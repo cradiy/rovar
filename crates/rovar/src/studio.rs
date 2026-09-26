@@ -4,6 +4,8 @@ mod home;
 mod language;
 mod loading;
 mod menu;
+#[cfg(target_os = "macos")]
+pub(crate) mod native_menu;
 mod open_error;
 mod preferences;
 #[cfg(test)]
@@ -107,6 +109,7 @@ pub(crate) struct Studio {
     focus: FocusHandle,
     error: Option<String>,
     closing: bool,
+    quit_requested: bool,
     _timer: Task<()>,
     _search_subscription: Subscription,
 }
@@ -289,6 +292,7 @@ impl Studio {
             focus,
             error,
             closing: false,
+            quit_requested: false,
             _timer: timer,
             _search_subscription: search_subscription,
         }
@@ -445,6 +449,8 @@ impl Render for Studio {
                     "w" => {
                         if let Some(token) = this.active {
                             this.close_tab(token, window, cx);
+                        } else if cfg!(target_os = "macos") {
+                            this.begin_close(window, cx);
                         }
                     }
                     "tab" => {
@@ -539,6 +545,8 @@ impl Render for Studio {
                 el.child(self.open_error_dialog(cx))
             })
             .map(|el| {
+                #[cfg(target_os = "macos")]
+                let el = self.native_menu_actions(el, cx);
                 #[cfg(target_os = "linux")]
                 let el = el.when(
                     self.chrome.mode != uic::desktop::TitleBarMode::System

@@ -42,7 +42,7 @@ impl Tool {
             Self::Media => (
                 "import-media",
                 t("tool-media"),
-                "Ctrl+Shift+K",
+                "Mod+Shift+K",
                 LucideIcons::Image,
             ),
             Self::Line => ("draw-line", t("shape-line"), "L", LucideIcons::Minus),
@@ -225,6 +225,7 @@ impl Workspace {
 
     fn tool_button(&self, tool: Tool, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let (id, label, key, glyph) = tool.details();
+        let key = crate::shortcuts::label(key);
         let active = self.active_tool(cx) == tool;
         div()
             .id(id)
@@ -258,6 +259,7 @@ impl Workspace {
             .copied()
             .map(|tool| {
                 let (id, label, key, glyph) = tool.details();
+                let key = crate::shortcuts::label(key);
                 div()
                     .id(("tool-option", tool as usize))
                     .debug_selector(move || format!("option-{id}"))

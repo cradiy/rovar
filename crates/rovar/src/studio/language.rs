@@ -12,6 +12,8 @@ impl Studio {
         let old_mixed = t("font-mixed");
         match i18n::set_language(language) {
             Ok(()) => {
+                #[cfg(target_os = "macos")]
+                super::native_menu::refresh(cx);
                 if let Some(panel) = &mut self.preferences {
                     panel.error = None;
                     panel.refresh_language(old_mixed, cx);

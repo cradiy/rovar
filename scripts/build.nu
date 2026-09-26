@@ -1,20 +1,42 @@
 #!/usr/bin/env nu
 
 use linux.nu *
+use macos.nu [preflight-macos package-macos]
 
-# Build Rovar on Linux. Add one or more formats to package it; "all" builds every format.
-# Examples: nu scripts/build.nu; nu scripts/build.nu all --offline
+# Build Rovar. Use the macos subcommand for macOS packages.
+# Examples: nu scripts/build.nu; nu scripts/build.nu macos
 def main [
-    ...formats: string # appimage, tar.gz, rpm, deb, arch, or all
+    ...formats: string # Linux: appimage, tar.gz, rpm, deb, arch; macOS: app, zip, dmg; or all
     --profile: string = "release" # Cargo profile (release or dev)
     --offline # Do not let Cargo access the network
     --skip-build # Package the existing binary from the selected Cargo profile
     --output: path # Output directory; defaults to dist/ in the checkout
     --keep-work # Keep intermediate packaging files in target/
 ] {
-    if $nu.os-info.name != "linux" { error make {msg: "This build entry currently supports Linux only."} }
+    build-rovar $formats $profile $offline $skip_build $output $keep_work
+}
+
+# Build and package the macOS release. Omit formats to produce app, zip and dmg.
+def "main macos" [
+    ...formats: string # app, zip, or dmg
+    --offline # Do not let Cargo access the network
+    --skip-build # Package the existing release binary
+    --output: path # Output directory; defaults to dist/ in the checkout
+    --keep-work # Keep intermediate packaging files in target/
+] {
+    if $nu.os-info.name != "macos" { error make {msg: "Run macOS packaging on macOS."} }
+    for format in $formats {
+        if $format not-in [app zip dmg] { error make {msg: $"Unknown macOS package format: ($format)"} }
+    }
+    let selected = if ($formats | is-empty) { [app zip dmg] } else { $formats }
+    build-rovar $selected release $offline $skip_build $output $keep_work
+}
+
+def build-rovar [formats: list<string>, profile: string, offline: bool, skip_build: bool, output: any, keep_work: bool] {
+    let macos = $nu.os-info.name == "macos"
+    if $nu.os-info.name not-in [linux macos] { error make {msg: "This build entry supports Linux and macOS."} }
     if $profile not-in [release dev] { error make {msg: "Profile must be release or dev."} }
-    let supported = [appimage tar.gz rpm deb arch]
+    let supported = if $macos { [app zip dmg] } else { [appimage tar.gz rpm deb arch] }
     let selected = if "all" in $formats { $supported } else { $formats | uniq }
     for format in $formats {
         if $format not-in ($supported | append all) { error make {msg: $"Unknown package format: ($format)"} }
@@ -23,12 +45,16 @@ def main [
     let destination = if $output == null { $root | path join dist } else { $output | path expand }
     cd $root
     require-tools [cargo rustc]
-    if not ($selected | is-empty) { preflight $selected }
+    if not ($selected | is-empty) {
+        if $macos { preflight-macos $selected } else { preflight $selected }
+    }
     let metadata = (capture cargo metadata --no-deps --format-version 1 --offline | from json)
     let package = ($metadata.packages | where name == rovar | first)
     let host = (capture rustc -vV | lines | parse 'host: {host}' | get host | first)
-    if $host !~ '^(x86_64|aarch64)-unknown-linux-gnu$' {
-        error make {msg: $"Unsupported native build target: ($host). Use x86_64 or aarch64 GNU/Linux."}
+    let supported_host = if $macos { '^aarch64-apple-darwin$' } else { '^(x86_64|aarch64)-unknown-linux-gnu$' }
+    if $host !~ $supported_host {
+        let requirement = if $macos { "Use the aarch64-apple-darwin toolchain; macOS packages support Apple Silicon only." } else { "Use x86_64 or aarch64 GNU/Linux." }
+        error make {msg: $"Unsupported native build target: ($host). ($requirement)"}
     }
     let arch = ($host | split row '-' | first)
     # An explicit target prevents CARGO_BUILD_TARGET or Cargo config from silently cross-compiling.
@@ -36,13 +62,24 @@ def main [
         print $"Building Rovar: ($profile), ($host)"
         mut args = [build --locked -p rovar --bin rovar --profile $profile --target $host]
         if $offline { $args = ($args | append "--offline") }
-        run cargo ...$args
+        run-tool cargo ...$args
     }
     let profile_dir = if $profile == "dev" { "debug" } else { "release" }
-    let binary = ($metadata.target_directory | path join $host $profile_dir rovar)
+    mut binary = ($metadata.target_directory | path join $host $profile_dir rovar)
+    if $macos and $skip_build and not ($binary | path exists) {
+        # Also accept the native binary produced by a plain cargo build.
+        $binary = ($metadata.target_directory | path join $profile_dir rovar)
+    }
     if not ($binary | path exists) { error make {msg: $"Missing ($binary). Run without --skip-build first."} }
     print $"Built: ($binary)"
     if ($selected | is-empty) { return }
+    if $macos {
+        package-macos {
+            root: $root, binary: $binary, arch: $arch, version: $package.version,
+            profile: $profile, target_directory: $metadata.target_directory,
+        } $selected $destination $keep_work
+        return
+    }
     let config = (open ($root | path join packaging linux config.toml))
     let version = $package.version
     let package_version = ($version | str replace --all '-' '~' | str replace --all '+' '.')

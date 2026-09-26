@@ -91,7 +91,7 @@ impl Workspace {
                     });
                 },
             )
-            .shortcut(shortcut)
+            .shortcut(crate::shortcuts::label(shortcut))
             .disabled(!enabled)
         };
         let order_enabled = editable && self.common_parent(&self.selection_ids()).is_some();
@@ -124,7 +124,7 @@ impl Workspace {
                 "context-undo",
                 t("undo"),
                 LucideIcons::Undo2,
-                "Ctrl+Z",
+                "Mod+Z",
                 Command::Undo,
                 self.history.borrow().can_undo(),
             ))
@@ -132,7 +132,7 @@ impl Workspace {
                 "context-redo",
                 t("redo"),
                 LucideIcons::Redo2,
-                "Ctrl+Shift+Z",
+                "Mod+Shift+Z",
                 Command::Redo,
                 self.history.borrow().can_redo(),
             ))
@@ -141,7 +141,7 @@ impl Workspace {
                 "context-cut",
                 t("cut"),
                 LucideIcons::Scissors,
-                "Ctrl+X",
+                "Mod+X",
                 Command::Cut,
                 editable,
             ))
@@ -149,7 +149,7 @@ impl Workspace {
                 "context-copy",
                 t("copy"),
                 LucideIcons::Copy,
-                "Ctrl+C",
+                "Mod+C",
                 Command::Copy,
                 editable,
             ))
@@ -157,7 +157,7 @@ impl Workspace {
                 "context-paste",
                 t("paste"),
                 LucideIcons::Clipboard,
-                "Ctrl+V",
+                "Mod+V",
                 Command::Paste,
                 paste_enabled,
             ))
@@ -165,7 +165,7 @@ impl Workspace {
                 "context-paste-in-place",
                 t("paste-in-place"),
                 LucideIcons::ClipboardPaste,
-                "Ctrl+Shift+V",
+                "Mod+Shift+V",
                 Command::PasteInPlace,
                 paste_enabled,
             ))
@@ -173,7 +173,7 @@ impl Workspace {
                 "context-duplicate",
                 t("duplicate"),
                 LucideIcons::CopyPlus,
-                "Ctrl+D",
+                "Mod+D",
                 Command::Duplicate,
                 editable,
             ))
@@ -198,7 +198,7 @@ impl Workspace {
                 "context-group",
                 t("group"),
                 LucideIcons::Group,
-                "Ctrl+G",
+                "Mod+G",
                 Command::Group,
                 self.can_group(),
             ))
@@ -206,7 +206,7 @@ impl Workspace {
                 "context-ungroup",
                 t("ungroup"),
                 LucideIcons::Ungroup,
-                "Ctrl+Shift+G",
+                "Mod+Shift+G",
                 Command::Ungroup,
                 editable && ids.iter().any(|id| self.hierarchy.groups.contains_key(id)),
             ))
@@ -221,7 +221,7 @@ impl Workspace {
                         "context-front",
                         t("bring-front"),
                         LucideIcons::ChevronsUp,
-                        "Ctrl+Shift+]",
+                        "Mod+Shift+]",
                         Command::Front,
                         order_enabled,
                     ))
@@ -229,7 +229,7 @@ impl Workspace {
                         "context-raise",
                         t("bring-forward"),
                         LucideIcons::ArrowUp,
-                        "Ctrl+]",
+                        "Mod+]",
                         Command::Raise,
                         order_enabled,
                     ))
@@ -237,7 +237,7 @@ impl Workspace {
                         "context-lower",
                         t("send-backward"),
                         LucideIcons::ArrowDown,
-                        "Ctrl+[",
+                        "Mod+[",
                         Command::Lower,
                         order_enabled,
                     ))
@@ -245,7 +245,7 @@ impl Workspace {
                         "context-back",
                         t("send-back"),
                         LucideIcons::ChevronsDown,
-                        "Ctrl+Shift+[",
+                        "Mod+Shift+[",
                         Command::Back,
                         order_enabled,
                     ))

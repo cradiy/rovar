@@ -101,6 +101,14 @@ impl Catalog {
         for resource in resources {
             bundle.add_resource_overriding(resource);
         }
+        // Resolve platform keys before caching labels, including fallback catalogs.
+        bundle.add_resource_overriding(
+            FluentResource::try_new(format!(
+                "-primary-modifier = {}\n",
+                crate::shortcuts::PRIMARY_MODIFIER
+            ))
+            .expect("Invalid shortcut modifier term"),
+        );
         let mut catalog = Self {
             bundle,
             labels: HashMap::new(),

@@ -31,4 +31,16 @@ nu scripts/build.nu all
 
 支持 AppImage、tar.gz、RPM、DEB 和 Arch，产物输出到 `dist/`。
 
+macOS 下使用 Nushell 和 Xcode Command Line Tools：
+
+```sh
+nu scripts/build.nu macos
+```
+
+构建 release 版本，生成 `.app`、ZIP 和 DMG。
+产物包含 `dist/Rovar.app`、带版本号的压缩包、SHA-256 校验文件和构建信息。
+仅支持 Apple Silicon（arm64），也可使用 `--output` 和 `--keep-work`。
+
+详见 [macOS 打包说明](packaging/macos/README.md)。
+
 [文件格式](crates/rovar-format/FORMAT.zh-CN.md) · [MIT 许可证](LICENSE)

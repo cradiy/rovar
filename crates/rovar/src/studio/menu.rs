@@ -42,11 +42,11 @@ impl Studio {
             .menu(
                 div().flex().flex_col().children(
                     [
-                        ("new-document", LucideIcons::FilePlus, "Ctrl N"),
-                        ("open-document", LucideIcons::FolderOpen, "Ctrl O"),
-                        ("save-document", LucideIcons::Save, "Ctrl S"),
-                        ("export-document", LucideIcons::Download, "Ctrl Shift E"),
-                        ("settings", LucideIcons::Settings, "Ctrl ,"),
+                        ("new-document", LucideIcons::FilePlus, "Mod+N"),
+                        ("open-document", LucideIcons::FolderOpen, "Mod+O"),
+                        ("save-document", LucideIcons::Save, "Mod+S"),
+                        ("export-document", LucideIcons::Download, "Mod+Shift+E"),
+                        ("settings", LucideIcons::Settings, "Mod+,"),
                     ]
                     .into_iter()
                     .map(|(id, glyph, shortcut)| {
@@ -80,7 +80,7 @@ impl Studio {
                                             } else {
                                                 0x514d58
                                             }))
-                                            .child(shortcut),
+                                            .child(crate::shortcuts::label(shortcut)),
                                     )
                                     .when(enabled, |el| {
                                         el.cursor_pointer().hover(|s| s.bg(rgb(0x353042))).on_click(

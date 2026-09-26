@@ -65,6 +65,7 @@ impl Studio {
         {
             tab.close_after_save = false;
             self.closing = false;
+            self.quit_requested = false;
             self.error = Some(error);
             cx.notify();
         }
@@ -150,6 +151,7 @@ impl Studio {
                         tab.error = Some(error.to_string());
                         tab.close_after_save = false;
                         this.closing = false;
+                        this.quit_requested = false;
                         this.error = Some(crate::i18n::message(
                             "save-failed",
                             &[("error", error.to_string())],
@@ -370,6 +372,7 @@ impl Studio {
     }
     pub(super) fn begin_close(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.strip.drag.is_some() {
+            self.quit_requested = false;
             return;
         }
         for editor in self.tabs.iter().filter_map(|t| t.editor.clone()) {
@@ -387,6 +390,7 @@ impl Studio {
             self.awaiting_library = false;
             if let Some(error) = self.library.read(cx).error.clone() {
                 self.closing = false;
+                self.quit_requested = false;
                 self.error = Some(error);
                 cx.notify();
                 return;
@@ -408,6 +412,7 @@ impl Studio {
             .any(|t| t.editor.is_some() && t.error.is_some())
         {
             self.closing = false;
+            self.quit_requested = false;
             return;
         }
         let dirty = self.tabs.iter().any(|tab| {
@@ -419,7 +424,7 @@ impl Studio {
             })
         });
         if !dirty {
-            if cx.windows().len() > 1 {
+            if cx.windows().len() > 1 && !self.quit_requested {
                 self.tabs.clear();
             }
             self.persist_session();

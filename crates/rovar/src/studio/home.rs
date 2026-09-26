@@ -320,12 +320,9 @@ impl Studio {
                                             })),
                                     ),
                             )
-                            .child(
-                                div()
-                                    .text_size(px(10.))
-                                    .text_color(rgba(0xe7ddff70))
-                                    .child(if primary { "Ctrl N" } else { "Ctrl O" }),
-                            ),
+                            .child(div().text_size(px(10.)).text_color(rgba(0xe7ddff70)).child(
+                                crate::shortcuts::label(if primary { "Mod+N" } else { "Mod+O" }),
+                            )),
                     ),
             )
             .on_click(cx.listener(move |this, _, window, cx| {

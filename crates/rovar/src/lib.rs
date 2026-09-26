@@ -12,6 +12,7 @@ mod media;
 mod rotation;
 mod settings;
 mod shape;
+mod shortcuts;
 mod studio;
 mod text;
 mod titlebar;
@@ -47,6 +48,8 @@ pub fn run() {
                 return;
             }
             i18n::init();
+            #[cfg(target_os = "macos")]
+            studio::native_menu::init(cx);
             if let Err(error) = ui_font::init(cx) {
                 eprintln!("Could not initialize UI font settings: {error}");
                 cx.quit();
