@@ -1,0 +1,169 @@
+use crate::{
+    artboard::{Artboard, Rect},
+    shape::Shape,
+    text::Snapshot,
+};
+use std::{
+    cell::RefCell,
+    ops::Range,
+    rc::Rc,
+    time::{Duration, Instant},
+};
+
+pub(crate) type SharedHistory = Rc<RefCell<History>>;
+
+#[derive(Clone)]
+pub(crate) struct SavedText {
+    pub id: usize,
+    pub layer: crate::layer::LayerState,
+    pub board: Option<usize>,
+    pub rect: Rect,
+    pub text: Snapshot,
+}
+
+/// Each change stores the state to restore. Replaying captures its inverse.
+/// No entities are retained, so deleted objects do not retain UI subscriptions.
+#[derive(Clone)]
+pub(crate) enum Change {
+    NodeSelection {
+        value: Option<(usize, usize)>,
+    },
+    Hierarchy {
+        value: crate::layer::Hierarchy,
+        selection: std::collections::BTreeSet<usize>,
+    },
+    Layer {
+        id: usize,
+        value: crate::layer::LayerState,
+    },
+    Board {
+        id: usize,
+        index: usize,
+        value: Option<Artboard>,
+    },
+    TextBox {
+        id: usize,
+        index: usize,
+        value: Option<SavedText>,
+    },
+    Text {
+        id: usize,
+        value: Snapshot,
+    },
+    Shape {
+        id: usize,
+        index: usize,
+        value: Option<Shape>,
+    },
+    TextRect {
+        id: usize,
+        board: Option<usize>,
+        value: Rect,
+    },
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub(crate) enum Group {
+    SelectionProperty(Vec<usize>, usize),
+    Typing(usize),
+    Style(usize, usize, Range<usize>),
+    Property(usize, usize, usize),
+    Color(usize, usize),
+}
+
+#[derive(Default)]
+pub(crate) struct History {
+    undo: Vec<Vec<Change>>,
+    redo: Vec<Vec<Change>>,
+    group: Option<(Group, Instant)>,
+    scope: Option<(Group, bool)>,
+    preview: Option<Vec<Change>>,
+}
+
+impl History {
+    pub fn break_group(&mut self) {
+        self.group = None;
+        self.scope = None;
+    }
+    // A picker drag has an explicit Commit boundary; numeric typing uses a timeout.
+    pub fn set_scope(&mut self, group: Group, continuous: bool) {
+        self.scope = Some((group, continuous));
+    }
+    pub fn clear_scope(&mut self) {
+        self.scope = None;
+    }
+    // A numeric drag previews one property on one object. Keep its first
+    // inverse until commit, leaving undo/redo untouched during the drag.
+    pub fn begin_preview(&mut self) {
+        self.break_group();
+        self.preview = Some(Vec::new());
+    }
+    pub fn end_preview(&mut self, commit: bool) -> Vec<Change> {
+        let changes = self.preview.take().unwrap_or_default();
+        self.break_group();
+        if commit && !changes.is_empty() {
+            self.record(changes, None);
+            Vec::new()
+        } else {
+            changes
+        }
+    }
+    pub fn can_merge(&self, group: Option<&Group>) -> bool {
+        if let Some(changes) = &self.preview {
+            return !changes.is_empty();
+        }
+        let key = self.scope.as_ref().map(|s| &s.0).or(group);
+        self.group.as_ref().is_some_and(|(last, time)| {
+            Some(last) == key
+                && (self.scope.as_ref().is_some_and(|s| s.1)
+                    || time.elapsed() < Duration::from_secs(1))
+        })
+    }
+    pub fn record(&mut self, changes: Vec<Change>, group: Option<Group>) {
+        if let Some(before) = &mut self.preview {
+            if before.is_empty() {
+                *before = changes;
+            }
+            return;
+        }
+        if !changes.is_empty() && !self.can_merge(group.as_ref()) {
+            self.undo.push(changes);
+            // Keep history bounded without retaining every document forever.
+            if self.undo.len() > 256 {
+                self.undo.remove(0);
+            }
+        }
+        self.redo.clear();
+        self.group = self
+            .scope
+            .as_ref()
+            .map(|s| s.0.clone())
+            .or(group)
+            .map(|g| (g, Instant::now()));
+    }
+    pub fn take(&mut self, redo: bool) -> Option<Vec<Change>> {
+        self.break_group();
+        if redo {
+            self.redo.pop()
+        } else {
+            self.undo.pop()
+        }
+    }
+    pub fn finish_replay(&mut self, inverse: Vec<Change>, redo: bool) {
+        if redo {
+            self.undo.push(inverse);
+        } else {
+            self.redo.push(inverse);
+        }
+    }
+    pub fn can_undo(&self) -> bool {
+        !self.undo.is_empty()
+    }
+    pub fn can_redo(&self) -> bool {
+        !self.redo.is_empty()
+    }
+    #[cfg(test)]
+    pub fn undo_len(&self) -> usize {
+        self.undo.len()
+    }
+}

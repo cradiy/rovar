@@ -1,0 +1,10 @@
+{
+  "intro_ms": 420,
+  "rotation_ms": 1800,
+  "mark_width": 80,
+  "pieces": [
+    {"name": "bottom", "pivot": [1.5, 18.8], "offset": [0, 9], "turn": 12, "wave": 0},
+    {"name": "upper", "pivot": [13.5, -15.1], "offset": [8, -6], "turn": 8, "wave": 2.0943951},
+    {"name": "left", "pivot": [-20.5, -4], "offset": [-8, -2], "turn": -10, "wave": 4.1887902}
+  ]
+}

@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Name=Rovar
+GenericName=Design Editor
+GenericName[zh_CN]=设计编辑器
+Comment=Create and edit designs on a flexible canvas
+Comment[zh_CN]=在自由画布上创作和编辑设计
+Exec=rovar
+Icon=rovar
+Terminal=false
+Categories=Graphics;2DGraphics;VectorGraphics;
+Keywords=design;vector;canvas;graphics;
+Keywords[zh_CN]=设计;矢量;画布;图形;
+StartupNotify=true
+StartupWMClass=rovar

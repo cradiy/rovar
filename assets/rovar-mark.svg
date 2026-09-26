@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="740" height="710" viewBox="140 160 740 710" fill="none">
+  <title>Rovar</title>
+  <defs>
+    <linearGradient id="lower-surface" x1="506" y1="576" x2="877" y2="651" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#514265"/>
+      <stop offset=".5" stop-color="#76618F"/>
+      <stop offset="1" stop-color="#9981BC"/>
+    </linearGradient>
+    <linearGradient id="lower-fold" x1="460" y1="564" x2="654" y2="792" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#67527F"/>
+      <stop offset=".5" stop-color="#8D76AD"/>
+      <stop offset="1" stop-color="#A18BC1"/>
+    </linearGradient>
+    <linearGradient id="upper-surface" x1="609" y1="235" x2="868" y2="514" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E1D5FC"/>
+      <stop offset=".5" stop-color="#D0BEF3"/>
+      <stop offset="1" stop-color="#B49AE7"/>
+    </linearGradient>
+    <linearGradient id="left-surface" x1="372" y1="528" x2="610" y2="310" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#B29AEB"/>
+      <stop offset=".45" stop-color="#BCA6F0"/>
+      <stop offset=".8" stop-color="#A28CD5"/>
+      <stop offset="1" stop-color="#8E78BD"/>
+    </linearGradient>
+  </defs>
+  <g id="mark" transform="translate(512 516) scale(1.14) translate(-640 -480)">
+    <g id="surface-bottom">
+      <path d="M499 563C576 550 653 524 739 512C785 505 826 501 853 498C895 493 914 518 902 559C881 635 824 698 765 727C673 775 484 766 402 703C391 658 447 592 499 563Z" fill="url(#lower-surface)"/>
+      <path d="M499 563C488 599 537 650 589 682C646 718 708 743 765 727C673 775 484 766 402 703C391 658 447 592 499 563Z" fill="url(#lower-fold)"/>
+    </g>
+    <g id="surface-upper">
+      <path d="M541 205C601 187 671 244 745 321C812 388 870 405 931 382C938 379 941 382 936 390C908 449 849 490 766 502C701 512 654 477 628 432C609 399 603 359 602 314C602 259 590 219 555 207C550 206 545 205 541 205Z" fill="url(#upper-surface)"/>
+    </g>
+    <g id="surface-left">
+      <path d="M541 205C479 203 415 269 375 365C344 439 339 508 348 570C354 624 370 675 402 703C370 666 414 611 471 543C530 474 578 416 596 342C610 287 605 241 578 218C568 208 555 204 541 205Z" fill="url(#left-surface)"/>
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,20 @@
+release = 1
+
+[dependencies]
+deb = [
+  "libfontconfig1", "libfreetype6", "libgcc-s1", "libxcb1",
+  "libxkbcommon0", "libxkbcommon-x11-0", "libwayland-client0",
+  "libvulkan1", "gstreamer1.0-plugins-base", "gstreamer1.0-plugins-good",
+  "gstreamer1.0-plugins-bad", "gstreamer1.0-libav",
+]
+rpm = [
+  "fontconfig", "libxkbcommon-x11", "libwayland-client", "libwayland-cursor",
+  "libwayland-egl", "vulkan-loader",
+  "gstreamer1-plugins-base", "gstreamer1-plugins-good",
+  "gstreamer1-plugins-bad-free", "gstreamer1-plugin-libav",
+]
+arch = [
+  "fontconfig", "freetype2", "gcc-libs", "libxcb", "libxkbcommon",
+  "libxkbcommon-x11", "wayland", "vulkan-icd-loader",
+  "gst-plugins-base", "gst-plugins-good", "gst-plugins-bad", "gst-libav",
+]

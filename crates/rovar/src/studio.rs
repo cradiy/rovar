@@ -1,0 +1,552 @@
+mod export;
+mod files;
+mod home;
+mod language;
+mod loading;
+mod menu;
+mod open_error;
+mod preferences;
+#[cfg(test)]
+mod record_tests;
+mod records;
+mod sorting;
+#[cfg(test)]
+mod storage_tests;
+mod tabs;
+#[cfg(test)]
+mod tests;
+#[cfg(test)]
+mod transfer_tests;
+mod window_controls;
+mod windows;
+
+use crate::workspace::{ACCENT, BORDER, MUTED, PANEL, TEXT, icon};
+use crate::{i18n::t, workspace::Workspace};
+use gpui::{
+    AppContext, Context, Entity, FocusHandle, IntoElement, Render, Subscription, Task, Window, div,
+    prelude::*, px, rgb,
+};
+use serde::{Deserialize, Serialize};
+use std::{
+    cell::RefCell,
+    path::PathBuf,
+    rc::Rc,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
+use uic::{
+    assets::LucideIcons,
+    components::{
+        dropdown::DropdownState,
+        input::{InputEvent, TextInput},
+    },
+};
+
+#[derive(Clone, Serialize, Deserialize)]
+struct Recent {
+    path: PathBuf,
+    title: String,
+    created: u64,
+    modified: u64,
+    view: [f32; 3],
+    preview: Option<String>,
+}
+
+#[derive(Default, Serialize, Deserialize)]
+struct Session {
+    recent: Vec<Recent>,
+    #[serde(skip)]
+    removed_recent: std::collections::BTreeSet<PathBuf>,
+    open: Vec<PathBuf>,
+    #[serde(skip)]
+    windows: std::collections::BTreeMap<u64, Vec<PathBuf>>,
+}
+
+pub(crate) struct Tab {
+    token: usize,
+    document_id: String,
+    file: Recent,
+    editor: Option<Entity<Workspace>>,
+    last_saved: Vec<u8>,
+    loading: bool,
+    saving: bool,
+    close_after_save: bool,
+    exporting: bool,
+    save_requested: bool,
+    error: Option<String>,
+    _subscription: Option<Subscription>,
+}
+
+pub(crate) struct Studio {
+    library: Entity<crate::component_library::Library>,
+    _library_subscription: Subscription,
+    awaiting_library: bool,
+    tabs: Vec<Tab>,
+    active: Option<usize>,
+    next_token: usize,
+    directory: PathBuf,
+    session: Rc<RefCell<Session>>,
+    window_id: u64,
+    chrome: crate::titlebar::Chrome,
+    dragging: Option<usize>,
+    tab_scroll: gpui::ScrollHandle,
+    strip: tabs::TabStrip,
+    search: Entity<TextInput>,
+    rename_input: Entity<TextInput>,
+    renaming: Option<PathBuf>,
+    deleting_document: Option<PathBuf>,
+    open_errors: std::collections::VecDeque<open_error::OpenError>,
+    _rename_subscriptions: Vec<Subscription>,
+    all_files: bool,
+    home_page: usize,
+    home_scroll: gpui::ScrollHandle,
+    file_sort: sorting::FileSort,
+    sort_menu: Entity<DropdownState>,
+    menu: Entity<DropdownState>,
+    language_menu: Entity<DropdownState>,
+    preferences: Option<preferences::Panel>,
+    focus: FocusHandle,
+    error: Option<String>,
+    closing: bool,
+    _timer: Task<()>,
+    _search_subscription: Subscription,
+}
+
+impl Studio {
+    pub(crate) fn new(directory: PathBuf, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        window.set_window_title("Rovar");
+        let directory = std::fs::canonicalize(&directory).unwrap_or(directory);
+        let library = crate::component_library::Library::open(&directory, cx);
+        let library_subscription = cx.observe_in(&library, window, |this, _, window, cx| {
+            if this.closing {
+                this.autosave(window, cx);
+            }
+            cx.notify();
+        });
+        let session_path = directory.join("session.json");
+        let (mut session, error) = match std::fs::read(&session_path) {
+            Ok(bytes) => match serde_json::from_slice::<Session>(&bytes) {
+                Ok(session) => (session, None),
+                Err(error) => (Session::default(), Some(error.to_string())),
+            },
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                (Session::default(), None)
+            }
+            Err(error) => (Session::default(), Some(error.to_string())),
+        };
+        session.removed_recent = records::removed_recent(&directory);
+        session
+            .recent
+            .retain(|file| files::is_internal(&directory, &file.path));
+        session
+            .open
+            .retain(|path| files::is_internal(&directory, path));
+        let search = cx.new(|cx| TextInput::new(cx).placeholder(t("home-search")));
+        let search_subscription = cx.subscribe(&search, |this, _, event: &InputEvent, cx| {
+            if matches!(event, InputEvent::Change(_)) {
+                this.set_home_page(0, cx);
+            }
+        });
+        let rename_input = cx.new(TextInput::new);
+        let rename_subscriptions = vec![
+            cx.subscribe_in(
+                &rename_input,
+                window,
+                |this, _, event: &InputEvent, window, cx| {
+                    if matches!(event, InputEvent::Submit(_)) {
+                        this.finish_document_rename(true, window, cx);
+                    }
+                },
+            ),
+            cx.observe(&rename_input, |_, _, cx| cx.notify()),
+        ];
+        let recovery_directory = directory.clone();
+        cx.spawn_in(window, async move |this, cx| {
+            let files = cx
+                .background_executor()
+                .spawn(async move { files::recover_documents(recovery_directory) })
+                .await;
+            let _ = this.update_in(cx, |this, _, cx| {
+                let mut changed = false;
+                for mut file in files {
+                    if !file.path.exists() {
+                        continue;
+                    }
+                    let known = {
+                        let mut session = this.session.borrow_mut();
+                        if let Some(item) = session
+                            .recent
+                            .iter_mut()
+                            .find(|item| item.path == file.path)
+                        {
+                            if item.preview != file.preview {
+                                item.preview = file.preview.clone();
+                                changed = true;
+                            }
+                            true
+                        } else {
+                            false
+                        }
+                    };
+                    if !known {
+                        file.title = t("recovered-document").into();
+                        this.remember(file);
+                        changed = true;
+                    }
+                }
+                if changed {
+                    this.persist_session();
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+        let timer = cx.spawn_in(window, async move |this, cx| {
+            loop {
+                cx.background_executor()
+                    .timer(Duration::from_millis(1000))
+                    .await;
+                if this
+                    .update_in(cx, |this, window, cx| this.autosave(window, cx))
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        });
+        let mut tabs = Vec::new();
+        for path in &session.open {
+            if let Some(file) = session.recent.iter().find(|file| &file.path == path) {
+                tabs.push(Tab {
+                    token: tabs.len() + 1,
+                    document_id: String::new(),
+                    file: file.clone(),
+                    editor: None,
+                    last_saved: Vec::new(),
+                    loading: false,
+                    saving: false,
+                    close_after_save: false,
+                    exporting: false,
+                    save_requested: false,
+                    error: None,
+                    _subscription: None,
+                });
+            }
+        }
+        let next_token = tabs.len() + 1;
+        let focus = cx.focus_handle();
+        focus.focus(window, cx);
+        let weak = cx.entity().downgrade();
+        window.on_window_should_close(cx, move |window, cx| {
+            weak.update(cx, |this, cx| {
+                if this.closing
+                    && !this.library.read(cx).busy
+                    && !this.awaiting_library
+                    && this
+                        .tabs
+                        .iter()
+                        .all(|tab| !tab.saving && !tab.exporting && tab.editor.is_none())
+                {
+                    return true;
+                }
+                this.begin_close(window, cx);
+                false
+            })
+            .unwrap_or(true)
+        });
+        let window_id = window.window_handle().window_id().as_u64();
+        session.windows.insert(
+            window_id,
+            tabs.iter().map(|tab| tab.file.path.clone()).collect(),
+        );
+        Self {
+            library,
+            _library_subscription: library_subscription,
+            awaiting_library: false,
+            tabs,
+            active: None,
+            next_token,
+            directory,
+            session: Rc::new(RefCell::new(session)),
+            window_id,
+            chrome: crate::titlebar::Chrome::current(cx),
+            dragging: None,
+            tab_scroll: gpui::ScrollHandle::new(),
+            strip: Default::default(),
+            search,
+            rename_input,
+            renaming: None,
+            deleting_document: None,
+            open_errors: Default::default(),
+            _rename_subscriptions: rename_subscriptions,
+            all_files: false,
+            home_page: 0,
+            home_scroll: gpui::ScrollHandle::new(),
+            file_sort: Default::default(),
+            sort_menu: cx.new(|cx| DropdownState::new(window, cx)),
+            menu: cx.new(|cx| DropdownState::new(window, cx)),
+            language_menu: cx.new(|cx| DropdownState::new(window, cx)),
+            preferences: None,
+            focus,
+            error,
+            closing: false,
+            _timer: timer,
+            _search_subscription: search_subscription,
+        }
+    }
+
+    pub(crate) fn active_editor(&self) -> Option<Entity<Workspace>> {
+        self.tabs
+            .iter()
+            .find(|tab| Some(tab.token) == self.active)
+            .and_then(|tab| tab.editor.clone())
+    }
+
+    fn select_tab(&mut self, token: Option<usize>, window: &mut Window, cx: &mut Context<Self>) {
+        if self.active == token {
+            if let Some(token) = token {
+                self.load_tab(token, window, cx);
+            }
+            return;
+        }
+        if let Some(editor) = self.active_editor() {
+            editor.update(cx, |editor, cx| editor.suspend(window, cx));
+        }
+        self.active = token;
+        if let Some(index) = self.tabs.iter().position(|tab| Some(tab.token) == token) {
+            self.reveal_tab(index, window);
+        }
+        self.focus.focus(window, cx);
+        if let Some(token) = token {
+            self.load_tab(token, window, cx);
+            if let Some(editor) = self.active_editor() {
+                editor.update(cx, |editor, cx| editor.focus_canvas(window, cx));
+            }
+        }
+        cx.notify();
+    }
+
+    fn new_document(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(editor) = self.active_editor() {
+            editor.update(cx, |editor, cx| editor.suspend(window, cx));
+        }
+        let token = self.next_token;
+        self.next_token += 1;
+        let document_id = uuid::Uuid::new_v4().to_string();
+        let editor = cx.new(|cx| Workspace::new(window, cx));
+        editor.update(cx, |editor, cx| {
+            editor.attach_library(self.library.clone(), cx)
+        });
+        let subscription = cx.observe(&editor, |_, _, cx| cx.notify());
+        let file = Recent {
+            path: self
+                .directory
+                .join("documents")
+                .join(format!("{document_id}.rovar")),
+            title: crate::i18n::message("untitled-name", &[("id", token.to_string())]),
+            created: sorting::creation_time(),
+            modified: now(),
+            view: [0., 0., 1.],
+            preview: None,
+        };
+        self.tabs.push(Tab {
+            token,
+            document_id,
+            file,
+            editor: Some(editor.clone()),
+            last_saved: Vec::new(),
+            loading: false,
+            saving: false,
+            close_after_save: false,
+            exporting: false,
+            save_requested: false,
+            error: None,
+            _subscription: Some(subscription),
+        });
+        self.active = Some(token);
+        self.reveal_tab(self.tabs.len() - 1, window);
+        editor.update(cx, |editor, cx| editor.focus_canvas(window, cx));
+        self.save_tab(token, window, cx);
+        cx.notify();
+    }
+}
+
+fn now() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
+impl Render for Studio {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .size_full()
+            .flex()
+            .flex_col()
+            .overflow_hidden()
+            .bg(rgb(PANEL))
+            .text_color(rgb(TEXT))
+            .font_family(crate::ui_font::family(cx))
+            .on_drag_move::<tabs::DragTab>(cx.listener(Self::tab_drag_moved))
+            .on_mouse_exit(cx.listener(Self::tab_drag_exited))
+            .on_drop(cx.listener(Self::dropped_as_window))
+            .track_focus(&self.focus)
+            .on_any_mouse_down(cx.listener(|this, _, window, cx| {
+                if let Some(editor) = this.active_editor() {
+                    editor.update(cx, |editor, cx| editor.dismiss_menus(window, cx));
+                }
+            }))
+            .capture_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, window, cx| {
+                if !this.open_errors.is_empty() {
+                    if matches!(event.keystroke.key.as_str(), "escape" | "enter") {
+                        this.dismiss_open_error(window, cx);
+                    }
+                    cx.stop_propagation();
+                    window.prevent_default();
+                    return;
+                }
+                if this.deleting_document.is_some() {
+                    if event.keystroke.key == "escape" {
+                        this.finish_document_delete(false, window, cx);
+                    }
+                    cx.stop_propagation();
+                    window.prevent_default();
+                    return;
+                }
+                if this.renaming.is_some() {
+                    if event.keystroke.key == "escape" {
+                        this.finish_document_rename(false, window, cx);
+                        cx.stop_propagation();
+                        window.prevent_default();
+                    }
+                    return;
+                }
+                if this.preferences.is_some() {
+                    if event.keystroke.key == "escape" {
+                        this.settings_escape(window, cx);
+                        cx.stop_propagation();
+                        window.prevent_default();
+                    }
+                    return;
+                }
+                if uic::components::context_menu::is_open(cx) {
+                    return;
+                }
+                let modifiers = event.keystroke.modifiers;
+                if !(modifiers.control || modifiers.platform) {
+                    return;
+                }
+                match event.keystroke.key.as_str() {
+                    "," => this.open_settings(window, cx),
+                    "n" | "t" => this.new_document(window, cx),
+                    "o" => this.open_dialog(window, cx),
+                    "s" => this.save_command(window, cx),
+                    "e" if modifiers.shift => this.export_dialog(window, cx),
+                    "w" => {
+                        if let Some(token) = this.active {
+                            this.close_tab(token, window, cx);
+                        }
+                    }
+                    "tab" => {
+                        if !this.tabs.is_empty() {
+                            let index = this
+                                .tabs
+                                .iter()
+                                .position(|t| Some(t.token) == this.active)
+                                .unwrap_or(if modifiers.shift {
+                                    0
+                                } else {
+                                    this.tabs.len() - 1
+                                });
+                            let offset = if modifiers.shift {
+                                this.tabs.len() - 1
+                            } else {
+                                1
+                            };
+                            this.select_tab(
+                                Some(this.tabs[(index + offset) % this.tabs.len()].token),
+                                window,
+                                cx,
+                            );
+                        }
+                    }
+                    _ => return,
+                }
+                cx.stop_propagation();
+                window.prevent_default();
+            }))
+            .child(self.tab_bar(window, cx))
+            .when_some(self.error.clone(), |el, error| {
+                el.child(
+                    div()
+                        .px(px(24.))
+                        .py(px(8.))
+                        .bg(rgb(0x4a3034))
+                        .text_size(px(12.))
+                        .flex()
+                        .items_center()
+                        .gap(px(12.))
+                        .child(div().flex_1().min_w_0().child(error))
+                        .child(
+                            div()
+                                .id("dismiss-error")
+                                .size(px(22.))
+                                .flex_shrink_0()
+                                .cursor_pointer()
+                                .child(icon(LucideIcons::X, 14.))
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.error = None;
+                                    cx.notify();
+                                })),
+                        ),
+                )
+            })
+            .child(
+                div()
+                    .flex_1()
+                    .min_h_0()
+                    .flex()
+                    .when_some(self.active_editor(), |el, editor| el.child(editor))
+                    .when(self.active.is_none(), |el| el.child(self.home(window, cx)))
+                    .when(
+                        self.active.is_some() && self.active_editor().is_none(),
+                        |el| {
+                            el.child(
+                                div()
+                                    .size_full()
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .text_color(rgb(MUTED))
+                                    .child(loading::view(self.active.unwrap())),
+                            )
+                        },
+                    ),
+            )
+            .when(self.active_editor().is_none(), |el| {
+                el.child(uic::components::context_menu::layer(cx))
+            })
+            .when(self.renaming.is_some(), |el| {
+                el.child(self.rename_dialog(cx))
+            })
+            .when(self.preferences.is_some(), |el| {
+                el.child(self.settings_dialog(cx))
+            })
+            .when(self.deleting_document.is_some(), |el| {
+                el.child(self.document_delete_dialog(cx))
+            })
+            .when(!self.open_errors.is_empty(), |el| {
+                el.child(self.open_error_dialog(cx))
+            })
+            .map(|el| {
+                #[cfg(target_os = "linux")]
+                let el = el.when(
+                    self.chrome.mode != uic::desktop::TitleBarMode::System
+                        && !window.is_maximized()
+                        && !window.is_fullscreen(),
+                    |el| el.children(crate::titlebar::resize_edges()),
+                );
+                el
+            })
+    }
+}
