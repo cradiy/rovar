@@ -127,22 +127,7 @@ impl Workspace {
                     cx.notify();
                 }
             }))
-            .on_scroll_wheel(cx.listener(|this, event: &gpui::ScrollWheelEvent, _, cx| {
-                if this.gesture.is_none() {
-                    this.vector_hover = None;
-                    let delta = event.delta.pixel_delta(px(20.));
-                    if event.modifiers.control {
-                        let local = event.position - this.bounds.get().origin;
-                        let zoom = this.view.zoom * (f32::from(delta.y) * 0.004).exp();
-                        this.view
-                            .zoom_at(point(f32::from(local.x), f32::from(local.y)), zoom);
-                    } else {
-                        this.view.pan += point(f32::from(delta.x), f32::from(delta.y));
-                    }
-                    cx.notify();
-                }
-                cx.stop_propagation();
-            }))
+            .on_scroll_wheel(cx.listener(Self::scroll_canvas))
             .child(
                 canvas(
                     move |bounds, window, _| {
@@ -221,6 +206,7 @@ impl Workspace {
                         .absolute()
                         .inset_0()
                         .occlude()
+                        .on_scroll_wheel(cx.listener(Self::scroll_canvas))
                         .cursor(if self.toolbar.hand {
                             CursorStyle::OpenHand
                         } else {
@@ -257,6 +243,28 @@ impl Workspace {
             .when(self.vector_edit.is_some(), |el| {
                 el.child(self.vector_toolbar(cx))
             })
+    }
+
+    fn scroll_canvas(
+        &mut self,
+        event: &gpui::ScrollWheelEvent,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.gesture.is_none() {
+            self.vector_hover = None;
+            let delta = event.delta.pixel_delta(px(20.));
+            if event.modifiers.control {
+                let local = event.position - self.bounds.get().origin;
+                let zoom = self.view.zoom * (f32::from(delta.y) * 0.004).exp();
+                self.view
+                    .zoom_at(point(f32::from(local.x), f32::from(local.y)), zoom);
+            } else {
+                self.view.pan += point(f32::from(delta.x), f32::from(delta.y));
+            }
+            cx.notify();
+        }
+        cx.stop_propagation();
     }
 
     fn canvas_grid(&self, pixels: bool) -> impl IntoElement + use<> {

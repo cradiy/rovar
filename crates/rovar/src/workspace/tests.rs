@@ -23,6 +23,61 @@ pub(super) fn draw(visual: &mut VisualTestContext) {
 }
 
 #[gpui::test]
+fn canvas_tools_allow_pointer_anchored_wheel_zoom_and_pan(cx: &mut TestAppContext) {
+    let window = open(cx);
+    let mut visual = VisualTestContext::from_window(window.into(), cx);
+    let pointer = point(px(500.), px(350.));
+    for tool in ["tool-hand", "add-rectangle", "tool-move"] {
+        click(&mut visual, tool);
+        let (zoom, anchor) = window
+            .update(&mut visual.cx, |this, _, _| {
+                let local = pointer - this.bounds.get().origin;
+                (
+                    this.view.zoom,
+                    this.view
+                        .world(point(f32::from(local.x), f32::from(local.y))),
+                )
+            })
+            .unwrap();
+        visual.simulate_event(gpui::ScrollWheelEvent {
+            position: pointer,
+            delta: gpui::ScrollDelta::Pixels(point(px(0.), px(100.))),
+            modifiers: gpui::Modifiers {
+                control: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+        draw(&mut visual);
+        let pan = window
+            .update(&mut visual.cx, |this, _, _| {
+                assert!(
+                    (this.view.zoom - zoom * 0.4_f32.exp()).abs() < 0.001,
+                    "{tool}"
+                );
+                let screen = this.view.screen(anchor);
+                let local = pointer - this.bounds.get().origin;
+                assert!((screen.x - f32::from(local.x)).abs() < 0.01);
+                assert!((screen.y - f32::from(local.y)).abs() < 0.01);
+                this.view.pan
+            })
+            .unwrap();
+        visual.simulate_event(gpui::ScrollWheelEvent {
+            position: pointer,
+            delta: gpui::ScrollDelta::Pixels(point(px(15.), px(-30.))),
+            ..Default::default()
+        });
+        draw(&mut visual);
+        window
+            .update(&mut visual.cx, |this, _, _| {
+                assert_eq!(this.view.pan, pan + point(15., -30.), "{tool}");
+                assert!((this.view.zoom - zoom * 0.4_f32.exp()).abs() < 0.001);
+            })
+            .unwrap();
+    }
+}
+
+#[gpui::test]
 fn high_zoom_keeps_pointer_anchor_and_grid_allows_object_selection(cx: &mut TestAppContext) {
     let window = open(cx);
     let mut visual = VisualTestContext::from_window(window.into(), cx);
