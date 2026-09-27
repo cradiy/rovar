@@ -2,6 +2,135 @@ use super::*;
 use gpui::{MouseButton, TestAppContext, VisualTestContext, point, size};
 
 #[gpui::test]
+fn hovering_tabs_shows_document_thumbnail_after_delay_and_dismisses_on_leave_or_drag(
+    cx: &mut TestAppContext,
+) {
+    cx.update(uic::init);
+    let directory = tempfile::tempdir().unwrap();
+    let handle = cx.open_window(size(px(1280.), px(800.)), |window, cx| {
+        Studio::new(directory.path().into(), window, cx)
+    });
+    handle
+        .update(cx, |studio, window, cx| {
+            window.activate_window();
+            studio.new_document(window, cx);
+        })
+        .unwrap();
+    cx.run_until_parked();
+    handle
+        .update(cx, |studio, window, cx| {
+            let tab = &studio.tabs[0];
+            let mut document = crate::document::Document::decode(&tab.last_saved).unwrap();
+            document.shapes.push(crate::shape::Shape::new(
+                1,
+                None,
+                crate::shape::ShapeKind::Rectangle,
+                crate::artboard::Rect {
+                    x: 0.,
+                    y: 0.,
+                    width: 100.,
+                    height: 80.,
+                },
+            ));
+            document.next_id = 2;
+            tab.editor.as_ref().unwrap().update(cx, |editor, cx| {
+                editor
+                    .load_document(
+                        crate::document::Loaded {
+                            json: serde_json::to_vec(&document).unwrap(),
+                            assets: Default::default(),
+                        },
+                        window,
+                        cx,
+                    )
+                    .unwrap();
+            });
+            studio.save_tab(1, window, cx);
+            studio.new_document(window, cx);
+        })
+        .unwrap();
+    cx.run_until_parked();
+    handle
+        .update(cx, |studio, _, _| {
+            let preview = studio.tabs[0].file.preview.as_ref().unwrap();
+            assert!(directory.path().join("previews").join(preview).exists());
+        })
+        .unwrap();
+    let mut visual = VisualTestContext::from_window(handle.into(), cx);
+    visual.update(|window, cx| window.draw(cx).clear());
+    let first = visual.debug_bounds("document-tab-1").unwrap().center();
+    visual.simulate_mouse_move(first, None, Default::default());
+    visual.cx.run_until_parked();
+    visual
+        .cx
+        .executor()
+        .advance_clock(Duration::from_millis(419));
+    visual.cx.run_until_parked();
+    visual.update(|window, cx| window.draw(cx).clear());
+    assert!(visual.debug_bounds("tab-preview").is_none());
+    visual.cx.executor().advance_clock(Duration::from_millis(1));
+    visual.cx.run_until_parked();
+    visual.update(|window, cx| window.draw(cx).clear());
+    let card = visual.debug_bounds("tab-preview").unwrap();
+    assert!(card.top() > px(BAR_HEIGHT));
+    assert!(visual.debug_bounds("tab-preview-image").is_some());
+    handle
+        .update(&mut visual.cx, |studio, _, _| {
+            assert_eq!(studio.active, Some(2));
+            assert_eq!(studio.strip.hover_card, Some(1));
+        })
+        .unwrap();
+
+    let outside = point(px(700.), px(350.));
+    visual.simulate_mouse_move(outside, None, Default::default());
+    visual.update(|window, cx| window.draw(cx).clear());
+    assert!(visual.debug_bounds("tab-preview").is_none());
+    visual.simulate_mouse_move(first, None, Default::default());
+    visual.cx.run_until_parked();
+    visual.simulate_mouse_move(outside, None, Default::default());
+    visual
+        .cx
+        .executor()
+        .advance_clock(Duration::from_millis(500));
+    visual.cx.run_until_parked();
+    visual.update(|window, cx| window.draw(cx).clear());
+    assert!(visual.debug_bounds("tab-preview").is_none());
+
+    visual.simulate_mouse_move(first, None, Default::default());
+    visual.cx.run_until_parked();
+    visual
+        .cx
+        .executor()
+        .advance_clock(Duration::from_millis(420));
+    visual.cx.run_until_parked();
+    visual.update(|window, cx| window.draw(cx).clear());
+    assert!(visual.debug_bounds("tab-preview").is_some());
+    visual.simulate_mouse_down(first, MouseButton::Left, Default::default());
+    visual.simulate_mouse_move(
+        first + point(px(12.), px(0.)),
+        Some(MouseButton::Left),
+        Default::default(),
+    );
+    visual.cx.run_until_parked();
+    visual
+        .cx
+        .executor()
+        .advance_clock(Duration::from_millis(500));
+    visual.cx.run_until_parked();
+    visual.update(|window, cx| window.draw(cx).clear());
+    assert!(visual.debug_bounds("tab-preview").is_none());
+    handle
+        .update(&mut visual.cx, |studio, _, _| {
+            assert!(studio.strip.drag.is_some());
+            assert!(studio.strip.hovered.is_none());
+        })
+        .unwrap();
+    visual.update(|window, cx| {
+        cx.stop_active_drag(window);
+    });
+}
+
+#[gpui::test]
 fn dragging_reorders_before_release_locks_to_rail_and_cancel_restores_order(
     cx: &mut TestAppContext,
 ) {

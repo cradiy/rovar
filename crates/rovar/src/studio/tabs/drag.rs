@@ -8,6 +8,7 @@ impl Studio {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.dismiss_tab_preview(cx);
         self.dragging = Some(payload.token);
         self.strip.drag = Some(payload.clone());
         self.strip.snap_index = None;

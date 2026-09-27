@@ -1,5 +1,6 @@
 use super::*;
 mod drag;
+mod hover;
 mod state;
 #[cfg(test)]
 mod tests;
@@ -287,6 +288,9 @@ impl Studio {
             .bg(rgb(if active { 0x292531 } else { 0x111216 }))
             .text_color(rgb(if active { TEXT } else { MUTED }))
             .hover(|s| s.bg(rgb(if active { 0x302a3a } else { 0x202027 })))
+            .on_hover(cx.listener(move |this, hovered, _, cx| {
+                this.hover_tab(token, *hovered, cx);
+            }))
             .child(icon(LucideIcons::PenTool, 13.))
             .child(
                 div()

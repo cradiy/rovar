@@ -306,6 +306,7 @@ impl Studio {
     }
 
     fn select_tab(&mut self, token: Option<usize>, window: &mut Window, cx: &mut Context<Self>) {
+        self.dismiss_tab_preview(cx);
         if self.active == token {
             if let Some(token) = token {
                 self.load_tab(token, window, cx);
@@ -330,6 +331,7 @@ impl Studio {
     }
 
     fn new_document(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.dismiss_tab_preview(cx);
         if let Some(editor) = self.active_editor() {
             editor.update(cx, |editor, cx| editor.suspend(window, cx));
         }
@@ -385,6 +387,7 @@ impl Render for Studio {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .size_full()
+            .relative()
             .flex()
             .flex_col()
             .overflow_hidden()
@@ -396,6 +399,7 @@ impl Render for Studio {
             .on_drop(cx.listener(Self::dropped_as_window))
             .track_focus(&self.focus)
             .on_any_mouse_down(cx.listener(|this, _, window, cx| {
+                this.dismiss_tab_preview(cx);
                 if let Some(editor) = this.active_editor() {
                     editor.update(cx, |editor, cx| editor.dismiss_menus(window, cx));
                 }
@@ -532,6 +536,7 @@ impl Render for Studio {
             .when(self.active_editor().is_none(), |el| {
                 el.child(uic::components::context_menu::layer(cx))
             })
+            .children(self.tab_preview(window))
             .when(self.renaming.is_some(), |el| {
                 el.child(self.rename_dialog(cx))
             })

@@ -351,6 +351,7 @@ impl Studio {
     }
 
     pub(super) fn close_tab(&mut self, token: usize, window: &mut Window, cx: &mut Context<Self>) {
+        self.dismiss_tab_preview(cx);
         let Some(tab) = self.tabs.iter_mut().find(|tab| tab.token == token) else {
             return;
         };

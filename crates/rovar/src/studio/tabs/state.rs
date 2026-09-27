@@ -90,6 +90,9 @@ impl DragTab {
 }
 
 pub(crate) struct TabStrip {
+    pub hovered: Option<usize>,
+    pub hover_card: Option<usize>,
+    pub hover_task: Task<()>,
     pub slots: BTreeMap<usize, SpringSlot>,
     pub drag: Option<DragTab>,
     pub snap_index: Option<usize>,
@@ -99,6 +102,9 @@ pub(crate) struct TabStrip {
 impl Default for TabStrip {
     fn default() -> Self {
         Self {
+            hovered: None,
+            hover_card: None,
+            hover_task: Task::ready(()),
             slots: Default::default(),
             drag: None,
             snap_index: None,
