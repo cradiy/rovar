@@ -64,6 +64,11 @@ impl Workspace {
     }
 
     pub(super) fn object_rect(&self, id: usize) -> Option<(Option<usize>, Rect)> {
+        if let Some(group) = self.hierarchy.groups.get(&id)
+            && let Some(layout) = self.hierarchy.layouts.get(&id)
+        {
+            return Some((group.board, layout.frame));
+        }
         self.boards
             .iter()
             .find(|b| b.id == id)
@@ -95,6 +100,40 @@ impl Workspace {
     }
 
     pub(super) fn set_object_rect(&mut self, id: usize, parent: Option<usize>, rect: Rect) {
+        if self.hierarchy.groups.contains_key(&id)
+            && let Some(layout) = self.hierarchy.layouts.get(&id)
+        {
+            let delta = point(rect.x - layout.frame.x, rect.y - layout.frame.y);
+            let ids = self.descendants(&std::collections::BTreeSet::from([id]));
+            let moving: Vec<_> = ids
+                .iter()
+                .copied()
+                .filter(|child| {
+                    *child != id
+                        && !self
+                            .ancestors(*child)
+                            .iter()
+                            .any(|p| ids.contains(p) && self.boards.iter().any(|b| b.id == *p))
+                })
+                .collect();
+            for child in moving {
+                if let Some(frame) = self
+                    .hierarchy
+                    .layouts
+                    .get_mut(&child)
+                    .filter(|_| self.hierarchy.groups.contains_key(&child))
+                {
+                    frame.frame.x += delta.x;
+                    frame.frame.y += delta.y;
+                } else if let Some((board, mut child_rect)) = self.object_rect(child) {
+                    child_rect.x += delta.x;
+                    child_rect.y += delta.y;
+                    self.set_object_rect(child, board, child_rect);
+                }
+            }
+            self.hierarchy.layouts.get_mut(&id).unwrap().frame = rect;
+            return;
+        }
         if let Some(b) = self.boards.iter_mut().find(|b| b.id == id) {
             b.rect = rect;
         } else if let Some(s) = self.shapes.iter_mut().find(|s| s.id == id) {
@@ -107,8 +146,22 @@ impl Workspace {
     }
 
     pub(super) fn before_geometry(&self) -> Vec<Change> {
-        self.operation_ids()
-            .into_iter()
+        let mut ids = self.operation_ids();
+        for id in self.selection_ids().into_iter().filter(|id| {
+            self.hierarchy.layouts.contains_key(id) && self.hierarchy.groups.contains_key(id)
+        }) {
+            ids.extend(
+                self.descendants(&std::collections::BTreeSet::from([id]))
+                    .into_iter()
+                    .filter(|child| {
+                        !self.ancestors(*child).iter().any(|p| {
+                            self.boards.iter().any(|b| b.id == *p)
+                                && self.ancestors(*p).contains(&id)
+                        })
+                    }),
+            );
+        }
+        ids.into_iter()
             .filter_map(|id| {
                 if let Some((index, b)) = self.boards.iter().enumerate().find(|(_, b)| b.id == id) {
                     Some(Change::Board {
@@ -135,7 +188,10 @@ impl Workspace {
                         })
                 }
             })
-            .chain((!self.hierarchy.groups.is_empty()).then(|| self.snapshot_hierarchy()))
+            .chain(
+                (!self.hierarchy.groups.is_empty() || !self.hierarchy.layouts.is_empty())
+                    .then(|| self.snapshot_hierarchy()),
+            )
             .collect()
     }
 
@@ -330,6 +386,25 @@ impl Workspace {
     }
 
     pub(super) fn move_selection(&mut self, delta: Point<f32>) {
+        let moved = self.descendants(&self.selection_ids());
+        if let Some(Change::Hierarchy { value, .. }) = self
+            .batch_before
+            .iter()
+            .find(|c| matches!(c, Change::Hierarchy { .. }))
+        {
+            for (id, layout) in &value.layouts {
+                if moved.contains(id)
+                    && value
+                        .groups
+                        .get(id)
+                        .is_some_and(|g| g.board.is_none_or(|b| !moved.contains(&b)))
+                {
+                    let frame = &mut self.hierarchy.layouts.get_mut(id).unwrap().frame;
+                    frame.x = layout.frame.x + delta.x;
+                    frame.y = layout.frame.y + delta.y;
+                }
+            }
+        }
         for change in self.batch_before.clone() {
             let (id, parent, mut rect) = match change {
                 Change::Board {
@@ -353,6 +428,10 @@ impl Workspace {
             return;
         }
         for id in self.selection_ids() {
+            if self.is_auto_layout_child(id) {
+                self.finish_layout_item_move(id);
+                continue;
+            }
             if self.hierarchy.groups.contains_key(&id) {
                 self.reparent_group(id);
                 continue;
@@ -483,6 +562,7 @@ impl Workspace {
             }
         }
         match (event.keystroke.key.as_str(), command) {
+            ("a" | "A", false) if modifiers.shift => self.enable_auto_layout(window, cx),
             ("g", true) if modifiers.shift => self.ungroup_selection(cx),
             ("g", true) => self.group_selection(cx),
             ("[" | "{", true) => self.shift_layers(false, modifiers.shift, cx),

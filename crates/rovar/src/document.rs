@@ -199,6 +199,7 @@ impl Page {
             ids.last().is_none_or(|id| self.next_id > *id),
             "Invalid next object ID"
         );
+        crate::auto_layout::validate(self, &ids)?;
         let boards: BTreeSet<_> = self.boards.iter().map(|b| b.id).collect();
         for board in self
             .shapes

@@ -48,6 +48,7 @@ enum Command {
     Delete,
     Rename,
     Group,
+    AutoLayout,
     Ungroup,
     Raise,
     Lower,
@@ -198,7 +199,22 @@ impl Workspace {
                 Command::SaveAsset,
                 self.can_save_asset(cx),
             ))
-            .separator()
+            .separator();
+        if self.can_auto_layout() {
+            menu = menu.item(item(
+                "context-auto-layout",
+                t(if self.has_auto_layout() {
+                    "layout-disable"
+                } else {
+                    "layout-enable"
+                }),
+                LucideIcons::PanelsTopLeft,
+                "Shift+A",
+                Command::AutoLayout,
+                editable && self.can_auto_layout(),
+            ));
+        }
+        menu = menu
             .item(item(
                 "context-group",
                 t("group"),
@@ -490,6 +506,7 @@ impl Workspace {
                 }
             }
             Command::Group => self.group_selection(cx),
+            Command::AutoLayout => self.enable_auto_layout(window, cx),
             Command::Ungroup => self.ungroup_selection(cx),
             Command::Raise => self.shift_layers(true, false, cx),
             Command::Lower => self.shift_layers(false, false, cx),

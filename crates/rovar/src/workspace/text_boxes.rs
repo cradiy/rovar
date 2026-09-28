@@ -95,6 +95,7 @@ impl Workspace {
         let editor = cx.new(|cx| TextEditor::new(id, history, window, cx));
         // Repaint the owning surface on input without copying text back into it.
         let subscription = cx.observe_in(&editor, window, |this, editor, window, cx| {
+            this.auto_layout.revision = None;
             // An IME commit may arrive during a chrome-only resize.
             this.scene.update(cx, |_, cx| cx.notify());
             if this
@@ -405,5 +406,6 @@ impl Workspace {
                     ),
             )
             .child(inspector_section(t("fill")).child(self.paint_value_row(cx)))
+            .child(self.auto_layout_controls(cx))
     }
 }

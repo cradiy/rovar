@@ -156,6 +156,14 @@ impl Workspace {
                     }
                 }
                 self.set_object_rect(id, parent, rect);
+                if self.hierarchy.layouts.contains_key(&id) && matches!(property, Width | Height) {
+                    let sizing = self.hierarchy.sizing.entry(id).or_default();
+                    if property == Width {
+                        sizing.width = crate::auto_layout::Mode::Fixed;
+                    } else {
+                        sizing.height = crate::auto_layout::Mode::Fixed;
+                    }
+                }
             }
         } else if property == Opacity {
             let mut color = self.object_color(id, cx).unwrap();
@@ -374,6 +382,7 @@ impl Workspace {
             .flex()
             .flex_col()
             .child(div().p(px(14.)).flex_shrink_0().child(actions))
+            .child(self.auto_layout_controls(cx))
             .child(
                 div()
                     .px(px(14.))
@@ -391,13 +400,15 @@ impl Workspace {
                 ),
             )
             .child(
-                section(t("object-dimensions")).child(
-                    div()
-                        .flex()
-                        .gap(px(8.))
-                        .child(self.property_field(3, t("width"), cx))
-                        .child(self.property_field(4, t("height"), cx)),
-                ),
+                section(t("object-dimensions"))
+                    .child(
+                        div()
+                            .flex()
+                            .gap(px(8.))
+                            .child(self.property_field(3, t("width"), cx))
+                            .child(self.property_field(4, t("height"), cx)),
+                    )
+                    .children(self.layout_position_control(cx)),
             )
             .when(self.batch_color_supported(cx), |el| {
                 el.child(section(t("color")).child(self.paint_value_row(cx)))

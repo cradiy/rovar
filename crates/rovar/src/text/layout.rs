@@ -412,6 +412,36 @@ pub(crate) fn export_fragments(
         .collect()
 }
 
+pub(crate) fn measure_content(
+    content: &str,
+    styles: &StyledText,
+    width: f32,
+    system: &gpui::WindowTextSystem,
+) -> [f32; 2] {
+    let layout = TextLayout::with_text_system(
+        content,
+        styles,
+        1.,
+        Bounds::new(
+            Point::default(),
+            size(px(width.max(1.)), px(crate::artboard::MAX_SIZE)),
+        ),
+        system,
+    );
+    let width = layout
+        .rows
+        .iter()
+        .filter_map(|r| r.carets.last().map(|(_, x)| f32::from(*x - r.origin.x)))
+        .fold(1., f32::max);
+    let height = layout
+        .rows
+        .iter()
+        .map(|r| f32::from(r.height))
+        .sum::<f32>()
+        .max(1.);
+    [width, height]
+}
+
 #[cfg(test)]
 mod tests {
     use super::TextLayout;

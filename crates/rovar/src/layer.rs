@@ -23,6 +23,10 @@ pub(crate) struct LayerGroup {
 /// Group membership is independent of the board coordinate system.
 #[derive(Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub(crate) struct Hierarchy {
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub layouts: std::collections::BTreeMap<usize, crate::auto_layout::Container>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub sizing: std::collections::BTreeMap<usize, crate::auto_layout::Sizing>,
     pub groups: std::collections::BTreeMap<usize, LayerGroup>,
     pub parents: std::collections::BTreeMap<usize, usize>,
     pub names: std::collections::BTreeMap<usize, String>,

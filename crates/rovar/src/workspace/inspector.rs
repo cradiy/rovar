@@ -820,14 +820,17 @@ impl Workspace {
             let valid = apply_text_field(text, property, value, stop, cx);
             let color = text.editor.read(cx).effective_style().editable_color(stop);
             if text.rect != before {
-                self.history.borrow_mut().record(
-                    vec![Change::TextRect {
-                        id,
-                        board,
-                        value: before,
-                    }],
-                    None,
-                );
+                let after = text.rect;
+                let mut changes: Vec<_> = self
+                    .fix_layout_size(id, before, after)
+                    .into_iter()
+                    .collect();
+                changes.push(Change::TextRect {
+                    id,
+                    board,
+                    value: before,
+                });
+                self.history.borrow_mut().record(changes, None);
             }
             (valid, color)
         } else if self.selected_shape.is_some() {
@@ -905,6 +908,12 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) -> impl IntoElement + use<> {
         let is_color = matches!(index, 5 | 16);
+        let sizing =
+            if matches!(index, 3 | 4) && !self.selected_shape().is_some_and(|s| s.kind.is_line()) {
+                self.sizing_control(index - 3, cx)
+            } else {
+                None
+            };
         let slot = index
             + if popup {
                 0
@@ -1134,6 +1143,7 @@ impl Workspace {
                         )
                     }),
             )
+            .children(sizing)
     }
 
     pub(super) fn paint_value_row(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
@@ -1328,7 +1338,8 @@ impl Workspace {
                         )
                         .when(self.selected_shape.is_none(), |el| {
                             el.child(inspector_section(t("fill")).child(self.paint_value_row(cx)))
-                        }),
+                        })
+                        .child(self.auto_layout_controls(cx)),
                 )
             })
             .when(!self.multi_selection.is_empty(), |el| {
@@ -1394,6 +1405,7 @@ impl Workspace {
                     )
                 },
             )
+            .children(self.layout_position_control(cx))
     }
     pub(super) fn color_picker(&self) -> impl IntoElement {
         ColorPicker::new(&self.picker)

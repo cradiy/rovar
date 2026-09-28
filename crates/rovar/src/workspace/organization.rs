@@ -190,16 +190,24 @@ impl Workspace {
         all.iter()
             .copied()
             .filter(|id| {
-                !self.hierarchy.groups.contains_key(id)
-                    && !self
-                        .ancestors(*id)
-                        .iter()
-                        .any(|p| all.contains(p) && self.boards.iter().any(|b| b.id == *p))
+                (!self.hierarchy.groups.contains_key(id) || self.hierarchy.layouts.contains_key(id))
+                    && !self.ancestors(*id).iter().any(|p| {
+                        all.contains(p)
+                            && (self.boards.iter().any(|b| b.id == *p)
+                                || self.hierarchy.layouts.contains_key(p))
+                    })
             })
             .collect()
     }
 
     pub(super) fn group_bounds(&self, id: usize) -> Option<Rect> {
+        if let Some(layout) = self.hierarchy.layouts.get(&id) {
+            let mut rect = layout.frame;
+            let origin = self.parent_origin(self.hierarchy.groups.get(&id)?.board);
+            rect.x += origin.x;
+            rect.y += origin.y;
+            return Some(rect);
+        }
         self.descendants(&BTreeSet::from([id]))
             .into_iter()
             .filter(|child| *child != id && !self.hierarchy.groups.contains_key(child))
@@ -246,9 +254,14 @@ impl Workspace {
         if !self.can_group() {
             return;
         }
-        self.seal_text_edits(cx);
         let ids = self.selection_ids();
-        let parent = self.common_parent(&ids).unwrap();
+        let Some(parent) = self.common_parent(&ids) else {
+            return;
+        };
+        if !ids.iter().all(|id| self.layer_editable(*id)) {
+            return;
+        }
+        self.seal_text_edits(cx);
         let before = self.snapshot_hierarchy();
         let mut order = self.ordered_children(parent);
         let at = order.iter().rposition(|id| ids.contains(id)).unwrap();
@@ -315,6 +328,8 @@ impl Workspace {
             self.hierarchy.groups.remove(&id);
             self.hierarchy.parents.remove(&id);
             self.hierarchy.order.retain(|i| *i != id);
+            self.hierarchy.layouts.remove(&id);
+            self.hierarchy.sizing.remove(&id);
             self.set_sibling_order(&order);
             selected.remove(&id);
             selected.extend(children);
@@ -324,7 +339,7 @@ impl Workspace {
         cx.notify();
     }
 
-    fn set_sibling_order(&mut self, ids: &[usize]) {
+    pub(super) fn set_sibling_order(&mut self, ids: &[usize]) {
         // Materialize current order before overriding one sibling list.
         let mut all = self.layer_ids();
         let rank: HashMap<_, _> = self
@@ -418,7 +433,10 @@ impl Workspace {
                 .groups
                 .keys()
                 .copied()
-                .filter(|id| self.ordered_children(Some(*id)).is_empty())
+                .filter(|id| {
+                    !self.hierarchy.layouts.contains_key(id)
+                        && self.ordered_children(Some(*id)).is_empty()
+                })
                 .collect();
             if empty.is_empty() {
                 break;
@@ -434,6 +452,8 @@ impl Workspace {
             .retain(|id, p| ids.contains(id) && ids.contains(p));
         self.hierarchy.names.retain(|id, _| ids.contains(id));
         self.hierarchy.order.retain(|id| ids.contains(id));
+        self.hierarchy.layouts.retain(|id, _| ids.contains(id));
+        self.hierarchy.sizing.retain(|id, _| ids.contains(id));
     }
 }
 
@@ -455,6 +475,16 @@ impl Workspace {
         };
         let board = self.board_at(point(rect.x + rect.width / 2., rect.y + rect.height / 2.));
         let origin = self.parent_origin(board);
+        for child in &descendants {
+            if let Some(group) = self.hierarchy.groups.get(child)
+                && self.hierarchy.layouts.contains_key(child)
+            {
+                let previous = self.parent_origin(group.board);
+                let frame = &mut self.hierarchy.layouts.get_mut(child).unwrap().frame;
+                frame.x += previous.x - origin.x;
+                frame.y += previous.y - origin.y;
+            }
+        }
         let positions: Vec<_> = descendants
             .iter()
             .filter(|id| !self.hierarchy.groups.contains_key(id))

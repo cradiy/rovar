@@ -1,4 +1,5 @@
 mod assets;
+mod auto_layout;
 mod canvas;
 mod context_menu;
 mod creation;
@@ -84,6 +85,10 @@ enum GestureKind {
         index: usize,
         original: f32,
     },
+    LayoutProperty {
+        index: usize,
+        original: f32,
+    },
     BezierPlace,
     BezierEdit {
         id: usize,
@@ -130,6 +135,7 @@ pub struct Workspace {
     export: export::ExportState,
     snapping: layout::Snapping,
     hierarchy: crate::layer::Hierarchy,
+    auto_layout: auto_layout::State,
     rename_input: Entity<TextInput>,
     layer_drag: Option<organization::LayerDrag>,
     layer_row_bounds: Rc<std::cell::RefCell<std::collections::HashMap<usize, Bounds<Pixels>>>>,
@@ -385,6 +391,7 @@ impl Workspace {
             pages,
             assets: assets::State::new(window, cx),
             hierarchy: Default::default(),
+            auto_layout: auto_layout::State::new(window, cx),
             snapping: Default::default(),
             export: export::ExportState::new(window, cx),
             rename_input,
@@ -610,6 +617,9 @@ impl Workspace {
             GestureKind::Property { index, original } => {
                 self.scrub_property(index, original, delta.x, shift, cx)
             }
+            GestureKind::LayoutProperty { index, original } => {
+                self.scrub_layout_number(index, original, delta.x, shift, cx)
+            }
             GestureKind::Draw => self.move_drawing(position, shift),
             GestureKind::BezierPlace => self.move_bezier_place(position, shift),
             GestureKind::BezierEdit { id, index, part } => {
@@ -681,6 +691,7 @@ impl Workspace {
                 }
                 GestureKind::Panel { side, original, .. } => self.panels.set(side, original),
                 GestureKind::Property { .. } => self.finish_property_scrub(false, cx),
+                GestureKind::LayoutProperty { .. } => self.finish_layout_scrub(false, cx),
                 GestureKind::Draw => {
                     self.box_draft = None;
                     self.draft = None;
@@ -720,6 +731,8 @@ impl Workspace {
 
 impl Render for Workspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.reflow_layout(cx);
+        self.sync_layout_inputs(cx);
         self.sync_video_visibility(cx);
         self.load_visible_media(window, cx);
         self.panels.window_width = f32::from(window.viewport_size().width);
@@ -728,6 +741,7 @@ impl Render for Workspace {
             GestureKind::LayerSort => gpui::CursorStyle::ClosedHand,
             GestureKind::Panel { .. }
             | GestureKind::Property { .. }
+            | GestureKind::LayoutProperty { .. }
             | GestureKind::MultiProperty { .. } => gpui::CursorStyle::ResizeLeftRight,
             GestureKind::Resize { handle, .. } => resize_cursor(handle),
             GestureKind::Text {
@@ -821,6 +835,7 @@ impl Render for Workspace {
                         g.kind,
                         GestureKind::LayerSort
                             | GestureKind::Property { .. }
+                            | GestureKind::LayoutProperty { .. }
                             | GestureKind::Panel { .. }
                             | GestureKind::MultiProperty { .. }
                     )

@@ -68,7 +68,7 @@ Document schema **2** uses these keys inside the 1.0 container:
 | --- | --- |
 | `document` | Schema, document UUID, ordered page UUIDs and media metadata |
 | `page/<uuid>` | Page name, object IDs, next object ID and media references |
-| `page/<uuid>/hierarchy` | Groups, parents, layer names and order |
+| `page/<uuid>/hierarchy` | Groups, parents, layer names, order, optional auto-layout containers and item sizing |
 | `page/<uuid>/board/<id>` | Artboard |
 | `page/<uuid>/shape/<id>` | Shape |
 | `page/<uuid>/text/<id>` | Text and styles |

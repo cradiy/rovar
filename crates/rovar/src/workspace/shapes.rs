@@ -31,14 +31,16 @@ impl Workspace {
         let before = self.shapes[index].clone();
         let result = change(&mut self.shapes[index]);
         if before != self.shapes[index] {
-            self.history.borrow_mut().record(
-                vec![Change::Shape {
-                    id: before.id,
-                    index,
-                    value: Some(before),
-                }],
-                None,
-            );
+            let mut changes: Vec<_> = self
+                .fix_layout_size(before.id, before.rect, self.shapes[index].rect)
+                .into_iter()
+                .collect();
+            changes.push(Change::Shape {
+                id: before.id,
+                index,
+                value: Some(before),
+            });
+            self.history.borrow_mut().record(changes, None);
         }
         Some(result)
     }

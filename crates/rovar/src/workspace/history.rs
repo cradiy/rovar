@@ -23,14 +23,16 @@ impl Workspace {
         let before = self.boards[index].clone();
         let result = edit(&mut self.boards[index]);
         if self.boards[index] != before {
-            self.history.borrow_mut().record(
-                vec![Change::Board {
-                    id: before.id,
-                    index,
-                    value: Some(before),
-                }],
-                group,
-            );
+            let mut changes: Vec<_> = self
+                .fix_layout_size(before.id, before.rect, self.boards[index].rect)
+                .into_iter()
+                .collect();
+            changes.push(Change::Board {
+                id: before.id,
+                index,
+                value: Some(before),
+            });
+            self.history.borrow_mut().record(changes, group);
         }
         Some(result)
     }
@@ -141,6 +143,13 @@ impl Workspace {
                     self.finish_property_scrub(changed, cx);
                     None
                 }
+                GestureKind::LayoutProperty { index, original } => {
+                    let changed = self
+                        .layout_number_value(index)
+                        .is_some_and(|v| v != original);
+                    self.finish_layout_scrub(changed, cx);
+                    None
+                }
                 GestureKind::Draw => {
                     self.finish_drawing(window, cx);
                     None
@@ -202,9 +211,46 @@ impl Workspace {
                     }),
                 GestureKind::Pan { .. } | GestureKind::Panel { .. } => None,
             };
-            self.reparent_moved(gesture.kind, cx);
+            let moving = match gesture.kind {
+                GestureKind::Shape {
+                    id, handle: None, ..
+                }
+                | GestureKind::Text {
+                    id, handle: None, ..
+                }
+                | GestureKind::Move { id, .. } => Some(id),
+                _ => None,
+            };
+            let layout_item =
+                moving.filter(|id| change.is_some() && self.is_auto_layout_child(*id));
+            let layout_change = layout_item.and_then(|id| self.finish_layout_item_move(id));
+            if layout_item.is_none() {
+                self.reparent_moved(gesture.kind, cx);
+            } else {
+                self.sync_fields(cx);
+            }
             if let Some(change) = change {
+                let resized = match &change {
+                    Change::Board {
+                        id, value: Some(b), ..
+                    } => Some((*id, b.rect)),
+                    Change::Shape {
+                        id, value: Some(s), ..
+                    } => Some((*id, s.rect)),
+                    Change::TextRect { id, value, .. } => Some((*id, *value)),
+                    _ => None,
+                }
+                .and_then(|(id, before)| {
+                    self.object_rect(id)
+                        .and_then(|(_, after)| self.fix_layout_size(id, before, after))
+                });
                 let mut changes = vec![change];
+                if let Some(before) = resized {
+                    changes.insert(0, before);
+                }
+                if let Some(before) = layout_change {
+                    changes.insert(0, before);
+                }
                 if matches!(gesture.kind, GestureKind::BezierEdit { .. }) {
                     changes.insert(
                         0,

@@ -249,7 +249,7 @@ impl Workspace {
             add(shape.id, false, &shape.media);
             add(shape.id, true, &shape.image_fill.asset);
         }
-        let page = Page {
+        let mut page = Page {
             id: self.pages.active.clone(),
             name: self.pages.current().page.name.clone(),
             boards: self.boards.clone(),
@@ -267,10 +267,15 @@ impl Workspace {
             next_id: self.next_id,
             assets,
         };
+        let text_system = gpui::WindowTextSystem::new(cx.text_system().clone());
+        if let Err(error) = crate::auto_layout::resolve(&mut page, &text_system) {
+            eprintln!("Could not resolve automatic layout: {error:#}");
+        }
         (page, sources)
     }
 
     pub(super) fn load_page(&mut self, page: Page, window: &mut Window, cx: &mut Context<Self>) {
+        self.auto_layout.revision = None;
         self.boards = page.boards;
         self.shapes = page.shapes;
         self.hierarchy = page.hierarchy;

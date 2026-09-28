@@ -22,6 +22,7 @@ image = { version = "0.25", default-features = false, features = [
   "tiff",
 ] }
 anyhow = "1"
+taffy = { version = "0.10.1", default-features = false, features = ["std", "taffy_tree", "flexbox", "block_layout"] }
 fluent-bundle = "0.16"
 fluent-syntax = "0.12"
 fluent-langneg = "0.14"

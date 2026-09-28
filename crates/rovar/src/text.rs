@@ -1,5 +1,6 @@
 mod layout;
 pub(crate) use layout::export_fragments;
+pub(crate) use layout::measure_content;
 pub(crate) mod styles;
 pub(crate) use styles::StyleChange;
 use styles::StyledText;

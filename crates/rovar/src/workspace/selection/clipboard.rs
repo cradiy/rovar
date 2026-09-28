@@ -78,6 +78,17 @@ impl Workspace {
             .retain(|id, p| included_ids.contains(id) && included_ids.contains(p));
         hierarchy.names.retain(|id, _| included_ids.contains(id));
         hierarchy.order.retain(|id| included_ids.contains(id));
+        hierarchy.layouts.retain(|id, _| included_ids.contains(id));
+        hierarchy.sizing.retain(|id, _| included_ids.contains(id));
+        for (id, layout) in &mut hierarchy.layouts {
+            if let Some(group) = hierarchy.groups.get(id)
+                && group.board.is_none_or(|b| !copied_boards.contains(&b))
+            {
+                let origin = self.parent_origin(group.board);
+                layout.frame.x += origin.x;
+                layout.frame.y += origin.y;
+            }
+        }
         let root_parents = roots
             .iter()
             .map(|id| (*id, self.layer_parent(*id)))
@@ -378,6 +389,21 @@ impl Workspace {
         }
         for (id, parent) in clipboard.hierarchy.parents {
             self.hierarchy.parents.insert(id_map[&id], id_map[&parent]);
+        }
+        for (id, mut layout) in clipboard.hierarchy.layouts {
+            if self
+                .hierarchy
+                .groups
+                .get(&id_map[&id])
+                .is_some_and(|g| g.board.is_none())
+            {
+                layout.frame.x += offset.x;
+                layout.frame.y += offset.y;
+            }
+            self.hierarchy.layouts.insert(id_map[&id], layout);
+        }
+        for (id, sizing) in clipboard.hierarchy.sizing {
+            self.hierarchy.sizing.insert(id_map[&id], sizing);
         }
         for (id, name) in clipboard.hierarchy.names {
             self.hierarchy.names.insert(id_map[&id], name);

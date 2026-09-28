@@ -68,7 +68,7 @@
 | --- | --- |
 | `document` | 结构版本、文档 UUID、有序页面 UUID 和媒体元数据 |
 | `page/<uuid>` | 页面名称、对象 ID、下一个对象 ID 和媒体引用 |
-| `page/<uuid>/hierarchy` | 分组、父子关系、图层名称和顺序 |
+| `page/<uuid>/hierarchy` | 分组、父子关系、图层名称、顺序，以及可选的自动布局容器和对象尺寸规则 |
 | `page/<uuid>/board/<id>` | 画板 |
 | `page/<uuid>/shape/<id>` | 形状 |
 | `page/<uuid>/text/<id>` | 文字和样式 |

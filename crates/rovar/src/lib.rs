@@ -1,5 +1,6 @@
 mod artboard;
 mod assets;
+mod auto_layout;
 mod bezier;
 mod component_export;
 mod component_library;

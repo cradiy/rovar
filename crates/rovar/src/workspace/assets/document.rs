@@ -9,7 +9,10 @@ pub(in crate::workspace) struct SavedComponent {
 }
 
 impl Workspace {
-    pub(super) fn component_snapshot(&self, cx: &gpui::App) -> anyhow::Result<SavedComponent> {
+    pub(in crate::workspace) fn component_snapshot(
+        &self,
+        cx: &gpui::App,
+    ) -> anyhow::Result<SavedComponent> {
         let roots = self.selection_ids();
         let included = self.descendants(&roots);
         let bounds = roots
@@ -58,6 +61,26 @@ impl Workspace {
             .retain(|id, _| included.contains(id));
         for group in document.hierarchy.groups.values_mut() {
             group.board = group.board.filter(|id| boards.contains(id));
+        }
+        document
+            .hierarchy
+            .layouts
+            .retain(|id, _| included.contains(id));
+        document
+            .hierarchy
+            .sizing
+            .retain(|id, _| included.contains(id));
+        for (id, layout) in &mut document.hierarchy.layouts {
+            if document
+                .hierarchy
+                .groups
+                .get(id)
+                .is_some_and(|g| g.board.is_none())
+            {
+                layout.frame = self.world_rect(*id).unwrap();
+                layout.frame.x -= bounds.x;
+                layout.frame.y -= bounds.y;
+            }
         }
         document
             .hierarchy
