@@ -470,8 +470,7 @@ fn history_buttons_follow_real_edits_undo_redo_and_tab_switches(cx: &mut TestApp
                 .unwrap()
                 .0;
             assert_eq!(
-                crate::document::Document::decode(&json)
-                    .unwrap()
+                crate::document::Document::decode(&json).unwrap().pages[0]
                     .shapes
                     .len(),
                 1,

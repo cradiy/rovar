@@ -5,6 +5,34 @@ use shapes::NodeAction;
 use std::collections::BTreeSet;
 use uic::components::context_menu::{self, ContextMenu, ContextMenuAppearance, ContextMenuItem};
 
+pub(super) fn menu(width: f32, selector: &'static str) -> ContextMenu {
+    ContextMenu::new()
+        .w(px(width))
+        .max_h(px(500.))
+        .bg(gpui::transparent_black())
+        .border_0()
+        .text_color(rgb(TEXT))
+        .text_size(px(12.))
+        .appearance(ContextMenuAppearance {
+            muted_foreground: rgb(MUTED).into(),
+            danger_foreground: rgb(0xff8c87).into(),
+            selected_background: gpui::rgba(0xb4a2ee28).into(),
+            selected_foreground: rgb(TEXT).into(),
+            separator: gpui::rgba(0xb4a2ee28).into(),
+            item_height: px(28.),
+            ..Default::default()
+        })
+        .surface(move |state, content, _, _| {
+            layers::glass_surface()
+                .debug_selector(move || format!("{selector}-{}", state.depth))
+                .rounded(px(12.))
+                .border_1()
+                .border_color(gpui::rgba(0xb4a2ee45))
+                .shadow_lg()
+                .child(content)
+        })
+}
+
 #[derive(Clone, Copy)]
 enum Command {
     SaveAsset,
@@ -96,30 +124,7 @@ impl Workspace {
         };
         let order_enabled = editable && self.common_parent(&self.selection_ids()).is_some();
         let paste_enabled = self.can_paste_objects(cx);
-        let mut menu = ContextMenu::new()
-            .w(px(238.))
-            .max_h(px(500.))
-            .bg(gpui::transparent_black())
-            .border_0()
-            .text_color(rgb(TEXT))
-            .text_size(px(12.))
-            .appearance(ContextMenuAppearance {
-                muted_foreground: rgb(MUTED).into(),
-                selected_background: gpui::rgba(0xb4a2ee28).into(),
-                selected_foreground: rgb(TEXT).into(),
-                separator: gpui::rgba(0xb4a2ee28).into(),
-                item_height: px(28.),
-                ..Default::default()
-            })
-            .surface(|state, content, _, _| {
-                layers::glass_surface()
-                    .debug_selector(move || format!("editor-context-glass-{}", state.depth))
-                    .rounded(px(12.))
-                    .border_1()
-                    .border_color(gpui::rgba(0xb4a2ee45))
-                    .shadow_lg()
-                    .child(content)
-            })
+        let mut menu = menu(238., "editor-context-glass")
             .item(item(
                 "context-undo",
                 t("undo"),
@@ -433,6 +438,26 @@ impl Workspace {
                     )
                     .danger(),
                 );
+        }
+        if editable && self.pages.entries.len() > 1 {
+            let pages: Vec<_> = self
+                .pages
+                .entries
+                .iter()
+                .filter(|p| p.page.id != self.pages.active)
+                .map(|p| (p.page.id.clone(), p.page.name.clone()))
+                .collect();
+            let weak = cx.entity().downgrade();
+            menu = menu.submenu(t("page-move-selection"), move |mut menu| {
+                for (id, name) in pages {
+                    let weak = weak.clone();
+                    menu = menu.item(ContextMenuItem::action(name, move |window, cx| {
+                        let _ = weak
+                            .update(cx, |this, cx| this.move_selection_to_page(&id, window, cx));
+                    }));
+                }
+                menu
+            });
         }
         let _ = context_menu::show(menu, position, window, cx);
         cx.notify();

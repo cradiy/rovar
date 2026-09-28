@@ -21,7 +21,7 @@ fn hovering_tabs_shows_document_thumbnail_after_delay_and_dismisses_on_leave_or_
         .update(cx, |studio, window, cx| {
             let tab = &studio.tabs[0];
             let mut document = crate::document::Document::decode(&tab.last_saved).unwrap();
-            document.shapes.push(crate::shape::Shape::new(
+            document.pages[0].shapes.push(crate::shape::Shape::new(
                 1,
                 None,
                 crate::shape::ShapeKind::Rectangle,
@@ -32,11 +32,12 @@ fn hovering_tabs_shows_document_thumbnail_after_delay_and_dismisses_on_leave_or_
                     height: 80.,
                 },
             ));
-            document.next_id = 2;
+            document.pages[0].next_id = 2;
             tab.editor.as_ref().unwrap().update(cx, |editor, cx| {
                 editor
                     .load_document(
                         crate::document::Loaded {
+                            needs_upgrade: false,
                             json: serde_json::to_vec(&document).unwrap(),
                             assets: Default::default(),
                         },

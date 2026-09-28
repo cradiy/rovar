@@ -16,8 +16,9 @@ fn rect(x: f32, y: f32, width: f32, height: f32) -> Rect {
         height,
     }
 }
-fn document(shapes: Vec<Shape>) -> Document {
-    Document {
+fn document(shapes: Vec<Shape>) -> Page {
+    Page {
+        name: "Page 1".into(),
         id: uuid::Uuid::new_v4().to_string(),
         next_id: 100,
         boards: vec![],
@@ -27,7 +28,7 @@ fn document(shapes: Vec<Shape>) -> Document {
         assets: vec![],
     }
 }
-fn job(doc: &Document, bounds: Rect) -> Job {
+fn job(doc: &Page, bounds: Rect) -> Job {
     Job {
         original: None,
         name: "Export".into(),

@@ -58,6 +58,7 @@ impl Workspace {
                 continue;
             }
             let hash = asset.hash.clone();
+            let page = self.pages.active.clone();
             cx.spawn(async move |this, cx| {
                 let result = cx
                     .background_executor()
@@ -65,7 +66,9 @@ impl Workspace {
                     .await;
                 let _ = this.update(cx, |this, cx| {
                     this.media_decoding.remove(&hash);
-                    if let Err(error) = result {
+                    if let Err(error) = result
+                        && this.pages.active == page
+                    {
                         this.media_error = Some(crate::i18n::message(
                             "media-import-error",
                             &[("error", format!("{error:#}"))],
@@ -92,6 +95,10 @@ impl Workspace {
         self.toolbar.hand = false;
         self.seal_text_edits(cx);
         let request = self.media_request;
+        let page = self.pages.active.clone();
+        let view = self.view;
+        let size = self.bounds.get().size.map(f32::from);
+        let insets = self.canvas_insets();
         let dialog = cx.prompt_for_paths(gpui::PathPromptOptions {
             files: true,
             directories: false,
@@ -142,7 +149,61 @@ impl Workspace {
                 }
                 this.media_loading = false;
                 match loaded {
-                    Ok(asset) => this.add_media(asset, window, cx),
+                    Ok(asset) => {
+                        if this.pages.active == page {
+                            this.add_media(asset, window, cx);
+                        } else if let Some(state) =
+                            this.pages.entries.iter_mut().find(|p| p.page.id == page)
+                        {
+                            let (left, right) = insets;
+                            let scale = (0.8 * (size.width - left - right).max(1.)
+                                / view.zoom
+                                / asset.width as f32)
+                                .min(
+                                    0.8 * (size.height - 160.).max(1.)
+                                        / view.zoom
+                                        / asset.height as f32,
+                                )
+                                .min(320. / view.zoom / asset.width.max(asset.height) as f32)
+                                .min(1.);
+                            let width = asset.width as f32 * scale;
+                            let height = asset.height as f32 * scale;
+                            let center = view
+                                .world(point((left + size.width - right) / 2., size.height / 2.));
+                            let id = state.page.next_id;
+                            state.page.next_id += 1;
+                            let mut shape = Shape::new(
+                                id,
+                                None,
+                                asset.kind(),
+                                Rect {
+                                    x: center.x - width / 2.,
+                                    y: center.y - height / 2.,
+                                    width,
+                                    height,
+                                },
+                            );
+                            shape.name = asset.name();
+                            shape.fill_enabled = false;
+                            shape.layer.aspect_locked = true;
+                            state.page.assets.push(crate::document::AssetUse {
+                                object: id,
+                                fill: false,
+                                hash: asset.hash.clone(),
+                            });
+                            shape.media = Some(asset);
+                            let index = state.page.shapes.len();
+                            state.page.shapes.push(shape);
+                            this.history.borrow_mut().record_for(
+                                page.clone(),
+                                vec![Change::Shape {
+                                    id,
+                                    index,
+                                    value: None,
+                                }],
+                            );
+                        }
+                    }
                     Err(error) => {
                         this.media_error = Some(crate::i18n::message(
                             "media-import-error",
@@ -396,6 +457,8 @@ impl Workspace {
         };
         let expected = asset.clone();
         let playback_generation = self.video_playback_generation;
+        let page = self.pages.active.clone();
+        let page_generation = self.pages.generation;
         cx.spawn_in(window, async move |this, cx| {
             let opened = cx
                 .background_executor()
@@ -416,6 +479,9 @@ impl Workspace {
                 })
                 .await;
             let _ = this.update(cx, |this, cx| {
+                if this.pages.active != page || this.pages.generation != page_generation {
+                    return;
+                }
                 this.video_loading.remove(&id);
                 if !this.layer_editable(id)
                     || !this.shapes.iter().any(|s| {

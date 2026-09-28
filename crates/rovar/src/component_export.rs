@@ -1,7 +1,7 @@
 use crate::scene_render::{TextFragment, render_options};
 use crate::{
     artboard::Rect,
-    document::{AssetSource, Document},
+    document::{AssetSource, Page},
 };
 use anyhow::{Context, Result, ensure};
 use std::{collections::BTreeMap, io::Write as _, path::PathBuf, sync::Arc};
@@ -79,7 +79,7 @@ impl Job {
     }
 
     pub fn svg(&self) -> Result<String> {
-        let document = Document::decode(&self.json)?;
+        let document = Page::decode(&self.json)?;
         ensure!(
             !document
                 .shapes

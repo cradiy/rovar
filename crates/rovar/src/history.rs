@@ -14,6 +14,31 @@ use std::{
 pub(crate) type SharedHistory = Rc<RefCell<History>>;
 
 #[derive(Clone)]
+pub(crate) struct PageEdit {
+    pub pages: std::collections::BTreeMap<String, Option<SavedPage>>,
+    pub order: Vec<String>,
+    pub active: String,
+}
+
+#[derive(Clone)]
+pub(crate) struct SavedPage {
+    pub page: crate::document::Page,
+    pub view: [f32; 3],
+    pub selection: std::collections::BTreeSet<usize>,
+    pub folded: std::collections::HashSet<usize>,
+}
+impl SavedPage {
+    pub fn new(page: crate::document::Page) -> Self {
+        Self {
+            page,
+            view: [0., 0., 1.],
+            selection: Default::default(),
+            folded: Default::default(),
+        }
+    }
+}
+
+#[derive(Clone)]
 pub(crate) struct SavedText {
     pub id: usize,
     pub layer: crate::layer::LayerState,
@@ -26,6 +51,9 @@ pub(crate) struct SavedText {
 /// No entities are retained, so deleted objects do not retain UI subscriptions.
 #[derive(Clone)]
 pub(crate) enum Change {
+    Pages {
+        value: PageEdit,
+    },
     NodeSelection {
         value: Option<(usize, usize)>,
     },
@@ -79,15 +107,41 @@ pub(crate) enum Group {
 
 #[derive(Default)]
 pub(crate) struct History {
+    pub suppressed: bool,
     revision: u64,
-    undo: Vec<Vec<Change>>,
-    redo: Vec<Vec<Change>>,
+    page: String,
+    undo: Vec<Entry>,
+    redo: Vec<Entry>,
     group: Option<(Group, Instant)>,
     scope: Option<(Group, bool)>,
     preview: Option<Vec<Change>>,
 }
 
+struct Entry {
+    page: String,
+    changes: Vec<Change>,
+}
+
 impl History {
+    pub fn record_for(&mut self, page: String, changes: Vec<Change>) {
+        self.break_group();
+        let preview = self.preview.take();
+        let scope = self.scope.take();
+        let current = std::mem::replace(&mut self.page, page);
+        self.record(changes, None);
+        self.page = current;
+        self.preview = preview;
+        self.scope = scope;
+    }
+    pub fn set_page(&mut self, page: String) {
+        self.break_group();
+        self.page = page;
+    }
+    pub fn replay_page(&self, redo: bool) -> Option<&str> {
+        (if redo { &self.redo } else { &self.undo })
+            .last()
+            .map(|entry| entry.page.as_str())
+    }
     pub fn revision(&self) -> u64 {
         self.revision
     }
@@ -136,6 +190,9 @@ impl History {
         })
     }
     pub fn record(&mut self, changes: Vec<Change>, group: Option<Group>) {
+        if self.suppressed {
+            return;
+        }
         // Merged typing/style edits may intentionally omit the inverse snapshot.
         self.mark_changed();
         if let Some(before) = &mut self.preview {
@@ -145,7 +202,10 @@ impl History {
             return;
         }
         if !changes.is_empty() && !self.can_merge(group.as_ref()) {
-            self.undo.push(changes);
+            self.undo.push(Entry {
+                page: self.page.clone(),
+                changes,
+            });
             // Keep history bounded without retaining every document forever.
             if self.undo.len() > 256 {
                 self.undo.remove(0);
@@ -162,17 +222,23 @@ impl History {
     pub fn take(&mut self, redo: bool) -> Option<Vec<Change>> {
         self.break_group();
         if redo {
-            self.redo.pop()
+            self.redo.pop().map(|entry| entry.changes)
         } else {
-            self.undo.pop()
+            self.undo.pop().map(|entry| entry.changes)
         }
     }
     pub fn finish_replay(&mut self, inverse: Vec<Change>, redo: bool) {
         self.mark_changed();
         if redo {
-            self.undo.push(inverse);
+            self.undo.push(Entry {
+                page: self.page.clone(),
+                changes: inverse,
+            });
         } else {
-            self.redo.push(inverse);
+            self.redo.push(Entry {
+                page: self.page.clone(),
+                changes: inverse,
+            });
         }
     }
     pub fn can_undo(&self) -> bool {

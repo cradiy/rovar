@@ -37,7 +37,10 @@ fn autosave_skips_idle_snapshots_but_persists_view_and_content_changes(cx: &mut 
             editor.update(cx, |editor, _| editor.restore_view([40., 60., 2.]));
             studio.autosave(window, cx);
             assert_eq!(editor.read(cx).snapshot_count.get(), count);
-            assert_eq!(studio.tabs[0].file.view, [40., 60., 2.]);
+            assert_eq!(
+                studio.tabs[0].file.views.pages[&studio.tabs[0].file.views.active],
+                [40., 60., 2.]
+            );
             set_rectangle(studio, 75., window, cx);
             let before_save = editor.read(cx).snapshot_count.get();
             studio.autosave(window, cx);
@@ -50,7 +53,7 @@ fn autosave_skips_idle_snapshots_but_persists_view_and_content_changes(cx: &mut 
         .unwrap()
         .into_document()
         .unwrap();
-    assert_eq!(saved.shapes[0].rect.x, 75.);
+    assert_eq!(saved.pages[0].shapes[0].rect.x, 75.);
     window
         .update(cx, |studio, window, cx| {
             let count = editor.read(cx).snapshot_count.get();
@@ -72,7 +75,7 @@ fn set_rectangle(studio: &mut Studio, x: f32, window: &mut Window, cx: &mut Cont
         .snapshot_document(&tab.document_id, cx)
         .unwrap();
     let mut document = crate::document::Document::decode(&json).unwrap();
-    document.shapes = vec![crate::shape::Shape::new(
+    document.pages[0].shapes = vec![crate::shape::Shape::new(
         1,
         None,
         crate::shape::ShapeKind::Rectangle,
@@ -83,11 +86,12 @@ fn set_rectangle(studio: &mut Studio, x: f32, window: &mut Window, cx: &mut Cont
             height: 80.,
         },
     )];
-    document.next_id = 2;
+    document.pages[0].next_id = 2;
     editor
         .update(cx, |editor, cx| {
             editor.load_document(
                 crate::document::Loaded {
+                    needs_upgrade: false,
                     json: serde_json::to_vec(&document).unwrap(),
                     assets: Default::default(),
                 },
@@ -200,6 +204,7 @@ fn save_is_internal_and_exported_files_are_independent(cx: &mut TestAppContext) 
     assert_eq!(
         crate::document::Document::decode(&loaded.json)
             .unwrap()
+            .pages[0]
             .shapes[0]
             .rect
             .x,
@@ -370,7 +375,8 @@ fn closing_waits_for_component_storage_and_keeps_failed_saves_visible(cx: &mut T
     window
         .update(cx, |studio, window, cx| {
             assert!(!studio.closing && studio.error.is_some());
-            let document = crate::document::Document {
+            let document = crate::document::Document::single(crate::document::Page {
+                name: "Page 1".into(),
                 id: uuid::Uuid::new_v4().to_string(),
                 boards: vec![],
                 texts: vec![],
@@ -388,7 +394,7 @@ fn closing_waits_for_component_storage_and_keeps_failed_saves_visible(cx: &mut T
                 hierarchy: Default::default(),
                 next_id: 2,
                 assets: vec![],
-            };
+            });
             studio.library.update(cx, |library, cx| {
                 library.save(
                     "Stored".into(),
@@ -415,6 +421,7 @@ fn closing_waits_for_component_storage_and_keeps_failed_saves_visible(cx: &mut T
             .unwrap()
             .into_document()
             .unwrap()
+            .pages[0]
             .shapes
             .len(),
         1

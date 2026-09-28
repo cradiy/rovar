@@ -5,7 +5,7 @@ use crate::scene_render::{self, Output, Scene};
 mod tests;
 
 pub(super) fn render(
-    doc: &Document,
+    doc: &Page,
     sources: &[AssetSource],
     text_system: &Arc<gpui::TextSystem>,
 ) -> Result<Vec<u8>> {

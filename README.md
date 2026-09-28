@@ -2,7 +2,7 @@
 
 English | [简体中文](README.zh-CN.md)
 
-A desktop design editor built with Rust and GPUI. Supports artboards, vectors, text, images, video, reusable components and multiple document tabs. Designs save automatically to a local workspace.
+A desktop design editor built with Rust and GPUI. Supports artboards, vectors, text, images, video, reusable components, multi-page documents and multiple document tabs. Designs save automatically to a local workspace.
 
 Export selections as PNG or SVG, videos in their original format, and documents as `.rovar` files. Available in English and Simplified Chinese.
 

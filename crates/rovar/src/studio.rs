@@ -49,7 +49,8 @@ struct Recent {
     title: String,
     created: u64,
     modified: u64,
-    view: [f32; 3],
+    #[serde(default)]
+    views: crate::workspace::pages::Views,
     preview: Option<String>,
 }
 
@@ -70,6 +71,7 @@ pub(crate) struct Tab {
     editor: Option<Entity<Workspace>>,
     last_saved: Vec<u8>,
     saved_revision: Option<u64>,
+    needs_upgrade: bool,
     loading: bool,
     saving: bool,
     close_after_save: bool,
@@ -227,6 +229,7 @@ impl Studio {
                     editor: None,
                     last_saved: Vec::new(),
                     saved_revision: None,
+                    needs_upgrade: false,
                     loading: false,
                     saving: false,
                     close_after_save: false,
@@ -353,7 +356,7 @@ impl Studio {
             title: crate::i18n::message("untitled-name", &[("id", token.to_string())]),
             created: sorting::creation_time(),
             modified: now(),
-            view: [0., 0., 1.],
+            views: Default::default(),
             preview: None,
         };
         self.tabs.push(Tab {
@@ -363,6 +366,7 @@ impl Studio {
             editor: Some(editor.clone()),
             last_saved: Vec::new(),
             saved_revision: None,
+            needs_upgrade: false,
             loading: false,
             saving: false,
             close_after_save: false,

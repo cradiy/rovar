@@ -20,6 +20,7 @@ impl Workspace {
         self.image_fill_loading = None;
         cx.notify();
         let request = self.image_fill_request;
+        let page = self.pages.active.clone();
         let dialog = cx.prompt_for_paths(gpui::PathPromptOptions {
             files: true,
             directories: false,
@@ -37,7 +38,9 @@ impl Workspace {
                 if this.image_fill_request != request {
                     return false;
                 }
-                this.image_fill_loading = Some(id);
+                if this.pages.active == page {
+                    this.image_fill_loading = Some(id);
+                }
                 cx.notify();
                 true
             }) else {
@@ -52,6 +55,52 @@ impl Workspace {
                     return;
                 }
                 this.image_fill_loading = None;
+                if this.pages.active != page {
+                    if let Ok(asset) = asset
+                        && let Some(state) =
+                            this.pages.entries.iter_mut().find(|p| p.page.id == page)
+                    {
+                        let change = if let Some(index) = state.page.shapes.iter().position(|s| {
+                            s.id == id && s.fill_mode == FillMode::Image && !s.layer.locked
+                        }) {
+                            let before = state.page.shapes[index].clone();
+                            state.page.shapes[index].image_fill.asset = Some(asset.clone());
+                            Some(Change::Shape {
+                                id,
+                                index,
+                                value: Some(before),
+                            })
+                        } else if let Some(index) = state.page.boards.iter().position(|b| {
+                            b.id == id && b.fill_mode == FillMode::Image && !b.layer.locked
+                        }) {
+                            let before = state.page.boards[index].clone();
+                            state.page.boards[index].image_fill.asset = Some(asset.clone());
+                            Some(Change::Board {
+                                id,
+                                index,
+                                value: Some(before),
+                            })
+                        } else {
+                            None
+                        };
+                        if let Some(change) = change {
+                            state
+                                .page
+                                .assets
+                                .retain(|use_| use_.object != id || !use_.fill);
+                            state.page.assets.push(crate::document::AssetUse {
+                                object: id,
+                                fill: true,
+                                hash: asset.hash.clone(),
+                            });
+                            this.history
+                                .borrow_mut()
+                                .record_for(page.clone(), vec![change]);
+                        }
+                    }
+                    cx.notify();
+                    return;
+                }
                 if !this.layer_editable(id) {
                     cx.notify();
                     return;

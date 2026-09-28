@@ -10,7 +10,7 @@ pub(super) struct Sidebar {
     pub collapsed: bool,
     pub(super) resources: bool,
     pub renaming: Option<usize>,
-    folded: HashSet<usize>,
+    pub(in crate::workspace) folded: HashSet<usize>,
 }
 
 // Only the enclosing surfaces sample the backdrop; their contents stay sharp.
@@ -368,7 +368,9 @@ impl Workspace {
             .child(tabs.child(toggle))
             .child(div().h(px(1.)).flex_shrink_0().bg(rgba(0xb4a2ee20)))
             .when(!self.sidebar.resources, |el| {
-                let el = el.child(self.organization_actions(cx));
+                let el = el
+                    .child(self.pages_panel(cx))
+                    .child(self.organization_actions(cx));
                 let rows = self.layer_rows();
                 if rows.is_empty() {
                     el.child(

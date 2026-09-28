@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 #[derive(Clone, Default)]
 struct ObjectClipboard {
     source: Option<gpui::EntityId>,
+    source_page: Option<String>,
     hierarchy: crate::layer::Hierarchy,
     boards: Vec<Artboard>,
     shapes: Vec<Shape>,
@@ -99,6 +100,7 @@ impl Workspace {
         self.seal_text_edits(cx);
         let mut clipboard = self.snapshot_selection(cx);
         clipboard.source = Some(cx.entity_id());
+        clipboard.source_page = Some(self.pages.active.clone());
         clipboard.marker = format!("rovar-objects:{:?}", std::time::SystemTime::now());
         cx.write_to_clipboard(gpui::ClipboardItem::new_string_with_metadata(
             crate::i18n::count("clipboard-summary", clipboard.roots.len()),
@@ -147,7 +149,9 @@ impl Workspace {
             20. * clipboard.pastes as f32
         };
         cx.set_global(Clipboard(Some(clipboard.clone())));
-        if clipboard.source != Some(cx.entity_id()) {
+        if clipboard.source != Some(cx.entity_id())
+            || clipboard.source_page.as_deref() != Some(&self.pages.active)
+        {
             clipboard.root_parents.clear();
         }
         self.insert_copies(clipboard, point(offset, offset), in_place, true, window, cx);
@@ -169,14 +173,44 @@ impl Workspace {
         );
     }
 
+    pub(in crate::workspace) fn move_selection_to_page(
+        &mut self,
+        id: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if id == self.pages.active
+            || !self.pages.entries.iter().any(|p| p.page.id == id)
+            || self.selection_ids().is_empty()
+            || self
+                .selection_ids()
+                .iter()
+                .any(|id| !self.layer_editable(*id))
+        {
+            return;
+        }
+        self.suspend(window, cx);
+        let before = self.page_edit(&[self.pages.active.clone(), id.into()], cx);
+        let mut clipboard = self.snapshot_selection(cx);
+        clipboard.root_parents.clear();
+        self.history.borrow_mut().suppressed = true;
+        self.delete_selected(cx);
+        self.switch_page(id, window, cx);
+        self.insert_copies(clipboard, point(0., 0.), true, false, window, cx);
+        self.history.borrow_mut().suppressed = false;
+        self.record_page_edit(before);
+        cx.notify();
+    }
+
     pub(in crate::workspace) fn insert_component_document(
         &mut self,
-        mut document: crate::document::Document,
+        document: crate::document::Document,
         name: String,
         offset: Point<f32>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let mut document = document.first_page().clone();
         let roots = document
             .boards
             .iter()

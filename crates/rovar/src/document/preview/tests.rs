@@ -53,7 +53,8 @@ fn thumbnail_preserves_rich_text_alignment_wrapping_and_clipped_overflow(
         &StyleChange::VerticalAlign(VerticalAlign::Top),
         true,
     );
-    let mut doc = Document {
+    let mut doc = Page {
+        name: "Page 1".into(),
         id: uuid::Uuid::new_v4().to_string(),
         next_id: 3,
         boards: vec![Artboard {

@@ -1,6 +1,6 @@
 use crate::{
     artboard::{FillMode, Rect},
-    document::{AssetSource, Document},
+    document::{AssetSource, Page},
     shape::{Shape, ShapeKind},
 };
 use anyhow::{Context, Result, ensure};
@@ -23,7 +23,7 @@ pub(crate) struct TextFragment {
 }
 
 pub(crate) struct Scene<'a> {
-    pub document: &'a Document,
+    pub document: &'a Page,
     pub assets: &'a [AssetSource],
     pub order: &'a [usize],
     pub bounds: Rect,
@@ -52,7 +52,7 @@ fn clip(defs: &mut String, id: &str, path: &str) {
     )
     .unwrap();
 }
-fn world(doc: &Document, parent: Option<usize>, mut rect: Rect) -> Rect {
+fn world(doc: &Page, parent: Option<usize>, mut rect: Rect) -> Rect {
     if let Some(board) = parent.and_then(|id| doc.boards.iter().find(|board| board.id == id)) {
         rect.x += board.rect.x;
         rect.y += board.rect.y;

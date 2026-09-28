@@ -3,9 +3,31 @@ use rovar_format::{Reader, Writer};
 use std::io::Read;
 
 const METADATA_LIMIT: u64 = 64 * 1024 * 1024;
+
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Manifest {
+    schema: u32,
+    id: String,
+    #[serde(default, skip_serializing, rename = "cover")]
+    previous_cover: Option<String>,
+    pages: Vec<String>,
+    media: BTreeMap<String, Media>,
+}
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PageIndex {
+    id: String,
+    name: String,
+    next_id: usize,
+    boards: Vec<usize>,
+    shapes: Vec<usize>,
+    texts: Vec<usize>,
+    assets: Vec<AssetUse>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SinglePageManifest {
     schema: u32,
     id: String,
     next_id: usize,
@@ -22,54 +44,118 @@ struct Media {
     size: [u32; 2],
 }
 
-fn manifest(reader: &Reader) -> Result<Manifest> {
-    let info: Manifest = serde_json::from_slice(&reader.read("document", METADATA_LIMIT)?)?;
+enum Index {
+    Pages(Manifest),
+    Single(SinglePageManifest),
+}
+impl Index {
+    fn id(&self) -> &str {
+        match self {
+            Self::Pages(info) => &info.id,
+            Self::Single(info) => &info.id,
+        }
+    }
+    fn media(&self) -> &BTreeMap<String, Media> {
+        match self {
+            Self::Pages(info) => &info.media,
+            Self::Single(info) => &info.media,
+        }
+    }
+}
+
+fn manifest(reader: &Reader) -> Result<Index> {
+    let value: serde_json::Value =
+        serde_json::from_slice(&reader.read("document", METADATA_LIMIT)?)?;
+    let schema = value
+        .get("schema")
+        .and_then(|v| v.as_u64())
+        .context("Missing document schema")?;
+    let index = match schema {
+        1 => Index::Single(serde_json::from_value(value)?),
+        2 => Index::Pages(serde_json::from_value(value)?),
+        _ => anyhow::bail!("Unsupported Rovar document schema: {schema}"),
+    };
     ensure!(
-        info.schema == 1,
-        "Unsupported Rovar document schema: {}",
-        info.schema
-    );
-    ensure!(
-        uuid::Uuid::parse_str(&info.id).is_ok(),
+        uuid::Uuid::parse_str(index.id()).is_ok(),
         "Invalid document ID"
     );
-    Ok(info)
+    Ok(index)
 }
 
 pub(crate) fn read_id(reader: &Reader) -> Result<String> {
-    Ok(manifest(reader)?.id)
+    Ok(manifest(reader)?.id().to_owned())
 }
 
-pub(crate) fn read_document(reader: &Reader) -> Result<Document> {
-    let info = manifest(reader)?;
+fn read_page(reader: &Reader, prefix: &str, info: PageIndex) -> Result<Page> {
     fn objects<T: serde::de::DeserializeOwned>(
         reader: &Reader,
+        prefix: &str,
         kind: &str,
         ids: &[usize],
     ) -> Result<Vec<T>> {
         ids.iter()
             .map(|id| {
                 Ok(serde_json::from_slice(
-                    &reader.read(&format!("{kind}/{id}"), METADATA_LIMIT)?,
+                    &reader.read(&format!("{prefix}{kind}/{id}"), METADATA_LIMIT)?,
                 )?)
             })
             .collect()
     }
-    let document = Document {
+    let page = Page {
         id: info.id,
+        name: info.name,
         next_id: info.next_id,
-        boards: objects(reader, "board", &info.boards)?,
-        shapes: objects(reader, "shape", &info.shapes)?,
-        texts: objects(reader, "text", &info.texts)?,
-        hierarchy: serde_json::from_slice(&reader.read("hierarchy", METADATA_LIMIT)?)?,
+        boards: objects(reader, prefix, "board", &info.boards)?,
+        shapes: objects(reader, prefix, "shape", &info.shapes)?,
+        texts: objects(reader, prefix, "text", &info.texts)?,
+        hierarchy: serde_json::from_slice(
+            &reader.read(&format!("{prefix}hierarchy"), METADATA_LIMIT)?,
+        )?,
         assets: info.assets,
     };
     ensure!(
-        document.boards.iter().map(|x| x.id).eq(info.boards)
-            && document.shapes.iter().map(|x| x.id).eq(info.shapes)
-            && document.texts.iter().map(|x| x.id).eq(info.texts),
-        "Object index differs from scene"
+        page.boards.iter().map(|x| x.id).eq(info.boards)
+            && page.shapes.iter().map(|x| x.id).eq(info.shapes)
+            && page.texts.iter().map(|x| x.id).eq(info.texts),
+        "Object index differs from page"
     );
+    page.validate()?;
+    Ok(page)
+}
+
+pub(crate) fn read_document(reader: &Reader) -> Result<Document> {
+    let document = match manifest(reader)? {
+        Index::Pages(info) => {
+            let mut pages = Vec::with_capacity(info.pages.len());
+            for id in info.pages {
+                let index: PageIndex =
+                    serde_json::from_slice(&reader.read(&format!("page/{id}"), METADATA_LIMIT)?)?;
+                ensure!(index.id == id, "Page index differs from document");
+                pages.push(read_page(reader, &format!("page/{id}/"), index)?);
+            }
+            Document { id: info.id, pages }
+        }
+        Index::Single(info) => {
+            ensure!(info.schema == 1, "Invalid single-page schema");
+            let page = read_page(
+                reader,
+                "",
+                PageIndex {
+                    id: info.id.clone(),
+                    name: "Page 1".into(),
+                    next_id: info.next_id,
+                    boards: info.boards,
+                    shapes: info.shapes,
+                    texts: info.texts,
+                    assets: info.assets,
+                },
+            )?;
+            Document {
+                id: info.id,
+                pages: vec![page],
+            }
+        }
+    };
     document.validate()?;
     Ok(document)
 }
@@ -113,13 +199,13 @@ fn write_document(
     sources: &[AssetSource],
     text_system: &Arc<gpui::TextSystem>,
 ) -> Result<()> {
-    let mut keys = BTreeSet::from(["document".to_owned(), "hierarchy".to_owned()]);
+    let mut keys = BTreeSet::from(["document".to_owned()]);
     // Component metadata survives document edits.
     if writer.contains("component") {
         keys.insert("component".into());
     }
     let mut media = BTreeMap::new();
-    let used: BTreeSet<_> = document.assets.iter().map(|a| a.hash.as_str()).collect();
+    let used: BTreeSet<_> = document.assets().map(|a| a.hash.as_str()).collect();
     for source in sources {
         let digest: [u8; 32] = decode_hash(&source.hash)?;
         ensure!(
@@ -160,31 +246,45 @@ fn write_document(
         "Missing media source"
     );
     let info = Manifest {
-        schema: 1,
+        schema: 2,
         id: document.id.clone(),
-        next_id: document.next_id,
-        boards: document.boards.iter().map(|x| x.id).collect(),
-        shapes: document.shapes.iter().map(|x| x.id).collect(),
-        texts: document.texts.iter().map(|x| x.id).collect(),
-        assets: document.assets.clone(),
+        previous_cover: None,
+        pages: document.pages.iter().map(|page| page.id.clone()).collect(),
         media,
     };
     put_json(writer, "document", "document", &info)?;
-    put_json(writer, "hierarchy", "json", &document.hierarchy)?;
-    macro_rules! objects {
-        ($items:expr, $kind:literal) => {
-            for item in $items {
-                let key = format!("{}/{}", $kind, item.id);
-                put_json(writer, &key, "json", item)?;
-                keys.insert(key);
-            }
+    for page in &document.pages {
+        let key = format!("page/{}", page.id);
+        let index = PageIndex {
+            id: page.id.clone(),
+            name: page.name.clone(),
+            next_id: page.next_id,
+            boards: page.boards.iter().map(|x| x.id).collect(),
+            shapes: page.shapes.iter().map(|x| x.id).collect(),
+            texts: page.texts.iter().map(|x| x.id).collect(),
+            assets: page.assets.clone(),
         };
+        put_json(writer, &key, "page", &index)?;
+        keys.insert(key.clone());
+        let hierarchy = format!("{key}/hierarchy");
+        put_json(writer, &hierarchy, "json", &page.hierarchy)?;
+        keys.insert(hierarchy);
+        macro_rules! objects {
+            ($items:expr, $kind:literal) => {
+                for item in $items {
+                    let key = format!("{}/{}/{}", key, $kind, item.id);
+                    put_json(writer, &key, "json", item)?;
+                    keys.insert(key);
+                }
+            };
+        }
+        objects!(&page.boards, "board");
+        objects!(&page.shapes, "shape");
+        objects!(&page.texts, "text");
     }
-    objects!(&document.boards, "board");
-    objects!(&document.shapes, "shape");
-    objects!(&document.texts, "text");
-    if !(document.boards.is_empty() && document.shapes.is_empty() && document.texts.is_empty()) {
-        match preview::render(document, sources, text_system) {
+    let cover = document.first_page();
+    if !(cover.boards.is_empty() && cover.shapes.is_empty() && cover.texts.is_empty()) {
+        match preview::render(cover, sources, text_system) {
             Ok(png) => {
                 writer.put_bytes("preview", "png", &png)?;
                 keys.insert("preview".into());
@@ -256,12 +356,12 @@ pub(crate) fn load(path: &Path) -> Result<Loaded> {
     let document = read_document(&reader)?;
     let json = serde_json::to_vec(&document)?;
     let mut assets = BTreeMap::new();
-    for asset in &document.assets {
+    for asset in document.assets() {
         if assets.contains_key(&asset.hash) {
             continue;
         }
         let meta = info
-            .media
+            .media()
             .get(&asset.hash)
             .context("Missing media metadata")?;
         ensure!(meta.size.iter().all(|v| *v > 0), "Invalid media dimensions");
@@ -281,5 +381,12 @@ pub(crate) fn load(path: &Path) -> Result<Loaded> {
             ),
         );
     }
-    Ok(Loaded { json, assets })
+    Ok(Loaded {
+        json,
+        assets,
+        needs_upgrade: match info {
+            Index::Single(_) => true,
+            Index::Pages(info) => info.previous_cover.is_some(),
+        },
+    })
 }

@@ -28,8 +28,8 @@ fn add_rectangle(studio: &mut Studio, window: &mut Window, cx: &mut Context<Stud
         .snapshot_document(&tab.document_id, cx)
         .unwrap();
     let mut document = crate::document::Document::decode(&json).unwrap();
-    document.shapes.push(crate::shape::Shape::new(
-        document.next_id,
+    document.pages[0].shapes.push(crate::shape::Shape::new(
+        document.pages[0].next_id,
         None,
         crate::shape::ShapeKind::Rectangle,
         crate::artboard::Rect {
@@ -39,11 +39,12 @@ fn add_rectangle(studio: &mut Studio, window: &mut Window, cx: &mut Context<Stud
             height: 80.,
         },
     ));
-    document.next_id += 1;
+    document.pages[0].next_id += 1;
     editor.update(cx, |editor, cx| {
         editor
             .load_document(
                 crate::document::Loaded {
+                    needs_upgrade: false,
                     json: serde_json::to_vec(&document).unwrap(),
                     assets: Default::default(),
                 },
@@ -69,8 +70,7 @@ fn shape_count(handle: WindowHandle<Studio>, cx: &mut TestAppContext) -> usize {
                 .read(cx)
                 .snapshot_document(&tab.document_id, cx)
                 .unwrap();
-            crate::document::Document::decode(&json)
-                .unwrap()
+            crate::document::Document::decode(&json).unwrap().pages[0]
                 .shapes
                 .len()
         })
@@ -193,6 +193,7 @@ fn cmd_q_waits_for_storage_in_all_windows_and_preserves_the_session(cx: &mut Tes
         assert_eq!(
             crate::document::Document::decode(&loaded.json)
                 .unwrap()
+                .pages[0]
                 .shapes
                 .len(),
             1

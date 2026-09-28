@@ -285,10 +285,22 @@ impl Workspace {
             return;
         }
         self.seal_text_edits(cx);
+        let page = self.history.borrow().replay_page(redo).map(str::to_owned);
         let changes = self.history.borrow_mut().take(redo);
         let Some(changes) = changes else {
             return;
         };
+        if let [Change::Pages { value }] = changes.as_slice() {
+            let inverse = self.replay_page_edit(value.clone(), window, cx);
+            self.history
+                .borrow_mut()
+                .finish_replay(vec![Change::Pages { value: inverse }], redo);
+            cx.notify();
+            return;
+        }
+        if let Some(page) = page {
+            self.switch_page(&page, window, cx);
+        }
         let replay_ids: std::collections::BTreeSet<_> = changes
             .iter()
             .filter_map(|change| match change {
@@ -298,7 +310,9 @@ impl Workspace {
                 | Change::Text { id, .. }
                 | Change::Shape { id, .. }
                 | Change::TextRect { id, .. } => Some(*id),
-                Change::Hierarchy { .. } | Change::NodeSelection { .. } => None,
+                Change::Hierarchy { .. } | Change::NodeSelection { .. } | Change::Pages { .. } => {
+                    None
+                }
             })
             .collect();
         let previous_selection = self.selection_ids();
@@ -320,6 +334,7 @@ impl Workspace {
         let mut target = None;
         for change in changes.into_iter().rev() {
             match change {
+                Change::Pages { .. } => unreachable!("page operations are replayed atomically"),
                 Change::NodeSelection { value } => {
                     inverse.push(Change::NodeSelection {
                         value: self.selected_node,

@@ -1,5 +1,5 @@
 use super::*;
-use crate::document::{AssetSource, AssetUse, Document, Loaded};
+use crate::document::{AssetSource, AssetUse, Document, Loaded, Page};
 #[cfg(test)]
 mod tests;
 
@@ -7,6 +7,8 @@ pub(crate) struct Transfer {
     loaded: Loaded,
     history: SharedHistory,
     view: [f32; 3],
+    page_views: pages::Views,
+    page_states: Vec<pages::PageState>,
     selection: std::collections::BTreeSet<usize>,
     tool: Option<DrawTool>,
     vector_edit: Option<usize>,
@@ -28,22 +30,37 @@ impl Workspace {
     pub(crate) fn transfer(&self, id: &str, cx: &gpui::App) -> anyhow::Result<Transfer> {
         let (json, _) = self.snapshot_document(id, cx)?;
         let mut assets = std::collections::BTreeMap::new();
-        for asset in self
-            .boards
-            .iter()
-            .filter_map(|b| b.image_fill.asset.as_ref())
-            .chain(self.shapes.iter().flat_map(|s| {
-                [s.media.as_ref(), s.image_fill.asset.as_ref()]
-                    .into_iter()
-                    .flatten()
-            }))
-        {
-            assets.insert(asset.hash.clone(), asset.clone());
+        let (current, _) = self.snapshot_page(cx);
+        for page in std::iter::once(&current).chain(
+            self.pages
+                .entries
+                .iter()
+                .filter(|p| p.page.id != self.pages.active)
+                .map(|p| &p.page),
+        ) {
+            for asset in page
+                .boards
+                .iter()
+                .filter_map(|b| b.image_fill.asset.as_ref())
+                .chain(page.shapes.iter().flat_map(|s| {
+                    [s.media.as_ref(), s.image_fill.asset.as_ref()]
+                        .into_iter()
+                        .flatten()
+                }))
+            {
+                assets.insert(asset.hash.clone(), asset.clone());
+            }
         }
         Ok(Transfer {
-            loaded: Loaded { json, assets },
+            loaded: Loaded {
+                json,
+                assets,
+                needs_upgrade: false,
+            },
             history: self.history.clone(),
             view: self.view_state(),
+            page_views: self.page_views(),
+            page_states: self.pages.entries.clone(),
             selection: self.selection_ids(),
             tool: self.draw_tool,
             vector_edit: self.vector_edit,
@@ -62,6 +79,17 @@ impl Workspace {
     ) -> anyhow::Result<()> {
         self.history = transfer.history;
         self.load_document(transfer.loaded, window, cx)?;
+        for state in &mut self.pages.entries {
+            if let Some(old) = transfer
+                .page_states
+                .iter()
+                .find(|old| old.page.id == state.page.id)
+            {
+                state.selection = old.selection.clone();
+                state.folded = old.folded.clone();
+            }
+        }
+        self.restore_page_views(transfer.page_views, window, cx);
         self.restore_view(transfer.view);
         self.set_selection(transfer.selection, cx);
         self.draw_tool = transfer.tool;
@@ -129,6 +157,74 @@ impl Workspace {
     ) -> anyhow::Result<(Vec<u8>, Vec<AssetSource>)> {
         #[cfg(test)]
         self.snapshot_count.set(self.snapshot_count.get() + 1);
+        let (current, _) = self.snapshot_page(cx);
+        let pages: Vec<_> = self
+            .pages
+            .entries
+            .iter()
+            .map(|state| {
+                if state.page.id == self.pages.active {
+                    current.clone()
+                } else {
+                    state.page.clone()
+                }
+            })
+            .collect();
+        let document = Document {
+            id: id.into(),
+            pages,
+        };
+        let mut sources = std::collections::BTreeMap::new();
+        for page in &document.pages {
+            for asset in page
+                .boards
+                .iter()
+                .filter_map(|b| b.image_fill.asset.as_ref())
+                .chain(page.shapes.iter().flat_map(|s| {
+                    [s.media.as_ref(), s.image_fill.asset.as_ref()]
+                        .into_iter()
+                        .flatten()
+                }))
+            {
+                sources
+                    .entry(asset.hash.clone())
+                    .or_insert_with(|| AssetSource {
+                        hash: asset.hash.clone(),
+                        name: asset.name(),
+                        path: asset.source.clone(),
+                        size: [asset.width, asset.height],
+                    });
+            }
+        }
+        Ok((
+            serde_json::to_vec(&document)?,
+            sources.into_values().collect(),
+        ))
+    }
+
+    pub(crate) fn load_document(
+        &mut self,
+        loaded: Loaded,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> anyhow::Result<String> {
+        let document = loaded.into_document()?;
+        self.suspend(window, cx);
+        self.history.borrow_mut().mark_changed();
+        self.pages.active = document.pages[0].id.clone();
+        self.pages.entries = document
+            .pages
+            .into_iter()
+            .map(pages::PageState::new)
+            .collect();
+        self.history
+            .borrow_mut()
+            .set_page(self.pages.active.clone());
+        self.load_page(self.pages.current().page.clone(), window, cx);
+        Ok(document.id)
+    }
+
+    pub(super) fn snapshot_page(&self, cx: &gpui::App) -> (Page, Vec<AssetSource>) {
         let mut sources = Vec::new();
         let mut assets = Vec::new();
         let mut add = |object, fill, asset: &Option<std::sync::Arc<crate::media::MediaAsset>>| {
@@ -153,8 +249,9 @@ impl Workspace {
             add(shape.id, false, &shape.media);
             add(shape.id, true, &shape.image_fill.asset);
         }
-        let document = Document {
-            id: id.into(),
+        let page = Page {
+            id: self.pages.active.clone(),
+            name: self.pages.current().page.name.clone(),
             boards: self.boards.clone(),
             shapes: self.shapes.clone(),
             texts: self
@@ -170,23 +267,16 @@ impl Workspace {
             next_id: self.next_id,
             assets,
         };
-        Ok((serde_json::to_vec(&document)?, sources))
+        (page, sources)
     }
 
-    pub(crate) fn load_document(
-        &mut self,
-        loaded: Loaded,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> anyhow::Result<String> {
-        let document = loaded.into_document()?;
-        self.history.borrow_mut().mark_changed();
-        self.boards = document.boards;
-        self.shapes = document.shapes;
-        self.hierarchy = document.hierarchy;
-        self.next_id = document.next_id;
+    pub(super) fn load_page(&mut self, page: Page, window: &mut Window, cx: &mut Context<Self>) {
+        self.boards = page.boards;
+        self.shapes = page.shapes;
+        self.hierarchy = page.hierarchy;
+        self.next_id = page.next_id;
         self.texts.clear();
-        for text in document.texts {
+        for text in page.texts {
             let mut item = self.make_text(text.id, text.board, text.rect, window, cx);
             item.layer = text.layer;
             item.editor.update(cx, |editor, cx| {
@@ -197,7 +287,6 @@ impl Workspace {
         }
         self.select(None, cx);
         cx.notify();
-        Ok(document.id)
     }
 
     pub(crate) fn suspend(&mut self, window: &mut Window, cx: &mut Context<Self>) {

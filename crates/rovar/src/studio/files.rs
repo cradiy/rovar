@@ -104,10 +104,10 @@ impl Studio {
             return;
         }
         let revision = editor.read(cx).document_revision();
-        let view = editor.read(cx).view_state();
-        let view_changed = view != tab.file.view;
-        tab.file.view = view;
-        if tab.saved_revision == Some(revision) {
+        let views = editor.read(cx).page_views();
+        let view_changed = views != tab.file.views;
+        tab.file.views = views;
+        if !tab.needs_upgrade && tab.saved_revision == Some(revision) {
             self.finish_unchanged_save(token, view_changed, window, cx);
             return;
         }
@@ -119,7 +119,7 @@ impl Studio {
                 return;
             }
         };
-        if json == tab.last_saved {
+        if !tab.needs_upgrade && json == tab.last_saved {
             tab.saved_revision = Some(revision);
             self.finish_unchanged_save(token, view_changed, window, cx);
             return;
@@ -161,6 +161,7 @@ impl Studio {
                         tab.file.preview = preview;
                         tab.last_saved = json;
                         tab.saved_revision = Some(revision);
+                        tab.needs_upgrade = false;
                         tab.file.modified = now();
                         let file = tab.file.clone();
                         let follow_up = tab.close_after_save || tab.save_requested;
@@ -266,7 +267,7 @@ impl Studio {
                 path,
                 created: sorting::creation_time(),
                 modified: now(),
-                view: [0., 0., 1.],
+                views: Default::default(),
                 preview: None,
             });
         let token = self.next_token;
@@ -278,6 +279,7 @@ impl Studio {
             editor: None,
             last_saved: Vec::new(),
             saved_revision: None,
+            needs_upgrade: false,
             loading: false,
             saving: false,
             close_after_save: false,
@@ -325,6 +327,7 @@ impl Studio {
                 };
                 tab.loading = false;
                 let result = loaded.and_then(|(loaded, preview, path)| {
+                    tab.needs_upgrade = loaded.needs_upgrade;
                     tab.file.path = path;
                     tab.file.preview = preview;
                     let json = loaded.json.clone();
@@ -335,7 +338,7 @@ impl Studio {
                     let id =
                         editor.update(cx, |editor, cx| editor.load_document(loaded, window, cx))?;
                     editor.update(cx, |editor, cx| {
-                        editor.restore_view(tab.file.view);
+                        editor.restore_page_views(tab.file.views.clone(), window, cx);
                         if this.active == Some(token) && this.open_errors.is_empty() {
                             editor.focus_canvas(window, cx);
                         }
@@ -513,7 +516,7 @@ pub(super) fn recover_documents(directory: PathBuf) -> Vec<Recent> {
                 title: String::new(),
                 created,
                 modified,
-                view: [0., 0., 1.],
+                views: Default::default(),
                 preview,
             })
         })

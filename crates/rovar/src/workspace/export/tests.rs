@@ -158,7 +158,7 @@ fn exported_text_keeps_wrapping_rich_styles_and_alignment(cx: &mut TestAppContex
     let window = open(cx);
     window
         .update(cx, |this, window, cx| {
-            let mut doc = Document::decode(
+            let mut doc = crate::document::Document::decode(
                 &this
                     .snapshot_document(&uuid::Uuid::new_v4().to_string(), cx)
                     .unwrap()
@@ -176,7 +176,7 @@ fn exported_text_keeps_wrapping_rich_styles_and_alignment(cx: &mut TestAppContex
                 color: rgb(0xff0000),
                 ..style.clone()
             };
-            doc.texts = vec![crate::document::Text {
+            doc.pages[0].texts = vec![crate::document::Text {
                 id: 10,
                 board: None,
                 rect: rect(100., 100., 80., 180.),
@@ -196,9 +196,10 @@ fn exported_text_keeps_wrapping_rich_styles_and_alignment(cx: &mut TestAppContex
                     ],
                 },
             }];
-            doc.next_id = 11;
+            doc.pages[0].next_id = 11;
             this.load_document(
                 Loaded {
+                    needs_upgrade: false,
                     json: serde_json::to_vec(&doc).unwrap(),
                     assets: BTreeMap::new(),
                 },

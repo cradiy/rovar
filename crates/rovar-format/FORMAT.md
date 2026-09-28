@@ -60,6 +60,23 @@ Readers inspect slots from newest to oldest and select the first with a valid in
 
 Compaction locks the source, streams and verifies live blocks into a temporary file in the same directory, commits it, then replaces the source by renaming. On Unix, it also syncs the parent directory. Existing readers retain their open snapshot. The compacted file starts at generation 1.
 
+## Document payload
+
+Document schema **2** uses these keys inside the 1.0 container:
+
+| Key | Contents |
+| --- | --- |
+| `document` | Schema, document UUID, ordered page UUIDs and media metadata |
+| `page/<uuid>` | Page name, object IDs, next object ID and media references |
+| `page/<uuid>/hierarchy` | Groups, parents, layer names and order |
+| `page/<uuid>/board/<id>` | Artboard |
+| `page/<uuid>/shape/<id>` | Shape |
+| `page/<uuid>/text/<id>` | Text and styles |
+| `media/<sha256>` | Shared original media bytes |
+| `preview` | First page PNG, when available |
+
+Object IDs are local to each page. A document has at least one page; the first page supplies its preview. Schema 1 single-page documents open as Page 1 and become schema 2 on save.
+
 ## Inspect a file
 
 ```sh

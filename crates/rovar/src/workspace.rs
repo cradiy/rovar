@@ -15,6 +15,7 @@ mod inspector;
 mod layers;
 mod media;
 mod organization;
+pub(crate) mod pages;
 mod panels;
 mod shapes;
 #[cfg(test)]
@@ -124,6 +125,7 @@ struct Gesture {
 }
 
 pub struct Workspace {
+    pages: pages::State,
     assets: assets::State,
     export: export::ExportState,
     snapping: layout::Snapping,
@@ -376,7 +378,11 @@ impl Workspace {
         let toolbar = toolbar::Toolbar::new(window, cx);
         let workspace = cx.entity().downgrade();
         let scene = cx.new(|_| canvas::CanvasScene::new(workspace));
+        let pages = pages::State::new(window, cx);
+        let history = SharedHistory::default();
+        history.borrow_mut().set_page(pages.active.clone());
         Self {
+            pages,
             assets: assets::State::new(window, cx),
             hierarchy: Default::default(),
             snapping: Default::default(),
@@ -425,7 +431,7 @@ impl Workspace {
             path_before: None,
             bezier_draft: None,
             next_id: 1,
-            history: Default::default(),
+            history,
             #[cfg(test)]
             snapshot_count: Cell::new(0),
             view: Viewport::default(),
@@ -778,6 +784,23 @@ impl Render for Workspace {
                 },
             ))
             .capture_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, window, cx| {
+                if let Some(id) = this.pages.delete.clone() {
+                    if event.keystroke.key == "escape" {
+                        this.pages.delete = None;
+                        cx.notify();
+                    } else if event.keystroke.key == "enter" {
+                        this.delete_page(&id, window, cx);
+                    }
+                    cx.stop_propagation();
+                    return;
+                }
+                if this.pages.renaming.is_some() {
+                    if event.keystroke.key == "escape" {
+                        this.finish_page_rename(false, window, cx);
+                        cx.stop_propagation();
+                    }
+                    return;
+                }
                 if this.assets.dialog.is_some() {
                     if event.keystroke.key == "escape" {
                         this.cancel_asset_dialog(window, cx);
@@ -843,6 +866,9 @@ impl Render for Workspace {
             .child(uic::components::context_menu::layer(cx))
             .when(self.assets.dialog.is_some(), |el| {
                 el.child(self.asset_dialog(cx))
+            })
+            .when(self.pages.delete.is_some(), |el| {
+                el.child(self.page_delete_dialog(cx))
             })
     }
 }

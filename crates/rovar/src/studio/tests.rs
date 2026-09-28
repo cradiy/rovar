@@ -109,7 +109,7 @@ fn closing_during_first_save_flushes_newer_edits_and_recovers_without_session(
                 .unwrap()
                 .0;
             let mut document = crate::document::Document::decode(&json).unwrap();
-            document.shapes.push(crate::shape::Shape::new(
+            document.pages[0].shapes.push(crate::shape::Shape::new(
                 1,
                 None,
                 crate::shape::ShapeKind::Ellipse,
@@ -120,11 +120,12 @@ fn closing_during_first_save_flushes_newer_edits_and_recovers_without_session(
                     height: 120.,
                 },
             ));
-            document.next_id = 2;
+            document.pages[0].next_id = 2;
             editor
                 .update(cx, |editor, cx| {
                     editor.load_document(
                         crate::document::Loaded {
+                            needs_upgrade: false,
                             json: serde_json::to_vec(&document).unwrap(),
                             assets: Default::default(),
                         },
@@ -146,6 +147,7 @@ fn closing_during_first_save_flushes_newer_edits_and_recovers_without_session(
     assert_eq!(
         crate::document::Document::decode(&loaded.json)
             .unwrap()
+            .pages[0]
             .shapes
             .len(),
         1

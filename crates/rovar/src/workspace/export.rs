@@ -1,7 +1,6 @@
 use super::*;
 use crate::{
     component_export::{self, Format, Job},
-    document::Document,
     i18n::t,
 };
 use anyhow::{Context as _, Result, ensure};
@@ -88,9 +87,8 @@ impl Workspace {
         window: &Window,
         cx: &gpui::App,
     ) -> Result<Vec<Job>> {
-        let (json, assets) = self.snapshot_document(&uuid::Uuid::new_v4().to_string(), cx)?;
-        let doc = Document::decode(&json)?;
-        let json = Arc::new(json);
+        let (doc, assets) = self.snapshot_page(cx);
+        let json = Arc::new(serde_json::to_vec(&doc)?);
         let assets = Arc::new(assets);
         let mut jobs = Vec::new();
         for root in self.selection_ids() {

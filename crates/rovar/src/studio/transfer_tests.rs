@@ -40,8 +40,7 @@ fn moving_a_tab_between_windows_preserves_dirty_document_history_and_view(cx: &m
                 .unwrap()
                 .0;
             assert_eq!(
-                crate::document::Document::decode(&json)
-                    .unwrap()
+                crate::document::Document::decode(&json).unwrap().pages[0]
                     .shapes
                     .len(),
                 1
@@ -80,8 +79,7 @@ fn moving_a_tab_between_windows_preserves_dirty_document_history_and_view(cx: &m
                 .unwrap()
                 .0;
             assert!(
-                crate::document::Document::decode(&undone)
-                    .unwrap()
+                crate::document::Document::decode(&undone).unwrap().pages[0]
                     .shapes
                     .is_empty()
             );

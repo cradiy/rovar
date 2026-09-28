@@ -38,14 +38,57 @@ pub(crate) struct AssetUse {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub(crate) struct Document {
+pub(crate) struct Page {
     pub id: String,
+    pub name: String,
     pub boards: Vec<Artboard>,
     pub shapes: Vec<Shape>,
     pub texts: Vec<Text>,
     pub hierarchy: Hierarchy,
     pub next_id: usize,
     pub assets: Vec<AssetUse>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub(crate) struct Document {
+    pub id: String,
+    pub pages: Vec<Page>,
+}
+
+impl Document {
+    pub fn single(page: Page) -> Self {
+        Self {
+            id: uuid::Uuid::new_v4().to_string(),
+            pages: vec![page],
+        }
+    }
+    pub fn decode(json: &[u8]) -> Result<Self> {
+        let document: Self = serde_json::from_slice(json)?;
+        document.validate()?;
+        Ok(document)
+    }
+    pub fn validate(&self) -> Result<()> {
+        ensure!(
+            uuid::Uuid::parse_str(&self.id).is_ok(),
+            "Invalid document ID"
+        );
+        ensure!(
+            !self.pages.is_empty(),
+            "A document must contain at least one page"
+        );
+        let mut ids = BTreeSet::new();
+        for page in &self.pages {
+            ensure!(ids.insert(&page.id), "Duplicate page ID");
+            page.validate()?;
+        }
+        Ok(())
+    }
+    pub fn first_page(&self) -> &Page {
+        self.pages.first().expect("validated nonempty document")
+    }
+    pub fn assets(&self) -> impl Iterator<Item = &AssetUse> {
+        self.pages.iter().flat_map(|page| &page.assets)
+    }
 }
 
 #[derive(Clone)]
@@ -58,27 +101,30 @@ pub(crate) struct AssetSource {
 
 pub(crate) struct Loaded {
     pub json: Vec<u8>,
+    pub needs_upgrade: bool,
     pub assets: BTreeMap<String, Arc<crate::media::MediaAsset>>,
 }
 
 impl Loaded {
     pub fn into_document(self) -> Result<Document> {
         let mut document = Document::decode(&self.json)?;
-        for use_ in &document.assets {
-            let asset = self
-                .assets
-                .get(&use_.hash)
-                .ok_or_else(|| anyhow::anyhow!("Missing asset"))?
-                .clone();
-            if use_.fill {
-                if let Some(board) = document.boards.iter_mut().find(|b| b.id == use_.object) {
-                    board.image_fill.asset = Some(asset);
-                } else if let Some(shape) = document.shapes.iter_mut().find(|s| s.id == use_.object)
-                {
-                    shape.image_fill.asset = Some(asset);
+        for page in &mut document.pages {
+            for use_ in &page.assets {
+                let asset = self
+                    .assets
+                    .get(&use_.hash)
+                    .ok_or_else(|| anyhow::anyhow!("Missing asset"))?
+                    .clone();
+                if use_.fill {
+                    if let Some(board) = page.boards.iter_mut().find(|b| b.id == use_.object) {
+                        board.image_fill.asset = Some(asset);
+                    } else if let Some(shape) = page.shapes.iter_mut().find(|s| s.id == use_.object)
+                    {
+                        shape.image_fill.asset = Some(asset);
+                    }
+                } else if let Some(shape) = page.shapes.iter_mut().find(|s| s.id == use_.object) {
+                    shape.media = Some(asset);
                 }
-            } else if let Some(shape) = document.shapes.iter_mut().find(|s| s.id == use_.object) {
-                shape.media = Some(asset);
             }
         }
         Ok(document)
@@ -110,7 +156,19 @@ pub(crate) fn import(
     Ok((load(&path)?, path))
 }
 
-impl Document {
+impl Page {
+    pub fn empty(name: String) -> Self {
+        Self {
+            id: uuid::Uuid::new_v4().to_string(),
+            name,
+            boards: Vec::new(),
+            shapes: Vec::new(),
+            texts: Vec::new(),
+            hierarchy: Default::default(),
+            next_id: 1,
+            assets: Vec::new(),
+        }
+    }
     pub fn decode(json: &[u8]) -> Result<Self> {
         let document: Self = serde_json::from_slice(json)?;
         document.validate()?;
@@ -121,6 +179,10 @@ impl Document {
         ensure!(
             uuid::Uuid::parse_str(&self.id).is_ok(),
             "Invalid document ID"
+        );
+        ensure!(
+            !self.name.trim().is_empty() && self.name.chars().count() <= 200,
+            "Invalid page name"
         );
         let mut ids = BTreeSet::new();
         for id in self

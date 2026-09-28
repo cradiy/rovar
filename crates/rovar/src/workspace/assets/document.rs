@@ -26,8 +26,8 @@ impl Workspace {
                 }
             })
             .ok_or_else(|| anyhow::anyhow!("Select a component first"))?;
-        let (json, mut sources) = self.snapshot_document(&uuid::Uuid::new_v4().to_string(), cx)?;
-        let mut document = Document::decode(&json)?;
+        let (mut document, mut sources) = self.snapshot_page(cx);
+        document.id = uuid::Uuid::new_v4().to_string();
         document.boards.retain(|item| included.contains(&item.id));
         document.shapes.retain(|item| included.contains(&item.id));
         document.texts.retain(|item| included.contains(&item.id));
@@ -91,7 +91,7 @@ impl Workspace {
         sources.retain(|a| hashes.contains(&a.hash));
         document.validate()?;
         Ok(SavedComponent {
-            json: serde_json::to_vec(&document)?,
+            json: serde_json::to_vec(&Document::single(document))?,
             sources,
             size: [bounds.width, bounds.height],
         })

@@ -1,7 +1,7 @@
 use super::*;
 use gpui::{ObjectFit, img, rgba};
 use uic::components::{
-    context_menu::{self, ContextMenu, ContextMenuAppearance, ContextMenuItem},
+    context_menu::{self, ContextMenuItem},
     input::Input,
 };
 
@@ -326,17 +326,7 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let mut menu = ContextMenu::new()
-            .w(px(194.))
-            .text_size(px(12.))
-            .text_color(rgb(TEXT))
-            .bg(rgb(0x202027))
-            .rounded(px(10.))
-            .appearance(ContextMenuAppearance {
-                selected_background: rgba(0xb4a2ee28).into(),
-                item_height: px(32.),
-                ..Default::default()
-            });
+        let mut menu = crate::workspace::context_menu::menu(194., "asset-context-glass");
         for (action, label, glyph) in [
             (0, t("assets-insert"), LucideIcons::Plus),
             (1, t("rename"), LucideIcons::Pencil),

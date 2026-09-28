@@ -185,6 +185,7 @@ fn saved_group_embeds_media_and_inserts_independent_objects_with_one_undo(cx: &m
             .unwrap()
             .into_document()
             .unwrap()
+            .pages[0]
             .shapes
             .len(),
         2
@@ -255,8 +256,8 @@ fn assets_panel_search_save_cancel_and_drop_respect_the_canvas(cx: &mut TestAppC
         .unwrap()
         .into_document()
         .unwrap();
-    assert_eq!(document.hierarchy.groups.len(), 1);
-    assert_eq!(document.hierarchy.parents.len(), 2);
+    assert_eq!(document.pages[0].hierarchy.groups.len(), 1);
+    assert_eq!(document.pages[0].hierarchy.parents.len(), 2);
     assert_eq!(entry.size, [180., 80.]);
     window
         .update(&mut visual.cx, |editor, window, cx| {

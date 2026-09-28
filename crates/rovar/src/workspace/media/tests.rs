@@ -304,7 +304,8 @@ fn hidden_video_pauses_and_deletion_drops_playback_without_putting_it_in_history
 fn reopening_displays_scene_before_decoding_only_visible_media(cx: &mut TestAppContext) {
     use crate::document::{self, AssetSource, AssetUse, Document};
     let directory = tempfile::tempdir().unwrap();
-    let mut doc = Document {
+    let mut doc = Document::single(crate::document::Page {
+        name: "Page 1".into(),
         id: uuid::Uuid::new_v4().to_string(),
         boards: vec![],
         shapes: vec![],
@@ -312,7 +313,7 @@ fn reopening_displays_scene_before_decoding_only_visible_media(cx: &mut TestAppC
         hierarchy: Default::default(),
         next_id: 3,
         assets: vec![],
-    };
+    });
     let mut sources = Vec::new();
     for (id, x) in [(1, 400.), (2, 5000.)] {
         let path = directory.path().join(format!("{id}.png"));
@@ -326,12 +327,12 @@ fn reopening_displays_scene_before_decoding_only_visible_media(cx: &mut TestAppC
             path: asset.source.clone(),
             size: [4, 4],
         });
-        doc.assets.push(AssetUse {
+        doc.pages[0].assets.push(AssetUse {
             object: id,
             fill: false,
             hash: asset.hash.clone(),
         });
-        doc.shapes.push(Shape::new(
+        doc.pages[0].shapes.push(Shape::new(
             id,
             None,
             ShapeKind::Image,

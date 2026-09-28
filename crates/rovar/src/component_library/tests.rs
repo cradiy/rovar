@@ -6,7 +6,8 @@ use crate::{
 };
 
 fn fixture() -> Document {
-    Document {
+    Document::single(crate::document::Page {
+        name: "Page 1".into(),
         id: uuid::Uuid::new_v4().to_string(),
         boards: vec![],
         shapes: vec![Shape::new(
@@ -24,7 +25,7 @@ fn fixture() -> Document {
         hierarchy: Default::default(),
         next_id: 2,
         assets: vec![],
-    }
+    })
 }
 
 #[gpui::test]
@@ -54,8 +55,9 @@ fn catalog_recovers_editable_components_and_failed_overwrite_keeps_original(
             .unwrap()
             .into_document()
             .unwrap()
+            .pages[0]
             .shapes,
-        document.shapes
+        document.pages[0].shapes
     );
     assert!(
         store(
@@ -110,7 +112,10 @@ fn shared_catalog_rename_delete_and_restart_preserve_existing_copies(
     cx.run_until_parked();
     assert!(same.read_with(cx, |lib, _| lib.entries.is_empty()));
     assert!(!entry.path.exists());
-    assert_eq!(copy.into_document().unwrap().shapes, document.shapes);
+    assert_eq!(
+        copy.into_document().unwrap().pages[0].shapes,
+        document.pages[0].shapes
+    );
 }
 
 #[gpui::test]
