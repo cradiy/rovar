@@ -31,13 +31,16 @@ impl Workspace {
         let (json, _) = self.snapshot_document(id, cx)?;
         let mut assets = std::collections::BTreeMap::new();
         let (current, _) = self.snapshot_page(cx);
-        for page in std::iter::once(&current).chain(
-            self.pages
-                .entries
-                .iter()
-                .filter(|p| p.page.id != self.pages.active)
-                .map(|p| &p.page),
-        ) {
+        for page in std::iter::once(&current)
+            .chain(
+                self.pages
+                    .entries
+                    .iter()
+                    .filter(|p| p.page.id != self.pages.active)
+                    .map(|p| &p.page),
+            )
+            .chain(self.components.definitions.values().map(|d| &d.page))
+        {
             for asset in page
                 .boards
                 .iter()
@@ -170,12 +173,18 @@ impl Workspace {
                 }
             })
             .collect();
-        let document = Document {
+        let mut document = Document {
             id: id.into(),
             pages,
+            components: self.components.definitions.clone(),
         };
+        crate::components::synchronize(&mut document.pages, &mut document.components)?;
         let mut sources = std::collections::BTreeMap::new();
-        for page in &document.pages {
+        for page in document
+            .pages
+            .iter()
+            .chain(document.components.values().map(|c| &c.page))
+        {
             for asset in page
                 .boards
                 .iter()
@@ -209,6 +218,8 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) -> anyhow::Result<String> {
         let document = loaded.into_document()?;
+        self.components.definitions = document.components;
+        self.components.revision = None;
         self.suspend(window, cx);
         self.history.borrow_mut().mark_changed();
         self.pages.active = document.pages[0].id.clone();

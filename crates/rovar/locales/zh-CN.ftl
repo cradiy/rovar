@@ -1,4 +1,14 @@
 language-name = 简体中文
+assets-document = 本文档
+assets-local = 资源库
+component-create = 创建组件
+component-create-selection = 从选区创建
+component-edit-main = 编辑主组件
+component-save-local = 保存到本机资源库
+component-detach = 脱离组件
+component-reset = 重置覆盖
+component-delete-hint = 现有实例将转为普通对象，可撤销。
+components-document-empty = 选择画布中的图层，即可创建组件。
 auto-layout = 自动布局
 layout-enable = 添加自动布局
 layout-disable = 移除自动布局

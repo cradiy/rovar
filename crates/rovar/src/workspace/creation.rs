@@ -148,6 +148,9 @@ impl Workspace {
             }
             _ => {}
         }
+        if let Some(id) = id {
+            self.avoid_component_nesting(id);
+        }
         self.sync_fields(cx);
     }
 

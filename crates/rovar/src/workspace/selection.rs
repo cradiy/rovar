@@ -445,6 +445,7 @@ impl Workspace {
             if let Some((parent, rect)) = self.object_rect(id) {
                 let (parent, rect) = self.parent_for_rect(parent, rect);
                 self.set_object_rect(id, parent, rect);
+                self.avoid_component_nesting(id);
             }
         }
         self.history.borrow_mut().record(before, None);

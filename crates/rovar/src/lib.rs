@@ -4,6 +4,7 @@ mod auto_layout;
 mod bezier;
 mod component_export;
 mod component_library;
+mod components;
 mod document;
 mod history;
 mod i18n;

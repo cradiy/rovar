@@ -12,6 +12,8 @@ struct Manifest {
     #[serde(default, skip_serializing, rename = "cover")]
     previous_cover: Option<String>,
     pages: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    components: Vec<String>,
     media: BTreeMap<String, Media>,
 }
 #[derive(Serialize, Deserialize)]
@@ -133,7 +135,22 @@ pub(crate) fn read_document(reader: &Reader) -> Result<Document> {
                 ensure!(index.id == id, "Page index differs from document");
                 pages.push(read_page(reader, &format!("page/{id}/"), index)?);
             }
-            Document { id: info.id, pages }
+            let mut components = crate::components::Definitions::new();
+            for id in info.components {
+                ensure!(uuid::Uuid::parse_str(&id).is_ok(), "Invalid component ID");
+                let definition = serde_json::from_slice(
+                    &reader.read(&format!("component/{id}"), METADATA_LIMIT)?,
+                )?;
+                ensure!(
+                    components.insert(id, definition).is_none(),
+                    "Duplicate component ID"
+                );
+            }
+            Document {
+                id: info.id,
+                pages,
+                components,
+            }
         }
         Index::Single(info) => {
             ensure!(info.schema == 1, "Invalid single-page schema");
@@ -153,6 +170,7 @@ pub(crate) fn read_document(reader: &Reader) -> Result<Document> {
             Document {
                 id: info.id,
                 pages: vec![page],
+                components: Default::default(),
             }
         }
     };
@@ -250,9 +268,15 @@ fn write_document(
         id: document.id.clone(),
         previous_cover: None,
         pages: document.pages.iter().map(|page| page.id.clone()).collect(),
+        components: document.components.keys().cloned().collect(),
         media,
     };
     put_json(writer, "document", "document", &info)?;
+    for (id, definition) in &document.components {
+        let key = format!("component/{id}");
+        put_json(writer, &key, "json", definition)?;
+        keys.insert(key);
+    }
     for page in &document.pages {
         let key = format!("page/{}", page.id);
         let index = PageIndex {

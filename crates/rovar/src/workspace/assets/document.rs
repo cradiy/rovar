@@ -30,6 +30,7 @@ impl Workspace {
             })
             .ok_or_else(|| anyhow::anyhow!("Select a component first"))?;
         let (mut document, mut sources) = self.snapshot_page(cx);
+        document.hierarchy.components.clear();
         document.id = uuid::Uuid::new_v4().to_string();
         document.boards.retain(|item| included.contains(&item.id));
         document.shapes.retain(|item| included.contains(&item.id));

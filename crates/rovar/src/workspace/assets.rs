@@ -5,25 +5,36 @@ use crate::{
 };
 use gpui::{AppContext, Focusable};
 mod document;
+mod document_view;
 #[cfg(test)]
 mod tests;
 mod view;
 use document::SavedComponent;
 
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+pub(super) enum Scope {
+    #[default]
+    Document,
+    Local,
+}
+
 pub(super) enum Dialog {
     Save(SavedComponent),
     Rename(Entry),
     Delete(Entry),
+    DocumentRename(String),
+    DocumentDelete(String),
 }
 
 pub(super) struct State {
+    pub scope: Scope,
     library: Option<Entity<Library>>,
     search: Entity<TextInput>,
     name: Entity<TextInput>,
     pub dialog: Option<Dialog>,
     pub inserting: bool,
     insert_request: u64,
-    error: Option<String>,
+    pub(super) error: Option<String>,
     observer: Option<Subscription>,
     _subscriptions: Vec<Subscription>,
 }
@@ -42,6 +53,7 @@ impl State {
             }),
         ];
         Self {
+            scope: Scope::Document,
             library: None,
             search,
             name,
@@ -99,6 +111,7 @@ impl Workspace {
         self.seal_text_edits(cx);
         self.close_tool_menus(window, cx);
         self.sidebar.resources = true;
+        self.assets.scope = Scope::Local;
         self.sidebar.collapsed = false;
         self.assets.error = None;
         match self.component_snapshot(cx) {
@@ -163,18 +176,50 @@ impl Workspace {
     }
 
     pub(super) fn confirm_asset_dialog(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if !self.library_available(cx) {
+        let local = !matches!(
+            self.assets.dialog,
+            Some(Dialog::DocumentRename(_) | Dialog::DocumentDelete(_))
+        );
+        if local && !self.library_available(cx) {
             return;
         }
         let name = self.assets.name.read(cx).value().trim().to_owned();
-        if !matches!(self.assets.dialog, Some(Dialog::Delete(_)))
-            && (name.is_empty() || name.chars().count() > 200)
+        if !matches!(
+            self.assets.dialog,
+            Some(Dialog::Delete(_) | Dialog::DocumentDelete(_))
+        ) && (name.is_empty() || name.chars().count() > 200)
         {
             return;
         }
         let Some(dialog) = self.assets.dialog.take() else {
             return;
         };
+        if let Dialog::DocumentRename(id) | Dialog::DocumentDelete(id) = &dialog {
+            let pages = self
+                .pages
+                .entries
+                .iter()
+                .map(|p| p.page.id.clone())
+                .collect::<Vec<_>>();
+            let before = self.page_edit(&pages, cx);
+            if matches!(dialog, Dialog::DocumentDelete(_)) {
+                self.components.definitions.remove(id);
+                self.hierarchy.components.retain(|_, b| &b.component != id);
+                for page in &mut self.pages.entries {
+                    page.page
+                        .hierarchy
+                        .components
+                        .retain(|_, b| &b.component != id);
+                }
+            } else if let Some(definition) = self.components.definitions.get_mut(id) {
+                definition.name = name;
+            }
+            self.record_page_edit(before);
+            self.components.revision = None;
+            self.focus.focus(window, cx);
+            cx.notify();
+            return;
+        }
         let library = self.assets.library.clone().unwrap();
         library.update(cx, |library, cx| match dialog {
             Dialog::Save(snapshot) => {
@@ -182,8 +227,61 @@ impl Workspace {
             }
             Dialog::Rename(entry) => library.rename(entry, name, cx),
             Dialog::Delete(entry) => library.delete(entry, cx),
+            Dialog::DocumentRename(_) | Dialog::DocumentDelete(_) => unreachable!(),
         });
         self.focus.focus(window, cx);
+        cx.notify();
+    }
+
+    pub(super) fn rename_document_component(
+        &mut self,
+        id: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(definition) = self.components.definitions.get(id) {
+            let name = definition.name.clone();
+            self.assets.dialog = Some(Dialog::DocumentRename(id.into()));
+            self.focus_asset_name(name, window, cx);
+            cx.notify();
+        }
+    }
+    pub(super) fn delete_document_component(
+        &mut self,
+        id: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.assets.dialog = Some(Dialog::DocumentDelete(id.into()));
+        self.focus.focus(window, cx);
+        cx.notify();
+    }
+    pub(super) fn save_document_component_local(
+        &mut self,
+        id: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if !self.library_available(cx) {
+            return;
+        }
+        self.sync_components(window, cx);
+        let Some(definition) = self.components.definitions.get(id) else {
+            return;
+        };
+        let page = definition.page.clone();
+        let name = definition.name.clone();
+        let Some(rect) = crate::components::bounds(&page, definition.root) else {
+            return;
+        };
+        let sources = crate::components::sources(&page);
+        let json = serde_json::to_vec(&crate::document::Document::single(page)).unwrap();
+        self.assets.dialog = Some(Dialog::Save(SavedComponent {
+            json,
+            sources,
+            size: [rect.width, rect.height],
+        }));
+        self.focus_asset_name(name, window, cx);
         cx.notify();
     }
 
@@ -210,6 +308,16 @@ impl Workspace {
             ))
         });
         let offset = point(center.x - entry.size[0] / 2., center.y - entry.size[1] / 2.);
+        if let Some(id) = self
+            .components
+            .definitions
+            .iter()
+            .find(|(_, c)| c.source.as_deref() == Some(entry.id.as_str()))
+            .map(|(id, _)| id.clone())
+        {
+            self.insert_document_component(&id, false, Some(offset), window, cx);
+            return;
+        }
         self.assets.insert_request += 1;
         let request = self.assets.insert_request;
         self.assets.inserting = true;
@@ -230,7 +338,7 @@ impl Workspace {
                 this.assets.inserting = false;
                 match result.and_then(crate::document::Loaded::into_document) {
                     Ok(document) => {
-                        this.insert_component_document(document, name, offset, window, cx)
+                        this.import_library_component(id, name, document, offset, window, cx)
                     }
                     Err(error) => library.update(cx, |library, cx| {
                         library.mark_failed(&id, format!("{error:#}"), cx);
@@ -252,10 +360,18 @@ impl Workspace {
         if self.assets.library.as_ref() != Some(&drag.library) {
             return;
         }
+        let Some(position) = self.asset_drop_position(window) else {
+            return;
+        };
+        self.insert_asset(drag.entry.clone(), Some(position), window, cx);
+        cx.stop_propagation();
+    }
+
+    pub(super) fn asset_drop_position(&self, window: &Window) -> Option<Point<f32>> {
         let bounds = self.bounds.get();
         let position = window.mouse_position();
         if !bounds.contains(&position) {
-            return;
+            return None;
         }
         let x = f32::from(position.x - bounds.left());
         let y = f32::from(position.y - bounds.top());
@@ -265,15 +381,9 @@ impl Workspace {
             || y < 56.
             || y > f32::from(bounds.size.height) - 76.
         {
-            return;
+            return None;
         }
-        self.insert_asset(
-            drag.entry.clone(),
-            Some(self.view.world(point(x, y))),
-            window,
-            cx,
-        );
-        cx.stop_propagation();
+        Some(self.view.world(point(x, y)))
     }
 }
 

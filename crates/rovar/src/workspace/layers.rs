@@ -123,6 +123,13 @@ impl Workspace {
                 ShapeKind::Bezier => LucideIcons::PenTool,
             },
         };
+        let glyph = self.hierarchy.components.get(&id).map_or(glyph, |link| {
+            if link.master {
+                LucideIcons::Component
+            } else {
+                LucideIcons::Diamond
+            }
+        });
         let active = self.is_selected(id);
         let folded = self.sidebar.folded.contains(&id);
         let (own, parent) = self.layer_info(id).unwrap();

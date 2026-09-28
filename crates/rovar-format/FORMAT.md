@@ -66,16 +66,19 @@ Document schema **2** uses these keys inside the 1.0 container:
 
 | Key | Contents |
 | --- | --- |
-| `document` | Schema, document UUID, ordered page UUIDs and media metadata |
+| `document` | Schema, document UUID, ordered page UUIDs, optional component UUIDs and media metadata |
 | `page/<uuid>` | Page name, object IDs, next object ID and media references |
-| `page/<uuid>/hierarchy` | Groups, parents, layer names, order, optional auto-layout containers and item sizing |
+| `page/<uuid>/hierarchy` | Groups, parents, layer names, order, auto layout, sizing and component bindings |
 | `page/<uuid>/board/<id>` | Artboard |
 | `page/<uuid>/shape/<id>` | Shape |
 | `page/<uuid>/text/<id>` | Text and styles |
+| `component/<uuid>` | Name, optional local-library source ID, root ID and component template |
 | `media/<sha256>` | Shared original media bytes |
 | `preview` | First page PNG, when available |
 
 Object IDs are local to each page. A document has at least one page; the first page supplies its preview. Schema 1 single-page documents open as Page 1 and become schema 2 on save.
+
+Component bindings identify the main component or an instance, map template IDs to page IDs, and retain a template baseline for local overrides. Component media uses the same shared media blocks.
 
 ## Inspect a file
 

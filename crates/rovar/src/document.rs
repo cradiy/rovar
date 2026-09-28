@@ -14,6 +14,7 @@ use std::{
 };
 
 mod preview;
+pub(crate) use preview::render as render_preview;
 #[cfg(test)]
 mod tests;
 
@@ -53,6 +54,8 @@ pub(crate) struct Page {
 pub(crate) struct Document {
     pub id: String,
     pub pages: Vec<Page>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub components: crate::components::Definitions,
 }
 
 impl Document {
@@ -60,6 +63,7 @@ impl Document {
         Self {
             id: uuid::Uuid::new_v4().to_string(),
             pages: vec![page],
+            components: Default::default(),
         }
     }
     pub fn decode(json: &[u8]) -> Result<Self> {
@@ -81,13 +85,59 @@ impl Document {
             ensure!(ids.insert(&page.id), "Duplicate page ID");
             page.validate()?;
         }
+        for (id, component) in &self.components {
+            ensure!(uuid::Uuid::parse_str(id).is_ok(), "Invalid component ID");
+            ensure!(
+                !component.name.trim().is_empty() && component.name.chars().count() <= 200,
+                "Invalid component name"
+            );
+            component.page.validate()?;
+            ensure!(
+                component.page.hierarchy.components.is_empty(),
+                "Nested component definitions are not supported"
+            );
+            ensure!(
+                crate::components::ids(&component.page).contains(&component.root)
+                    && crate::components::subtree(&component.page, component.root)
+                        == crate::components::ids(&component.page),
+                "Invalid component root"
+            );
+        }
+        let mut masters = BTreeSet::new();
+        for page in &self.pages {
+            for (root, binding) in &page.hierarchy.components {
+                let definition = self
+                    .components
+                    .get(&binding.component)
+                    .ok_or_else(|| anyhow::anyhow!("Missing component definition"))?;
+                ensure!(
+                    !binding.master || masters.insert(&binding.component),
+                    "Duplicate main component"
+                );
+                ensure!(
+                    binding.nodes.get(&definition.root) == Some(root),
+                    "Invalid component root mapping"
+                );
+                let mut parent = crate::components::parent(page, *root);
+                while let Some(id) = parent {
+                    ensure!(
+                        !page.hierarchy.components.contains_key(&id),
+                        "Nested components are not supported"
+                    );
+                    parent = crate::components::parent(page, id);
+                }
+            }
+        }
         Ok(())
     }
     pub fn first_page(&self) -> &Page {
         self.pages.first().expect("validated nonempty document")
     }
     pub fn assets(&self) -> impl Iterator<Item = &AssetUse> {
-        self.pages.iter().flat_map(|page| &page.assets)
+        self.pages
+            .iter()
+            .chain(self.components.values().map(|c| &c.page))
+            .flat_map(|page| &page.assets)
     }
 }
 
@@ -108,7 +158,11 @@ pub(crate) struct Loaded {
 impl Loaded {
     pub fn into_document(self) -> Result<Document> {
         let mut document = Document::decode(&self.json)?;
-        for page in &mut document.pages {
+        for page in document
+            .pages
+            .iter_mut()
+            .chain(document.components.values_mut().map(|c| &mut c.page))
+        {
             for use_ in &page.assets {
                 let asset = self
                     .assets
@@ -198,6 +252,14 @@ impl Page {
         ensure!(
             ids.last().is_none_or(|id| self.next_id > *id),
             "Invalid next object ID"
+        );
+        ensure!(
+            self.hierarchy
+                .names
+                .keys()
+                .chain(self.hierarchy.order.iter())
+                .all(|id| ids.contains(id)),
+            "Invalid layer reference"
         );
         crate::auto_layout::validate(self, &ids)?;
         let boards: BTreeSet<_> = self.boards.iter().map(|b| b.id).collect();
@@ -336,6 +398,31 @@ impl Page {
                             .iter()
                             .all(|p| p.x.is_finite() && p.y.is_finite())),
                 "Invalid path coordinates"
+            );
+        }
+        for (root, binding) in &self.hierarchy.components {
+            ensure!(ids.contains(root), "Missing component instance");
+            ensure!(
+                uuid::Uuid::parse_str(&binding.component).is_ok(),
+                "Invalid component reference"
+            );
+            let baseline: Page = serde_json::from_value(binding.baseline.clone())?;
+            ensure!(
+                baseline.hierarchy.components.is_empty(),
+                "Recursive component baseline"
+            );
+            baseline.validate()?;
+            ensure!(
+                crate::components::ids(&baseline)
+                    .iter()
+                    .all(|id| binding.nodes.contains_key(id)),
+                "Incomplete component mapping"
+            );
+            let mapped: BTreeSet<_> = binding.nodes.values().copied().collect();
+            ensure!(
+                mapped.len() == binding.nodes.len()
+                    && mapped.iter().all(|id| *id > 0 && *id < self.next_id),
+                "Invalid component mapping"
             );
         }
         Ok(())

@@ -166,6 +166,8 @@ fn saved_group_embeds_media_and_inserts_independent_objects_with_one_undo(cx: &m
         .update(cx, |editor, _, cx| {
             assert_eq!(editor.shapes.len(), 2);
             assert_ne!(editor.shapes[0].id, editor.shapes[1].id);
+            assert_eq!(editor.components.definitions.len(), 1);
+            assert_eq!(editor.hierarchy.components.len(), 2);
             editor.shapes[0].color = rgb(0xff0000);
             assert_ne!(editor.shapes[0].color, editor.shapes[1].color);
             let (json, sources) = editor
@@ -229,6 +231,7 @@ fn assets_panel_search_save_cancel_and_drop_respect_the_canvas(cx: &mut TestAppC
             editor.next_id = 3;
             editor.set_selection(BTreeSet::from([1, 2]), cx);
             editor.sidebar.resources = true;
+            editor.assets.scope = Scope::Local;
         })
         .unwrap();
     let mut visual = VisualTestContext::from_window(window.into(), cx);
@@ -331,7 +334,9 @@ fn assets_panel_search_save_cancel_and_drop_respect_the_canvas(cx: &mut TestAppC
             assert!((bounds.x + bounds.width / 2. - 600.).abs() < 0.01);
             assert!((bounds.y + bounds.height / 2. - 340.).abs() < 0.01);
             // Leaving a tab cancels a pending insert instead of stealing focus later.
-            editor.insert_asset(entry.clone(), None, window, cx);
+            let mut uncached = entry.clone();
+            uncached.id = uuid::Uuid::new_v4().to_string();
+            editor.insert_asset(uncached, None, window, cx);
             editor.suspend(window, cx);
         })
         .unwrap();
@@ -371,6 +376,7 @@ fn failed_asset_card_can_be_removed_without_a_dialog(cx: &mut TestAppContext) {
         editor.attach_library(library.clone(), cx);
         editor.sidebar.resources = true;
         editor.sidebar.collapsed = false;
+        editor.assets.scope = Scope::Local;
         editor
     });
     let mut visual = VisualTestContext::from_window(window.into(), cx);

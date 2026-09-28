@@ -1,6 +1,7 @@
 mod assets;
 mod auto_layout;
 mod canvas;
+mod components;
 mod context_menu;
 mod creation;
 mod document;
@@ -136,6 +137,7 @@ pub struct Workspace {
     snapping: layout::Snapping,
     hierarchy: crate::layer::Hierarchy,
     auto_layout: auto_layout::State,
+    components: components::State,
     rename_input: Entity<TextInput>,
     layer_drag: Option<organization::LayerDrag>,
     layer_row_bounds: Rc<std::cell::RefCell<std::collections::HashMap<usize, Bounds<Pixels>>>>,
@@ -392,6 +394,7 @@ impl Workspace {
             assets: assets::State::new(window, cx),
             hierarchy: Default::default(),
             auto_layout: auto_layout::State::new(window, cx),
+            components: components::State::default(),
             snapping: Default::default(),
             export: export::ExportState::new(window, cx),
             rename_input,
@@ -732,6 +735,7 @@ impl Workspace {
 impl Render for Workspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.reflow_layout(cx);
+        self.sync_components(window, cx);
         self.sync_layout_inputs(cx);
         self.sync_video_visibility(cx);
         self.load_visible_media(window, cx);
@@ -820,7 +824,10 @@ impl Render for Workspace {
                         this.cancel_asset_dialog(window, cx);
                         cx.stop_propagation();
                     } else if event.keystroke.key == "enter"
-                        && matches!(this.assets.dialog, Some(assets::Dialog::Delete(_)))
+                        && matches!(
+                            this.assets.dialog,
+                            Some(assets::Dialog::Delete(_) | assets::Dialog::DocumentDelete(_))
+                        )
                     {
                         this.confirm_asset_dialog(window, cx);
                         cx.stop_propagation();

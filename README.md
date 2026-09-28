@@ -6,6 +6,8 @@ A desktop design editor built with Rust and GPUI. Supports artboards, vectors, t
 
 Auto layout supports nested horizontal and vertical frames and groups, spacing, padding, alignment and fixed, content-sized or fill sizing. Use the context menu or `Shift+A`; multiple selected objects are grouped first.
 
+Assets separates document components from the local library. Main components update instances across pages while preserving local overrides; components and their media travel with the `.rovar` file. Import local assets for reuse across documents.
+
 Export selections as PNG or SVG, videos in their original format, and documents as `.rovar` files. Available in English and Simplified Chinese.
 
 Primarily developed by GPT-6 Astra, Rovar is a Figma-like project I created to showcase what my GPUI can do. It already has a fairly broad feature set, though a complete product is not the main goal. I may keep developing it if enough people want to use it, or if I need it myself.

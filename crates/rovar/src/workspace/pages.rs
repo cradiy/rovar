@@ -124,6 +124,7 @@ impl Workspace {
         self.finish_page_rename(true, window, cx);
         self.finish_rename(true, window, cx);
         self.suspend(window, cx);
+        self.sync_components(window, cx);
         self.park_page(cx);
         self.activate_page(id, window, cx);
     }
@@ -171,6 +172,7 @@ impl Workspace {
     }
     pub(in crate::workspace) fn page_edit(&self, ids: &[String], cx: &gpui::App) -> PageEdit {
         PageEdit {
+            components: self.components.definitions.clone(),
             pages: ids
                 .iter()
                 .map(|id| {
@@ -213,6 +215,8 @@ impl Workspace {
         self.suspend(window, cx);
         self.park_page(cx);
         let inverse = self.page_edit(&ids, cx);
+        self.components.definitions = value.components;
+        self.components.revision = None;
         for (id, state) in value.pages {
             self.pages.entries.retain(|p| p.page.id != id);
             if let Some(state) = state {
@@ -233,12 +237,16 @@ impl Workspace {
     ) {
         self.suspend(window, cx);
         self.finish_page_rename(true, window, cx);
+        self.sync_components(window, cx);
         self.park_page(cx);
         let page = if let Some(id) = duplicate {
             let Some(source) = self.pages.entries.iter().find(|p| p.page.id == id) else {
                 return;
             };
             let mut page = source.page.clone();
+            for link in page.hierarchy.components.values_mut() {
+                link.master = false;
+            }
             page.id = uuid::Uuid::new_v4().to_string();
             page.name = message(
                 "page-copy-name",

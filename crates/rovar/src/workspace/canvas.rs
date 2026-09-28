@@ -32,6 +32,21 @@ impl Workspace {
             .on_drop(cx.listener(|this, drag: &assets::AssetDrag, window, cx| {
                 this.drop_asset(drag, window, cx)
             }))
+            .on_drop(
+                cx.listener(|this, drag: &components::ComponentDrag, window, cx| {
+                    if drag.owner == cx.entity_id()
+                        && let Some(position) = this.asset_drop_position(window)
+                        && let Some(definition) = this.components.definitions.get(&drag.id)
+                        && let Some(rect) =
+                            crate::components::bounds(&definition.page, definition.root)
+                    {
+                        let offset =
+                            point(position.x - rect.width / 2., position.y - rect.height / 2.);
+                        this.insert_document_component(&drag.id, false, Some(offset), window, cx);
+                        cx.stop_propagation();
+                    }
+                }),
+            )
             .debug_selector(|| "editor-area".into())
             .track_focus(&self.focus)
             .relative()

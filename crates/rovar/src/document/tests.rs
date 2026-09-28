@@ -378,6 +378,47 @@ fn rich_text_paths_groups_and_external_edit_conflicts_round_trip(cx: &mut gpui::
 }
 
 #[gpui::test]
+fn component_baselines_allow_consecutive_saves_with_fractional_geometry(
+    cx: &mut gpui::TestAppContext,
+) {
+    let text_system = cx.update(|cx| cx.text_system().clone());
+    let mut document = fixture();
+    document.pages[0].shapes[0].rect.x = 687.28;
+    document.pages[0].shapes[0].rect.y = 339.17;
+    document.pages[0].shapes[0].color = gpui::rgb(0xd9d9d9);
+    let id = uuid::Uuid::new_v4().to_string();
+    let template = crate::components::extract(&document.pages[0], 1).unwrap();
+    document.pages[0].hierarchy.components.insert(
+        1,
+        crate::components::Binding {
+            component: id.clone(),
+            master: true,
+            nodes: [(1, 1)].into(),
+            baseline: serde_json::to_value(&template).unwrap(),
+        },
+    );
+    document.components.insert(
+        id,
+        crate::components::Definition {
+            name: "Card".into(),
+            source: None,
+            root: 1,
+            page: template,
+        },
+    );
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("component.rovar");
+    let first = serde_json::to_vec(&document).unwrap();
+    save(&path, &first, &[], &[], &text_system).unwrap();
+    assert_eq!(load(&path).unwrap().json, first);
+    document.pages[0].shapes[0].rect.width += 10.;
+    let second = serde_json::to_vec(&document).unwrap();
+    save(&path, &second, &[], &first, &text_system).unwrap();
+    assert_eq!(load(&path).unwrap().json, second);
+    assert!(save(&path, &first, &[], &first, &text_system).is_err());
+}
+
+#[gpui::test]
 fn invalid_references_and_unsupported_version_are_rejected(cx: &mut gpui::TestAppContext) {
     let text_system = cx.update(|cx| cx.text_system().clone());
     let mut document = fixture();

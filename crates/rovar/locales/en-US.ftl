@@ -1,4 +1,14 @@
 language-name = English
+assets-document = This document
+assets-local = Library
+component-create = Create component
+component-create-selection = Create from selection
+component-edit-main = Edit main component
+component-save-local = Save to local library
+component-detach = Detach component
+component-reset = Reset overrides
+component-delete-hint = Instances become ordinary objects. This can be undone.
+components-document-empty = Select layers on the canvas to create a component.
 auto-layout = Auto layout
 layout-enable = Add auto layout
 layout-disable = Remove auto layout

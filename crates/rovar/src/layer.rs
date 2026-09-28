@@ -24,6 +24,8 @@ pub(crate) struct LayerGroup {
 #[derive(Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub(crate) struct Hierarchy {
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub components: std::collections::BTreeMap<usize, crate::components::Binding>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub layouts: std::collections::BTreeMap<usize, crate::auto_layout::Container>,
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub sizing: std::collections::BTreeMap<usize, crate::auto_layout::Sizing>,

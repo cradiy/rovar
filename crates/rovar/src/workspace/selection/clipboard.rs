@@ -7,6 +7,7 @@ struct ObjectClipboard {
     source: Option<gpui::EntityId>,
     source_page: Option<String>,
     hierarchy: crate::layer::Hierarchy,
+    definitions: crate::components::Definitions,
     boards: Vec<Artboard>,
     shapes: Vec<Shape>,
     texts: Vec<SavedText>,
@@ -80,6 +81,9 @@ impl Workspace {
         hierarchy.order.retain(|id| included_ids.contains(id));
         hierarchy.layouts.retain(|id, _| included_ids.contains(id));
         hierarchy.sizing.retain(|id, _| included_ids.contains(id));
+        hierarchy
+            .components
+            .retain(|id, _| included_ids.contains(id));
         for (id, layout) in &mut hierarchy.layouts {
             if let Some(group) = hierarchy.groups.get(id)
                 && group.board.is_none_or(|b| !copied_boards.contains(&b))
@@ -94,6 +98,13 @@ impl Workspace {
             .map(|id| (*id, self.layer_parent(*id)))
             .collect();
         ObjectClipboard {
+            definitions: self
+                .components
+                .definitions
+                .iter()
+                .filter(|(id, _)| hierarchy.components.values().any(|b| &b.component == *id))
+                .map(|(id, definition)| (id.clone(), definition.clone()))
+                .collect(),
             root_parents,
             hierarchy,
             boards,
@@ -174,6 +185,7 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) {
         self.seal_text_edits(cx);
+        self.sync_components(window, cx);
         self.insert_copies(
             self.snapshot_selection(cx),
             point(20., 20.),
@@ -266,7 +278,7 @@ impl Workspace {
         self.insert_copies(clipboard, offset, false, false, window, cx);
     }
 
-    fn restore_copy_parent(&mut self, id: usize, parent: Option<usize>) {
+    pub(in crate::workspace) fn restore_copy_parent(&mut self, id: usize, parent: Option<usize>) {
         let board = parent.and_then(|parent| {
             if self.boards.iter().any(|b| b.id == parent) {
                 Some(parent)
@@ -313,6 +325,14 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) {
         let before = self.snapshot_hierarchy();
+        let import_before = clipboard
+            .definitions
+            .keys()
+            .any(|id| !self.components.definitions.contains_key(id))
+            .then(|| self.page_edit(std::slice::from_ref(&self.pages.active), cx));
+        for (id, definition) in clipboard.definitions {
+            self.components.definitions.entry(id).or_insert(definition);
+        }
         let mut id_map = BTreeMap::new();
         // Preserve the relative stacking of mixed text and shape objects.
         let ids: BTreeSet<_> = clipboard
@@ -405,6 +425,19 @@ impl Workspace {
         for (id, sizing) in clipboard.hierarchy.sizing {
             self.hierarchy.sizing.insert(id_map[&id], sizing);
         }
+        for (root, mut link) in clipboard.hierarchy.components {
+            for id in link.nodes.values_mut() {
+                *id = id_map.get(id).copied().unwrap_or_else(|| {
+                    let reserved = self.next_id;
+                    self.next_id += 1;
+                    reserved
+                });
+            }
+            if rename {
+                link.master = false;
+            }
+            self.hierarchy.components.insert(id_map[&root], link);
+        }
         for (id, name) in clipboard.hierarchy.names {
             self.hierarchy.names.insert(id_map[&id], name);
         }
@@ -438,6 +471,7 @@ impl Workspace {
             } else if self.hierarchy.groups.contains_key(&id) {
                 self.reparent_group(id);
             }
+            self.avoid_component_nesting(id);
         }
         if let Change::Hierarchy { ref value, .. } = before
             && *value != self.hierarchy
@@ -447,7 +481,11 @@ impl Workspace {
         if changes.is_empty() {
             return;
         }
-        self.history.borrow_mut().record(changes, None);
+        if let Some(before) = import_before {
+            self.record_page_edit(before);
+        } else {
+            self.history.borrow_mut().record(changes, None);
+        }
         self.set_selection(
             clipboard.roots.into_iter().map(|id| id_map[&id]).collect(),
             cx,

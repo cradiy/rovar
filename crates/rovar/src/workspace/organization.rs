@@ -326,6 +326,7 @@ impl Workspace {
                 }
             }
             self.hierarchy.groups.remove(&id);
+            self.hierarchy.components.remove(&id);
             self.hierarchy.parents.remove(&id);
             self.hierarchy.order.retain(|i| *i != id);
             self.hierarchy.layouts.remove(&id);
@@ -454,6 +455,7 @@ impl Workspace {
         self.hierarchy.order.retain(|id| ids.contains(id));
         self.hierarchy.layouts.retain(|id, _| ids.contains(id));
         self.hierarchy.sizing.retain(|id, _| ids.contains(id));
+        self.hierarchy.components.retain(|id, _| ids.contains(id));
     }
 }
 
@@ -474,6 +476,7 @@ impl Workspace {
             return;
         };
         let board = self.board_at(point(rect.x + rect.width / 2., rect.y + rect.height / 2.));
+        let board = board.filter(|board| self.component_parent_allowed(id, Some(*board)));
         let origin = self.parent_origin(board);
         for child in &descendants {
             if let Some(group) = self.hierarchy.groups.get(child)

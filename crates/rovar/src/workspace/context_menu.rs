@@ -49,6 +49,10 @@ enum Command {
     Rename,
     Group,
     AutoLayout,
+    CreateComponent,
+    EditComponent,
+    DetachComponent,
+    ResetComponent,
     Ungroup,
     Raise,
     Lower,
@@ -193,13 +197,56 @@ impl Workspace {
             ))
             .item(item(
                 "context-save-asset",
-                t("assets-save-selection"),
+                t("component-save-local"),
                 LucideIcons::Component,
                 "",
                 Command::SaveAsset,
                 self.can_save_asset(cx),
             ))
             .separator();
+        if self.can_create_component() {
+            menu = menu.item(item(
+                "context-create-component",
+                t("component-create"),
+                LucideIcons::Component,
+                "",
+                Command::CreateComponent,
+                true,
+            ));
+        }
+        if let Some(link) = ids
+            .first()
+            .filter(|_| ids.len() == 1)
+            .and_then(|id| self.hierarchy.components.get(id))
+        {
+            if !link.master {
+                menu = menu
+                    .item(item(
+                        "context-edit-component",
+                        t("component-edit-main"),
+                        LucideIcons::Pencil,
+                        "",
+                        Command::EditComponent,
+                        true,
+                    ))
+                    .item(item(
+                        "context-reset-component",
+                        t("component-reset"),
+                        LucideIcons::RotateCcw,
+                        "",
+                        Command::ResetComponent,
+                        editable,
+                    ));
+            }
+            menu = menu.item(item(
+                "context-detach-component",
+                t("component-detach"),
+                LucideIcons::Unlink,
+                "",
+                Command::DetachComponent,
+                editable,
+            ));
+        }
         if self.can_auto_layout() {
             menu = menu.item(item(
                 "context-auto-layout",
@@ -507,6 +554,26 @@ impl Workspace {
             }
             Command::Group => self.group_selection(cx),
             Command::AutoLayout => self.enable_auto_layout(window, cx),
+            Command::CreateComponent => self.create_component(window, cx),
+            Command::EditComponent => {
+                if let Some(id) = ids
+                    .first()
+                    .and_then(|id| self.hierarchy.components.get(id))
+                    .map(|b| b.component.clone())
+                {
+                    self.edit_document_component(&id, window, cx);
+                }
+            }
+            Command::DetachComponent => {
+                if let Some(id) = ids.first() {
+                    self.detach_component(*id, cx);
+                }
+            }
+            Command::ResetComponent => {
+                if let Some(id) = ids.first() {
+                    self.reset_component(*id, window, cx);
+                }
+            }
             Command::Ungroup => self.ungroup_selection(cx),
             Command::Raise => self.shift_layers(true, false, cx),
             Command::Lower => self.shift_layers(false, false, cx),

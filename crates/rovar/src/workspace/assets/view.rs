@@ -44,10 +44,7 @@ pub(super) fn thumbnail(entry: &Entry, height: f32) -> impl IntoElement {
 }
 
 impl Workspace {
-    pub(in crate::workspace) fn assets_panel(
-        &self,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement + use<> {
+    pub(super) fn local_assets_panel(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let library = self.assets.library.as_ref().map(|lib| lib.read(cx));
         let busy = library.is_some_and(|lib| lib.busy) || self.assets.inserting;
         let error = self
@@ -361,14 +358,21 @@ impl Workspace {
         &self,
         cx: &mut Context<Self>,
     ) -> impl IntoElement + use<> {
-        let delete = matches!(self.assets.dialog, Some(Dialog::Delete(_)));
+        let delete = matches!(
+            self.assets.dialog,
+            Some(Dialog::Delete(_) | Dialog::DocumentDelete(_))
+        );
         let title = match self.assets.dialog {
             Some(Dialog::Save(_)) => t("assets-save-title"),
-            Some(Dialog::Delete(_)) => t("assets-delete-title"),
+            Some(Dialog::Delete(_) | Dialog::DocumentDelete(_)) => t("assets-delete-title"),
             _ => t("rename"),
         };
         let value = self.assets.name.read(cx).value();
-        let valid = self.library_available(cx)
+        let valid = (self.library_available(cx)
+            || matches!(
+                self.assets.dialog,
+                Some(Dialog::DocumentRename(_) | Dialog::DocumentDelete(_))
+            ))
             && (delete || (!value.trim().is_empty() && value.trim().chars().count() <= 200));
         let mut body = div()
             .id("asset-dialog")
@@ -385,15 +389,26 @@ impl Workspace {
             .gap(px(16.))
             .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
             .child(div().text_size(px(15.)).child(title));
-        if let Some(Dialog::Delete(entry)) = &self.assets.dialog {
-            body = body
-                .child(div().text_size(px(13.)).child(entry.name.clone()))
-                .child(
-                    div()
-                        .text_size(px(12.))
-                        .text_color(rgb(MUTED))
-                        .child(t("assets-delete-hint")),
-                );
+        if delete {
+            let name = match &self.assets.dialog {
+                Some(Dialog::Delete(entry)) => entry.name.clone(),
+                Some(Dialog::DocumentDelete(id)) => self
+                    .components
+                    .definitions
+                    .get(id)
+                    .map(|c| c.name.clone())
+                    .unwrap_or_default(),
+                _ => String::new(),
+            };
+            body = body.child(div().text_size(px(13.)).child(name)).child(
+                div().text_size(px(12.)).text_color(rgb(MUTED)).child(t(
+                    if matches!(self.assets.dialog, Some(Dialog::DocumentDelete(_))) {
+                        "component-delete-hint"
+                    } else {
+                        "assets-delete-hint"
+                    },
+                )),
+            );
         } else {
             body = body.child(
                 Input::new(&self.assets.name)
