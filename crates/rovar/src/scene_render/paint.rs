@@ -139,7 +139,7 @@ pub(super) fn paint(
     Ok(format!("fill=\"url(#{id})\""))
 }
 
-pub(super) fn image_uri(source: &AssetSource) -> Result<String> {
+pub(super) fn image_uri(source: &AssetSource, output: Output) -> Result<String> {
     use base64::Engine;
     let asset = crate::media::MediaAsset::from_cached(
         source.name.clone().into(),
@@ -155,6 +155,10 @@ pub(super) fn image_uri(source: &AssetSource) -> Result<String> {
     }
     let image = image::RgbaImage::from_raw(asset.width, asset.height, rgba)
         .context("Invalid image data")?;
+    let image = match output {
+        Output::Export => image,
+        Output::Preview => image::imageops::thumbnail(&image, 560, 336),
+    };
     let mut bytes = std::io::Cursor::new(Vec::new());
     image.write_to(&mut bytes, image::ImageFormat::Png)?;
     Ok(format!(

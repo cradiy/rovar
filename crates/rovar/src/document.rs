@@ -85,7 +85,11 @@ impl Loaded {
     }
 }
 
-pub(crate) fn import(source: &Path, directory: &Path) -> Result<(Loaded, PathBuf)> {
+pub(crate) fn import(
+    source: &Path,
+    directory: &Path,
+    text_system: &Arc<gpui::TextSystem>,
+) -> Result<(Loaded, PathBuf)> {
     let mut loaded = load(source)?;
     let mut document = Document::decode(&loaded.json)?;
     document.id = uuid::Uuid::new_v4().to_string();
@@ -102,7 +106,7 @@ pub(crate) fn import(source: &Path, directory: &Path) -> Result<(Loaded, PathBuf
         .collect();
     std::fs::create_dir_all(directory)?;
     let path = directory.join(format!("{}.rovar", document.id));
-    save_as(&path, &loaded.json, &assets)?;
+    save_as(&path, &loaded.json, &assets, text_system)?;
     Ok((load(&path)?, path))
 }
 

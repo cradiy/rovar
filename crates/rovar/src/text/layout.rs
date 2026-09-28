@@ -19,7 +19,12 @@ pub(super) struct TextLayout {
     pub bounds: Bounds<Pixels>,
 }
 
-fn shape(text: &str, style: &TextStyle, zoom: f32, window: &Window) -> ShapedLine {
+fn shape(
+    text: &str,
+    style: &TextStyle,
+    zoom: f32,
+    text_system: &gpui::WindowTextSystem,
+) -> ShapedLine {
     let mut font = gpui::font(style.family.clone());
     font.weight = FontWeight(style.weight);
     if style.spacing != 0. {
@@ -37,12 +42,8 @@ fn shape(text: &str, style: &TextStyle, zoom: f32, window: &Window) -> ShapedLin
         underline: None,
         strikethrough: None,
     };
-    let mut line = window.text_system().shape_line(
-        text.to_owned().into(),
-        px(style.size * zoom),
-        &[run],
-        None,
-    );
+    let mut line =
+        text_system.shape_line(text.to_owned().into(), px(style.size * zoom), &[run], None);
     if style.spacing != 0. && !text.is_empty() {
         let boundaries: Vec<_> = text.grapheme_indices(true).map(|(i, _)| i).collect();
         let spacing = px(style.spacing * zoom);
@@ -98,6 +99,16 @@ impl TextLayout {
         bounds: Bounds<Pixels>,
         window: &Window,
     ) -> Self {
+        Self::with_text_system(content, styles, zoom, bounds, window.text_system())
+    }
+
+    fn with_text_system(
+        content: &str,
+        styles: &StyledText,
+        zoom: f32,
+        bounds: Bounds<Pixels>,
+        text_system: &gpui::WindowTextSystem,
+    ) -> Self {
         let viewport = bounds;
         let bounds = Bounds::new(Point::default(), bounds.size);
         let mut rows = Vec::new();
@@ -114,7 +125,7 @@ impl TextLayout {
                     continue;
                 }
                 let text = &content[start..end];
-                let shaped = shape(text, &run.style, zoom, window);
+                let shaped = shape(text, &run.style, zoom, text_system);
                 let boundaries = text
                     .grapheme_indices(true)
                     .map(|(i, _)| i)
@@ -174,7 +185,7 @@ impl TextLayout {
                     if a >= b {
                         continue;
                     }
-                    let line = shape(&content[a..b], &run.style, zoom, window);
+                    let line = shape(&content[a..b], &run.style, zoom, text_system);
                     let indices = content[a..b].grapheme_indices(true).map(|(i, _)| i);
                     carets.extend(
                         positions_for_indices(&line, indices)
@@ -378,21 +389,21 @@ pub(crate) fn export_fragments(
     content: &str,
     styles: &StyledText,
     rect: Rect,
-    window: &Window,
-) -> Vec<crate::component_export::TextFragment> {
-    let layout = TextLayout::new(
+    text_system: &gpui::WindowTextSystem,
+) -> Vec<crate::scene_render::TextFragment> {
+    let layout = TextLayout::with_text_system(
         content,
         styles,
         1.,
         Bounds::new(Point::default(), size(px(rect.width), px(rect.height))),
-        window,
+        text_system,
     );
     layout
         .rows
         .iter()
         .take_while(|row| row.origin.y < px(rect.height))
         .flat_map(|row| row.fragments.iter())
-        .map(|fragment| crate::component_export::TextFragment {
+        .map(|fragment| crate::scene_render::TextFragment {
             text: fragment.line.text.to_string(),
             x: fragment.origin.x.into(),
             baseline: (fragment.origin.y + fragment.line.ascent).into(),

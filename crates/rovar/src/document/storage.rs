@@ -79,6 +79,7 @@ pub(crate) fn save(
     json: &[u8],
     sources: &[AssetSource],
     expected: &[u8],
+    text_system: &Arc<gpui::TextSystem>,
 ) -> Result<()> {
     let document = Document::decode(json)?;
     if !path.exists() {
@@ -86,7 +87,7 @@ pub(crate) fn save(
             expected.is_empty(),
             "The document was removed from its save location"
         );
-        return save_as(path, json, sources);
+        return save_as(path, json, sources, text_system);
     }
     let mut writer = Writer::open(path)?;
     let previous = read_document(&writer.snapshot())?;
@@ -98,7 +99,7 @@ pub(crate) fn save(
         previous.id == document.id,
         "A different document now exists at this location"
     );
-    write_document(&mut writer, &document, json, sources)?;
+    write_document(&mut writer, &document, sources, text_system)?;
     // Reclaim superseded blocks only when there is substantial garbage.
     if let Err(error) = writer.compact_if_needed(path, 4 * 1024 * 1024) {
         eprintln!("Document saved; container compaction deferred: {error:#}");
@@ -109,8 +110,8 @@ pub(crate) fn save(
 fn write_document(
     writer: &mut Writer,
     document: &Document,
-    json: &[u8],
     sources: &[AssetSource],
+    text_system: &Arc<gpui::TextSystem>,
 ) -> Result<()> {
     let mut keys = BTreeSet::from(["document".to_owned(), "hierarchy".to_owned()]);
     // Component metadata survives document edits.
@@ -182,11 +183,14 @@ fn write_document(
     objects!(&document.boards, "board");
     objects!(&document.shapes, "shape");
     objects!(&document.texts, "text");
-    if !(document.boards.is_empty() && document.shapes.is_empty() && document.texts.is_empty())
-        && let Ok(png) = preview::render(json, sources)
-    {
-        writer.put_bytes("preview", "png", &png)?;
-        keys.insert("preview".into());
+    if !(document.boards.is_empty() && document.shapes.is_empty() && document.texts.is_empty()) {
+        match preview::render(document, sources, text_system) {
+            Ok(png) => {
+                writer.put_bytes("preview", "png", &png)?;
+                keys.insert("preview".into());
+            }
+            Err(error) => eprintln!("Could not render document preview: {error:#}"),
+        }
     }
     writer.retain(&keys);
     writer.commit()?;
@@ -226,7 +230,12 @@ pub(crate) fn cache_preview(path: &Path, directory: &Path) -> Result<Option<Stri
     Ok(Some(name))
 }
 
-pub(crate) fn save_as(path: &Path, json: &[u8], sources: &[AssetSource]) -> Result<()> {
+pub(crate) fn save_as(
+    path: &Path,
+    json: &[u8],
+    sources: &[AssetSource],
+    text_system: &Arc<gpui::TextSystem>,
+) -> Result<()> {
     let document = Document::decode(json)?;
     let directory = path.parent().context("Invalid save location")?;
     let temporary = tempfile::Builder::new()
@@ -234,7 +243,7 @@ pub(crate) fn save_as(path: &Path, json: &[u8], sources: &[AssetSource]) -> Resu
         .tempfile_in(directory)?
         .into_temp_path();
     let mut writer = Writer::create(&temporary)?;
-    write_document(&mut writer, &document, json, sources)?;
+    write_document(&mut writer, &document, sources, text_system)?;
     drop(writer);
     std::fs::rename(&temporary, path)?;
     rovar_format::sync_parent(path)?;

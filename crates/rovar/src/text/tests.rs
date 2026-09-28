@@ -70,6 +70,45 @@ struct TestView {
 }
 
 #[gpui::test]
+fn merged_typing_style_edits_and_replay_advance_document_revision(cx: &mut TestAppContext) {
+    let window = cx.open_window(size(px(500.), px(400.)), |window, cx| TestView {
+        editor: cx.new(|cx| TextEditor::new(0, Default::default(), window, cx)),
+    });
+    window
+        .update(cx, |view, _, cx| {
+            view.editor.update(cx, |text, cx| {
+                let mut revision = text.history.borrow().revision();
+                for (index, value) in ["A", "B", "C"].into_iter().enumerate() {
+                    text.edit(index..index, value, true);
+                    let next = text.history.borrow().revision();
+                    assert!(next > revision);
+                    assert_eq!(text.history.borrow().undo_len(), 1);
+                    revision = next;
+                }
+                text.edit(0..3, "ABC", true);
+                assert_eq!(text.history.borrow().revision(), revision);
+                text.move_cursor(0, false);
+                text.move_cursor(3, true);
+                for size in [32., 48.] {
+                    text.apply_style(StyleChange::Size(size), cx);
+                    let next = text.history.borrow().revision();
+                    assert!(next > revision);
+                    revision = next;
+                }
+                assert_eq!(text.history.borrow().undo_len(), 2);
+                replay(text, false);
+                assert_eq!(text.styles.at(0).size, 24.);
+                assert!(text.history.borrow().revision() > revision);
+                revision = text.history.borrow().revision();
+                replay(text, true);
+                assert_eq!(text.styles.at(0).size, 48.);
+                assert!(text.history.borrow().revision() > revision);
+            });
+        })
+        .unwrap();
+}
+
+#[gpui::test]
 fn rich_styles_follow_unicode_edits_composition_and_undo(cx: &mut TestAppContext) {
     let window = cx.open_window(size(px(500.), px(400.)), |window, cx| TestView {
         editor: cx.new(|cx| TextEditor::new(0, Default::default(), window, cx)),

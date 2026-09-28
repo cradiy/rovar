@@ -266,11 +266,12 @@ impl Workspace {
     pub(super) fn text_properties(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let align = self.selected_text().and_then(|t| {
             let editor = t.editor.read(cx);
-            (!editor.mixed(11)).then_some(editor.effective_style().align)
+            (!editor.mixed(TextProperty::Align)).then_some(editor.effective_style().align)
         });
         let vertical_align = self.selected_text().and_then(|t| {
             let editor = t.editor.read(cx);
-            (!editor.mixed(14)).then_some(editor.effective_style().vertical_align)
+            (!editor.mixed(TextProperty::VerticalAlign))
+                .then_some(editor.effective_style().vertical_align)
         });
         let scope = self
             .selected_text()

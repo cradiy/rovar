@@ -2,6 +2,37 @@ use super::*;
 use crate::document;
 
 impl Studio {
+    fn finish_unchanged_save(
+        &mut self,
+        token: usize,
+        view_changed: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(tab) = self.tabs.iter_mut().find(|tab| tab.token == token) else {
+            return;
+        };
+        let requested = std::mem::take(&mut tab.save_requested);
+        let can_close = tab.close_after_save
+            && !tab.exporting
+            && tab
+                .editor
+                .as_ref()
+                .is_none_or(|editor| !editor.read(cx).is_exporting());
+        if can_close || view_changed || requested {
+            let file = tab.file.clone();
+            self.remember(file);
+            if can_close {
+                self.remove_tab(token, window, cx);
+            } else {
+                self.persist_session();
+            }
+        }
+        if requested {
+            cx.notify();
+        }
+    }
+
     pub(super) fn remember(&mut self, file: Recent) {
         let mut session = self.session.borrow_mut();
         session.recent.retain(|item| item.path != file.path);
@@ -72,6 +103,14 @@ impl Studio {
         if !editor.read(cx).save_ready(cx) {
             return;
         }
+        let revision = editor.read(cx).document_revision();
+        let view = editor.read(cx).view_state();
+        let view_changed = view != tab.file.view;
+        tab.file.view = view;
+        if tab.saved_revision == Some(revision) {
+            self.finish_unchanged_save(token, view_changed, window, cx);
+            return;
+        }
         let (json, assets) = match editor.read(cx).snapshot_document(&tab.document_id, cx) {
             Ok(snapshot) => snapshot,
             Err(error) => {
@@ -80,23 +119,9 @@ impl Studio {
                 return;
             }
         };
-        let view = editor.read(cx).view_state();
-        let view_changed = view != tab.file.view;
-        tab.file.view = view;
         if json == tab.last_saved {
-            let requested = std::mem::take(&mut tab.save_requested);
-            if tab.close_after_save && !tab.exporting && !editor.read(cx).is_exporting() {
-                let file = tab.file.clone();
-                self.remember(file);
-                self.remove_tab(token, window, cx);
-            } else if view_changed || requested {
-                let file = tab.file.clone();
-                self.remember(file);
-                self.persist_session();
-            }
-            if requested {
-                cx.notify();
-            }
+            tab.saved_revision = Some(revision);
+            self.finish_unchanged_save(token, view_changed, window, cx);
             return;
         }
         let path = tab.file.path.clone();
@@ -110,6 +135,7 @@ impl Studio {
         tab.saving = true;
         tab.error = None;
         cx.notify();
+        let text_system = cx.text_system().clone();
         cx.spawn_in(window, async move |this, cx| {
             let bytes = json.clone();
             let output = path.clone();
@@ -119,7 +145,7 @@ impl Studio {
                     if let Some(parent) = output.parent() {
                         std::fs::create_dir_all(parent)?;
                     }
-                    document::save(&output, &bytes, &assets, &expected)?;
+                    document::save(&output, &bytes, &assets, &expected, &text_system)?;
                     Ok::<_, anyhow::Error>(
                         document::cache_preview(&output, &previews).ok().flatten(),
                     )
@@ -134,6 +160,7 @@ impl Studio {
                     Ok(preview) => {
                         tab.file.preview = preview;
                         tab.last_saved = json;
+                        tab.saved_revision = Some(revision);
                         tab.file.modified = now();
                         let file = tab.file.clone();
                         let follow_up = tab.close_after_save || tab.save_requested;
@@ -250,6 +277,7 @@ impl Studio {
             document_id: String::new(),
             editor: None,
             last_saved: Vec::new(),
+            saved_revision: None,
             loading: false,
             saving: false,
             close_after_save: false,
@@ -274,6 +302,7 @@ impl Studio {
         let internal = is_internal(&self.directory, &path);
         let documents = self.directory.join("documents");
         let previews = self.directory.join("previews");
+        let text_system = cx.text_system().clone();
         cx.spawn_in(window, async move |this, cx| {
             let loaded = cx
                 .background_executor()
@@ -281,7 +310,7 @@ impl Studio {
                     let (loaded, path) = if internal {
                         (document::load(&path)?, path)
                     } else {
-                        document::import(&path, &documents)?
+                        document::import(&path, &documents, &text_system)?
                     };
                     Ok::<_, anyhow::Error>((
                         loaded,
@@ -315,6 +344,7 @@ impl Studio {
                 });
                 match result {
                     Ok((editor, id, json)) => {
+                        tab.saved_revision = Some(editor.read(cx).document_revision());
                         tab._subscription = Some(cx.observe(&editor, |_, _, cx| cx.notify()));
                         tab.editor = Some(editor);
                         tab.document_id = id;

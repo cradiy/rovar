@@ -176,7 +176,12 @@ impl Workspace {
                 .map(|t| {
                     (
                         t.id,
-                        crate::text::export_fragments(&t.content, &t.styles, t.rect, window),
+                        crate::text::export_fragments(
+                            &t.content,
+                            &t.styles,
+                            t.rect,
+                            window.text_system(),
+                        ),
                     )
                 })
                 .collect();

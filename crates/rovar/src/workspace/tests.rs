@@ -353,8 +353,8 @@ fn selection_properties_and_gradient_keep_other_characters_unchanged(cx: &mut Te
     window
         .update(&mut visual.cx, |this, _, cx| {
             let text = this.texts[0].editor.read(cx);
-            assert!(text.mixed(7));
-            assert!(text.mixed(12));
+            assert!(text.mixed(TextProperty::Size));
+            assert!(text.mixed(TextProperty::FillMode));
             assert_eq!(this.fields[7].read(cx).value().as_ref(), "");
             assert_eq!(text.content, "abcd");
         })
@@ -378,8 +378,8 @@ fn selection_properties_and_gradient_keep_other_characters_unchanged(cx: &mut Te
     window
         .update(&mut visual.cx, |this, _, cx| {
             let text = this.texts[0].editor.read(cx);
-            assert!(!text.mixed(10));
-            assert!(text.mixed(7));
+            assert!(!text.mixed(TextProperty::Weight));
+            assert!(text.mixed(TextProperty::Size));
             assert_eq!(text.effective_style().weight, 700.);
             assert_eq!(this.texts[0].rect.width, 320.);
         })
@@ -929,8 +929,8 @@ fn vertical_alignment_targets_selection_and_supports_mixed_state_and_undo(cx: &m
     window
         .update(&mut visual.cx, |this, _, cx| {
             let editor = this.texts[0].editor.read(cx);
-            assert!(editor.mixed(14));
-            assert!(editor.mixed(7));
+            assert!(editor.mixed(TextProperty::VerticalAlign));
+            assert!(editor.mixed(TextProperty::Size));
         })
         .unwrap();
     // Whole-box alignment changes only this property, preserving the mixed sizes.
@@ -939,8 +939,8 @@ fn vertical_alignment_targets_selection_and_supports_mixed_state_and_undo(cx: &m
     window
         .update(&mut visual.cx, |this, _, cx| {
             let editor = this.texts[0].editor.read(cx);
-            assert!(!editor.mixed(14));
-            assert!(editor.mixed(7));
+            assert!(!editor.mixed(TextProperty::VerticalAlign));
+            assert!(editor.mixed(TextProperty::Size));
             assert_eq!(
                 editor.effective_style().vertical_align,
                 VerticalAlign::Center

@@ -24,6 +24,7 @@ mod toolbar;
 
 use crate::artboard::{Artboard, FillMode, Handle, Rect, Viewport};
 use crate::history::{Change, Group, SharedHistory};
+use crate::property::{Property, TextProperty};
 use crate::shape::{Shape, ShapeKind};
 use crate::text::{StyleChange, TextBox, TextEditor};
 #[cfg(test)]
@@ -69,7 +70,7 @@ enum GestureKind {
     Marquee,
     SelectionMove,
     MultiProperty {
-        index: usize,
+        property: Property,
     },
     Draw,
     Panel {
@@ -171,6 +172,8 @@ pub struct Workspace {
     bezier_draft: Option<shapes::BezierDraft>,
     next_id: usize,
     history: SharedHistory,
+    #[cfg(test)]
+    pub(crate) snapshot_count: Cell<usize>,
     view: Viewport,
     bounds: Rc<Cell<Bounds<Pixels>>>,
     capture: Rc<Cell<Option<HitboxId>>>,
@@ -289,7 +292,15 @@ impl Workspace {
                         } else {
                             inspector::hex(color)
                         };
-                        this.edit_multi_field(index, &value, cx);
+                        this.edit_multi_field(
+                            if alpha_only {
+                                Property::Opacity
+                            } else {
+                                Property::Color
+                            },
+                            &value,
+                            cx,
+                        );
                         if matches!(event, ColorPickerEvent::Commit(_)) {
                             this.history.borrow_mut().break_group();
                         }
@@ -415,6 +426,8 @@ impl Workspace {
             bezier_draft: None,
             next_id: 1,
             history: Default::default(),
+            #[cfg(test)]
+            snapshot_count: Cell::new(0),
             view: Viewport::default(),
             bounds: Rc::new(Cell::new(Bounds::default())),
             capture: Rc::new(Cell::new(None)),
@@ -567,8 +580,8 @@ impl Workspace {
             GestureKind::LayerSort => self.move_layer_sort(position),
             GestureKind::Marquee => self.move_marquee(position, cx),
             GestureKind::SelectionMove => self.move_selection(snapped),
-            GestureKind::MultiProperty { index } => {
-                self.move_multi_property(index, delta.x, shift, cx)
+            GestureKind::MultiProperty { property } => {
+                self.move_multi_property(property, delta.x, shift, cx)
             }
             GestureKind::Panel {
                 side,

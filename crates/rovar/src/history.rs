@@ -1,5 +1,6 @@
 use crate::{
     artboard::{Artboard, Rect},
+    property::{Property, TextProperty},
     shape::Shape,
     text::Snapshot,
 };
@@ -64,15 +65,21 @@ pub(crate) enum Change {
 
 #[derive(Clone, PartialEq, Eq)]
 pub(crate) enum Group {
-    SelectionProperty(Vec<usize>, usize),
+    SelectionProperty(Vec<usize>, Property),
     Typing(usize),
-    Style(usize, usize, Range<usize>),
-    Property(usize, usize, usize),
+    Style(usize, TextProperty, Range<usize>),
+    Property {
+        id: usize,
+        property: Property,
+        stop: usize,
+        stroke: bool,
+    },
     Color(usize, usize),
 }
 
 #[derive(Default)]
 pub(crate) struct History {
+    revision: u64,
     undo: Vec<Vec<Change>>,
     redo: Vec<Vec<Change>>,
     group: Option<(Group, Instant)>,
@@ -81,6 +88,15 @@ pub(crate) struct History {
 }
 
 impl History {
+    pub fn revision(&self) -> u64 {
+        self.revision
+    }
+    pub fn mark_changed(&mut self) {
+        self.revision = self
+            .revision
+            .checked_add(1)
+            .expect("document revision exhausted");
+    }
     pub fn break_group(&mut self) {
         self.group = None;
         self.scope = None;
@@ -120,6 +136,8 @@ impl History {
         })
     }
     pub fn record(&mut self, changes: Vec<Change>, group: Option<Group>) {
+        // Merged typing/style edits may intentionally omit the inverse snapshot.
+        self.mark_changed();
         if let Some(before) = &mut self.preview {
             if before.is_empty() {
                 *before = changes;
@@ -150,6 +168,7 @@ impl History {
         }
     }
     pub fn finish_replay(&mut self, inverse: Vec<Change>, redo: bool) {
+        self.mark_changed();
         if redo {
             self.undo.push(inverse);
         } else {

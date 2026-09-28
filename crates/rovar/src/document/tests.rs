@@ -32,13 +32,14 @@ fn fixture() -> Document {
     }
 }
 
-#[test]
-fn file_round_trip_and_failed_save_preserve_the_previous_document() {
+#[gpui::test]
+fn file_round_trip_and_failed_save_preserve_the_previous_document(cx: &mut gpui::TestAppContext) {
+    let text_system = cx.update(|cx| cx.text_system().clone());
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("design.rovar");
     let mut document = fixture();
     let original = serde_json::to_vec(&document).unwrap();
-    save(&path, &original, &[], &[]).unwrap();
+    save(&path, &original, &[], &[], &text_system).unwrap();
     let decoded = Document::decode(&load(&path).unwrap().json).unwrap();
     assert_eq!(decoded.shapes, document.shapes);
     document.shapes[0].name = "changed".into();
@@ -49,9 +50,18 @@ fn file_round_trip_and_failed_save_preserve_the_previous_document() {
         path: crate::media::Source::file(tempfile::NamedTempFile::new().unwrap().into_temp_path()),
         size: [1, 1],
     };
-    assert!(save(&path, &bytes, std::slice::from_ref(&bad_asset), &original).is_err());
+    assert!(
+        save(
+            &path,
+            &bytes,
+            std::slice::from_ref(&bad_asset),
+            &original,
+            &text_system
+        )
+        .is_err()
+    );
     assert_eq!(load(&path).unwrap().json, original);
-    assert!(save_as(&path, &bytes, &[bad_asset]).is_err());
+    assert!(save_as(&path, &bytes, &[bad_asset], &text_system).is_err());
     assert_eq!(load(&path).unwrap().json, original);
     document.id = uuid::Uuid::new_v4().to_string();
     assert!(
@@ -59,15 +69,17 @@ fn file_round_trip_and_failed_save_preserve_the_previous_document() {
             &path,
             &serde_json::to_vec(&document).unwrap(),
             &[],
-            &original
+            &original,
+            &text_system
         )
         .is_err()
     );
     assert_eq!(load(&path).unwrap().json, original);
 }
 
-#[test]
-fn embedded_assets_survive_source_removal_and_deduplicate() {
+#[gpui::test]
+fn embedded_assets_survive_source_removal_and_deduplicate(cx: &mut gpui::TestAppContext) {
+    let text_system = cx.update(|cx| cx.text_system().clone());
     let directory = tempfile::tempdir().unwrap();
     let original = directory.path().join("photo.png");
     image::RgbaImage::from_pixel(3, 2, image::Rgba([42, 70, 90, 255]))
@@ -99,6 +111,7 @@ fn embedded_assets_survive_source_removal_and_deduplicate() {
         &serde_json::to_vec(&document).unwrap(),
         &[source.clone(), source],
         &[],
+        &text_system,
     )
     .unwrap();
     let loaded = load(&path).unwrap();
@@ -118,7 +131,7 @@ fn embedded_assets_survive_source_removal_and_deduplicate() {
         (3, 2)
     );
     let (import_result, imported_path) =
-        import(&path, &directory.path().join("documents")).unwrap();
+        import(&path, &directory.path().join("documents"), &text_system).unwrap();
     let imported = load(&imported_path).unwrap();
     assert_ne!(Document::decode(&imported.json).unwrap().id, document.id);
     assert_eq!(
@@ -144,8 +157,9 @@ fn embedded_assets_survive_source_removal_and_deduplicate() {
     assert_eq!(load(&imported_path).unwrap().assets.len(), 1);
 }
 
-#[test]
-fn rich_text_paths_groups_and_external_edit_conflicts_round_trip() {
+#[gpui::test]
+fn rich_text_paths_groups_and_external_edit_conflicts_round_trip(cx: &mut gpui::TestAppContext) {
+    let text_system = cx.update(|cx| cx.text_system().clone());
     use crate::text::{
         TextStyle,
         styles::{StyleRun, StyledText},
@@ -201,22 +215,23 @@ fn rich_text_paths_groups_and_external_edit_conflicts_round_trip() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("text.rovar");
     let first = serde_json::to_vec(&document).unwrap();
-    save(&path, &first, &[], &[]).unwrap();
+    save(&path, &first, &[], &[], &text_system).unwrap();
     let decoded = Document::decode(&load(&path).unwrap().json).unwrap();
     assert_eq!(decoded.shapes, document.shapes);
     assert_eq!(decoded.hierarchy.order, document.hierarchy.order);
     assert!(decoded.texts[0].styles == document.texts[0].styles);
     document.texts[0].rect.width = 640.;
     let second = serde_json::to_vec(&document).unwrap();
-    save(&path, &second, &[], &first).unwrap();
-    assert!(save(&path, &first, &[], &first).is_err());
+    save(&path, &second, &[], &first, &text_system).unwrap();
+    assert!(save(&path, &first, &[], &first, &text_system).is_err());
     assert_eq!(load(&path).unwrap().json, second);
     document.texts[0].styles.runs[0].range.end = 4;
     assert!(Document::decode(&serde_json::to_vec(&document).unwrap()).is_err());
 }
 
-#[test]
-fn invalid_references_and_unsupported_version_are_rejected() {
+#[gpui::test]
+fn invalid_references_and_unsupported_version_are_rejected(cx: &mut gpui::TestAppContext) {
+    let text_system = cx.update(|cx| cx.text_system().clone());
     let mut document = fixture();
     document.hierarchy.parents.insert(1, 999);
     assert!(Document::decode(&serde_json::to_vec(&document).unwrap()).is_err());
@@ -226,7 +241,14 @@ fn invalid_references_and_unsupported_version_are_rejected() {
     document.shapes.pop();
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("future.rovar");
-    save(&path, &serde_json::to_vec(&document).unwrap(), &[], &[]).unwrap();
+    save(
+        &path,
+        &serde_json::to_vec(&document).unwrap(),
+        &[],
+        &[],
+        &text_system,
+    )
+    .unwrap();
     use std::io::{Seek, SeekFrom, Write};
     let mut file = std::fs::OpenOptions::new().write(true).open(&path).unwrap();
     file.seek(SeekFrom::Start(8)).unwrap();
@@ -241,8 +263,9 @@ fn invalid_references_and_unsupported_version_are_rejected() {
     );
 }
 
-#[test]
-fn changed_object_is_appended_and_export_discards_obsolete_blocks() {
+#[gpui::test]
+fn changed_object_is_appended_and_export_discards_obsolete_blocks(cx: &mut gpui::TestAppContext) {
+    let text_system = cx.update(|cx| cx.text_system().clone());
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("design.rovar");
     let mut document = fixture();
@@ -251,11 +274,11 @@ fn changed_object_is_appended_and_export_discards_obsolete_blocks() {
     document.shapes.push(second);
     document.next_id = 3;
     let first = serde_json::to_vec(&document).unwrap();
-    save_as(&path, &first, &[]).unwrap();
+    save_as(&path, &first, &[], &text_system).unwrap();
     let before = rovar_format::Reader::open(&path).unwrap();
     document.shapes[0].name = "Changed".into();
     let json = serde_json::to_vec(&document).unwrap();
-    save(&path, &json, &[], &first).unwrap();
+    save(&path, &json, &[], &first, &text_system).unwrap();
     let after = rovar_format::Reader::open(&path).unwrap();
     assert_eq!(before.entry("shape/2"), after.entry("shape/2"));
     assert_ne!(before.entry("shape/1"), after.entry("shape/1"));
@@ -264,7 +287,7 @@ fn changed_object_is_appended_and_export_discards_obsolete_blocks() {
         serde_json::to_vec(&fixture().shapes[0]).unwrap()
     );
     let export = directory.path().join("export.rovar");
-    save_as(&export, &json, &[]).unwrap();
+    save_as(&export, &json, &[], &text_system).unwrap();
     assert!(std::fs::metadata(&export).unwrap().len() < std::fs::metadata(&path).unwrap().len());
     assert_eq!(load(&export).unwrap().json, json);
 }

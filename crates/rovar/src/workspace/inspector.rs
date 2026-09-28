@@ -4,8 +4,10 @@ use crate::i18n::t;
 mod fill_tests;
 mod image_fill;
 mod name_input;
+mod properties;
 mod scrub;
 use crate::artboard::{LinearGradient, MAX_SIZE, MIN_SIZE};
+use properties::{apply_field, apply_shape_field, apply_text_field};
 use uic::components::{
     color_picker::{ColorPicker, ColorPickerAppearance},
     input::{Input, InputAppearance},
@@ -13,12 +15,11 @@ use uic::components::{
 };
 
 impl Workspace {
-    pub(super) fn shape_field_target(&self, index: usize) -> (usize, bool) {
+    pub(super) fn field_edits_stroke(&self, index: usize) -> bool {
         match index {
-            16 | 17 => (index - 11, true),
-            5 | 6 => (index, false),
-            14 => (index, true),
-            _ => (index, self.stroke_editing),
+            14 | 16 | 17 => true,
+            5 | 6 => false,
+            _ => self.stroke_editing,
         }
     }
     pub(super) fn shape_paint_stop(&self, stroke: bool) -> usize {
@@ -188,7 +189,7 @@ impl Workspace {
             && self.selected_shape().is_none_or(|s| s.can_fill());
         let mixed_mode = self
             .selected_text()
-            .is_some_and(|t| t.editor.read(cx).mixed(12));
+            .is_some_and(|t| t.editor.read(cx).mixed(TextProperty::FillMode));
         let modes = [
             (
                 FillMode::Solid,
@@ -527,7 +528,9 @@ impl Workspace {
     }
 
     pub(super) fn field_value(&self, index: usize, cx: &gpui::App) -> Option<String> {
-        if index == 15 {
+        use Property::*;
+        let property = self.field_property(index)?;
+        if property == Rotation {
             return self
                 .selected_text
                 .or(self.selected_shape)
@@ -535,33 +538,35 @@ impl Workspace {
                 .map(|id| number(self.object_rotation(id)));
         }
         if !self.multi_selection.is_empty() {
-            return self.multi_field_value(index, cx);
+            return self.multi_field_value(property, cx);
         }
         if let Some(text) = self.selected_text() {
             let editor = text.editor.read(cx);
             let style = editor.effective_style();
-            if (5..=10).contains(&index) && editor.mixed(index) {
+            if property.text_style().is_some_and(|p| editor.mixed(p)) {
                 return Some(String::new());
             }
-            if matches!(index, 5 | 6 | 12 | 13)
-                && (editor.mixed(12) || (style.fill_mode == FillMode::Linear && editor.mixed(13)))
+            if matches!(property, Color | Opacity | GradientAngle | GradientPosition)
+                && (editor.mixed(TextProperty::FillMode)
+                    || (style.fill_mode == FillMode::Linear
+                        && editor.mixed(TextProperty::Gradient)))
             {
                 return Some(String::new());
             }
-            return Some(match index {
-                0 => return None,
-                1 => number(text.rect.x),
-                2 => number(text.rect.y),
-                3 => number(text.rect.width),
-                4 => number(text.rect.height),
-                5 => hex(style.editable_color(self.active_stop)),
-                6 => number(style.editable_color(self.active_stop).a * 100.),
-                7 => number(style.size),
-                8 => number(style.line_height),
-                9 => number(style.spacing),
-                10 => number(style.weight),
-                12 => number(style.gradient.angle),
-                13 => number(
+            return Some(match property {
+                Name => return None,
+                X => number(text.rect.x),
+                Y => number(text.rect.y),
+                Width => number(text.rect.width),
+                Height => number(text.rect.height),
+                Color => hex(style.editable_color(self.active_stop)),
+                Opacity => number(style.editable_color(self.active_stop).a * 100.),
+                FontSize => number(style.size),
+                LineHeight => number(style.line_height),
+                LetterSpacing => number(style.spacing),
+                FontWeight => number(style.weight),
+                GradientAngle => number(style.gradient.angle),
+                GradientPosition => number(
                     style
                         .gradient
                         .stop(self.active_stop)
@@ -573,59 +578,61 @@ impl Workspace {
             });
         }
         if let Some(shape) = self.selected_shape() {
-            let (index, stroke) = self.shape_field_target(index);
+            let stroke = self.field_edits_stroke(index);
             let stop = self.shape_paint_stop(stroke);
             let color = shape.paint_color(stop, stroke);
-            return Some(match index {
-                0 => shape.name.clone(),
-                1 if shape.kind.is_line() => number(shape.display_path_point(0).x),
-                2 if shape.kind.is_line() => number(shape.display_path_point(0).y),
-                3 if shape.kind.is_line() => number(shape.display_path_point(1).x),
-                4 if shape.kind.is_line() => number(shape.display_path_point(1).y),
-                1 => number(shape.rect.x),
-                2 => number(shape.rect.y),
-                3 => number(shape.rect.width),
-                4 => number(shape.rect.height),
-                5 if !stroke && shape.fill_mode == FillMode::Image => t("shape-image").into(),
-                5 => hex(color),
-                6 if !stroke && shape.fill_mode == FillMode::Image => {
+            return Some(match property {
+                Name => shape.name.clone(),
+                StartX if shape.kind.is_line() => number(shape.display_path_point(0).x),
+                StartY if shape.kind.is_line() => number(shape.display_path_point(0).y),
+                EndX if shape.kind.is_line() => number(shape.display_path_point(1).x),
+                EndY if shape.kind.is_line() => number(shape.display_path_point(1).y),
+                X => number(shape.rect.x),
+                Y => number(shape.rect.y),
+                Width => number(shape.rect.width),
+                Height => number(shape.rect.height),
+                Color if !stroke && shape.fill_mode == FillMode::Image => t("shape-image").into(),
+                Color => hex(color),
+                Opacity if !stroke && shape.fill_mode == FillMode::Image => {
                     number(shape.image_fill.opacity * 100.)
                 }
-                6 => number(color.a * 100.),
-                7 => number(shape.paint_gradient(stroke).angle),
-                8 => number(shape.paint_gradient(stroke).stop(stop)?.position * 100.),
-                9 if shape.kind.supports_corners() => number(shape.radius),
-                9 if shape.kind.is_polygon() => shape.vertices.to_string(),
-                10 if shape.kind == ShapeKind::Star => number(shape.inner_radius * 100.),
-                10..=13 if shape.kind.supports_corners() => {
-                    number(shape.corners.unwrap_or([shape.radius; 4])[index - 10])
+                Opacity => number(color.a * 100.),
+                GradientAngle => number(shape.paint_gradient(stroke).angle),
+                GradientPosition => {
+                    number(shape.paint_gradient(stroke).stop(stop)?.position * 100.)
                 }
-                14 => number(shape.stroke.width),
+                Radius if shape.kind.supports_corners() => number(shape.radius),
+                Vertices if shape.kind.is_polygon() => shape.vertices.to_string(),
+                InnerRadius if shape.kind == ShapeKind::Star => number(shape.inner_radius * 100.),
+                Corner(corner) if shape.kind.supports_corners() => {
+                    number(shape.corners.unwrap_or([shape.radius; 4])[corner.index()])
+                }
+                StrokeWidth => number(shape.stroke.width),
                 _ => return None,
             });
         }
-        if index >= 9 {
-            return None;
-        }
         let board = self.selected_board()?;
         let color = board.editable_color(self.active_stop);
-        Some(match index {
-            0 => board.name.clone(),
-            1 => number(board.rect.x),
-            2 => number(board.rect.y),
-            3 => number(board.rect.width),
-            4 => number(board.rect.height),
-            5 if board.fill_mode == FillMode::Image => t("shape-image").into(),
-            5 => format!(
+        Some(match property {
+            Name => board.name.clone(),
+            X => number(board.rect.x),
+            Y => number(board.rect.y),
+            Width => number(board.rect.width),
+            Height => number(board.rect.height),
+            Color if board.fill_mode == FillMode::Image => t("shape-image").into(),
+            Color => format!(
                 "{:02X}{:02X}{:02X}",
                 (color.r * 255.).round() as u8,
                 (color.g * 255.).round() as u8,
                 (color.b * 255.).round() as u8
             ),
-            6 if board.fill_mode == FillMode::Image => number(board.image_fill.opacity * 100.),
-            6 => number(color.a * 100.),
-            7 => number(board.gradient.angle),
-            _ => number(board.gradient.stop(self.active_stop)?.position * 100.),
+            Opacity if board.fill_mode == FillMode::Image => {
+                number(board.image_fill.opacity * 100.)
+            }
+            Opacity => number(color.a * 100.),
+            GradientAngle => number(board.gradient.angle),
+            GradientPosition => number(board.gradient.stop(self.active_stop)?.position * 100.),
+            _ => return None,
         })
     }
 
@@ -696,7 +703,7 @@ impl Workspace {
             let editor = text.editor.read(cx);
             let style = editor.effective_style();
             let color = style.editable_color(self.active_stop);
-            let family = if editor.mixed(0) {
+            let family = if editor.mixed(TextProperty::Family) {
                 t("font-mixed").into()
             } else {
                 style.family.clone()
@@ -722,7 +729,7 @@ impl Workspace {
             let editor = text.editor.read(cx);
             let style = editor.effective_style();
             let color = style.editable_color(self.active_stop);
-            let family = if editor.mixed(0) {
+            let family = if editor.mixed(TextProperty::Family) {
                 t("font-mixed").into()
             } else {
                 style.family.clone()
@@ -738,6 +745,9 @@ impl Workspace {
 
     pub(super) fn edit_field(&mut self, slot: usize, event: &InputEvent, cx: &mut Context<Self>) {
         let index = slot % PROPERTY_COUNT;
+        let Some(property) = self.field_property(index) else {
+            return;
+        };
         let value = event.text();
         if matches!(event, InputEvent::Change(_)) {
             if let Some(pos) = self
@@ -756,7 +766,7 @@ impl Workspace {
             return;
         }
         if !self.multi_selection.is_empty() {
-            self.invalid[slot] = !self.edit_multi_field(index, value, cx);
+            self.invalid[slot] = !self.edit_multi_field(property, value, cx);
             if !self.invalid[slot] && matches!(index, 3 | 4) {
                 self.sync_field(7 - index, cx);
             }
@@ -777,17 +787,23 @@ impl Workspace {
             return;
         };
         if self.selected_shape.is_some() && matches!(index, 5 | 6 | 14 | 16 | 17) {
-            let (_, stroke) = self.shape_field_target(index);
+            let stroke = self.field_edits_stroke(index);
             if stroke != self.stroke_editing {
                 self.history.borrow_mut().break_group();
                 self.set_paint_target(stroke);
             }
         }
         let stop = self.active_stop;
-        self.history
-            .borrow_mut()
-            .set_scope(Group::Property(id, index, stop), false);
-        if index == 15 {
+        self.history.borrow_mut().set_scope(
+            Group::Property {
+                id,
+                property,
+                stop,
+                stroke: self.selected_shape.is_some() && self.field_edits_stroke(index),
+            },
+            false,
+        );
+        if property == Property::Rotation {
             self.invalid[slot] = !self.edit_rotation(value);
             self.history.borrow_mut().clear_scope();
             if matches!(event, InputEvent::Submit(_)) {
@@ -801,7 +817,7 @@ impl Workspace {
             let text = self.selected_text_mut().unwrap();
             let before = text.rect;
             let board = text.board;
-            let valid = apply_text_field(text, index, value, stop, cx);
+            let valid = apply_text_field(text, property, value, stop, cx);
             let color = text.editor.read(cx).effective_style().editable_color(stop);
             if text.rect != before {
                 self.history.borrow_mut().record(
@@ -815,9 +831,9 @@ impl Workspace {
             }
             (valid, color)
         } else if self.selected_shape.is_some() {
-            let (local_index, stroke) = self.shape_field_target(index);
+            let stroke = self.field_edits_stroke(index);
             let valid = self
-                .edit_shape(|shape| apply_shape_field(shape, stroke, stop, local_index, value))
+                .edit_shape(|shape| apply_shape_field(shape, stroke, stop, property, value))
                 .unwrap_or(false);
             (
                 valid,
@@ -825,7 +841,7 @@ impl Workspace {
             )
         } else {
             let valid = self
-                .edit_board(None, |board| apply_field(board, stop, index, value))
+                .edit_board(None, |board| apply_field(board, stop, property, value))
                 .unwrap_or(false);
             (valid, self.selected_board().unwrap().editable_color(stop))
         };
@@ -911,7 +927,8 @@ impl Workspace {
                 .is_open();
         let numeric = !matches!(index, 0 | 5 | 16);
         let draggable = if !self.multi_selection.is_empty() {
-            self.multi_can_scrub(index, cx)
+            self.field_property(index)
+                .is_some_and(|property| self.multi_can_scrub(property, cx))
         } else {
             numeric
                 && self
@@ -942,7 +959,7 @@ impl Workspace {
             _ => None,
         };
         let swatch = if index == 5 && !self.multi_selection.is_empty() {
-            self.multi_field_value(5, cx)
+            self.multi_field_value(Property::Color, cx)
                 .and_then(|s| u32::from_str_radix(&s, 16).ok())
                 .map(|v| rgb(v).into())
         } else if is_color && self.selected_shape.is_some() {
@@ -1476,166 +1493,6 @@ pub(super) fn hex(color: gpui::Rgba) -> String {
     )
 }
 
-fn apply_shape_field(
-    shape: &mut Shape,
-    stroke: bool,
-    stop: usize,
-    index: usize,
-    text: &str,
-) -> bool {
-    if index == 0 {
-        shape.name = text.to_owned();
-        return true;
-    }
-    if index == 5 {
-        let hex = text.trim().trim_start_matches('#');
-        if hex.len() != 6 || !hex.bytes().all(|c| c.is_ascii_hexdigit()) {
-            return false;
-        }
-        let Ok(value) = u32::from_str_radix(hex, 16) else {
-            return false;
-        };
-        let Some(target) = shape.paint_color_mut(stop, stroke) else {
-            return false;
-        };
-        let alpha = target.a;
-        *target = rgb(value);
-        target.a = alpha;
-        return true;
-    }
-    let Ok(value) = text.trim().parse::<f32>() else {
-        return false;
-    };
-    if !value.is_finite() {
-        return false;
-    }
-    if shape.kind.is_line() && (1..=4).contains(&index) {
-        if value.abs() > 1_000_000. {
-            return false;
-        }
-        let end = usize::from(index >= 3);
-        let pivot = crate::rotation::center(shape.rect);
-        let mut p = shape.display_path_point(end);
-        if index % 2 == 1 {
-            p.x = value;
-        } else {
-            p.y = value;
-        }
-        shape.set_endpoint(
-            end,
-            crate::rotation::around(p, pivot, -shape.layer.rotation),
-        );
-        shape.preserve_rotation_pivot(pivot);
-        return true;
-    }
-    match index {
-        1 if value.abs() <= 1_000_000. => shape.rect.x = value,
-        2 if value.abs() <= 1_000_000. => shape.rect.y = value,
-        3 | 4 => {
-            return editing::set_dimension(
-                &mut shape.rect,
-                index,
-                value,
-                shape.layer.aspect_locked,
-            );
-        }
-        6 if !stroke && shape.fill_mode == FillMode::Image && (0. ..=100.).contains(&value) => {
-            shape.image_fill.opacity = value / 100.
-        }
-        6 if (0. ..=100.).contains(&value) => {
-            let Some(target) = shape.paint_color_mut(stop, stroke) else {
-                return false;
-            };
-            target.a = value / 100.;
-        }
-        7 if (0. ..=360.).contains(&value) => shape.paint_gradient_mut(stroke).angle = value,
-        8 if (0. ..=100.).contains(&value) => {
-            return shape
-                .paint_gradient_mut(stroke)
-                .set_position(stop, value / 100.);
-        }
-        9 if shape.kind.supports_corners() && (0. ..=MAX_SIZE / 2.).contains(&value) => {
-            shape.radius = value
-        }
-        9 if shape.kind.is_polygon() && (3. ..=60.).contains(&value) && value.fract() == 0. => {
-            shape.vertices = value as usize
-        }
-        10 if shape.kind == ShapeKind::Star && (1. ..=99.).contains(&value) => {
-            shape.inner_radius = value / 100.
-        }
-        10..=13 if shape.kind.supports_corners() && (0. ..=MAX_SIZE / 2.).contains(&value) => {
-            shape.corners.get_or_insert([shape.radius; 4])[index - 10] = value;
-        }
-        14 if (0. ..=MAX_SIZE / 2.).contains(&value) => shape.stroke.width = value,
-        _ => return false,
-    }
-    true
-}
-
-fn apply_text_field(
-    text: &mut TextBox,
-    index: usize,
-    value: &str,
-    stop: usize,
-    cx: &mut Context<Workspace>,
-) -> bool {
-    if index == 5 {
-        let hex = value.trim().trim_start_matches('#');
-        if hex.len() != 6 || !hex.bytes().all(|c| c.is_ascii_hexdigit()) {
-            return false;
-        }
-        let Ok(color) = u32::from_str_radix(hex, 16) else {
-            return false;
-        };
-        text.editor.update(cx, |editor, cx| {
-            editor.apply_color(rgb(color), stop, false, cx)
-        });
-        return true;
-    }
-    let Ok(value) = value.trim().parse::<f32>() else {
-        return false;
-    };
-    if !value.is_finite() {
-        return false;
-    }
-    match index {
-        1 if value.abs() <= 1_000_000. => text.rect.x = value,
-        2 if value.abs() <= 1_000_000. => text.rect.y = value,
-        3 | 4 => {
-            return editing::set_dimension(&mut text.rect, index, value, text.layer.aspect_locked);
-        }
-        6 if (0. ..=100.).contains(&value) => text.editor.update(cx, |editor, cx| {
-            let mut color = editor.effective_style().editable_color(stop);
-            color.a = value / 100.;
-            editor.apply_color(color, stop, true, cx);
-        }),
-        7 if (1. ..=1000.).contains(&value) => text
-            .editor
-            .update(cx, |e, cx| e.apply_style(StyleChange::Size(value), cx)),
-        8 if (0.5..=5.).contains(&value) => text.editor.update(cx, |e, cx| {
-            e.apply_style(StyleChange::LineHeight(value), cx)
-        }),
-        9 if (0. ..=200.).contains(&value) => text
-            .editor
-            .update(cx, |e, cx| e.apply_style(StyleChange::Spacing(value), cx)),
-        10 if (100. ..=900.).contains(&value) && value % 100. == 0. => text
-            .editor
-            .update(cx, |e, cx| e.apply_style(StyleChange::Weight(value), cx)),
-        12 if (0. ..=360.).contains(&value) => text.editor.update(cx, |e, cx| {
-            let mut gradient = e.effective_style().gradient.clone();
-            gradient.angle = value;
-            e.apply_style(StyleChange::Gradient(gradient), cx);
-        }),
-        13 if (0. ..=100.).contains(&value) => text.editor.update(cx, |e, cx| {
-            let mut gradient = e.effective_style().gradient.clone();
-            gradient.set_position(stop, value / 100.);
-            e.apply_style(StyleChange::Gradient(gradient), cx);
-        }),
-        _ => return false,
-    }
-    true
-}
-
 pub(super) fn icon_button(
     id: &'static str,
     label: &'static str,
@@ -1672,67 +1529,6 @@ pub(super) fn number(value: f32) -> String {
     text.trim_end_matches('0').trim_end_matches('.').to_owned()
 }
 
-fn apply_field(board: &mut Artboard, stop: usize, index: usize, text: &str) -> bool {
-    if index == 0 {
-        board.name = text.to_owned();
-        return true;
-    }
-    if index == 5 {
-        let hex = text.trim().trim_start_matches('#');
-        if hex.len() != 6 || !hex.bytes().all(|c| c.is_ascii_hexdigit()) {
-            return false;
-        }
-        let Ok(value) = u32::from_str_radix(hex, 16) else {
-            return false;
-        };
-        let Some(target) = board.editable_color_mut(stop) else {
-            return false;
-        };
-        let alpha = target.a;
-        *target = rgb(value);
-        target.a = alpha;
-        return true;
-    }
-    let Ok(value) = text.trim().parse::<f32>() else {
-        return false;
-    };
-    if !value.is_finite() {
-        return false;
-    }
-    match index {
-        1 | 2 if value.abs() <= 1_000_000. => {
-            if index == 1 {
-                board.rect.x = value;
-            } else {
-                board.rect.y = value;
-            }
-        }
-        3 | 4 if (MIN_SIZE..=MAX_SIZE).contains(&value) => {
-            return editing::set_dimension(
-                &mut board.rect,
-                index,
-                value,
-                board.layer.aspect_locked,
-            );
-        }
-        6 if board.fill_mode == FillMode::Image && (0. ..=100.).contains(&value) => {
-            board.image_fill.opacity = value / 100.
-        }
-        6 if (0. ..=100.).contains(&value) => {
-            let Some(target) = board.editable_color_mut(stop) else {
-                return false;
-            };
-            target.a = value / 100.;
-        }
-        7 if (0. ..=360.).contains(&value) => board.gradient.angle = value,
-        8 if (0. ..=100.).contains(&value) => {
-            return board.gradient.set_position(stop, value / 100.);
-        }
-        _ => return false,
-    }
-    true
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1756,14 +1552,14 @@ mod tests {
         };
         let original = board.rect;
         for value in ["", "-", "0", "-20", "NaN", "inf", "100001"] {
-            assert!(!apply_field(&mut board, 0, 3, value));
+            assert!(!apply_field(&mut board, 0, Property::Width, value));
             assert_eq!(board.rect, original);
         }
-        assert!(apply_field(&mut board, 0, 6, "25"));
-        assert!(apply_field(&mut board, 0, 5, "#345678"));
+        assert!(apply_field(&mut board, 0, Property::Opacity, "25"));
+        assert!(apply_field(&mut board, 0, Property::Color, "#345678"));
         assert_eq!(board.color.a, 0.25);
         let color = board.color;
-        assert!(!apply_field(&mut board, 0, 5, "GGGGGG"));
+        assert!(!apply_field(&mut board, 0, Property::Color, "GGGGGG"));
         assert_eq!(board.color, color);
     }
 }

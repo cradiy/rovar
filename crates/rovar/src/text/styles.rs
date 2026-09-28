@@ -1,5 +1,6 @@
 use super::{TextStyle, VerticalAlign};
 use crate::artboard::{FillMode, LinearGradient};
+use crate::property::TextProperty;
 use gpui::{Rgba, SharedString, TextAlign};
 use std::ops::Range;
 
@@ -22,19 +23,19 @@ impl StyleChange {
     pub fn is_paragraph(&self) -> bool {
         matches!(self, Self::LineHeight(_) | Self::Align(_))
     }
-    pub fn key(&self) -> usize {
+    pub fn key(&self) -> TextProperty {
         match self {
-            Self::Family(_) => 0,
-            Self::Color(_) => 5,
-            Self::Opacity(_) => 6,
-            Self::Size(_) => 7,
-            Self::LineHeight(_) => 8,
-            Self::Spacing(_) => 9,
-            Self::Weight(_) => 10,
-            Self::Align(_) => 11,
-            Self::FillMode(_) => 12,
-            Self::Gradient(_) => 13,
-            Self::VerticalAlign(_) => 14,
+            Self::Family(_) => TextProperty::Family,
+            Self::Color(_) => TextProperty::Color,
+            Self::Opacity(_) => TextProperty::Opacity,
+            Self::Size(_) => TextProperty::Size,
+            Self::LineHeight(_) => TextProperty::LineHeight,
+            Self::Spacing(_) => TextProperty::Spacing,
+            Self::Weight(_) => TextProperty::Weight,
+            Self::Align(_) => TextProperty::Align,
+            Self::FillMode(_) => TextProperty::FillMode,
+            Self::Gradient(_) => TextProperty::Gradient,
+            Self::VerticalAlign(_) => TextProperty::VerticalAlign,
         }
     }
     fn apply(&self, style: &mut TextStyle) {
@@ -59,24 +60,23 @@ impl StyleChange {
 }
 
 impl TextStyle {
-    pub fn same_property(&self, other: &Self, index: usize) -> bool {
-        match index {
-            0 => self.family == other.family,
-            5 => {
+    pub fn same_property(&self, other: &Self, property: TextProperty) -> bool {
+        match property {
+            TextProperty::Family => self.family == other.family,
+            TextProperty::Color => {
                 self.color.r == other.color.r
                     && self.color.g == other.color.g
                     && self.color.b == other.color.b
             }
-            6 => self.color.a == other.color.a,
-            7 => self.size == other.size,
-            8 => self.line_height == other.line_height,
-            9 => self.spacing == other.spacing,
-            10 => self.weight == other.weight,
-            11 => self.align == other.align,
-            12 => self.fill_mode == other.fill_mode,
-            13 => self.gradient == other.gradient,
-            14 => self.vertical_align == other.vertical_align,
-            _ => true,
+            TextProperty::Opacity => self.color.a == other.color.a,
+            TextProperty::Size => self.size == other.size,
+            TextProperty::LineHeight => self.line_height == other.line_height,
+            TextProperty::Spacing => self.spacing == other.spacing,
+            TextProperty::Weight => self.weight == other.weight,
+            TextProperty::Align => self.align == other.align,
+            TextProperty::FillMode => self.fill_mode == other.fill_mode,
+            TextProperty::Gradient => self.gradient == other.gradient,
+            TextProperty::VerticalAlign => self.vertical_align == other.vertical_align,
         }
     }
 }

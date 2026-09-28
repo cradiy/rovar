@@ -73,10 +73,11 @@ impl Studio {
         tab.exporting = true;
         self.save_tab(token, window, cx);
         cx.notify();
+        let text_system = cx.text_system().clone();
         cx.spawn_in(window, async move |this, cx| {
             let result = cx
                 .background_executor()
-                .spawn(async move { document::save_as(&path, &json, &assets) })
+                .spawn(async move { document::save_as(&path, &json, &assets, &text_system) })
                 .await;
             let _ = this.update_in(cx, |this, window, cx| {
                 let Some(tab) = this.tabs.iter_mut().find(|tab| tab.token == token) else {

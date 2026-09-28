@@ -1,41 +1,20 @@
 use super::*;
 
 impl Workspace {
-    fn numeric_limits(&self, index: usize) -> (f32, f32, f32, f32) {
-        if index == 17 {
-            return (0., 100., 1., 1.);
-        }
-        if index == 15 {
-            return (-1_000_000., 1_000_000., 1., 1.);
-        }
+    fn numeric_limits(property: Property) -> (f32, f32, f32, f32) {
+        use Property::*;
         // Minimum, maximum, units per screen pixel, quantization.
-        if self.selected_shape().is_some_and(|s| s.kind.is_line()) && (1..=4).contains(&index) {
-            return (-1_000_000., 1_000_000., 1., 1.);
-        }
-        if self.selected_text.is_some() {
-            match index {
-                7 => return (1., 1000., 1., 1.),
-                8 => return (0.5, 5., 0.01, 0.01),
-                9 => return (0., 200., 0.1, 0.1),
-                10 => return (100., 900., 10., 100.),
-                12 => return (0., 360., 1., 1.),
-                13 => return (0., 100., 1., 1.),
-                _ => {}
-            }
-        }
-        if let Some(s) = self.selected_shape() {
-            if index == 9 && s.kind.is_polygon() {
-                return (3., 60., 0.1, 1.);
-            }
-            if index == 10 && s.kind == ShapeKind::Star {
-                return (1., 99., 1., 1.);
-            }
-        }
-        match index {
-            1 | 2 => (-1_000_000., 1_000_000., 1., 1.),
-            3 | 4 => (MIN_SIZE, MAX_SIZE, 1., 1.),
-            6 | 8 => (0., 100., 1., 1.),
-            7 => (0., 360., 1., 1.),
+        match property {
+            X | Y | StartX | StartY | EndX | EndY | Rotation => (-1_000_000., 1_000_000., 1., 1.),
+            Width | Height => (MIN_SIZE, MAX_SIZE, 1., 1.),
+            Opacity | GradientPosition => (0., 100., 1., 1.),
+            GradientAngle => (0., 360., 1., 1.),
+            FontSize => (1., 1000., 1., 1.),
+            LineHeight => (0.5, 5., 0.01, 0.01),
+            LetterSpacing => (0., 200., 0.1, 0.1),
+            FontWeight => (100., 900., 10., 100.),
+            Vertices => (3., 60., 0.1, 1.),
+            InnerRadius => (1., 99., 1., 1.),
             _ => (0., MAX_SIZE / 2., 1., 1.),
         }
     }
@@ -51,11 +30,13 @@ impl Workspace {
             return;
         }
         if !self.multi_selection.is_empty() {
-            self.begin_multi_property(index, event, window, cx);
+            if let Some(property) = self.field_property(index) {
+                self.begin_multi_property(property, event, window, cx);
+            }
             return;
         }
         if self.selected_shape.is_some() && matches!(index, 5 | 6 | 14 | 16 | 17) {
-            let (_, stroke) = self.shape_field_target(index);
+            let stroke = self.field_edits_stroke(index);
             self.activate_paint(stroke, cx);
         }
         let Some(original) = self
@@ -87,20 +68,23 @@ impl Workspace {
         if delta.abs() < 3. && !self.history.borrow().can_merge(None) {
             return;
         }
-        let (min, max, step, quantum) = self.numeric_limits(index);
+        let Some(property) = self.field_property(index) else {
+            return;
+        };
+        let (min, max, step, quantum) = Self::numeric_limits(property);
         let delta = (delta * step * if shift { 10. } else { 1. } / quantum).round() * quantum;
         let value = number((original + delta).clamp(min, max));
         if self.field_value(index, cx).as_deref() == Some(value.as_str()) {
             return;
         }
         let stop = self.active_stop;
-        if index == 15 {
+        if property == Property::Rotation {
             self.edit_rotation(&value);
         } else if let Some(text) = self.selected_text_mut() {
             let before = text.rect;
             let board = text.board;
             let id = text.id;
-            apply_text_field(text, index, &value, stop, cx);
+            apply_text_field(text, property, &value, stop, cx);
             if text.rect != before {
                 self.history.borrow_mut().record(
                     vec![Change::TextRect {
@@ -112,10 +96,10 @@ impl Workspace {
                 );
             }
         } else if self.selected_shape.is_some() {
-            let (index, stroke) = self.shape_field_target(index);
-            self.edit_shape(|shape| apply_shape_field(shape, stroke, stop, index, &value));
+            let stroke = self.field_edits_stroke(index);
+            self.edit_shape(|shape| apply_shape_field(shape, stroke, stop, property, &value));
         } else {
-            self.edit_board(None, |board| apply_field(board, stop, index, &value));
+            self.edit_board(None, |board| apply_field(board, stop, property, &value));
         }
         self.sync_fields(cx);
         cx.notify();

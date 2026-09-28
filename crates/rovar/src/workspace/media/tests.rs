@@ -345,7 +345,8 @@ fn reopening_displays_scene_before_decoding_only_visible_media(cx: &mut TestAppC
     }
     let path = directory.path().join("scene.rovar");
     let json = serde_json::to_vec(&doc).unwrap();
-    document::save_as(&path, &json, &sources).unwrap();
+    let text_system = cx.update(|cx| cx.text_system().clone());
+    document::save_as(&path, &json, &sources, &text_system).unwrap();
     let loaded = document::load(&path).unwrap();
     assert!(loaded.assets.values().all(|asset| asset.is_pending()));
     let window = open(cx);

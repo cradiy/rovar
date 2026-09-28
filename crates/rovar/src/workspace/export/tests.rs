@@ -219,7 +219,7 @@ fn exported_text_keeps_wrapping_rich_styles_and_alignment(cx: &mut TestAppContex
                     .len()
                     >= 3
             );
-            let options = crate::component_export::render_options(true).unwrap();
+            let options = crate::scene_render::render_options(true).unwrap();
             let svg = String::from_utf8(jobs[0].render(Format::Svg, 1, &options).unwrap()).unwrap();
             assert!(!svg.contains("<text"));
             assert!(svg.contains("<path"));

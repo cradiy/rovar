@@ -220,11 +220,11 @@ impl TextEditor {
     pub fn effective_style(&self) -> &TextStyle {
         self.styles.at(self.style_range().start)
     }
-    pub fn mixed(&self, index: usize) -> bool {
+    pub fn mixed(&self, property: crate::property::TextProperty) -> bool {
         let effective = self.effective_style();
         self.styles
             .in_range(self.style_range())
-            .any(|style| !style.same_property(effective, index))
+            .any(|style| !style.same_property(effective, property))
     }
     pub fn apply_color(
         &mut self,

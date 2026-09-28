@@ -2,18 +2,27 @@ use super::*;
 use crate::artboard::{MAX_SIZE, MIN_SIZE};
 use crate::i18n::t;
 
-pub(super) fn set_dimension(rect: &mut Rect, index: usize, value: f32, locked: bool) -> bool {
-    if !value.is_finite() || !(MIN_SIZE..=MAX_SIZE).contains(&value) {
+pub(super) fn set_dimension(rect: &mut Rect, property: Property, value: f32, locked: bool) -> bool {
+    if !matches!(property, Property::Width | Property::Height)
+        || !value.is_finite()
+        || !(MIN_SIZE..=MAX_SIZE).contains(&value)
+    {
         return false;
     }
     if locked && rect.width > 0. && rect.height > 0. {
-        let scale = (value / if index == 3 { rect.width } else { rect.height }).clamp(
+        let scale = (value
+            / if property == Property::Width {
+                rect.width
+            } else {
+                rect.height
+            })
+        .clamp(
             (MIN_SIZE / rect.width).max(MIN_SIZE / rect.height),
             (MAX_SIZE / rect.width).min(MAX_SIZE / rect.height),
         );
         rect.width *= scale;
         rect.height *= scale;
-    } else if index == 3 {
+    } else if property == Property::Width {
         rect.width = value;
     } else {
         rect.height = value;

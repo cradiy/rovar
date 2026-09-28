@@ -27,13 +27,24 @@ fn fixture() -> Document {
     }
 }
 
-#[test]
-fn catalog_recovers_editable_components_and_failed_overwrite_keeps_original() {
+#[gpui::test]
+fn catalog_recovers_editable_components_and_failed_overwrite_keeps_original(
+    cx: &mut gpui::TestAppContext,
+) {
+    let text_system = cx.update(|cx| cx.text_system().clone());
     let root = tempfile::tempdir().unwrap();
     let directory = root.path().join("components");
     let document = fixture();
     let json = serde_json::to_vec(&document).unwrap();
-    store(&directory, "按钮 / primary", &json, &[], [80., 40.]).unwrap();
+    store(
+        &directory,
+        "按钮 / primary",
+        &json,
+        &[],
+        [80., 40.],
+        &text_system,
+    )
+    .unwrap();
     let entries = catalog(&directory).unwrap();
     assert_eq!(entries.len(), 1);
     assert_eq!(entries[0].name, "按钮 / primary");
@@ -46,10 +57,20 @@ fn catalog_recovers_editable_components_and_failed_overwrite_keeps_original() {
             .shapes,
         document.shapes
     );
-    assert!(store(&directory, "replacement", &json, &[], [80., 40.]).is_err());
+    assert!(
+        store(
+            &directory,
+            "replacement",
+            &json,
+            &[],
+            [80., 40.],
+            &text_system
+        )
+        .is_err()
+    );
     assert_eq!(catalog(&directory).unwrap()[0].name, "按钮 / primary");
     assert_eq!(document::load(&entries[0].path).unwrap().json, json);
-    assert!(store(&directory, " ", &json, &[], [80., 40.]).is_err());
+    assert!(store(&directory, " ", &json, &[], [80., 40.], &text_system).is_err());
     assert!(component_path(&directory, "../documents/other").is_err());
 }
 
@@ -94,6 +115,7 @@ fn shared_catalog_rename_delete_and_restart_preserve_existing_copies(
 
 #[gpui::test]
 fn invalid_component_is_isolated_and_removal_survives_refresh(cx: &mut gpui::TestAppContext) {
+    let text_system = cx.update(|cx| cx.text_system().clone());
     let root = tempfile::tempdir().unwrap();
     let directory = root.path().join("components");
     let valid = fixture();
@@ -105,6 +127,7 @@ fn invalid_component_is_isolated_and_removal_survives_refresh(cx: &mut gpui::Tes
             &serde_json::to_vec(doc).unwrap(),
             &[],
             [80., 40.],
+            &text_system,
         )
         .unwrap();
     }

@@ -127,6 +127,8 @@ impl Workspace {
         id: &str,
         cx: &gpui::App,
     ) -> anyhow::Result<(Vec<u8>, Vec<AssetSource>)> {
+        #[cfg(test)]
+        self.snapshot_count.set(self.snapshot_count.get() + 1);
         let mut sources = Vec::new();
         let mut assets = Vec::new();
         let mut add = |object, fill, asset: &Option<std::sync::Arc<crate::media::MediaAsset>>| {
@@ -178,6 +180,7 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) -> anyhow::Result<String> {
         let document = loaded.into_document()?;
+        self.history.borrow_mut().mark_changed();
         self.boards = document.boards;
         self.shapes = document.shapes;
         self.hierarchy = document.hierarchy;
@@ -226,6 +229,9 @@ impl Workspace {
     }
     pub(crate) fn view_state(&self) -> [f32; 3] {
         [self.view.pan.x, self.view.pan.y, self.view.zoom]
+    }
+    pub(crate) fn document_revision(&self) -> u64 {
+        self.history.borrow().revision()
     }
     pub(crate) fn restore_view(&mut self, view: [f32; 3]) {
         if view.iter().all(|v| v.is_finite()) {

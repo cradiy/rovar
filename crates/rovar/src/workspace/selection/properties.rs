@@ -2,13 +2,14 @@ use super::super::inspector::{hex, number};
 use super::*;
 use crate::artboard::{MAX_SIZE, MIN_SIZE};
 use crate::i18n::t;
+use crate::property::Property::*;
 
 impl Workspace {
     pub(in crate::workspace) fn batch_color_supported(&self, cx: &gpui::App) -> bool {
         self.operation_ids().into_iter().all(|id| {
             if let Some(t) = self.texts.iter().find(|t| t.id == id) {
                 let e = t.editor.read(cx);
-                e.effective_style().fill_mode == FillMode::Solid && !e.mixed(12)
+                e.effective_style().fill_mode == FillMode::Solid && !e.mixed(TextProperty::FillMode)
             } else if let Some(s) = self.shapes.iter().find(|s| s.id == id) {
                 !s.kind.is_media()
                     && s.paint_mode(!s.can_fill()) == FillMode::Solid
@@ -51,27 +52,27 @@ impl Workspace {
             })
     }
 
-    fn object_value(&self, id: usize, index: usize, cx: &gpui::App) -> Option<String> {
-        if (1..=4).contains(&index) {
+    fn object_value(&self, id: usize, property: Property, cx: &gpui::App) -> Option<String> {
+        if property.is_geometry() {
             let r = self.world_rect(id)?;
-            return Some(number(match index {
-                1 => r.x,
-                2 => r.y,
-                3 => r.width,
+            return Some(number(match property {
+                X => r.x,
+                Y => r.y,
+                Width => r.width,
                 _ => r.height,
             }));
         }
-        if matches!(index, 5 | 6) {
+        if matches!(property, Color | Opacity) {
             if self
                 .texts
                 .iter()
                 .find(|t| t.id == id)
-                .is_some_and(|t| t.editor.read(cx).mixed(index))
+                .is_some_and(|t| t.editor.read(cx).mixed(property.text_style().unwrap()))
             {
                 return Some(String::new());
             }
             let c = self.object_color(id, cx)?;
-            return Some(if index == 5 {
+            return Some(if property == Color {
                 hex(c)
             } else {
                 number(c.a * 100.)
@@ -82,16 +83,18 @@ impl Workspace {
 
     pub(in crate::workspace) fn multi_field_value(
         &self,
-        index: usize,
+        property: Property,
         cx: &gpui::App,
     ) -> Option<String> {
-        if !(1..=6).contains(&index) || (index >= 5 && !self.batch_color_supported(cx)) {
+        if !(property.is_geometry() || matches!(property, Color | Opacity))
+            || (matches!(property, Color | Opacity) && !self.batch_color_supported(cx))
+        {
             return None;
         }
         let property_ids = self.operation_ids();
         let mut values = property_ids
             .iter()
-            .map(|id| self.object_value(*id, index, cx));
+            .map(|id| self.object_value(*id, property, cx));
         let first = values.next()??;
         Some(if values.all(|value| value.as_ref() == Some(&first)) {
             first
@@ -100,45 +103,53 @@ impl Workspace {
         })
     }
 
-    pub(in crate::workspace) fn multi_can_scrub(&self, index: usize, cx: &gpui::App) -> bool {
-        (matches!(index, 1..=4) || (index == 6 && self.batch_color_supported(cx)))
+    pub(in crate::workspace) fn multi_can_scrub(&self, property: Property, cx: &gpui::App) -> bool {
+        (property.is_geometry() || (property == Opacity && self.batch_color_supported(cx)))
             && self.operation_ids().iter().all(|id| {
-                self.object_value(*id, index, cx)
+                self.object_value(*id, property, cx)
                     .is_some_and(|v| v.parse::<f32>().is_ok())
             })
     }
 
-    fn before_batch_property(&self, index: usize, cx: &gpui::App) -> Vec<Change> {
+    fn before_batch_property(&self, property: Property, cx: &gpui::App) -> Vec<Change> {
         self.before_geometry()
             .into_iter()
             .map(|change| match change {
-                Change::TextRect { id, .. } if index >= 5 => Change::Text {
-                    id,
-                    value: self
-                        .texts
-                        .iter()
-                        .find(|t| t.id == id)
-                        .unwrap()
-                        .editor
-                        .read(cx)
-                        .snapshot(),
-                },
+                Change::TextRect { id, .. } if matches!(property, Color | Opacity) => {
+                    Change::Text {
+                        id,
+                        value: self
+                            .texts
+                            .iter()
+                            .find(|t| t.id == id)
+                            .unwrap()
+                            .editor
+                            .read(cx)
+                            .snapshot(),
+                    }
+                }
                 other => other,
             })
             .collect()
     }
 
-    fn set_batch_numeric(&mut self, id: usize, index: usize, value: f32, cx: &mut Context<Self>) {
-        if (1..=4).contains(&index) {
+    fn set_batch_numeric(
+        &mut self,
+        id: usize,
+        property: Property,
+        value: f32,
+        cx: &mut Context<Self>,
+    ) {
+        if property.is_geometry() {
             if let Some((parent, mut rect)) = self.object_rect(id) {
                 let origin = self.parent_origin(parent);
-                match index {
-                    1 => rect.x = value - origin.x,
-                    2 => rect.y = value - origin.y,
+                match property {
+                    X => rect.x = value - origin.x,
+                    Y => rect.y = value - origin.y,
                     _ => {
                         editing::set_dimension(
                             &mut rect,
-                            index,
+                            property,
                             value,
                             self.layer_info(id).is_some_and(|(s, _)| s.aspect_locked),
                         );
@@ -146,7 +157,7 @@ impl Workspace {
                 }
                 self.set_object_rect(id, parent, rect);
             }
-        } else if index == 6 {
+        } else if property == Opacity {
             let mut color = self.object_color(id, cx).unwrap();
             color.a = value / 100.;
             self.set_batch_color(id, color, true, cx);
@@ -197,15 +208,17 @@ impl Workspace {
 
     pub(in crate::workspace) fn edit_multi_field(
         &mut self,
-        index: usize,
+        property: Property,
         value: &str,
         cx: &mut Context<Self>,
     ) -> bool {
-        if !(1..=6).contains(&index) || (index >= 5 && !self.batch_color_supported(cx)) {
+        if !(property.is_geometry() || matches!(property, Color | Opacity))
+            || (matches!(property, Color | Opacity) && !self.batch_color_supported(cx))
+        {
             return false;
         }
-        let before = self.before_batch_property(index, cx);
-        if index == 5 {
+        let before = self.before_batch_property(property, cx);
+        if property == Color {
             let value = value.trim().trim_start_matches('#');
             if value.len() != 6 || !value.bytes().all(|c| c.is_ascii_hexdigit()) {
                 return false;
@@ -220,12 +233,12 @@ impl Workspace {
             let Ok(value) = value.trim().parse::<f32>() else {
                 return false;
             };
-            let (min, max) = multi_limits(index);
+            let (min, max) = multi_limits(property);
             if !value.is_finite() || !(min..=max).contains(&value) {
                 return false;
             }
             for id in self.operation_ids() {
-                self.set_batch_numeric(id, index, value, cx);
+                self.set_batch_numeric(id, property, value, cx);
             }
         }
         if self.batch_changed(&before, cx) {
@@ -233,7 +246,7 @@ impl Workspace {
                 before,
                 Some(Group::SelectionProperty(
                     self.operation_ids().iter().copied().collect(),
-                    index,
+                    property,
                 )),
             );
         }
@@ -243,12 +256,12 @@ impl Workspace {
 
     pub(in crate::workspace) fn begin_multi_property(
         &mut self,
-        index: usize,
+        property: Property,
         event: &gpui::MouseDownEvent,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if !self.multi_can_scrub(index, cx) {
+        if !self.multi_can_scrub(property, cx) {
             return;
         }
         self.batch_values = self
@@ -257,13 +270,16 @@ impl Workspace {
             .map(|id| {
                 (
                     *id,
-                    self.object_value(*id, index, cx).unwrap().parse().unwrap(),
+                    self.object_value(*id, property, cx)
+                        .unwrap()
+                        .parse()
+                        .unwrap(),
                 )
             })
             .collect();
-        self.batch_before = self.before_batch_property(index, cx);
+        self.batch_before = self.before_batch_property(property, cx);
         self.begin(
-            GestureKind::MultiProperty { index },
+            GestureKind::MultiProperty { property },
             event.position,
             event.button,
             window,
@@ -273,7 +289,7 @@ impl Workspace {
 
     pub(in crate::workspace) fn move_multi_property(
         &mut self,
-        index: usize,
+        property: Property,
         delta: f32,
         shift: bool,
         cx: &mut Context<Self>,
@@ -281,10 +297,10 @@ impl Workspace {
         if delta.abs() < 3. && !self.batch_changed(&self.batch_before, cx) {
             return;
         }
-        let (min, max) = multi_limits(index);
+        let (min, max) = multi_limits(property);
         for (id, original) in self.batch_values.clone() {
             let value = (original + (delta * if shift { 10. } else { 1. }).round()).clamp(min, max);
-            self.set_batch_numeric(id, index, value, cx);
+            self.set_batch_numeric(id, property, value, cx);
         }
         self.sync_fields(cx);
     }
@@ -389,10 +405,10 @@ impl Workspace {
     }
 }
 
-fn multi_limits(index: usize) -> (f32, f32) {
-    match index {
-        1 | 2 => (-1_000_000., 1_000_000.),
-        3 | 4 => (MIN_SIZE, MAX_SIZE),
+fn multi_limits(property: Property) -> (f32, f32) {
+    match property {
+        X | Y => (-1_000_000., 1_000_000.),
+        Width | Height => (MIN_SIZE, MAX_SIZE),
         _ => (0., 100.),
     }
 }

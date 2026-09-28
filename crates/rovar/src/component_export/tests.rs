@@ -1,9 +1,9 @@
 use super::*;
 use crate::{
-    artboard::Artboard,
+    artboard::{Artboard, FillMode},
     document::{AssetUse, Text},
     layer::Hierarchy,
-    shape::StrokeAlign,
+    shape::{Shape, ShapeKind, StrokeAlign},
     text::{TextStyle, styles::StyledText},
 };
 use gpui::{GradientKind, rgb};

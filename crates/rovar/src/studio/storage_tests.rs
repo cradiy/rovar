@@ -1,6 +1,65 @@
 use super::*;
 use gpui::{TestAppContext, VisualTestContext, size};
 
+#[gpui::test]
+fn autosave_skips_idle_snapshots_but_persists_view_and_content_changes(cx: &mut TestAppContext) {
+    cx.update(uic::init);
+    let directory = tempfile::tempdir().unwrap();
+    let window = cx.open_window(size(px(1280.), px(800.)), |window, cx| {
+        Studio::new(directory.path().into(), window, cx)
+    });
+    window
+        .update(cx, |studio, window, cx| studio.new_document(window, cx))
+        .unwrap();
+    cx.run_until_parked();
+    window
+        .update(cx, |studio, window, cx| {
+            studio.autosave(window, cx);
+        })
+        .unwrap();
+    cx.run_until_parked();
+    let (editor, count, path) = window
+        .update(cx, |studio, _, cx| {
+            let tab = &studio.tabs[0];
+            let editor = tab.editor.clone().unwrap();
+            let count = editor.read(cx).snapshot_count.get();
+            (editor, count, tab.file.path.clone())
+        })
+        .unwrap();
+    let bytes = std::fs::read(&path).unwrap();
+    for _ in 0..3 {
+        cx.executor().advance_clock(Duration::from_secs(1));
+        cx.run_until_parked();
+    }
+    window
+        .update(cx, |studio, window, cx| {
+            assert_eq!(editor.read(cx).snapshot_count.get(), count);
+            editor.update(cx, |editor, _| editor.restore_view([40., 60., 2.]));
+            studio.autosave(window, cx);
+            assert_eq!(editor.read(cx).snapshot_count.get(), count);
+            assert_eq!(studio.tabs[0].file.view, [40., 60., 2.]);
+            set_rectangle(studio, 75., window, cx);
+            let before_save = editor.read(cx).snapshot_count.get();
+            studio.autosave(window, cx);
+            assert_eq!(editor.read(cx).snapshot_count.get(), before_save + 1);
+        })
+        .unwrap();
+    cx.run_until_parked();
+    assert_ne!(std::fs::read(&path).unwrap(), bytes);
+    let saved = crate::document::load(&path)
+        .unwrap()
+        .into_document()
+        .unwrap();
+    assert_eq!(saved.shapes[0].rect.x, 75.);
+    window
+        .update(cx, |studio, window, cx| {
+            let count = editor.read(cx).snapshot_count.get();
+            studio.autosave(window, cx);
+            assert_eq!(editor.read(cx).snapshot_count.get(), count);
+        })
+        .unwrap();
+}
+
 fn set_rectangle(studio: &mut Studio, x: f32, window: &mut Window, cx: &mut Context<Studio>) {
     let tab = studio
         .tabs

@@ -171,7 +171,13 @@ fn saved_group_embeds_media_and_inserts_independent_objects_with_one_undo(cx: &m
             let (json, sources) = editor
                 .snapshot_document(&uuid::Uuid::new_v4().to_string(), cx)
                 .unwrap();
-            crate::document::save_as(&root.path().join("copy.rovar"), &json, &sources).unwrap();
+            crate::document::save_as(
+                &root.path().join("copy.rovar"),
+                &json,
+                &sources,
+                cx.text_system(),
+            )
+            .unwrap();
         })
         .unwrap();
     assert_eq!(

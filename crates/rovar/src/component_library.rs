@@ -110,8 +110,9 @@ impl Library {
         size: [f32; 2],
         cx: &mut Context<Self>,
     ) {
+        let text_system = cx.text_system().clone();
         self.run(
-            move |directory| store(directory, &name, &json, &sources, size),
+            move |directory| store(directory, &name, &json, &sources, size, &text_system),
             cx,
         );
     }
@@ -198,6 +199,7 @@ fn store(
     json: &[u8],
     sources: &[AssetSource],
     size: [f32; 2],
+    text_system: &std::sync::Arc<gpui::TextSystem>,
 ) -> Result<()> {
     let name = valid_name(name)?;
     ensure!(
@@ -210,7 +212,7 @@ fn store(
         .suffix(".component")
         .tempfile_in(directory)?
         .into_temp_path();
-    document::save_as(&temporary, json, sources)?;
+    document::save_as(&temporary, json, sources, text_system)?;
     {
         let mut writer = Writer::open(&temporary)?;
         writer.put_bytes(
