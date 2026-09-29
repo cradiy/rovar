@@ -1,7 +1,13 @@
 [build]
 target = "index.html"
 dist = "../dist/web"
+pattern_preload = ""
+pattern_script = '''<script type="module">import { start } from "{base}shell/app.js"; start({js: "{base}{js}", wasm: "{base}{wasm}"});</script>'''
 
 [serve]
 addresses = ["127.0.0.1"]
 port = 8080
+
+[[proxy]]
+backend = "http://127.0.0.1:8699/api/v1/"
+no_system_proxy = true

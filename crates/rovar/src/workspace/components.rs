@@ -142,6 +142,7 @@ impl Workspace {
                 let result = cx
                     .background_executor()
                     .spawn(async move {
+                        crate::raster::prepare().await?;
                         let page: Page = serde_json::from_slice(&json)?;
                         let png = crate::document::render_preview(&page, &sources, &text_system)?;
                         let mut pixels = image::load_from_memory(&png)?.into_rgba8();

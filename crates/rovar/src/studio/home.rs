@@ -19,7 +19,8 @@ impl Studio {
             .recent
             .iter()
             .filter(|file| {
-                (self.all_files || !session.removed_recent.contains(&file.path))
+                self.source_matches(&file.path, cx)
+                    && (self.all_files || !session.removed_recent.contains(&file.path))
                     && file.title.to_lowercase().contains(&search)
             })
             .cloned()
@@ -57,13 +58,18 @@ impl Studio {
                     .flex_col()
                     .gap(px(32.))
                     .child(
-                        div().flex().items_center().justify_between().child(
-                            div()
-                                .text_size(px(28.))
-                                .font_weight(FontWeight::BOLD)
-                                .text_color(rgb(0xf0edf6))
-                                .child(t("home-title")),
-                        ),
+                        div()
+                            .flex()
+                            .items_center()
+                            .justify_between()
+                            .child(
+                                div()
+                                    .text_size(px(28.))
+                                    .font_weight(FontWeight::BOLD)
+                                    .text_color(rgb(0xf0edf6))
+                                    .child(t("home-title")),
+                            )
+                            .child(self.source_control(cx)),
                     )
                     .child(
                         div()

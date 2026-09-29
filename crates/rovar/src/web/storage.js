@@ -4,6 +4,11 @@ let inFlight = false;
 let releaseLock;
 
 export function status(message, failed) {
+    if (failed && !document.getElementById('shell').hidden) {
+        document.getElementById('loading').textContent = message;
+        document.getElementById('retry').hidden = false;
+        return;
+    }
     const element = document.getElementById('storage-status');
     element.textContent = message;
     element.dataset.failed = String(failed);
@@ -12,6 +17,14 @@ export function status(message, failed) {
         setTimeout(() => { if (element.textContent === message) element.hidden = true; }, 2000);
     }
 }
+
+let loadedFonts = [];
+export function fontData() { return loadedFonts; }
+
+export function editorReady() { document.getElementById('shell').hidden = true; }
+
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+export function loginMotionAllowed() { return !document.hidden && !reducedMotion.matches; }
 
 export async function initialize() {
     if (!navigator.gpu) throw new Error('Rovar needs WebGPU. Open it in a supported browser on HTTPS or localhost.');
@@ -46,6 +59,7 @@ export async function initialize() {
             if (!response.ok) throw new Error(`Could not load font: ${name}`);
             return new Uint8Array(await response.arrayBuffer());
         }));
+        loadedFonts = fonts;
         document.getElementById('storage-status').hidden = true;
         return { files, fonts };
     } catch (error) { releaseLock?.(); throw error; }

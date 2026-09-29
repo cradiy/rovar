@@ -1,2 +1,5 @@
 /target
 /dist
+/rovar-server-data
+/rovar-server.toml
+/crates/rovar-server/rovar-server.toml

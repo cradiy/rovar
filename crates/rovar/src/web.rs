@@ -11,6 +11,10 @@ extern "C" {
     fn status(message: &str, failed: bool);
     fn watch(callback: &js_sys::Function);
     fn downloadBytes(name: &str, bytes: &[u8]);
+    #[wasm_bindgen(js_name = editorReady)]
+    fn editor_ready();
+    #[wasm_bindgen(js_name = loginMotionAllowed)]
+    pub fn login_motion_allowed() -> bool;
 }
 static FONTS: OnceLock<Vec<Vec<u8>>> = OnceLock::new();
 static UNSAVED: AtomicBool = AtomicBool::new(false);
@@ -57,6 +61,7 @@ pub fn start() {
                     .collect(),
             );
             crate::run_app();
+            editor_ready();
             let callback = Closure::<dyn FnMut() -> bool>::new(|| {
                 rovar_storage::has_pending() || UNSAVED.load(Ordering::Relaxed)
             });
@@ -115,6 +120,22 @@ pub async fn flush_workspace() {
         }
     }
 }
+
+pub async fn flush_for_navigation() -> bool {
+    // Closing tabs and acknowledging a server save can enqueue another write
+    // while IndexedDB is committing the previous snapshot.
+    for _ in 0..20 {
+        flush_workspace().await;
+        if !rovar_storage::has_pending() {
+            return true;
+        }
+        if SAVE_FAILED.load(Ordering::Relaxed) {
+            return false;
+        }
+    }
+    false
+}
+
 pub fn download(path: &Path) -> anyhow::Result<()> {
     let bytes = rovar_storage::fs::read(path)?;
     downloadBytes(

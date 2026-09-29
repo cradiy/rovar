@@ -1,0 +1,30 @@
+[package]
+name = "rovar-server"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[features]
+embedded-web = ["dep:rust-embed", "dep:mime_guess"]
+
+[dependencies]
+rovar-api = { path = "../rovar-api" }
+anyhow = "1"
+async-trait = "0.1"
+salvo = "0.95"
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "tls-rustls-ring", "postgres", "migrate", "macros"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "fs", "sync", "time"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "1.1"
+aes-gcm = "0.10"
+argon2 = "0.5"
+base64 = "0.22"
+sha2 = "0.10"
+uuid = { version = "1", features = ["v4"] }
+url = "2"
+rust-embed = { version = "8", optional = true, features = ["debug-embed"] }
+mime_guess = { version = "2", optional = true }
+
+[dev-dependencies]
+tempfile = "3"

@@ -25,6 +25,9 @@ impl Studio {
                     input.set_placeholder(t("home-search"));
                     cx.notify();
                 });
+                if let Some(panel) = &self.servers {
+                    panel.refresh_language(cx);
+                }
                 for other in cx
                     .windows()
                     .into_iter()

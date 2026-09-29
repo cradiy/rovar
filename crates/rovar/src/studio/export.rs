@@ -82,6 +82,7 @@ impl Studio {
             let result = cx
                 .background_executor()
                 .spawn(async move {
+                    crate::raster::prepare_preview().await;
                     document::save_as(&path, &json, &assets, &text_system)?;
                     crate::platform::download(&path)
                 })

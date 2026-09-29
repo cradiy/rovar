@@ -102,14 +102,11 @@ impl Job {
         &self,
         format: Format,
         scale: u32,
-        options: &resvg::usvg::Options,
+        options: &crate::raster::Options,
     ) -> Result<Vec<u8>> {
         let svg = self.svg()?;
-        let tree = resvg::usvg::Tree::from_str(&svg, options)?;
         if format == Format::Svg {
-            return Ok(tree
-                .to_string(&resvg::usvg::WriteOptions::default())
-                .into_bytes());
+            return crate::raster::render(&svg, [0, 0], 1., false, true, options);
         }
         let (width, height) = (
             (self.bounds.width * scale as f32).ceil(),
@@ -119,14 +116,14 @@ impl Job {
             scale > 0 && width <= 16384. && height <= 16384. && width * height <= 64_000_000.,
             ExportError("export-size-limit")
         );
-        let mut pixels = resvg::tiny_skia::Pixmap::new(width as u32, height as u32)
-            .context("Invalid PNG size")?;
-        resvg::render(
-            &tree,
-            resvg::tiny_skia::Transform::from_scale(scale as f32, scale as f32),
-            &mut pixels.as_mut(),
-        );
-        Ok(pixels.encode_png()?)
+        crate::raster::render(
+            &svg,
+            [width as u32, height as u32],
+            scale as f32,
+            false,
+            false,
+            options,
+        )
     }
 }
 

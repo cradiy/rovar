@@ -263,32 +263,27 @@ impl Scene<'_> {
     }
 }
 
-pub(crate) fn render_options(with_text: bool) -> Result<resvg::usvg::Options<'static>> {
+#[cfg(target_family = "wasm")]
+pub(crate) fn render_options(_: bool) -> Result<crate::raster::Options> {
+    Ok(crate::raster::Options)
+}
+
+#[cfg(not(target_family = "wasm"))]
+pub(crate) fn render_options(with_text: bool) -> Result<crate::raster::Options> {
     let mut options = resvg::usvg::Options::default();
     if with_text {
         let db = options.fontdb_mut();
-        #[cfg(not(target_family = "wasm"))]
-        {
-            db.load_system_fonts();
-            // Resolve the platform's fallback instead of usvg's hard-coded Times New Roman.
-            let fallback = font_kit::source::SystemSource::new()
-                .select_best_match(
-                    &[font_kit::family_name::FamilyName::SansSerif],
-                    &font_kit::properties::Properties::new(),
-                )?
-                .load()?
-                .family_name();
-            db.set_serif_family(fallback.clone());
-            db.set_sans_serif_family(fallback);
-        }
-        #[cfg(target_family = "wasm")]
-        {
-            for bytes in crate::web::fonts() {
-                db.load_font_data(bytes.to_vec());
-            }
-            db.set_serif_family("IBM Plex Sans");
-            db.set_sans_serif_family("IBM Plex Sans");
-        }
+        db.load_system_fonts();
+        // Resolve the platform's fallback instead of usvg's hard-coded Times New Roman.
+        let fallback = font_kit::source::SystemSource::new()
+            .select_best_match(
+                &[font_kit::family_name::FamilyName::SansSerif],
+                &font_kit::properties::Properties::new(),
+            )?
+            .load()?
+            .family_name();
+        db.set_serif_family(fallback.clone());
+        db.set_sans_serif_family(fallback);
         ensure!(
             db.query(&resvg::usvg::fontdb::Query {
                 families: &[resvg::usvg::fontdb::Family::SansSerif],

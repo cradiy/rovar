@@ -5,12 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Rovar</title>
   <link data-trunk rel="rust" href="../crates/rovar/Cargo.toml" data-bin="rovar" data-wasm-opt="0">
+  <link data-trunk rel="rust" href="../crates/rovar-render/Cargo.toml" data-target-name="rovar_render" data-type="worker" data-bindgen-target="web" data-wasm-opt="0">
   <link data-trunk rel="copy-dir" href="fonts">
-  <style>
-    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #131418; }
-    #storage-status { position: fixed; z-index: 100; right: 16px; bottom: 16px; max-width: 460px; padding: 10px 14px; border: 1px solid #464050; border-radius: 8px; background: #25232e; color: #ddd5ee; font: 13px/1.5 system-ui; }
-    #storage-status[data-failed="true"] { color: #ffb5a8; }
-  </style>
+  <link data-trunk rel="copy-dir" href="shell">
+  <link data-trunk rel="copy-file" href="../assets/rovar-mark.svg">
+  <link rel="icon" type="image/svg+xml" href="rovar-mark.svg">
+  <link rel="stylesheet" href="shell/style.css">
 </head>
-<body><div id="storage-status" role="status">Opening workspace…</div></body>
+<body>
+  <main id="shell">
+    <section class="startup">
+      <img src="rovar-mark.svg" width="40" height="40" alt="Rovar">
+      <p id="loading" role="status">Loading Rovar…</p>
+      <button id="retry" type="button" hidden>Try again</button>
+      <noscript>Enable JavaScript to open this workspace.</noscript>
+    </section>
+  </main>
+  <div id="storage-status" role="status" hidden></div>
+</body>
 </html>

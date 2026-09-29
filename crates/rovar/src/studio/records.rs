@@ -141,6 +141,8 @@ impl Studio {
             }
         }
         // No writer can be in flight. Remove all open owners before another autosave.
+        self.remote
+            .update(cx, |remote, cx| remote.changed(path, None, true, cx));
         self.drop_deleted_document(path, window, cx);
         for handle in cx
             .windows()
@@ -319,6 +321,9 @@ impl Studio {
         };
         let title = self.rename_input.read(cx).value().trim().to_owned();
         if commit && !title.is_empty() {
+            self.remote.update(cx, |remote, cx| {
+                remote.changed(&path, Some(title.clone()), false, cx)
+            });
             for file in &mut self.session.borrow_mut().recent {
                 if file.path == path {
                     file.title = title.clone();

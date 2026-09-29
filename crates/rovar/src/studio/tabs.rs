@@ -174,6 +174,7 @@ impl Studio {
                     .flex()
                     .items_center()
                     .gap(px(4.))
+                    .children(self.server_badge(cx))
                     .children(
                         self.active
                             .map(|_| {
@@ -267,6 +268,10 @@ impl Studio {
         div()
             .id(("document-tab", token))
             .debug_selector(move || format!("document-tab-{token}"))
+            .on_drop(cx.listener(|this, drag: &DragTab, window, cx| {
+                this.dropped_on_strip(drag, window, cx);
+                cx.stop_propagation();
+            }))
             .absolute()
             .occlude()
             .left(px(left))

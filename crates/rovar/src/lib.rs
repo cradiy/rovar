@@ -13,6 +13,8 @@ mod layer;
 mod media;
 mod platform;
 mod property;
+mod raster;
+mod remote;
 mod rotation;
 mod scene_render;
 mod settings;

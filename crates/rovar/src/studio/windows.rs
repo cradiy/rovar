@@ -47,9 +47,13 @@ impl Studio {
             }
             let transfer = editor.read(cx).transfer(&tab.document_id, cx)?;
             let editor = cx.new(|cx| Workspace::new(window, cx));
-            editor.update(cx, |editor, cx| {
-                editor.attach_library(self.library.clone(), cx)
-            });
+            let source = self
+                .remote
+                .read(cx)
+                .link(&tab.file.path)
+                .map(|link| link.connection.clone());
+            let library = self.source_library(source, cx);
+            editor.update(cx, |editor, cx| editor.attach_library(library, cx));
             editor.update(cx, |editor, cx| {
                 editor.receive_transfer(transfer, window, cx)
             })?;
@@ -196,6 +200,28 @@ impl Studio {
         let native = payload.transaction.borrow().native;
         let finished = match event {
             gpui::DragEnd::Dropped { .. } => payload.transaction.borrow().owner.is_some(),
+            gpui::DragEnd::Unaccepted if !native => {
+                // Occluding titlebar controls may leave a drop unclaimed. An internal
+                // release on the strip still commits its order instead of detaching.
+                let reordered = payload
+                    .window
+                    .update(cx, |studio, window, cx| {
+                        let position = window.mouse_position();
+                        if !tabs::over_strip(
+                            f32::from(position.x),
+                            f32::from(position.y),
+                            f32::from(window.viewport_size().width),
+                            false,
+                            false,
+                        ) {
+                            return false;
+                        }
+                        studio.receive_tab(&payload, None, window, cx);
+                        true
+                    })
+                    .unwrap_or(false);
+                reordered || Self::open_detached_tab(&payload, None, cx)
+            }
             gpui::DragEnd::Unaccepted => Self::open_detached_tab(&payload, None, cx),
             gpui::DragEnd::Cancelled if native => Self::open_detached_tab(&payload, None, cx),
             gpui::DragEnd::Cancelled

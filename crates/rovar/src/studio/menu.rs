@@ -47,6 +47,15 @@ impl Studio {
                         ("save-document", LucideIcons::Save, "Mod+S"),
                         ("export-document", LucideIcons::Download, "Mod+Shift+E"),
                         ("settings", LucideIcons::Settings, "Mod+,"),
+                        (
+                            if cfg!(target_family = "wasm") {
+                                "server-sign-out"
+                            } else {
+                                "server-manage"
+                            },
+                            LucideIcons::Server,
+                            "",
+                        ),
                     ]
                     .into_iter()
                     .map(|(id, glyph, shortcut)| {
@@ -95,6 +104,14 @@ impl Studio {
                                                         this.export_dialog(window, cx)
                                                     }
                                                     "settings" => this.open_settings(window, cx),
+                                                    "server-manage" => {
+                                                        this.open_servers(None, window, cx)
+                                                    }
+                                                    "server-sign-out" => {
+                                                        if let Some(id) = this.source.clone() {
+                                                            this.server_logout(id, window, cx);
+                                                        }
+                                                    }
                                                     _ => this.save_command(window, cx),
                                                 }
                                             }),

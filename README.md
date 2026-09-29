@@ -57,6 +57,13 @@ nu scripts/web.nu --release
 ```
 
 Requires WebGPU on HTTPS or localhost. Build output: `dist/web/`.
-Documents save in the browser's IndexedDB; export `.rovar` files to keep independent copies. One browser tab owns the workspace; multiple document tabs work inside it. Use file dialogs for imports. Web panels use solid backgrounds, and fonts are bundled.
+For `--serve`, start the backend on `127.0.0.1:8699` with `server.public_origin = "http://127.0.0.1:8080"`, then open that browser origin. Trunk forwards `/api/v1/` to the backend; use a separate development TOML configuration. The embedded server uses its own public origin instead.
+Sign-in, registration, and the editor share the GPUI interface and language setting. HTML only displays startup progress while WASM loads; PNG/SVG export and thumbnail rendering use a separate WASM module loaded on demand.
+Auto language follows the browser's preferred languages and falls back to English. Login background motion respects reduced-motion preferences and pauses in hidden tabs.
+Connect to the server hosting the editor. Documents are cached in IndexedDB and synchronized to the server; export `.rovar` files to keep independent copies. One browser tab owns the workspace; multiple document tabs work inside it. Use file dialogs for imports. Web panels use solid backgrounds, and fonts are bundled.
+
+## Server
+
+Run `nu scripts/server.nu` to build a server binary with the Web editor embedded. Desktop can switch between local storage and multiple servers. See [server setup](crates/rovar-server/README.md).
 
 [File format](crates/rovar-format/FORMAT.md) · [MIT License](LICENSE)

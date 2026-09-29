@@ -199,6 +199,48 @@ fn dragging_reorders_before_release_locks_to_rail_and_cancel_restores_order(
 }
 
 #[gpui::test]
+fn releasing_reordered_tab_in_titlebar_keeps_the_existing_window(cx: &mut TestAppContext) {
+    cx.update(uic::init);
+    let directory = tempfile::tempdir().unwrap();
+    let handle = cx.open_window(size(px(1280.), px(800.)), |window, cx| {
+        Studio::new(directory.path().into(), window, cx)
+    });
+    handle
+        .update(cx, |studio, window, cx| {
+            for _ in 0..3 {
+                studio.new_document(window, cx);
+            }
+        })
+        .unwrap();
+    cx.run_until_parked();
+    let mut visual = VisualTestContext::from_window(handle.into(), cx);
+    for target in [point(px(670.), px(30.)), point(px(1245.), px(30.))] {
+        visual.update(|window, cx| window.draw(cx).clear());
+        let first = visual.debug_bounds("document-tab-1").unwrap().center();
+        visual.simulate_mouse_down(first, MouseButton::Left, Default::default());
+        visual.simulate_mouse_move(
+            first + point(px(10.), px(0.)),
+            Some(MouseButton::Left),
+            Default::default(),
+        );
+        visual.simulate_mouse_move(target, Some(MouseButton::Left), Default::default());
+        visual.simulate_mouse_up(target, MouseButton::Left, Default::default());
+        visual.cx.run_until_parked();
+        handle
+            .update(&mut visual.cx, |studio, _, cx| {
+                assert_eq!(cx.windows().len(), 1, "Reordering must not create a window");
+                assert_eq!(
+                    studio.tabs.iter().map(|tab| tab.token).collect::<Vec<_>>(),
+                    [2, 3, 1]
+                );
+                assert_eq!(studio.active, Some(1));
+                assert!(studio.strip.drag.is_none());
+            })
+            .unwrap();
+    }
+}
+
+#[gpui::test]
 fn native_hover_reserves_slot_until_drop_and_uses_snap_hysteresis(cx: &mut TestAppContext) {
     cx.update(uic::init);
     let directory = tempfile::tempdir().unwrap();

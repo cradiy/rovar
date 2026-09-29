@@ -265,6 +265,7 @@ impl Workspace {
                     }
                     cx.background_executor()
                         .spawn(async move {
+                            crate::raster::prepare().await?;
                             let paths = component_export::write(jobs, path, format, scale, batch)?;
                             for path in &paths {
                                 crate::platform::download(path)?;

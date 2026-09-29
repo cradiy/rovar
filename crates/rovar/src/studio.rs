@@ -11,7 +11,10 @@ mod preferences;
 #[cfg(test)]
 mod record_tests;
 mod records;
+mod servers;
 mod sorting;
+mod source_menu;
+mod spaces;
 #[cfg(test)]
 mod storage_tests;
 mod tabs;
@@ -78,6 +81,14 @@ pub(crate) struct Tab {
 }
 
 pub(crate) struct Studio {
+    remote: Entity<crate::remote::Remote>,
+    _remote_subscription: Subscription,
+    source: Option<String>,
+    servers: Option<servers::Panel>,
+    spaces: Option<spaces::Panel>,
+    signing_out: bool,
+    source_menu: Entity<DropdownState>,
+    server_info: Entity<DropdownState>,
     library: Entity<crate::component_library::Library>,
     _library_subscription: Subscription,
     awaiting_library: bool,
@@ -117,6 +128,10 @@ impl Studio {
     pub(crate) fn new(directory: PathBuf, window: &mut Window, cx: &mut Context<Self>) -> Self {
         window.set_window_title("Rovar");
         let directory = rovar_storage::fs::canonicalize(&directory).unwrap_or(directory);
+        let remote = crate::remote::Remote::shared(&directory, cx);
+        let remote_subscription = cx.observe(&remote, |this, _, cx| {
+            this.update_remote_catalog(cx);
+        });
         let library = crate::component_library::Library::open(&directory, cx);
         let library_subscription = cx.observe_in(&library, window, |this, _, window, cx| {
             if this.closing {
@@ -258,11 +273,23 @@ impl Studio {
             .unwrap_or(true)
         });
         let window_id = window.window_handle().window_id().as_u64();
+        let weak = cx.entity().downgrade();
+        window.on_next_frame(move |window, cx| {
+            let _ = weak.update(cx, |this, cx| this.initialize_servers(window, cx));
+        });
         session.windows.insert(
             window_id,
             tabs.iter().map(|tab| tab.file.path.clone()).collect(),
         );
         Self {
+            remote,
+            _remote_subscription: remote_subscription,
+            source: None,
+            servers: None,
+            spaces: None,
+            signing_out: false,
+            source_menu: cx.new(|cx| DropdownState::new(window, cx)),
+            server_info: cx.new(|cx| DropdownState::new(window, cx)),
             library,
             _library_subscription: library_subscription,
             awaiting_library: false,
@@ -307,6 +334,17 @@ impl Studio {
     }
 
     fn select_tab(&mut self, token: Option<usize>, window: &mut Window, cx: &mut Context<Self>) {
+        self.server_info
+            .update(cx, |state, cx| state.close(window, cx));
+        if self.remote.read(cx).busy
+            && self.tabs.iter().any(|tab| {
+                Some(tab.token) == token
+                    && tab.editor.is_none()
+                    && self.remote.read(cx).link(&tab.file.path).is_some()
+            })
+        {
+            return;
+        }
         self.dismiss_tab_preview(cx);
         if self.active == token {
             if let Some(token) = token {
@@ -332,6 +370,9 @@ impl Studio {
     }
 
     fn new_document(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.can_create_document(window, cx) {
+            return;
+        }
         self.dismiss_tab_preview(cx);
         if let Some(editor) = self.active_editor() {
             editor.update(cx, |editor, cx| editor.suspend(window, cx));
@@ -340,9 +381,8 @@ impl Studio {
         self.next_token += 1;
         let document_id = uuid::Uuid::new_v4().to_string();
         let editor = cx.new(|cx| Workspace::new(window, cx));
-        editor.update(cx, |editor, cx| {
-            editor.attach_library(self.library.clone(), cx)
-        });
+        let library = self.source_library(self.source.clone(), cx);
+        editor.update(cx, |editor, cx| editor.attach_library(library, cx));
         let subscription = cx.observe(&editor, |_, _, cx| cx.notify());
         let file = Recent {
             path: self
@@ -355,6 +395,17 @@ impl Studio {
             views: Default::default(),
             preview: None,
         };
+        if let Some(connection) = &self.source {
+            self.remote.update(cx, |remote, cx| {
+                remote.track(
+                    file.path.clone(),
+                    connection.clone(),
+                    file.title.clone(),
+                    rovar_api::Kind::Document,
+                    cx,
+                )
+            });
+        }
         self.tabs.push(Tab {
             token,
             document_id,
@@ -379,7 +430,7 @@ impl Studio {
     }
 }
 
-fn now() -> u64 {
+pub(crate) fn now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
@@ -395,6 +446,25 @@ impl Render for Studio {
                     tab.saved_revision != Some(editor.read(cx).document_revision())
                 })
         }));
+        #[cfg(target_family = "wasm")]
+        if self.source.is_none() || self.signing_out {
+            if self.servers.is_some() && !self.signing_out {
+                return self.web_login_page(cx).into_any_element();
+            }
+            return div()
+                .size_full()
+                .flex()
+                .items_center()
+                .justify_center()
+                .bg(rgb(PANEL))
+                .text_color(rgb(MUTED))
+                .child(
+                    self.error
+                        .clone()
+                        .unwrap_or_else(|| t("server-connecting").into()),
+                )
+                .into_any_element();
+        }
         div()
             .size_full()
             .relative()
@@ -447,6 +517,22 @@ impl Render for Studio {
                     }
                     return;
                 }
+                if this.spaces.is_some() {
+                    if event.keystroke.key == "escape" {
+                        this.spaces = None;
+                        this.focus.focus(window, cx);
+                        cx.notify();
+                    }
+                    return;
+                }
+                if this.servers.is_some() {
+                    if event.keystroke.key == "escape" {
+                        this.servers = None;
+                        this.focus.focus(window, cx);
+                        cx.notify();
+                    }
+                    return;
+                }
                 if uic::components::context_menu::is_open(cx) {
                     return;
                 }
@@ -496,6 +582,33 @@ impl Render for Studio {
                 window.prevent_default();
             }))
             .child(self.tab_bar(window, cx))
+            .when_some(self.remote_status(cx), |el, status| {
+                el.child(
+                    div()
+                        .px(px(24.))
+                        .py(px(6.))
+                        .text_size(px(12.))
+                        .text_color(rgb(MUTED))
+                        .flex()
+                        .items_center()
+                        .gap(px(12.))
+                        .child(div().flex_1().child(status))
+                        .when_some(self.active_remote_conflict(cx), |el, path| {
+                            el.child(
+                                div()
+                                    .id("server-save-copy")
+                                    .cursor_pointer()
+                                    .text_color(rgb(ACCENT))
+                                    .child(t("server-save-copy"))
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        this.remote.update(cx, |remote, cx| {
+                                            remote.fork_conflict(&path, cx)
+                                        });
+                                    })),
+                            )
+                        }),
+                )
+            })
             .when_some(self.error.clone(), |el, error| {
                 el.child(
                     div()
@@ -546,12 +659,16 @@ impl Render for Studio {
             .when(self.active_editor().is_none(), |el| {
                 el.child(uic::components::context_menu::layer(cx))
             })
-            .children(self.tab_preview(window))
+            .children(self.tab_preview(window, cx))
             .when(self.renaming.is_some(), |el| {
                 el.child(self.rename_dialog(cx))
             })
             .when(self.preferences.is_some(), |el| {
                 el.child(self.settings_dialog(cx))
+            })
+            .when(self.spaces.is_some(), |el| el.child(self.spaces_dialog(cx)))
+            .when(self.servers.is_some(), |el| {
+                el.child(self.server_dialog(cx))
             })
             .when(self.deleting_document.is_some(), |el| {
                 el.child(self.document_delete_dialog(cx))
@@ -571,5 +688,6 @@ impl Render for Studio {
                 );
                 el
             })
+            .into_any_element()
     }
 }

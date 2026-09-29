@@ -64,12 +64,13 @@ impl Library {
     }
 
     pub fn refresh(&mut self, cx: &mut Context<Self>) {
-        self.run(|_| Ok(()), cx);
+        self.run(|_| Ok(()), false, cx);
     }
 
     fn run(
         &mut self,
         operation: impl FnOnce(&Path) -> Result<()> + Send + 'static,
+        needs_renderer: bool,
         cx: &mut Context<Self>,
     ) {
         if self.busy {
@@ -82,6 +83,9 @@ impl Library {
             let result = cx
                 .background_executor()
                 .spawn(async move {
+                    if needs_renderer {
+                        crate::raster::prepare_preview().await;
+                    }
                     operation(&directory)?;
                     catalog(&directory)
                 })
@@ -92,6 +96,11 @@ impl Library {
                     Ok(entries) => {
                         this.entries = entries;
                         this.ready = true;
+                        if let Some(remote) = crate::remote::Remote::existing(cx) {
+                            remote.update(cx, |remote, cx| {
+                                remote.library_changed(&this.directory, &this.entries, cx)
+                            });
+                        }
                     }
                     Err(error) => this.error = Some(format!("{error:#}")),
                 }
@@ -113,6 +122,7 @@ impl Library {
         let text_system = cx.text_system().clone();
         self.run(
             move |directory| store(directory, &name, &json, &sources, size, &text_system),
+            true,
             cx,
         );
     }
@@ -129,6 +139,7 @@ impl Library {
                 writer.commit()?;
                 Ok(())
             },
+            false,
             cx,
         );
     }
@@ -164,6 +175,7 @@ impl Library {
                     Err(error) => Err(error.into()),
                 }
             },
+            false,
             cx,
         );
     }
@@ -174,6 +186,7 @@ impl Library {
                 rovar_storage::fs::remove_file(component_path(directory, &entry.id)?)?;
                 Ok(())
             },
+            false,
             cx,
         );
     }

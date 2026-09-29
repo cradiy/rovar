@@ -244,6 +244,17 @@ impl Studio {
         cx: &mut Context<Self>,
     ) {
         let position = window.mouse_position();
+        if over_strip(
+            f32::from(position.x),
+            f32::from(position.y),
+            f32::from(window.viewport_size().width),
+            false,
+            false,
+        ) {
+            self.dropped_on_strip(payload, window, cx);
+            cx.stop_propagation();
+            return;
+        }
         let origin = window.bounds().origin
             + gpui::point(
                 position.x - gpui::px(payload.transaction.borrow().cursor_offset_x),

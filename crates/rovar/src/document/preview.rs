@@ -135,13 +135,5 @@ pub(crate) fn render(
     }
     .svg(Output::Preview)?;
     let options = scene_render::render_options(!doc.texts.is_empty())?;
-    let tree = resvg::usvg::Tree::from_str(&svg, &options)?;
-    let mut pixels = resvg::tiny_skia::Pixmap::new(560, 336).context("Invalid thumbnail size")?;
-    pixels.fill(resvg::tiny_skia::Color::from_rgba8(18, 20, 25, 255));
-    resvg::render(
-        &tree,
-        resvg::tiny_skia::Transform::identity(),
-        &mut pixels.as_mut(),
-    );
-    Ok(pixels.encode_png()?)
+    crate::raster::render(&svg, [560, 336], 1., true, false, &options)
 }

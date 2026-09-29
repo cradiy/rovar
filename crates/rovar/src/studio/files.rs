@@ -66,6 +66,7 @@ impl Studio {
     }
 
     pub(super) fn autosave(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.remote.update(cx, |remote, cx| remote.sync(cx));
         let tokens: Vec<_> = self
             .tabs
             .iter()
@@ -145,6 +146,7 @@ impl Studio {
                     if let Some(parent) = output.parent() {
                         rovar_storage::fs::create_dir_all(parent)?;
                     }
+                    crate::raster::prepare_preview().await;
                     document::save(&output, &bytes, &assets, &expected, &text_system)?;
                     Ok::<_, anyhow::Error>(
                         document::cache_preview(&output, &previews).ok().flatten(),
@@ -165,6 +167,9 @@ impl Studio {
                         tab.file.modified = now();
                         let file = tab.file.clone();
                         let follow_up = tab.close_after_save || tab.save_requested;
+                        this.remote.update(cx, |remote, cx| {
+                            remote.changed(&file.path, Some(file.title.clone()), false, cx)
+                        });
                         this.remember(file);
                         this.persist_session();
                         if follow_up {
@@ -193,6 +198,9 @@ impl Studio {
     }
 
     pub(super) fn open_dialog(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.can_create_document(window, cx) {
+            return;
+        }
         let dialog = crate::platform::prompt_for_paths(
             cx,
             gpui::PathPromptOptions {
@@ -221,6 +229,9 @@ impl Studio {
     }
 
     pub(super) fn open_path(&mut self, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
+        if self.remote.read(cx).busy && self.remote.read(cx).link(&path).is_some() {
+            return;
+        }
         let path = rovar_storage::fs::canonicalize(&path).unwrap_or(path);
         self.restore_recent(&path, cx);
         for other in cx
@@ -305,6 +316,7 @@ impl Studio {
         tab.error = None;
         let path = tab.file.path.clone();
         let internal = is_internal(&self.directory, &path);
+        let import_source = if internal { None } else { self.source.clone() };
         let documents = self.directory.join("documents");
         let previews = self.directory.join("previews");
         let text_system = cx.text_system().clone();
@@ -325,6 +337,14 @@ impl Studio {
                 })
                 .await;
             let _ = this.update_in(cx, |this, window, cx| {
+                let source = this
+                    .tabs
+                    .iter()
+                    .find(|tab| tab.token == token)
+                    .and_then(|tab| this.remote.read(cx).link(&tab.file.path))
+                    .map(|link| link.connection.clone())
+                    .or(import_source.clone());
+                let library = this.source_library(source, cx);
                 let Some(tab) = this.tabs.iter_mut().find(|tab| tab.token == token) else {
                     return;
                 };
@@ -335,9 +355,7 @@ impl Studio {
                     tab.file.preview = preview;
                     let json = loaded.json.clone();
                     let editor = cx.new(|cx| Workspace::new(window, cx));
-                    editor.update(cx, |editor, cx| {
-                        editor.attach_library(this.library.clone(), cx)
-                    });
+                    editor.update(cx, |editor, cx| editor.attach_library(library, cx));
                     let id =
                         editor.update(cx, |editor, cx| editor.load_document(loaded, window, cx))?;
                     editor.update(cx, |editor, cx| {
@@ -356,6 +374,17 @@ impl Studio {
                         tab.document_id = id;
                         tab.last_saved = json;
                         let file = tab.file.clone();
+                        if let Some(connection) = import_source {
+                            this.remote.update(cx, |remote, cx| {
+                                remote.track(
+                                    file.path.clone(),
+                                    connection,
+                                    file.title.clone(),
+                                    rovar_api::Kind::Document,
+                                    cx,
+                                )
+                            });
+                        }
                         this.remember(file);
                         this.persist_session();
                     }

@@ -1,0 +1,12 @@
+[package]
+name = "rovar-render"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+resvg = { version = "0.48", default-features = false, features = ["text", "raster-images"] }
+wasm-bindgen = "0.2"
