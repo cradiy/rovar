@@ -143,6 +143,7 @@ impl Workspace {
                 }
             }))
             .on_scroll_wheel(cx.listener(Self::scroll_canvas))
+            .on_pinch(cx.listener(Self::pinch_canvas))
             .child(
                 canvas(
                     move |bounds, window, _| {
@@ -222,6 +223,7 @@ impl Workspace {
                         .inset_0()
                         .occlude()
                         .on_scroll_wheel(cx.listener(Self::scroll_canvas))
+                        .on_pinch(cx.listener(Self::pinch_canvas))
                         .cursor(if self.toolbar.hand {
                             CursorStyle::OpenHand
                         } else {
@@ -277,6 +279,24 @@ impl Workspace {
             } else {
                 self.view.pan += point(f32::from(delta.x), f32::from(delta.y));
             }
+            cx.notify();
+        }
+        cx.stop_propagation();
+    }
+
+    fn pinch_canvas(
+        &mut self,
+        event: &gpui::PinchEvent,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.gesture.is_none() {
+            self.vector_hover = None;
+            let local = event.position - self.bounds.get().origin;
+            self.view.zoom_at(
+                point(f32::from(local.x), f32::from(local.y)),
+                self.view.zoom * (1. + event.delta).max(0.01),
+            );
             cx.notify();
         }
         cx.stop_propagation();
