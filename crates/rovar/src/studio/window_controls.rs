@@ -105,7 +105,7 @@ mod tests {
     #[gpui::test]
     fn linux_modes_reserve_controls_and_close_waits_for_storage(cx: &mut TestAppContext) {
         cx.update(uic::init);
-        let root = tempfile::tempdir().unwrap();
+        let root = rovar_storage::tempfile::tempdir().unwrap();
         cx.update(|cx| {
             cx.set_global(crate::titlebar::Chrome {
                 mode: TitleBarMode::Compact,

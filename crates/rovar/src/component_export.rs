@@ -170,7 +170,7 @@ pub(crate) fn write(
     let mut prepared = Vec::new();
     for job in jobs {
         let name = job.output_name(format)?;
-        let mut file = tempfile::NamedTempFile::new_in(parent)?;
+        let mut file = rovar_storage::tempfile::NamedTempFile::new_in(parent)?;
         if let Some(source) = &job.original {
             source.path.verify()?;
             let mut input = source.path.open()?;
@@ -212,7 +212,7 @@ pub(crate) fn write(
                 }
                 Err(error) => {
                     for path in &written {
-                        let _ = std::fs::remove_file(path);
+                        let _ = rovar_storage::fs::remove_file(path);
                     }
                     return Err(error.error.into());
                 }

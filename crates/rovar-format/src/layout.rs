@@ -1,10 +1,10 @@
 use crate::{VERSION, Version};
 use anyhow::{Result, ensure};
+use rovar_storage::fs::File;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeMap,
-    fs::File,
     io::{Read, Seek, SeekFrom},
 };
 

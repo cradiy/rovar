@@ -1,6 +1,9 @@
 use super::*;
 use crate::i18n::t;
-use gpui::{AnyElement, hsla, rgba, uniform_list};
+#[cfg(not(target_family = "wasm"))]
+use gpui::hsla;
+use gpui::{AnyElement, rgba, uniform_list};
+#[cfg(not(target_family = "wasm"))]
 use gpui_effects::{LiquidGlass, LiquidGlassAppearance};
 use std::collections::HashSet;
 mod state;
@@ -14,6 +17,7 @@ pub(super) struct Sidebar {
 }
 
 // Only the enclosing surfaces sample the backdrop; their contents stay sharp.
+#[cfg(not(target_family = "wasm"))]
 pub(super) fn glass_surface() -> LiquidGlass {
     LiquidGlass::with_appearance(LiquidGlassAppearance {
         blur_radius: px(16.),
@@ -26,6 +30,13 @@ pub(super) fn glass_surface() -> LiquidGlass {
         dispersion: 0.,
         ..LiquidGlassAppearance::dark()
     })
+}
+
+// The current WebGPU backdrop shader fails browser uniformity validation.
+// Keep the same panel layout with an opaque material until GPUI fixes it.
+#[cfg(target_family = "wasm")]
+pub(super) fn glass_surface() -> Div {
+    div().bg(rgb(PANEL))
 }
 
 #[derive(Clone, Copy)]

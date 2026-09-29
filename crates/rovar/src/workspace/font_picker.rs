@@ -101,9 +101,20 @@ impl FontPicker {
         self.loading = true;
         self.failed = false;
         let scan = cx.background_executor().spawn(async {
-            font_kit::source::SystemSource::new()
-                .all_families()
-                .map_err(|e| e.to_string())
+            #[cfg(not(target_family = "wasm"))]
+            {
+                font_kit::source::SystemSource::new()
+                    .all_families()
+                    .map_err(|e| e.to_string())
+            }
+            #[cfg(target_family = "wasm")]
+            {
+                Ok::<Vec<String>, String>(vec![
+                    "IBM Plex Sans".into(),
+                    "Lilex".into(),
+                    "Noto Sans CJK SC".into(),
+                ])
+            }
         });
         self._scan = cx.spawn(async move |this, cx| {
             let result = scan.await;

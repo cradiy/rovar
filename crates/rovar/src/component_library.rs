@@ -156,9 +156,9 @@ impl Library {
                     "Invalid component path"
                 );
                 let removed = directory.join("removed");
-                std::fs::create_dir_all(&removed)?;
+                rovar_storage::fs::create_dir_all(&removed)?;
                 let target = removed.join(format!("{}.rovar", uuid::Uuid::new_v4()));
-                match std::fs::rename(&entry.path, target) {
+                match rovar_storage::fs::rename(&entry.path, target) {
                     Ok(()) => Ok(()),
                     Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
                     Err(error) => Err(error.into()),
@@ -171,7 +171,7 @@ impl Library {
     pub fn delete(&mut self, entry: Entry, cx: &mut Context<Self>) {
         self.run(
             move |directory| {
-                std::fs::remove_file(component_path(directory, &entry.id)?)?;
+                rovar_storage::fs::remove_file(component_path(directory, &entry.id)?)?;
                 Ok(())
             },
             cx,
@@ -207,8 +207,8 @@ fn store(
         "Invalid component size"
     );
     let document = document::Document::decode(json)?;
-    std::fs::create_dir_all(directory)?;
-    let temporary = tempfile::Builder::new()
+    rovar_storage::fs::create_dir_all(directory)?;
+    let temporary = rovar_storage::tempfile::Builder::new()
         .suffix(".component")
         .tempfile_in(directory)?
         .into_temp_path();
@@ -232,7 +232,7 @@ fn store(
 }
 
 fn catalog(directory: &Path) -> Result<Vec<Entry>> {
-    let files = match std::fs::read_dir(directory) {
+    let files = match rovar_storage::fs::read_dir(directory) {
         Ok(files) => files,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
         Err(error) => return Err(error.into()),

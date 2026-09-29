@@ -102,7 +102,7 @@ impl Studio {
                         })
                         .when_some(preview, |el, path| {
                             el.child(
-                                gpui::img(path)
+                                gpui::img(crate::platform::preview_image(path))
                                     .debug_selector(|| "tab-preview-image".into())
                                     .size_full()
                                     .object_fit(gpui::ObjectFit::Contain),

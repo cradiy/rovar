@@ -41,6 +41,84 @@ impl std::fmt::Debug for MediaAsset {
     }
 }
 impl MediaAsset {
+    pub async fn load_async(
+        path: PathBuf,
+        executor: &gpui::BackgroundExecutor,
+    ) -> Result<Arc<Self>> {
+        #[cfg(not(target_family = "wasm"))]
+        {
+            executor.spawn(async move { Self::load(path) }).await
+        }
+        #[cfg(target_family = "wasm")]
+        {
+            let _ = executor;
+            if !is_video(&path) {
+                return Self::load(path);
+            }
+            let (source, hash) = Self::cache_source(&path)?;
+            let (width, height, content) = Self::decode_video(&source).await?;
+            Ok(Arc::new(Self {
+                path,
+                source,
+                hash,
+                width,
+                height,
+                content: OnceLock::from(Ok(content)),
+                video: true,
+            }))
+        }
+    }
+    pub async fn ensure_decoded_async(
+        self: Arc<Self>,
+        executor: &gpui::BackgroundExecutor,
+    ) -> Result<()> {
+        #[cfg(not(target_family = "wasm"))]
+        {
+            executor.spawn(async move { self.ensure_decoded() }).await
+        }
+        #[cfg(target_family = "wasm")]
+        {
+            let _ = executor;
+            if !self.video {
+                return self.ensure_decoded();
+            }
+            if self.content.get().is_none() {
+                let result = Self::decode_video(&self.source)
+                    .await
+                    .and_then(|(w, h, content)| {
+                        anyhow::ensure!(
+                            (w, h) == (self.width, self.height),
+                            "Media dimensions differ from stored metadata"
+                        );
+                        Ok(content)
+                    })
+                    .map_err(|e| e.to_string());
+                let _ = self.content.set(result);
+            }
+            self.content
+                .get()
+                .unwrap()
+                .as_ref()
+                .map(|_| ())
+                .map_err(|e| anyhow::anyhow!(e.clone()))
+        }
+    }
+    #[cfg(target_family = "wasm")]
+    async fn decode_video(source: &Source) -> Result<(u32, u32, MediaContent)> {
+        gpui_media_backend::SystemBackend::initialize()?;
+        let frame = VideoFrameExtractor::new(
+            source.media_source()?,
+            Arc::new(gpui_media_backend::SystemBackend),
+        )?
+        .initial_frame()
+        .await?;
+        let size = frame.display_size();
+        Ok((
+            size.width.try_into()?,
+            size.height.try_into()?,
+            MediaContent::Video(VideoSurface::new().set_frame(&frame)?),
+        ))
+    }
     pub fn kind(&self) -> crate::shape::ShapeKind {
         if self.video {
             crate::shape::ShapeKind::Video
@@ -98,9 +176,9 @@ impl MediaAsset {
     fn cache_source(path: &Path) -> Result<(Arc<Source>, String)> {
         use sha2::{Digest, Sha256};
         use std::io::{Read, Write};
-        let mut input = std::fs::File::open(path)?;
+        let mut input = rovar_storage::fs::File::open(path)?;
         let extension = path.extension().and_then(|s| s.to_str()).unwrap_or("bin");
-        let mut file = tempfile::Builder::new()
+        let mut file = rovar_storage::tempfile::Builder::new()
             .suffix(&format!(".{extension}"))
             .tempfile()?;
         let mut digest = Sha256::new();

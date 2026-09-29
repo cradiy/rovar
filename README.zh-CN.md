@@ -47,4 +47,16 @@ nu scripts/build.nu macos
 
 详见 [macOS 打包说明](packaging/macos/README.md)。
 
+## Web（实验性）
+
+安装 [Trunk](https://trunkrs.dev/) 和 Rust 的 `wasm32-unknown-unknown` 编译目标后：
+
+```nu
+nu scripts/web.nu --serve
+nu scripts/web.nu --release
+```
+
+需要支持 WebGPU 的浏览器，通过 HTTPS 或 localhost 访问。构建产物：`dist/web/`。
+文档保存到浏览器的 IndexedDB，可导出 `.rovar` 文件保留独立副本。同一工作区只允许一个浏览器标签页打开，应用内支持多文档标签页。导入请使用文件选择框。Web 面板使用实色背景，字体随应用提供。
+
 [文件格式](crates/rovar-format/FORMAT.zh-CN.md) · [MIT 许可证](LICENSE)

@@ -21,12 +21,15 @@ impl Workspace {
         cx.notify();
         let request = self.image_fill_request;
         let page = self.pages.active.clone();
-        let dialog = cx.prompt_for_paths(gpui::PathPromptOptions {
-            files: true,
-            directories: false,
-            multiple: false,
-            prompt: Some(t("image-background-choose").into()),
-        });
+        let dialog = crate::platform::prompt_for_paths(
+            cx,
+            gpui::PathPromptOptions {
+                files: true,
+                directories: false,
+                multiple: false,
+                prompt: Some(t("image-background-choose").into()),
+            },
+        );
         cx.spawn(async move |this, cx| {
             let Ok(Ok(Some(paths))) = dialog.await else {
                 return;

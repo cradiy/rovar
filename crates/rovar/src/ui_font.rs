@@ -116,7 +116,7 @@ mod linux {
             .unwrap_or_default()
             .to_lowercase();
         if desktop.split(':').any(|name| name == "kde")
-            && let Ok(source) = std::fs::read_to_string(config.join("kdeglobals"))
+            && let Ok(source) = rovar_storage::fs::read_to_string(config.join("kdeglobals"))
             && let Some(font) = ini_value(&source, "General", "font")
             && let Some(family) = font
                 .split(',')
@@ -127,7 +127,7 @@ mod linux {
             return Some(family.into());
         }
         for path in ["gtk-4.0/settings.ini", "gtk-3.0/settings.ini"] {
-            if let Ok(source) = std::fs::read_to_string(config.join(path))
+            if let Ok(source) = rovar_storage::fs::read_to_string(config.join(path))
                 && let Some(font) = ini_value(&source, "Settings", "gtk-font-name")
                 && let Some(family) = pango_family(&font)
             {

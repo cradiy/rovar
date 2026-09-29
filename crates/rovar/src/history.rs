@@ -4,12 +4,8 @@ use crate::{
     shape::Shape,
     text::Snapshot,
 };
-use std::{
-    cell::RefCell,
-    ops::Range,
-    rc::Rc,
-    time::{Duration, Instant},
-};
+use std::{cell::RefCell, ops::Range, rc::Rc};
+use web_time::{Duration, Instant};
 
 pub(crate) type SharedHistory = Rc<RefCell<History>>;
 

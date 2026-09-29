@@ -47,4 +47,16 @@ Supports Apple Silicon (arm64) only. `--output` and `--keep-work` are also suppo
 
 See [macOS packaging](packaging/macos/README.md) for details.
 
+## Web (experimental)
+
+Install [Trunk](https://trunkrs.dev/) and the Rust `wasm32-unknown-unknown` target, then:
+
+```nu
+nu scripts/web.nu --serve
+nu scripts/web.nu --release
+```
+
+Requires WebGPU on HTTPS or localhost. Build output: `dist/web/`.
+Documents save in the browser's IndexedDB; export `.rovar` files to keep independent copies. One browser tab owns the workspace; multiple document tabs work inside it. Use file dialogs for imports. Web panels use solid backgrounds, and fonts are bundled.
+
 [File format](crates/rovar-format/FORMAT.md) · [MIT License](LICENSE)

@@ -25,7 +25,7 @@ fn shape(
     zoom: f32,
     text_system: &gpui::WindowTextSystem,
 ) -> ShapedLine {
-    let mut font = gpui::font(style.family.clone());
+    let mut font = gpui::font(crate::platform::render_font_family(&style.family));
     font.weight = FontWeight(style.weight);
     if style.spacing != 0. {
         font.features = FontFeatures(Arc::new(vec![("liga".into(), 0), ("clig".into(), 0)]));

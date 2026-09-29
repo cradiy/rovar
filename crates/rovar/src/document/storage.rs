@@ -186,7 +186,7 @@ pub(crate) fn save(
     text_system: &Arc<gpui::TextSystem>,
 ) -> Result<()> {
     let document = Document::decode(json)?;
-    if !path.exists() {
+    if !rovar_storage::exists(path) {
         ensure!(
             expected.is_empty(),
             "The document was removed from its save location"
@@ -346,10 +346,10 @@ pub(crate) fn cache_preview(path: &Path, directory: &Path) -> Result<Option<Stri
     }
     let png = reader.read("preview", METADATA_LIMIT)?;
     let name = format!("{}.png", hex::encode(Sha256::digest(&png)));
-    std::fs::create_dir_all(directory)?;
+    rovar_storage::fs::create_dir_all(directory)?;
     let path = directory.join(&name);
-    if !path.exists() {
-        std::fs::write(path, png)?;
+    if !rovar_storage::exists(&path) {
+        rovar_storage::fs::write(path, png)?;
     }
     Ok(Some(name))
 }
@@ -362,14 +362,14 @@ pub(crate) fn save_as(
 ) -> Result<()> {
     let document = Document::decode(json)?;
     let directory = path.parent().context("Invalid save location")?;
-    let temporary = tempfile::Builder::new()
+    let temporary = rovar_storage::tempfile::Builder::new()
         .suffix(".rovar")
         .tempfile_in(directory)?
         .into_temp_path();
     let mut writer = Writer::create(&temporary)?;
     write_document(&mut writer, &document, sources, text_system)?;
     drop(writer);
-    std::fs::rename(&temporary, path)?;
+    rovar_storage::fs::rename(&temporary, path)?;
     rovar_format::sync_parent(path)?;
     Ok(())
 }

@@ -53,8 +53,8 @@ impl Studio {
         let mut unique = std::collections::BTreeSet::new();
         session.open.retain(|path| unique.insert(path.clone()));
         let result = (|| -> anyhow::Result<()> {
-            std::fs::create_dir_all(&self.directory)?;
-            let mut temp = tempfile::NamedTempFile::new_in(&self.directory)?;
+            rovar_storage::fs::create_dir_all(&self.directory)?;
+            let mut temp = rovar_storage::tempfile::NamedTempFile::new_in(&self.directory)?;
             serde_json::to_writer(&mut temp, &*session)?;
             temp.as_file().sync_all()?;
             temp.persist(self.directory.join("session.json"))?;
@@ -143,7 +143,7 @@ impl Studio {
                 .background_executor()
                 .spawn(async move {
                     if let Some(parent) = output.parent() {
-                        std::fs::create_dir_all(parent)?;
+                        rovar_storage::fs::create_dir_all(parent)?;
                     }
                     document::save(&output, &bytes, &assets, &expected, &text_system)?;
                     Ok::<_, anyhow::Error>(
@@ -193,12 +193,15 @@ impl Studio {
     }
 
     pub(super) fn open_dialog(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let dialog = cx.prompt_for_paths(gpui::PathPromptOptions {
-            files: true,
-            directories: false,
-            multiple: true,
-            prompt: Some(t("open-document").into()),
-        });
+        let dialog = crate::platform::prompt_for_paths(
+            cx,
+            gpui::PathPromptOptions {
+                files: true,
+                directories: false,
+                multiple: true,
+                prompt: Some(t("open-document").into()),
+            },
+        );
         cx.spawn_in(window, async move |this, cx| {
             let result = dialog.await;
             let _ = this.update_in(cx, |this, window, cx| match result {
@@ -218,7 +221,7 @@ impl Studio {
     }
 
     pub(super) fn open_path(&mut self, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
-        let path = std::fs::canonicalize(&path).unwrap_or(path);
+        let path = rovar_storage::fs::canonicalize(&path).unwrap_or(path);
         self.restore_recent(&path, cx);
         for other in cx
             .windows()
@@ -468,9 +471,9 @@ impl Studio {
 }
 
 pub(super) fn is_internal(directory: &std::path::Path, path: &std::path::Path) -> bool {
-    let path = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let path = rovar_storage::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
     let root = directory.join("documents");
-    let root = std::fs::canonicalize(&root).unwrap_or(root);
+    let root = rovar_storage::fs::canonicalize(&root).unwrap_or(root);
     path.parent() == Some(root.as_path())
         && path
             .file_stem()
@@ -480,7 +483,7 @@ pub(super) fn is_internal(directory: &std::path::Path, path: &std::path::Path) -
 }
 
 pub(super) fn recover_documents(directory: PathBuf) -> Vec<Recent> {
-    let Ok(entries) = std::fs::read_dir(directory.join("documents")) else {
+    let Ok(entries) = rovar_storage::fs::read_dir(directory.join("documents")) else {
         return Vec::new();
     };
     entries

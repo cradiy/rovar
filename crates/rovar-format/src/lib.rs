@@ -9,14 +9,16 @@ mod writer;
 
 use anyhow::Result;
 pub use reader::{Block, BlockHandle, BlockReader, Reader};
-use std::{fs::File, path::Path};
+#[cfg(unix)]
+use std::fs::File;
+use std::path::Path;
 pub use version::{VERSION, Version};
 pub use writer::Writer;
 
 /// Sync a published directory entry as well as the file's contents on Unix.
-pub fn sync_parent(path: &Path) -> Result<()> {
+pub fn sync_parent(_path: &Path) -> Result<()> {
     #[cfg(unix)]
-    File::open(path.parent().unwrap_or(Path::new(".")))?.sync_all()?;
+    File::open(_path.parent().unwrap_or(Path::new(".")))?.sync_all()?;
     Ok(())
 }
 
@@ -26,7 +28,7 @@ pub fn compact(source: &Path, target: &Path) -> Result<()> {
     let mut writer = Writer::open(source)?;
     let snapshot = writer.snapshot();
     let directory = target.parent().unwrap_or(Path::new("."));
-    let temporary = tempfile::NamedTempFile::new_in(directory)?.into_temp_path();
+    let temporary = rovar_storage::tempfile::NamedTempFile::new_in(directory)?.into_temp_path();
     let mut output = Writer::create(&temporary)?;
     for (key, block) in snapshot.entries() {
         output.put(
@@ -39,7 +41,7 @@ pub fn compact(source: &Path, target: &Path) -> Result<()> {
     output.commit()?;
     drop(output);
     // Keep the source write lock through replacement.
-    std::fs::rename(&temporary, target)?;
+    rovar_storage::fs::rename(&temporary, target)?;
     sync_parent(target)?;
     writer.finish();
     Ok(())

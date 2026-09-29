@@ -2,7 +2,7 @@ use super::*;
 use crate::i18n::t;
 use crate::media::{MediaAsset, MediaContent};
 use gpui::AnimationExt as _;
-use gpui_media::{MediaBackend, MediaOutputSink, MediaPlaybackRequest, MediaSource};
+use gpui_media::{MediaBackend, MediaOutputSink, MediaPlaybackRequest};
 use std::{sync::Arc, time::Duration};
 #[cfg(test)]
 mod tests;
@@ -60,10 +60,7 @@ impl Workspace {
             let hash = asset.hash.clone();
             let page = self.pages.active.clone();
             cx.spawn(async move |this, cx| {
-                let result = cx
-                    .background_executor()
-                    .spawn(async move { asset.ensure_decoded() })
-                    .await;
+                let result = asset.ensure_decoded_async(cx.background_executor()).await;
                 let _ = this.update(cx, |this, cx| {
                     this.media_decoding.remove(&hash);
                     if let Err(error) = result
@@ -99,12 +96,15 @@ impl Workspace {
         let view = self.view;
         let size = self.bounds.get().size.map(f32::from);
         let insets = self.canvas_insets();
-        let dialog = cx.prompt_for_paths(gpui::PathPromptOptions {
-            files: true,
-            directories: false,
-            multiple: false,
-            prompt: Some(t("media-choose").into()),
-        });
+        let dialog = crate::platform::prompt_for_paths(
+            cx,
+            gpui::PathPromptOptions {
+                files: true,
+                directories: false,
+                multiple: false,
+                prompt: Some(t("media-choose").into()),
+            },
+        );
         cx.spawn_in(window, async move |this, cx| {
             let path = match dialog.await {
                 Ok(Ok(Some(paths))) => paths.into_iter().next(),
@@ -139,10 +139,7 @@ impl Workspace {
             if !current {
                 return;
             }
-            let loaded = cx
-                .background_executor()
-                .spawn(async move { MediaAsset::load(path) })
-                .await;
+            let loaded = MediaAsset::load_async(path, cx.background_executor()).await;
             let _ = this.update_in(cx, |this, window, cx| {
                 if this.media_request != request {
                     return;
@@ -464,17 +461,22 @@ impl Workspace {
                 .background_executor()
                 .spawn(async move {
                     let (sink, output) = MediaOutputSink::channel();
-                    let mut playback = gpui_media_backend::SystemBackend.open_playback(
+                    let playback = gpui_media_backend::SystemBackend.open_playback(
                         MediaPlaybackRequest {
-                            source: MediaSource::from_path(&*asset.source.cached_path()?)?,
+                            source: asset.source.media_source()?,
                             output_capabilities: None,
                         },
                         sink,
                     )?;
                     // Portable frames also work inside the editor's rotated offscreen surfaces.
-                    playback.set_frame_transport_preference(
-                        gpui_media::FrameTransportPreference::CpuOnly,
-                    )?;
+                    #[cfg(not(target_family = "wasm"))]
+                    let playback = {
+                        let mut playback = playback;
+                        playback.set_frame_transport_preference(
+                            gpui_media::FrameTransportPreference::CpuOnly,
+                        )?;
+                        playback
+                    };
                     Ok::<_, anyhow::Error>((playback, output))
                 })
                 .await;

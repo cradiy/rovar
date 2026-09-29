@@ -29,12 +29,7 @@ use gpui::{
     prelude::*, px, rgb,
 };
 use serde::{Deserialize, Serialize};
-use std::{
-    cell::RefCell,
-    path::PathBuf,
-    rc::Rc,
-    time::{Duration, SystemTime, UNIX_EPOCH},
-};
+use std::{cell::RefCell, path::PathBuf, rc::Rc};
 use uic::{
     assets::LucideIcons,
     components::{
@@ -42,6 +37,7 @@ use uic::{
         input::{InputEvent, TextInput},
     },
 };
+use web_time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[derive(Clone, Serialize, Deserialize)]
 struct Recent {
@@ -120,7 +116,7 @@ pub(crate) struct Studio {
 impl Studio {
     pub(crate) fn new(directory: PathBuf, window: &mut Window, cx: &mut Context<Self>) -> Self {
         window.set_window_title("Rovar");
-        let directory = std::fs::canonicalize(&directory).unwrap_or(directory);
+        let directory = rovar_storage::fs::canonicalize(&directory).unwrap_or(directory);
         let library = crate::component_library::Library::open(&directory, cx);
         let library_subscription = cx.observe_in(&library, window, |this, _, window, cx| {
             if this.closing {
@@ -129,7 +125,7 @@ impl Studio {
             cx.notify();
         });
         let session_path = directory.join("session.json");
-        let (mut session, error) = match std::fs::read(&session_path) {
+        let (mut session, error) = match rovar_storage::fs::read(&session_path) {
             Ok(bytes) => match serde_json::from_slice::<Session>(&bytes) {
                 Ok(session) => (session, None),
                 Err(error) => (Session::default(), Some(error.to_string())),
@@ -174,7 +170,7 @@ impl Studio {
             let _ = this.update_in(cx, |this, _, cx| {
                 let mut changed = false;
                 for mut file in files {
-                    if !file.path.exists() {
+                    if !rovar_storage::exists(&file.path) {
                         continue;
                     }
                     let known = {
@@ -392,6 +388,13 @@ fn now() -> u64 {
 
 impl Render for Studio {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        #[cfg(target_family = "wasm")]
+        crate::web::set_unsaved(self.tabs.iter().any(|tab| {
+            tab.saving
+                || tab.editor.as_ref().is_some_and(|editor| {
+                    tab.saved_revision != Some(editor.read(cx).document_revision())
+                })
+        }));
         div()
             .size_full()
             .relative()

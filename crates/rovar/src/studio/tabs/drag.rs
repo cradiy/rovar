@@ -221,6 +221,9 @@ impl Studio {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if cfg!(target_family = "wasm") {
+            return;
+        }
         let width = self.tab_width(f32::from(window.viewport_size().width), self.tabs.len() + 1);
         let index = self.strip.snap_index.unwrap_or_else(|| {
             insertion_index(

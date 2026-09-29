@@ -5,6 +5,9 @@ use std::{
 use uic::desktop::TitleBarMode;
 
 pub(crate) fn path() -> Option<PathBuf> {
+    #[cfg(target_family = "wasm")]
+    return Some("/workspace/settings.json".into());
+    #[cfg(not(target_family = "wasm"))]
     std::env::var_os("ROVAR_CONFIG")
         .map(PathBuf::from)
         .or_else(|| dirs::config_dir().map(|dir| dir.join("rovar/settings.json")))
@@ -14,7 +17,7 @@ pub(crate) fn read(path: Option<&Path>) -> std::io::Result<serde_json::Value> {
     let Some(path) = path else {
         return Ok(serde_json::json!({}));
     };
-    match std::fs::read_to_string(path) {
+    match rovar_storage::fs::read_to_string(path) {
         Ok(source) => {
             let config: serde_json::Value = serde_json::from_str(&source)?;
             if !config.is_object() {
@@ -35,8 +38,8 @@ pub(crate) fn write(path: &Path, config: &serde_json::Value) -> std::io::Result<
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
         .unwrap_or(Path::new("."));
-    std::fs::create_dir_all(directory)?;
-    let mut file = tempfile::NamedTempFile::new_in(directory)?;
+    rovar_storage::fs::create_dir_all(directory)?;
+    let mut file = rovar_storage::tempfile::NamedTempFile::new_in(directory)?;
     serde_json::to_writer_pretty(&mut file, config)?;
     writeln!(file)?;
     file.as_file().sync_all()?;
@@ -92,7 +95,7 @@ mod tests {
 
     #[test]
     fn ui_font_is_initialized_once_without_replacing_other_settings() {
-        let root = tempfile::tempdir().unwrap();
+        let root = rovar_storage::tempfile::tempdir().unwrap();
         let path = root.path().join("settings.json");
         write(
             &path,
@@ -114,15 +117,15 @@ mod tests {
             let mut config = config.clone();
             config["ui_font"] = invalid;
             write(&path, &config).unwrap();
-            let before = std::fs::read(&path).unwrap();
+            let before = rovar_storage::fs::read(&path).unwrap();
             assert!(ui_font(&path, || panic!("must not overwrite invalid settings")).is_err());
-            assert_eq!(std::fs::read(&path).unwrap(), before);
+            assert_eq!(rovar_storage::fs::read(&path).unwrap(), before);
         }
     }
 
     #[test]
     fn titlebar_is_detected_once_and_preserves_other_preferences() {
-        let root = tempfile::tempdir().unwrap();
+        let root = rovar_storage::tempfile::tempdir().unwrap();
         let path = root.path().join("settings.json");
         write(
             &path,
@@ -150,9 +153,9 @@ mod tests {
         }
         config["titlebar"] = "invalid".into();
         write(&path, &config).unwrap();
-        let before = std::fs::read(&path).unwrap();
+        let before = rovar_storage::fs::read(&path).unwrap();
         assert!(titlebar(&path, || TitleBarMode::Compact).is_err());
-        assert_eq!(std::fs::read(&path).unwrap(), before);
+        assert_eq!(rovar_storage::fs::read(&path).unwrap(), before);
         let first = root.path().join("fresh/settings.json");
         titlebar(&first, || TitleBarMode::Compact).unwrap();
         assert_eq!(read(Some(&first)).unwrap()["titlebar"], "compact");

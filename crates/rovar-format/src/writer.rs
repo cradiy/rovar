@@ -3,10 +3,10 @@ use crate::{
     layout::{self, Block, Commit, FORMAT_TAG, HEADER, MAGIC, MAX_INDEX, SLOT},
 };
 use anyhow::{Result, ensure};
+use rovar_storage::fs::{File, OpenOptions};
 use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fs::{File, OpenOptions},
     io::{Read, Write},
     path::Path,
     sync::{Arc, Mutex},
@@ -57,7 +57,7 @@ impl Writer {
         {
             use std::os::unix::fs::MetadataExt;
             let held = file.metadata()?;
-            let live = std::fs::metadata(path.as_ref())?;
+            let live = rovar_storage::fs::metadata(path.as_ref())?;
             ensure!(
                 (held.dev(), held.ino()) == (live.dev(), live.ino()),
                 "Container was replaced while opening"
@@ -179,7 +179,7 @@ impl Writer {
             return Ok(());
         }
         let directory = path.parent().unwrap_or(Path::new("."));
-        let temporary = tempfile::NamedTempFile::new_in(directory)?.into_temp_path();
+        let temporary = rovar_storage::tempfile::NamedTempFile::new_in(directory)?.into_temp_path();
         let mut output = Self::create(&temporary)?;
         for (key, block) in self.committed.entries() {
             output.put(
@@ -191,7 +191,7 @@ impl Writer {
         }
         output.commit()?;
         drop(output);
-        std::fs::rename(&temporary, path)?;
+        rovar_storage::fs::rename(&temporary, path)?;
         crate::sync_parent(path)?;
         self.finish();
         Ok(())
@@ -207,8 +207,9 @@ impl Drop for Writer {
 }
 
 fn write_at(file: &File, bytes: &[u8], offset: u64) -> std::io::Result<()> {
-    #[cfg(unix)]
+    #[cfg(any(unix, target_family = "wasm"))]
     {
+        #[cfg(unix)]
         use std::os::unix::fs::FileExt;
         file.write_all_at(bytes, offset)
     }

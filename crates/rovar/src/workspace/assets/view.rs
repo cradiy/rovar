@@ -34,9 +34,11 @@ pub(super) fn thumbnail(entry: &Entry, height: f32) -> impl IntoElement {
                     )
             } else {
                 match &entry.preview {
-                    Some(path) => {
-                        el.child(img(path.clone()).size_full().object_fit(ObjectFit::Contain))
-                    }
+                    Some(path) => el.child(
+                        img(crate::platform::preview_image(path.clone()))
+                            .size_full()
+                            .object_fit(ObjectFit::Contain),
+                    ),
                     None => el.child(icon(LucideIcons::Component, 25.).text_color(rgb(ACCENT))),
                 }
             }

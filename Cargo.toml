@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/rovar", "crates/rovar-format"]
+members = ["crates/rovar", "crates/rovar-format", "crates/rovar-storage"]
 
 [profile.dev]
 debug = 0

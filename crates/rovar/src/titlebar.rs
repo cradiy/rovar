@@ -1,4 +1,4 @@
-#[cfg(not(target_os = "windows"))]
+#[cfg(all(not(target_os = "windows"), not(target_family = "wasm")))]
 use gpui::MouseButton;
 use gpui::{
     App, Div, Global, TitlebarOptions, WindowControlArea, WindowOptions, div, point, prelude::*, px,
@@ -41,7 +41,7 @@ impl Chrome {
     }
 
     pub fn controls_width(self) -> f32 {
-        if self.macos || self.mode != TitleBarMode::Compact {
+        if cfg!(target_family = "wasm") || self.macos || self.mode != TitleBarMode::Compact {
             0.
         } else if self.windows {
             138.
@@ -80,7 +80,7 @@ pub(crate) fn init(cx: &mut App) -> std::io::Result<()> {
 
 pub(crate) fn drag_region() -> Div {
     let region = div().window_control_area(WindowControlArea::Drag);
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(all(not(target_os = "windows"), not(target_family = "wasm")))]
     let region = region.on_mouse_down(MouseButton::Left, |event, window, cx| {
         if event.click_count == 2 {
             window.zoom_window();

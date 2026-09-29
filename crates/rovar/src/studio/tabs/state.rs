@@ -1,5 +1,6 @@
 use super::*;
-use std::{collections::BTreeMap, time::Instant};
+use std::collections::BTreeMap;
+use web_time::Instant;
 
 pub(in crate::studio) const BAR_HEIGHT: f32 = 46.;
 pub(super) const TAB_TOP: f32 = 7.;
@@ -225,7 +226,7 @@ impl Render for DragPreview {
                     .bg(rgb(0x121419))
                     .when_some(self.thumbnail.clone(), |el, path| {
                         el.child(
-                            gpui::img(path)
+                            gpui::img(crate::platform::preview_image(path))
                                 .w(px(266.))
                                 .h(px(160.))
                                 .object_fit(gpui::ObjectFit::Contain),

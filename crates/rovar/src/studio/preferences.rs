@@ -504,7 +504,7 @@ mod tests {
     #[gpui::test]
     fn settings_menu_modal_and_nested_popups_keep_keyboard_focus(cx: &mut TestAppContext) {
         cx.update(uic::init);
-        let directory = tempfile::tempdir().unwrap();
+        let directory = rovar_storage::tempfile::tempdir().unwrap();
         let window = cx.open_window(size(px(1280.), px(800.)), |window, cx| {
             Studio::new(directory.path().into(), window, cx)
         });

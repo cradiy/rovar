@@ -123,7 +123,7 @@ impl Workspace {
         let mut clipboard = self.snapshot_selection(cx);
         clipboard.source = Some(cx.entity_id());
         clipboard.source_page = Some(self.pages.active.clone());
-        clipboard.marker = format!("rovar-objects:{:?}", std::time::SystemTime::now());
+        clipboard.marker = format!("rovar-objects:{:?}", web_time::SystemTime::now());
         cx.write_to_clipboard(gpui::ClipboardItem::new_string_with_metadata(
             crate::i18n::count("clipboard-summary", clipboard.roots.len()),
             clipboard.marker.clone(),

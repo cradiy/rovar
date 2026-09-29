@@ -11,6 +11,7 @@ mod i18n;
 mod image_fill;
 mod layer;
 mod media;
+mod platform;
 mod property;
 mod rotation;
 mod scene_render;
@@ -21,6 +22,8 @@ mod studio;
 mod text;
 mod titlebar;
 mod ui_font;
+#[cfg(target_family = "wasm")]
+mod web;
 mod workspace;
 
 use gpui::{AppContext, Bounds, WindowBounds, WindowOptions, px, size};
@@ -42,50 +45,50 @@ fn window_options(cx: &gpui::App) -> WindowOptions {
 }
 
 pub fn run() {
-    gpui_platform::application()
-        .with_assets(assets::Assets)
-        .run(|cx| {
-            uic::init(cx);
-            if let Err(error) = titlebar::init(cx) {
-                eprintln!("Could not initialize titlebar settings: {error}");
-                cx.quit();
-                return;
-            }
-            i18n::init();
-            #[cfg(target_os = "macos")]
-            studio::native_menu::init(cx);
-            if let Err(error) = ui_font::init(cx) {
-                eprintln!("Could not initialize UI font settings: {error}");
-                cx.quit();
-                return;
-            }
-            cx.on_window_closed(|cx, _| {
-                if cx.windows().is_empty() {
-                    cx.quit();
-                }
-            })
-            .detach();
+    #[cfg(target_family = "wasm")]
+    web::start();
+    #[cfg(not(target_family = "wasm"))]
+    run_app();
+}
 
-            let result = cx.open_window(window_options(cx), |window, cx| {
-                cx.new(|cx| {
-                    Studio::new(
-                        std::env::var_os("ROVAR_DATA_DIR")
-                            .map(std::path::PathBuf::from)
-                            .unwrap_or_else(|| {
-                                dirs::data_local_dir()
-                                    .unwrap_or_else(std::env::temp_dir)
-                                    .join("rovar")
-                            }),
-                        window,
-                        cx,
-                    )
-                })
-            });
-            if let Err(error) = result {
-                eprintln!("Could not open Rovar window: {error:#}");
+fn run_app() {
+    #[cfg(not(target_family = "wasm"))]
+    let application = gpui_platform::application();
+    #[cfg(target_family = "wasm")]
+    let application =
+        gpui::Application::with_platform(std::rc::Rc::new(gpui_web::WebPlatform::new(false)));
+    application.with_assets(assets::Assets).run(|cx| {
+        uic::init(cx);
+        #[cfg(target_family = "wasm")]
+        web::load_fonts(cx);
+        if let Err(error) = titlebar::init(cx) {
+            eprintln!("Could not initialize titlebar settings: {error}");
+            cx.quit();
+            return;
+        }
+        i18n::init();
+        #[cfg(target_os = "macos")]
+        studio::native_menu::init(cx);
+        if let Err(error) = ui_font::init(cx) {
+            eprintln!("Could not initialize UI font settings: {error}");
+            cx.quit();
+            return;
+        }
+        cx.on_window_closed(|cx, _| {
+            if cx.windows().is_empty() {
                 cx.quit();
-            } else {
-                cx.activate(true);
             }
+        })
+        .detach();
+
+        let result = cx.open_window(window_options(cx), |window, cx| {
+            cx.new(|cx| Studio::new(platform::workspace_directory(), window, cx))
         });
+        if let Err(error) = result {
+            eprintln!("Could not open Rovar window: {error:#}");
+            cx.quit();
+        } else {
+            cx.activate(true);
+        }
+    });
 }

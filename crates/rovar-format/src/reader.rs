@@ -1,10 +1,10 @@
 pub use crate::layout::Block;
 use crate::layout::{self, Commit};
 use anyhow::{Context, Result, ensure};
+use rovar_storage::fs::File;
 use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeMap,
-    fs::File,
     io::{self, Read, Seek, SeekFrom},
     path::Path,
     sync::{Arc, Mutex},
@@ -122,8 +122,9 @@ impl Read for BlockReader {
             .file
             .lock()
             .map_err(|_| io::Error::other("Poisoned file lock"))?;
-        #[cfg(unix)]
+        #[cfg(any(unix, target_family = "wasm"))]
         let count = {
+            #[cfg(unix)]
             use std::os::unix::fs::FileExt;
             file.read_at(
                 &mut buffer[..length],

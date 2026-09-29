@@ -1,0 +1,11 @@
+[package]
+name = "rovar-storage"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[dependencies]
+web-time = "1"
+
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+tempfile = "3"

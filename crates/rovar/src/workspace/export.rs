@@ -236,39 +236,43 @@ impl Workspace {
         self.export
             .format_menu
             .update(cx, |menu, cx| menu.close(window, cx));
-        let directory = dirs::document_dir().unwrap_or_else(std::env::temp_dir);
-        let file_dialog = (!batch).then(|| cx.prompt_for_new_path(&directory, Some(&filename)));
+        let directory = crate::platform::export_directory();
+        let file_dialog =
+            (!batch).then(|| crate::platform::prompt_for_new_path(cx, &directory, Some(&filename)));
         let folder_dialog = batch.then(|| {
-            cx.prompt_for_paths(gpui::PathPromptOptions {
-                files: false,
-                directories: true,
-                multiple: false,
-                prompt: Some(t("export-folder").into()),
-            })
+            crate::platform::prompt_for_paths(
+                cx,
+                gpui::PathPromptOptions {
+                    files: false,
+                    directories: true,
+                    multiple: false,
+                    prompt: Some(t("export-folder").into()),
+                },
+            )
         });
         cx.spawn_in(window, async move |this, cx| {
             let result: Result<Option<std::path::PathBuf>> = if let Some(dialog) = file_dialog {
-                dialog
-                    .await
-                    .map_err(anyhow::Error::from)
-                    .and_then(std::convert::identity)
+                dialog.await.and_then(std::convert::identity)
             } else {
-                folder_dialog
-                    .unwrap()
-                    .await
-                    .map_err(anyhow::Error::from)
-                    .and_then(|result| {
-                        result.map(|paths| paths.and_then(|paths| paths.into_iter().next()))
-                    })
+                folder_dialog.unwrap().await.and_then(|result| {
+                    result.map(|paths| paths.and_then(|paths| paths.into_iter().next()))
+                })
             };
             let result = match result {
                 Ok(Some(mut path)) => {
                     if !batch && path.extension().is_none() {
                         path.set_extension(&extension);
                     }
-                    cx.background_executor().spawn(async move {
-                        component_export::write(jobs, path, format, scale, batch)
-                    }).await.map(Some)
+                    cx.background_executor()
+                        .spawn(async move {
+                            let paths = component_export::write(jobs, path, format, scale, batch)?;
+                            for path in &paths {
+                                crate::platform::download(path)?;
+                            }
+                            Ok::<_, anyhow::Error>(paths)
+                        })
+                        .await
+                        .map(Some)
                 }
                 Ok(None) => Ok(None),
                 Err(error) => Err(error),

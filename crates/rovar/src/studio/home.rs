@@ -349,7 +349,7 @@ impl Studio {
             .preview
             .as_ref()
             .map(|name| self.directory.join("previews").join(name))
-            .filter(|path| path.exists());
+            .filter(|path| rovar_storage::exists(path));
         div()
             .id(("recent-file", index))
             .debug_selector(move || format!("recent-file-{index}"))
@@ -394,7 +394,7 @@ impl Studio {
                                 .items_center()
                                 .justify_center()
                                 .child(
-                                    gpui::img(path)
+                                    gpui::img(crate::platform::preview_image(path))
                                         .w(px(preview_width))
                                         .h(px(preview_width * 336. / 560.))
                                         .flex_shrink_0()

@@ -10,8 +10,12 @@ impl Studio {
             return;
         }
         let token = tab.token;
-        let directory = dirs::document_dir().unwrap_or_else(std::env::temp_dir);
-        let dialog = cx.prompt_for_new_path(&directory, Some(&format!("{}.rovar", tab.file.title)));
+        let directory = crate::platform::export_directory();
+        let dialog = crate::platform::prompt_for_new_path(
+            cx,
+            &directory,
+            Some(&format!("{}.rovar", tab.file.title)),
+        );
         cx.spawn_in(window, async move |this, cx| {
             let result = dialog.await;
             let _ = this.update_in(cx, |this, window, cx| match result {
@@ -38,14 +42,14 @@ impl Studio {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let path = std::fs::canonicalize(&path).unwrap_or_else(|_| {
+        let path = rovar_storage::fs::canonicalize(&path).unwrap_or_else(|_| {
             path.parent()
-                .and_then(|parent| std::fs::canonicalize(parent).ok())
+                .and_then(|parent| rovar_storage::fs::canonicalize(parent).ok())
                 .zip(path.file_name())
                 .map_or_else(|| path.clone(), |(parent, name)| parent.join(name))
         });
-        let root =
-            std::fs::canonicalize(&self.directory).unwrap_or_else(|_| self.directory.clone());
+        let root = rovar_storage::fs::canonicalize(&self.directory)
+            .unwrap_or_else(|_| self.directory.clone());
         if path.starts_with(&root) || files::is_internal(&self.directory, &path) {
             self.error = Some(t("export-outside-workspace").into());
             cx.notify();
@@ -77,7 +81,10 @@ impl Studio {
         cx.spawn_in(window, async move |this, cx| {
             let result = cx
                 .background_executor()
-                .spawn(async move { document::save_as(&path, &json, &assets, &text_system) })
+                .spawn(async move {
+                    document::save_as(&path, &json, &assets, &text_system)?;
+                    crate::platform::download(&path)
+                })
                 .await;
             let _ = this.update_in(cx, |this, window, cx| {
                 let Some(tab) = this.tabs.iter_mut().find(|tab| tab.token == token) else {

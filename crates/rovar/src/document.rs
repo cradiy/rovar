@@ -204,7 +204,7 @@ pub(crate) fn import(
             size: [asset.width, asset.height],
         })
         .collect();
-    std::fs::create_dir_all(directory)?;
+    rovar_storage::fs::create_dir_all(directory)?;
     let path = directory.join(format!("{}.rovar", document.id));
     save_as(&path, &loaded.json, &assets, text_system)?;
     Ok((load(&path)?, path))

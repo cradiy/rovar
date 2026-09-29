@@ -9,7 +9,7 @@ use uic::components::{
 
 // These markers affect the recent list only; the catalog still owns all documents.
 pub(super) fn removed_recent(directory: &Path) -> BTreeSet<PathBuf> {
-    std::fs::read_dir(directory.join("removed-recents"))
+    rovar_storage::fs::read_dir(directory.join("removed-recents"))
         .into_iter()
         .flatten()
         .flatten()
@@ -53,7 +53,7 @@ impl Studio {
         if !self.session.borrow().removed_recent.contains(path) {
             return;
         }
-        match std::fs::remove_file(self.recent_marker(path)) {
+        match rovar_storage::fs::remove_file(self.recent_marker(path)) {
             Ok(()) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             Err(error) => {
@@ -71,8 +71,8 @@ impl Studio {
             return;
         }
         let marker = self.recent_marker(path);
-        let result = std::fs::create_dir_all(marker.parent().unwrap())
-            .and_then(|_| std::fs::write(marker, []));
+        let result = rovar_storage::fs::create_dir_all(marker.parent().unwrap())
+            .and_then(|_| rovar_storage::fs::write(marker, []));
         match result {
             Ok(()) => {
                 self.session
@@ -131,7 +131,7 @@ impl Studio {
             cx.notify();
             return;
         }
-        match std::fs::remove_file(path) {
+        match rovar_storage::fs::remove_file(path) {
             Ok(()) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             Err(error) => {

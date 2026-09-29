@@ -198,7 +198,9 @@ impl Studio {
             gpui::DragEnd::Dropped { .. } => payload.transaction.borrow().owner.is_some(),
             gpui::DragEnd::Unaccepted => Self::open_detached_tab(&payload, None, cx),
             gpui::DragEnd::Cancelled if native => Self::open_detached_tab(&payload, None, cx),
-            gpui::DragEnd::Cancelled => Self::restore_drag_source(&payload, cx),
+            gpui::DragEnd::Cancelled
+            | gpui::DragEnd::Failed(_)
+            | gpui::DragEnd::ExternalDropped { .. } => Self::restore_drag_source(&payload, cx),
         };
         if !finished {
             Self::restore_drag_source(&payload, cx);

@@ -26,7 +26,7 @@ impl Catalogs {
         })
         .collect();
         for directory in directories {
-            let entries = match std::fs::read_dir(directory) {
+            let entries = match rovar_storage::fs::read_dir(directory) {
                 Ok(entries) => entries,
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
                 Err(error) => {
@@ -52,7 +52,7 @@ impl Catalogs {
                 else {
                     continue;
                 };
-                match std::fs::read_to_string(&path)
+                match rovar_storage::fs::read_to_string(&path)
                     .map_err(|e| e.to_string())
                     .and_then(|source| {
                         FluentResource::try_new(source).map_err(|(_, errors)| format!("{errors:?}"))

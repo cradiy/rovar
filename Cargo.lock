@@ -609,15 +609,6 @@ dependencies = [
 
 [[package]]
 name = "bit-set"
-version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "34ddef2995421ab6a5c779542c81ee77c115206f4ad9d5a8e05f4ff49716a3dd"
-dependencies = [
- "bit-vec 0.9.1",
-]
-
-[[package]]
-name = "bit-set"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09ec2f926cc3060f09db9ebc5b52823d85268d24bb917e472c0c4bea35780a7d"
@@ -1011,7 +1002,7 @@ dependencies = [
 [[package]]
 name = "collections"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=b73bb448ab81c4027a58f8e5bb23335a3e5b623a#b73bb448ab81c4027a58f8e5bb23335a3e5b623a"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=299612af59e49407bf19ffbf3d0f2ecd35ed1484#299612af59e49407bf19ffbf3d0f2ecd35ed1484"
 dependencies = [
  "gpui_util",
  "indexmap",
@@ -1397,7 +1388,7 @@ dependencies = [
 [[package]]
 name = "derive_refineable"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=b73bb448ab81c4027a58f8e5bb23335a3e5b623a#b73bb448ab81c4027a58f8e5bb23335a3e5b623a"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=299612af59e49407bf19ffbf3d0f2ecd35ed1484#299612af59e49407bf19ffbf3d0f2ecd35ed1484"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2276,7 +2267,7 @@ dependencies = [
 [[package]]
 name = "gpui"
 version = "0.2.2"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=b73bb448ab81c4027a58f8e5bb23335a3e5b623a#b73bb448ab81c4027a58f8e5bb23335a3e5b623a"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=299612af59e49407bf19ffbf3d0f2ecd35ed1484#299612af59e49407bf19ffbf3d0f2ecd35ed1484"
 dependencies = [
  "accesskit",
  "anyhow",
@@ -2389,7 +2380,7 @@ dependencies = [
 [[package]]
 name = "gpui_effects"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=b73bb448ab81c4027a58f8e5bb23335a3e5b623a#b73bb448ab81c4027a58f8e5bb23335a3e5b623a"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=299612af59e49407bf19ffbf3d0f2ecd35ed1484#299612af59e49407bf19ffbf3d0f2ecd35ed1484"
 dependencies = [
  "accesskit",
  "anyhow",
@@ -2403,7 +2394,7 @@ dependencies = [
 [[package]]
 name = "gpui_linux"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=b73bb448ab81c4027a58f8e5bb23335a3e5b623a#b73bb448ab81c4027a58f8e5bb23335a3e5b623a"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=299612af59e49407bf19ffbf3d0f2ecd35ed1484#299612af59e49407bf19ffbf3d0f2ecd35ed1484"
 dependencies = [
  "accesskit",
  "accesskit_unix",
@@ -2455,7 +2446,7 @@ dependencies = [
 [[package]]
 name = "gpui_macos"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=b73bb448ab81c4027a58f8e5bb23335a3e5b623a#b73bb448ab81c4027a58f8e5bb23335a3e5b623a"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=299612af59e49407bf19ffbf3d0f2ecd35ed1484#299612af59e49407bf19ffbf3d0f2ecd35ed1484"
 dependencies = [
  "accesskit",
  "accesskit_macos",
@@ -2486,7 +2477,7 @@ dependencies = [
  "mach2",
  "media",
  "metal",
- "naga 29.0.4",
+ "naga",
  "objc",
  "objc2 0.6.4",
  "objc2-app-kit 0.3.2",
@@ -2504,7 +2495,7 @@ dependencies = [
 [[package]]
 name = "gpui_macros"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=b73bb448ab81c4027a58f8e5bb23335a3e5b623a#b73bb448ab81c4027a58f8e5bb23335a3e5b623a"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=299612af59e49407bf19ffbf3d0f2ecd35ed1484#299612af59e49407bf19ffbf3d0f2ecd35ed1484"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -2515,29 +2506,38 @@ dependencies = [
 [[package]]
 name = "gpui_media"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=b73bb448ab81c4027a58f8e5bb23335a3e5b623a#b73bb448ab81c4027a58f8e5bb23335a3e5b623a"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=299612af59e49407bf19ffbf3d0f2ecd35ed1484#299612af59e49407bf19ffbf3d0f2ecd35ed1484"
 dependencies = [
  "async-channel",
  "gpui",
  "gpui_media_core",
+ "js-sys",
  "log",
  "url",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
 ]
 
 [[package]]
 name = "gpui_media_backend"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=b73bb448ab81c4027a58f8e5bb23335a3e5b623a#b73bb448ab81c4027a58f8e5bb23335a3e5b623a"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=299612af59e49407bf19ffbf3d0f2ecd35ed1484#299612af59e49407bf19ffbf3d0f2ecd35ed1484"
 dependencies = [
  "core-foundation 0.10.0",
  "core-video",
  "gpui_media_core",
+ "gpui_util",
  "gstreamer",
  "gstreamer-allocators",
  "gstreamer-app",
  "gstreamer-video",
+ "js-sys",
  "log",
  "url",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
  "windows 0.61.3",
  "windows-core 0.61.2",
 ]
@@ -2545,18 +2545,20 @@ dependencies = [
 [[package]]
 name = "gpui_media_core"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=b73bb448ab81c4027a58f8e5bb23335a3e5b623a#b73bb448ab81c4027a58f8e5bb23335a3e5b623a"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=299612af59e49407bf19ffbf3d0f2ecd35ed1484#299612af59e49407bf19ffbf3d0f2ecd35ed1484"
 dependencies = [
  "async-channel",
  "core-video",
+ "gpui_util",
  "log",
  "url",
+ "wasm-bindgen-futures",
 ]
 
 [[package]]
 name = "gpui_platform"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=b73bb448ab81c4027a58f8e5bb23335a3e5b623a#b73bb448ab81c4027a58f8e5bb23335a3e5b623a"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=299612af59e49407bf19ffbf3d0f2ecd35ed1484#299612af59e49407bf19ffbf3d0f2ecd35ed1484"
 dependencies = [
  "console_error_panic_hook",
  "gpui",
@@ -2569,7 +2571,7 @@ dependencies = [
 [[package]]
 name = "gpui_shared_string"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=b73bb448ab81c4027a58f8e5bb23335a3e5b623a#b73bb448ab81c4027a58f8e5bb23335a3e5b623a"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=299612af59e49407bf19ffbf3d0f2ecd35ed1484#299612af59e49407bf19ffbf3d0f2ecd35ed1484"
 dependencies = [
  "schemars",
  "serde",
@@ -2579,17 +2581,21 @@ dependencies = [
 [[package]]
 name = "gpui_util"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=b73bb448ab81c4027a58f8e5bb23335a3e5b623a#b73bb448ab81c4027a58f8e5bb23335a3e5b623a"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=299612af59e49407bf19ffbf3d0f2ecd35ed1484#299612af59e49407bf19ffbf3d0f2ecd35ed1484"
 dependencies = [
  "anyhow",
+ "async-channel",
  "log",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
  "which",
 ]
 
 [[package]]
 name = "gpui_wayland_source"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=b73bb448ab81c4027a58f8e5bb23335a3e5b623a#b73bb448ab81c4027a58f8e5bb23335a3e5b623a"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=299612af59e49407bf19ffbf3d0f2ecd35ed1484#299612af59e49407bf19ffbf3d0f2ecd35ed1484"
 dependencies = [
  "calloop",
  "wayland-client",
@@ -2598,12 +2604,12 @@ dependencies = [
 [[package]]
 name = "gpui_web"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=b73bb448ab81c4027a58f8e5bb23335a3e5b623a#b73bb448ab81c4027a58f8e5bb23335a3e5b623a"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=299612af59e49407bf19ffbf3d0f2ecd35ed1484#299612af59e49407bf19ffbf3d0f2ecd35ed1484"
 dependencies = [
  "anyhow",
- "console_error_panic_hook",
  "futures",
  "gpui",
+ "gpui_util",
  "gpui_wgpu",
  "http_client",
  "js-sys",
@@ -2622,7 +2628,7 @@ dependencies = [
 [[package]]
 name = "gpui_wgpu"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=b73bb448ab81c4027a58f8e5bb23335a3e5b623a#b73bb448ab81c4027a58f8e5bb23335a3e5b623a"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=299612af59e49407bf19ffbf3d0f2ecd35ed1484#299612af59e49407bf19ffbf3d0f2ecd35ed1484"
 dependencies = [
  "anyhow",
  "ash",
@@ -2641,6 +2647,7 @@ dependencies = [
  "js-sys",
  "log",
  "metal",
+ "naga",
  "objc2 0.6.4",
  "objc2-metal 0.3.2",
  "parking_lot",
@@ -2660,7 +2667,7 @@ dependencies = [
 [[package]]
 name = "gpui_windows"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=b73bb448ab81c4027a58f8e5bb23335a3e5b623a#b73bb448ab81c4027a58f8e5bb23335a3e5b623a"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=299612af59e49407bf19ffbf3d0f2ecd35ed1484#299612af59e49407bf19ffbf3d0f2ecd35ed1484"
 dependencies = [
  "accesskit",
  "accesskit_windows",
@@ -2675,7 +2682,7 @@ dependencies = [
  "image",
  "itertools 0.14.0",
  "log",
- "naga 29.0.4",
+ "naga",
  "parking_lot",
  "rand 0.9.5",
  "raw-window-handle",
@@ -2948,12 +2955,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
-name = "hexf-parse"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dfa686283ad6dd069f105e5ab091b04c62850d3e4cf5d67debad1933f55023df"
-
-[[package]]
 name = "hkdf"
 version = "0.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3003,7 +3004,7 @@ dependencies = [
 [[package]]
 name = "http_client"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=b73bb448ab81c4027a58f8e5bb23335a3e5b623a#b73bb448ab81c4027a58f8e5bb23335a3e5b623a"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=299612af59e49407bf19ffbf3d0f2ecd35ed1484#299612af59e49407bf19ffbf3d0f2ecd35ed1484"
 dependencies = [
  "anyhow",
  "bytes",
@@ -3723,7 +3724,7 @@ dependencies = [
 [[package]]
 name = "media"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=b73bb448ab81c4027a58f8e5bb23335a3e5b623a#b73bb448ab81c4027a58f8e5bb23335a3e5b623a"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=299612af59e49407bf19ffbf3d0f2ecd35ed1484#299612af59e49407bf19ffbf3d0f2ecd35ed1484"
 dependencies = [
  "anyhow",
  "bindgen 0.71.1",
@@ -3858,31 +3859,6 @@ name = "multiversion_no_op"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "743fb55ba31b18fb1ecef6bdc9aa2743314978ac084044301a7eee33fb99a20d"
-
-[[package]]
-name = "naga"
-version = "29.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b2bf919621e7975acb27d881bae2fb993e0d45c8e0446e85e6272971e00dc8df"
-dependencies = [
- "arrayvec",
- "bit-set 0.9.1",
- "bitflags 2.13.2",
- "cfg-if",
- "cfg_aliases",
- "codespan-reporting",
- "half",
- "hashbrown 0.16.1",
- "hexf-parse",
- "indexmap",
- "libm",
- "log",
- "num-traits",
- "once_cell",
- "rustc-hash 1.1.0",
- "thiserror 2.0.20",
- "unicode-ident",
-]
 
 [[package]]
 name = "naga"
@@ -5175,7 +5151,7 @@ dependencies = [
 [[package]]
 name = "refineable"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=b73bb448ab81c4027a58f8e5bb23335a3e5b623a#b73bb448ab81c4027a58f8e5bb23335a3e5b623a"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=299612af59e49407bf19ffbf3d0f2ecd35ed1484#299612af59e49407bf19ffbf3d0f2ecd35ed1484"
 dependencies = [
  "derive_refineable",
 ]
@@ -5265,6 +5241,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "base64 0.23.1",
+ "console_error_panic_hook",
  "dirs 7.0.0",
  "fluent-bundle",
  "fluent-langneg 0.14.2",
@@ -5274,10 +5251,14 @@ dependencies = [
  "gpui_media",
  "gpui_media_backend",
  "gpui_platform",
+ "gpui_web",
  "hex",
  "image",
+ "js-sys",
  "resvg 0.48.1",
  "rovar-format",
+ "rovar-storage",
+ "rust-embed",
  "serde",
  "serde_json",
  "sha2 0.11.0",
@@ -5289,6 +5270,10 @@ dependencies = [
  "unicode-linebreak",
  "unicode-segmentation",
  "uuid",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+ "web-time",
  "zed-font-kit 0.14.1-zed (git+https://github.com/cradiy/font-kit?rev=94b0f28166665e8fd2f53ff6d268a14955c82269)",
 ]
 
@@ -5297,10 +5282,19 @@ name = "rovar-format"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "rovar-storage",
  "serde",
  "serde_json",
  "sha2 0.10.9",
  "tempfile",
+]
+
+[[package]]
+name = "rovar-storage"
+version = "0.1.0"
+dependencies = [
+ "tempfile",
+ "web-time",
 ]
 
 [[package]]
@@ -5461,7 +5455,7 @@ dependencies = [
 [[package]]
 name = "scheduler"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=b73bb448ab81c4027a58f8e5bb23335a3e5b623a#b73bb448ab81c4027a58f8e5bb23335a3e5b623a"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=299612af59e49407bf19ffbf3d0f2ecd35ed1484#299612af59e49407bf19ffbf3d0f2ecd35ed1484"
 dependencies = [
  "async-task",
  "backtrace",
@@ -5937,7 +5931,7 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 [[package]]
 name = "sum_tree"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=b73bb448ab81c4027a58f8e5bb23335a3e5b623a#b73bb448ab81c4027a58f8e5bb23335a3e5b623a"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=299612af59e49407bf19ffbf3d0f2ecd35ed1484#299612af59e49407bf19ffbf3d0f2ecd35ed1484"
 dependencies = [
  "heapless",
  "log",
@@ -6491,7 +6485,7 @@ dependencies = [
 [[package]]
 name = "uic"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=b73bb448ab81c4027a58f8e5bb23335a3e5b623a#b73bb448ab81c4027a58f8e5bb23335a3e5b623a"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=299612af59e49407bf19ffbf3d0f2ecd35ed1484#299612af59e49407bf19ffbf3d0f2ecd35ed1484"
 dependencies = [
  "anyhow",
  "chrono",
@@ -6507,7 +6501,7 @@ dependencies = [
 [[package]]
 name = "uic-macros"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=b73bb448ab81c4027a58f8e5bb23335a3e5b623a#b73bb448ab81c4027a58f8e5bb23335a3e5b623a"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=299612af59e49407bf19ffbf3d0f2ecd35ed1484#299612af59e49407bf19ffbf3d0f2ecd35ed1484"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -6687,7 +6681,7 @@ checksum = "b6c140620e7ffbb22c2dee59cafe6084a59b5ffc27a8859a5f0d494b5d52b6be"
 [[package]]
 name = "util_macros"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=b73bb448ab81c4027a58f8e5bb23335a3e5b623a#b73bb448ab81c4027a58f8e5bb23335a3e5b623a"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=299612af59e49407bf19ffbf3d0f2ecd35ed1484#299612af59e49407bf19ffbf3d0f2ecd35ed1484"
 dependencies = [
  "quote",
  "syn 2.0.119",
@@ -7031,7 +7025,7 @@ dependencies = [
  "hashbrown 0.17.1",
  "js-sys",
  "log",
- "naga 30.0.1",
+ "naga",
  "parking_lot",
  "portable-atomic",
  "profiling",
@@ -7062,7 +7056,7 @@ dependencies = [
  "hashbrown 0.17.1",
  "indexmap",
  "log",
- "naga 30.0.1",
+ "naga",
  "naga-types",
  "once_cell",
  "parking_lot",
@@ -7131,7 +7125,7 @@ dependencies = [
  "libc",
  "libloading",
  "log",
- "naga 30.0.1",
+ "naga",
  "naga-types",
  "ndk-sys",
  "objc2 0.6.4",
@@ -7169,7 +7163,7 @@ version = "30.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2f62e73117bb7a62bfd9c5a5841438a823f6566c6442a808ee269d2d055c081"
 dependencies = [
- "naga 30.0.1",
+ "naga",
  "wgpu-types",
 ]
 

@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rovar</title>
+  <link data-trunk rel="rust" href="../crates/rovar/Cargo.toml" data-bin="rovar" data-wasm-opt="0">
+  <link data-trunk rel="copy-dir" href="fonts">
+  <style>
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #131418; }
+    #storage-status { position: fixed; z-index: 100; right: 16px; bottom: 16px; max-width: 460px; padding: 10px 14px; border: 1px solid #464050; border-radius: 8px; background: #25232e; color: #ddd5ee; font: 13px/1.5 system-ui; }
+    #storage-status[data-failed="true"] { color: #ffb5a8; }
+  </style>
+</head>
+<body><div id="storage-status" role="status">Opening workspace…</div></body>
+</html>
