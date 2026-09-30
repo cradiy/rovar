@@ -3,6 +3,137 @@ use crate::workspace::tests::{click, create, draw, open};
 use gpui::{TestAppContext, VisualTestContext};
 
 #[gpui::test]
+fn angular_seam_drag_keeps_colors_and_can_be_undone(cx: &mut TestAppContext) {
+    let window = open(cx);
+    let mut visual = VisualTestContext::from_window(window.into(), cx);
+    create(&mut visual, "add-artboard");
+    click(&mut visual, "property-drag-5");
+    click(&mut visual, "fill-linear");
+    window
+        .update(&mut visual.cx, |w, _, cx| {
+            w.mutate_gradient(|g| g.kind = gpui::GradientKind::Angular, cx);
+            cx.notify();
+        })
+        .unwrap();
+    draw(&mut visual);
+    let (before, undo) = window
+        .update(&mut visual.cx, |w, _, cx| {
+            (w.fill_state(cx).unwrap().1, w.history.borrow().undo_len())
+        })
+        .unwrap();
+    let start = visual.debug_bounds("fill-seam-width").unwrap().center();
+    let end = start + point(px(15.), px(0.));
+    visual.simulate_mouse_down(start, MouseButton::Left, Default::default());
+    visual.simulate_mouse_move(end, MouseButton::Left, Default::default());
+    visual.simulate_mouse_up(end, MouseButton::Left, Default::default());
+    draw(&mut visual);
+    window
+        .update(&mut visual.cx, |w, window, cx| {
+            let after = w.fill_state(cx).unwrap().1;
+            assert!((after.seam_width - 0.27).abs() < 0.0001);
+            assert_eq!(after.stops(), before.stops());
+            assert_eq!(w.history.borrow().undo_len(), undo + 1);
+            w.replay_history(false, window, cx);
+            assert_eq!(w.fill_state(cx).unwrap().1, before);
+        })
+        .unwrap();
+}
+
+#[gpui::test]
+fn gradient_midpoint_drag_is_one_edit_and_escape_restores_the_preview(cx: &mut TestAppContext) {
+    for (tool, stroke) in [
+        ("add-artboard", false),
+        ("add-rectangle", false),
+        ("add-rectangle", true),
+        ("add-text", false),
+    ] {
+        let window = open(cx);
+        let mut visual = VisualTestContext::from_window(window.into(), cx);
+        create(&mut visual, tool);
+        if tool == "add-text" {
+            visual.simulate_input("Gradient");
+        }
+        if stroke {
+            click(&mut visual, "stroke-visibility");
+        }
+        click(
+            &mut visual,
+            if stroke {
+                "property-drag-16"
+            } else {
+                "property-drag-5"
+            },
+        );
+        click(&mut visual, "fill-linear");
+        let before = window
+            .update(&mut visual.cx, |this, _, _| {
+                this.history.borrow().undo_len()
+            })
+            .unwrap();
+        let start = visual.debug_bounds("fill-midpoint-0").unwrap().center();
+        let end = start - point(px(45.), px(0.));
+        visual.simulate_mouse_down(start, MouseButton::Left, Default::default());
+        for dx in [15., 30., 45.] {
+            visual.simulate_mouse_move(
+                start - point(px(dx), px(0.)),
+                MouseButton::Left,
+                Default::default(),
+            );
+            draw(&mut visual);
+        }
+        visual.simulate_mouse_up(end, MouseButton::Left, Default::default());
+        draw(&mut visual);
+        window
+            .update(&mut visual.cx, |this, window, cx| {
+                let after = this.fill_state(cx).unwrap().1;
+                assert!(
+                    after.stop(0).unwrap().midpoint < 0.5,
+                    "{tool}, stroke={stroke}"
+                );
+                assert_eq!(this.history.borrow().undo_len(), before + 1);
+                this.replay_history(false, window, cx);
+                assert_eq!(
+                    this.fill_state(cx).unwrap().1.stop(0).unwrap().midpoint,
+                    0.5
+                );
+                this.replay_history(true, window, cx);
+                assert_eq!(this.fill_state(cx).unwrap().1, after);
+            })
+            .unwrap();
+        draw(&mut visual);
+        // Re-open after history playback restores editor focus.
+        click(
+            &mut visual,
+            if stroke {
+                "property-drag-16"
+            } else {
+                "property-drag-5"
+            },
+        );
+        let start = visual.debug_bounds("fill-midpoint-0").unwrap().center();
+        let original = window
+            .update(&mut visual.cx, |this, _, cx| this.fill_state(cx).unwrap().1)
+            .unwrap();
+        visual.simulate_mouse_down(start, MouseButton::Left, Default::default());
+        visual.simulate_mouse_move(
+            start + point(px(90.), px(0.)),
+            MouseButton::Left,
+            Default::default(),
+        );
+        draw(&mut visual);
+        visual.simulate_keystrokes("escape");
+        visual.simulate_mouse_up(start, MouseButton::Left, Default::default());
+        draw(&mut visual);
+        window
+            .update(&mut visual.cx, |this, _, cx| {
+                assert_eq!(this.fill_state(cx).unwrap().1, original);
+                assert_eq!(this.history.borrow().undo_len(), before + 1);
+            })
+            .unwrap();
+    }
+}
+
+#[gpui::test]
 fn alpha_slider_updates_values_and_paint_live_without_changing_rgb_and_undoes_once(
     cx: &mut TestAppContext,
 ) {

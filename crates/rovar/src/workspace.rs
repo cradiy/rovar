@@ -8,6 +8,7 @@ mod creation;
 mod document;
 mod editing;
 mod export;
+mod gradient_editor;
 mod layout;
 mod rotation;
 mod selection;
@@ -94,6 +95,21 @@ enum GestureKind {
     },
     ColorStyleProperty {
         angle: bool,
+        original: f32,
+    },
+    ColorStyleStop {
+        original: f32,
+        left: f32,
+        width: f32,
+    },
+    GradientMidpoint {
+        style: bool,
+        id: usize,
+        original: f32,
+        width: f32,
+    },
+    GradientSeam {
+        style: bool,
         original: f32,
     },
     BezierPlace,
@@ -575,16 +591,27 @@ impl Workspace {
         });
         // A numeric drag inside a color popover must not dismiss its own editor.
         // Pointer capture still routes moves/releases outside the popover to the canvas.
-        let popover_focus = matches!(kind, GestureKind::Property { .. })
-            .then(|| {
-                self.paint_popovers.iter().find_map(|popover| {
-                    let state = popover.read(cx);
-                    let focus = state.focus_handle(cx);
-                    (state.is_open() && focus.contains_focused(window, cx)).then_some(focus)
-                })
+        let popover_focus = matches!(
+            kind,
+            GestureKind::Property { .. }
+                | GestureKind::GradientMidpoint { style: false, .. }
+                | GestureKind::GradientSeam { style: false, .. }
+        )
+        .then(|| {
+            self.paint_popovers.iter().find_map(|popover| {
+                let state = popover.read(cx);
+                let focus = state.focus_handle(cx);
+                (state.is_open() && focus.contains_focused(window, cx)).then_some(focus)
             })
-            .flatten();
-        if !matches!(kind, GestureKind::ColorStyleProperty { .. }) {
+        })
+        .flatten();
+        if !matches!(
+            kind,
+            GestureKind::ColorStyleProperty { .. }
+                | GestureKind::ColorStyleStop { .. }
+                | GestureKind::GradientMidpoint { style: true, .. }
+                | GestureKind::GradientSeam { style: true, .. }
+        ) {
             popover_focus
                 .unwrap_or_else(|| self.focus.clone())
                 .focus(window, cx);
@@ -636,8 +663,35 @@ impl Workspace {
             GestureKind::LayoutProperty { index, original } => {
                 self.scrub_layout_number(index, original, delta.x, shift, cx)
             }
-            GestureKind::ColorStyleProperty { angle, original } => {
-                self.scrub_style_number(angle, original, delta.x, shift, cx)
+            GestureKind::ColorStyleProperty { angle, .. } => {
+                self.scrub_style_number(angle, delta.x, shift, self.snapping.bypass, cx)
+            }
+            GestureKind::ColorStyleStop { left, width, .. } => {
+                self.set_style_number(
+                    false,
+                    ((f32::from(position.x) - left) / width * 100.).clamp(0., 100.),
+                    cx,
+                );
+            }
+            GestureKind::GradientMidpoint {
+                style,
+                id,
+                original,
+                width,
+            } => {
+                self.set_gradient_midpoint(
+                    style,
+                    id,
+                    (original + delta.x / width).clamp(0.01, 0.99),
+                    cx,
+                );
+            }
+            GestureKind::GradientSeam { style, original } => {
+                self.set_gradient_seam(
+                    style,
+                    (original + delta.x.round() / 100.).clamp(0., 0.5),
+                    cx,
+                );
             }
             GestureKind::Draw => self.move_drawing(position, shift),
             GestureKind::BezierPlace => self.move_bezier_place(position, shift),
@@ -714,6 +768,28 @@ impl Workspace {
                 GestureKind::ColorStyleProperty { angle, original } => {
                     self.set_style_number(angle, original, cx);
                 }
+                GestureKind::ColorStyleStop { original, .. } => {
+                    self.set_style_number(false, original, cx)
+                }
+                GestureKind::GradientMidpoint {
+                    style,
+                    id,
+                    original,
+                    ..
+                } => {
+                    if style {
+                        self.set_gradient_midpoint(true, id, original, cx);
+                    } else {
+                        self.finish_property_scrub(false, cx);
+                    }
+                }
+                GestureKind::GradientSeam { style, original } => {
+                    if style {
+                        self.set_gradient_seam(true, original, cx);
+                    } else {
+                        self.finish_property_scrub(false, cx);
+                    }
+                }
                 GestureKind::Draw => {
                     self.box_draft = None;
                     self.draft = None;
@@ -769,6 +845,9 @@ impl Render for Workspace {
             | GestureKind::Property { .. }
             | GestureKind::LayoutProperty { .. }
             | GestureKind::ColorStyleProperty { .. }
+            | GestureKind::ColorStyleStop { .. }
+            | GestureKind::GradientMidpoint { .. }
+            | GestureKind::GradientSeam { .. }
             | GestureKind::MultiProperty { .. } => gpui::CursorStyle::ResizeLeftRight,
             GestureKind::Resize { handle, .. } => resize_cursor(handle),
             GestureKind::Text {
@@ -845,10 +924,16 @@ impl Render for Workspace {
                 if this.colors.dialog.is_some() {
                     if event.keystroke.key == "escape" {
                         if this.gesture.is_some_and(|g| {
-                            matches!(g.kind, GestureKind::ColorStyleProperty { .. })
+                            matches!(
+                                g.kind,
+                                GestureKind::ColorStyleProperty { .. }
+                                    | GestureKind::ColorStyleStop { .. }
+                                    | GestureKind::GradientMidpoint { style: true, .. }
+                                    | GestureKind::GradientSeam { style: true, .. }
+                            )
                         }) {
                             this.cancel_gesture(window, cx);
-                        } else {
+                        } else if !this.cancel_style_input(window, cx) {
                             this.close_color_dialog(window, cx);
                         }
                         cx.stop_propagation();

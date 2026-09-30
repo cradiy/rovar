@@ -219,6 +219,31 @@ impl Workspace {
                 GestureKind::Pan { .. }
                 | GestureKind::Panel { .. }
                 | GestureKind::ColorStyleProperty { .. } => None,
+                GestureKind::ColorStyleStop { .. } => None,
+                GestureKind::GradientSeam { style, original } => {
+                    if !style {
+                        let changed = self
+                            .fill_state(cx)
+                            .is_some_and(|(_, g)| g.seam_width != original);
+                        self.finish_property_scrub(changed, cx);
+                    }
+                    None
+                }
+                GestureKind::GradientMidpoint {
+                    style,
+                    id,
+                    original,
+                    ..
+                } => {
+                    if !style {
+                        let changed = self
+                            .fill_state(cx)
+                            .and_then(|(_, g)| g.stop(id).map(|s| s.midpoint))
+                            != Some(original);
+                        self.finish_property_scrub(changed, cx);
+                    }
+                    None
+                }
             };
             let moving = match gesture.kind {
                 GestureKind::Shape {

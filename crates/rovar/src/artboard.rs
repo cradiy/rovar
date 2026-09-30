@@ -41,8 +41,28 @@ pub enum FillMode {
 pub struct GradientStop {
     pub id: usize,
     pub position: f32,
+    /// Relative 50% mix point in the segment leading to the next stop.
+    #[serde(default = "default_midpoint")]
+    pub midpoint: f32,
     #[serde(with = "crate::document::rgba")]
     pub color: Rgba,
+}
+
+fn default_midpoint() -> f32 {
+    0.5
+}
+
+pub(crate) fn default_seam_width() -> f32 {
+    0.12
+}
+
+pub(crate) fn midpoint_weight(position: f32, midpoint: f32) -> f32 {
+    let t = position.clamp(0., 1.);
+    if midpoint == 0.5 || t == 0. || t == 1. {
+        t
+    } else {
+        t.powf(0.5_f32.ln() / midpoint.ln())
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -50,6 +70,8 @@ pub struct LinearGradient {
     pub angle: f32,
     #[serde(with = "crate::document::gradient_kind")]
     pub kind: gpui::GradientKind,
+    #[serde(default = "default_seam_width")]
+    pub seam_width: f32,
     stops: Vec<GradientStop>,
     next_id: usize,
 }
@@ -59,15 +81,18 @@ impl Default for LinearGradient {
         Self {
             angle: 90.,
             kind: gpui::GradientKind::Linear,
+            seam_width: default_seam_width(),
             stops: vec![
                 GradientStop {
                     id: 0,
                     position: 0.,
+                    midpoint: 0.5,
                     color: rgb(0xffffff),
                 },
                 GradientStop {
                     id: 1,
                     position: 1.,
+                    midpoint: 0.5,
                     color: rgb(0xd9d9d9),
                 },
             ],
@@ -91,8 +116,16 @@ impl LinearGradient {
                     && (0. ..=1.).contains(&stop.position),
                 "Invalid gradient stop"
             );
+            anyhow::ensure!(
+                (0.01..=0.99).contains(&stop.midpoint),
+                "Invalid gradient midpoint"
+            );
         }
         anyhow::ensure!(self.angle.is_finite(), "Invalid gradient angle");
+        anyhow::ensure!(
+            (0. ..=0.5).contains(&self.seam_width),
+            "Invalid angular seam width"
+        );
         Ok(())
     }
     pub fn stops(&self) -> &[GradientStop] {
@@ -105,6 +138,65 @@ impl LinearGradient {
 
     pub fn stop_mut(&mut self, id: usize) -> Option<&mut GradientStop> {
         self.stops.iter_mut().find(|s| s.id == id)
+    }
+
+    pub fn set_midpoint(&mut self, id: usize, value: f32) -> bool {
+        if !(0.01..=0.99).contains(&value) {
+            return false;
+        }
+        let count = self.stops.len();
+        let Some(stop) = self.stops[..count - 1].iter_mut().find(|s| s.id == id) else {
+            return false;
+        };
+        stop.midpoint = value;
+        true
+    }
+
+    pub fn sample(&self, position: f32) -> Rgba {
+        if position < self.stops[0].position {
+            return self.stops[0].color;
+        }
+        for pair in self.stops.windows(2) {
+            let [a, b] = [pair[0], pair[1]];
+            if position < b.position {
+                let t = midpoint_weight(
+                    (position - a.position) / (b.position - a.position),
+                    a.midpoint,
+                );
+                let mix = |x, y| x + (y - x) * t;
+                return Rgba {
+                    r: mix(a.color.r, b.color.r),
+                    g: mix(a.color.g, b.color.g),
+                    b: mix(a.color.b, b.color.b),
+                    a: mix(a.color.a, b.color.a),
+                };
+            }
+        }
+        self.stops.last().unwrap().color
+    }
+
+    pub fn sample_angular(&self, position: f32) -> Rgba {
+        let position = position.rem_euclid(1.);
+        let half = self.seam_width * 0.5;
+        if self.seam_width == 0. || (half..=1. - half).contains(&position) {
+            return self.sample(position);
+        }
+        let from = self.sample(1. - half);
+        let to = self.sample(half);
+        let wrapped = if position < half {
+            position
+        } else {
+            position - 1.
+        };
+        let t = ((wrapped + half) / self.seam_width).clamp(0., 1.);
+        let weight = t * t * (3. - 2. * t);
+        let mix = |a, b| a + (b - a) * weight;
+        Rgba {
+            r: mix(from.r, to.r),
+            g: mix(from.g, to.g),
+            b: mix(from.b, to.b),
+            a: mix(from.a, to.a),
+        }
     }
 
     pub fn set_position(&mut self, id: usize, position: f32) -> bool {
@@ -128,20 +220,20 @@ impl LinearGradient {
         let pair = self.stops.windows(2).max_by(|a, b| {
             (a[1].position - a[0].position).total_cmp(&(b[1].position - b[0].position))
         })?;
-        let (a, b) = (pair[0], pair[1]);
-        let alpha = (a.color.a + b.color.a) * 0.5;
-        let mix = |x: f32, y: f32| (x + y) * 0.5;
-        let color = Rgba {
-            r: mix(a.color.r, b.color.r),
-            g: mix(a.color.g, b.color.g),
-            b: mix(a.color.b, b.color.b),
-            a: alpha,
-        };
+        self.add_stop_at((pair[0].position + pair[1].position) * 0.5)
+    }
+
+    pub fn add_stop_at(&mut self, position: f32) -> Option<usize> {
+        if self.stops.len() >= 4 || !position.is_finite() || !(0. ..=1.).contains(&position) {
+            return None;
+        }
+        let color = self.sample(position);
         let id = self.next_id;
         self.next_id += 1;
         self.stops.push(GradientStop {
             id,
-            position: (a.position + b.position) * 0.5,
+            position,
+            midpoint: 0.5,
             color,
         });
         self.stops.sort_by(|a, b| a.position.total_cmp(&b.position));
@@ -158,10 +250,19 @@ impl LinearGradient {
     }
 
     pub fn reverse(&mut self) {
+        let midpoints: Vec<_> = self
+            .stops
+            .windows(2)
+            .map(|pair| 1. - pair[0].midpoint)
+            .collect();
         for stop in &mut self.stops {
             stop.position = 1. - stop.position;
         }
         self.stops.reverse();
+        for (stop, midpoint) in self.stops.iter_mut().zip(midpoints.into_iter().rev()) {
+            stop.midpoint = midpoint;
+        }
+        self.stops.last_mut().unwrap().midpoint = 0.5;
     }
 
     pub fn background(&self) -> Background {
@@ -170,13 +271,18 @@ impl LinearGradient {
             .iter()
             .map(|s| linear_color_stop(s.color, s.position))
             .collect();
-        (match stops.as_slice() {
+        let mut background = (match stops.as_slice() {
             [a, b] => multi_linear_gradient(self.angle, [*a, *b]),
             [a, b, c] => multi_linear_gradient(self.angle, [*a, *b, *c]),
             [a, b, c, d] => multi_linear_gradient(self.angle, [*a, *b, *c, *d]),
             _ => unreachable!("gradient mutations preserve 2–4 stops"),
         })
         .gradient_kind(self.kind)
+        .angular_seam_width(self.seam_width);
+        for (index, stop) in self.stops.iter().take(self.stops.len() - 1).enumerate() {
+            background = background.gradient_midpoint(index, stop.midpoint);
+        }
+        background
     }
 }
 
@@ -304,6 +410,53 @@ impl Handle {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn angular_seam_is_continuous_without_replacing_stops_or_changing_other_segments() {
+        let mut g = LinearGradient {
+            kind: gpui::GradientKind::Angular,
+            ..Default::default()
+        };
+        g.stop_mut(0).unwrap().color = gpui::rgba(0xff0066ff);
+        g.stop_mut(1).unwrap().color = gpui::rgba(0x2200ff40);
+        g.set_midpoint(0, 0.3);
+        let stops = g.stops().to_vec();
+        for seam in [0.01, 0.12, 0.5] {
+            g.seam_width = seam;
+            let left = g.sample_angular(1. - 0.000001);
+            let right = g.sample_angular(0.000001);
+            for (a, b) in [(left.r, right.r), (left.b, right.b), (left.a, right.a)] {
+                assert!((a - b).abs() < 0.001);
+            }
+            for t in [0.3, 0.5, 0.7] {
+                assert_eq!(g.sample_angular(t), g.sample(t));
+            }
+            assert_eq!(g.stops(), stops);
+        }
+        g.seam_width = 0.;
+        assert!((g.sample_angular(0.000001).r - g.sample_angular(0.999999).r).abs() > 0.8);
+    }
+
+    #[test]
+    fn gradient_midpoints_use_segment_local_coordinates_and_survive_reverse() {
+        let mut g = LinearGradient::default();
+        g.stop_mut(0).unwrap().color = rgb(0xff0000);
+        g.stop_mut(1).unwrap().color = rgb(0x0000ff);
+        g.set_position(0, 0.2);
+        g.set_position(1, 0.8);
+        assert!(g.set_midpoint(0, 0.25));
+        let mix = g.sample(0.35);
+        assert!((mix.r - 0.5).abs() < 0.0001);
+        assert!((mix.b - 0.5).abs() < 0.0001);
+        g.reverse();
+        assert_eq!(g.stops()[0].id, 1);
+        assert_eq!(g.stops()[0].midpoint, 0.75);
+        let mix = g.sample(0.65);
+        assert!((mix.r - 0.5).abs() < 0.0001);
+        for invalid in [0., 1., f32::NAN, f32::INFINITY] {
+            assert!(!g.set_midpoint(1, invalid));
+        }
+    }
 
     #[test]
     fn gradient_reorders_by_position_without_changing_stop_identity() {

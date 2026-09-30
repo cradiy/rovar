@@ -35,7 +35,10 @@ impl Workspace {
             gradient.stops()[0].id
         }
     }
-    fn fill_state(&self, cx: &gpui::App) -> Option<(FillMode, LinearGradient)> {
+    pub(in crate::workspace) fn fill_state(
+        &self,
+        cx: &gpui::App,
+    ) -> Option<(FillMode, LinearGradient)> {
         if let Some(text) = self.selected_text() {
             let editor = text.editor.read(cx);
             let style = editor.effective_style();
@@ -50,7 +53,7 @@ impl Workspace {
                 .map(|board| (board.fill_mode, board.gradient.clone()))
         }
     }
-    fn mutate_gradient<R>(
+    pub(in crate::workspace) fn mutate_gradient<R>(
         &mut self,
         change: impl FnOnce(&mut LinearGradient) -> R,
         cx: &mut Context<Self>,
@@ -323,18 +326,33 @@ impl Workspace {
                 .child(
                     div()
                         .relative()
-                        .h(px(24.))
+                        .h(px(42.))
                         .rounded(px(6.))
-                        .overflow_hidden()
-                        .bg(rgb(0xffffff))
+                        .child(self.gradient_midpoints(false, &gradient, cx))
                         .child(
                             div()
                                 .absolute()
-                                .inset_0()
+                                .top(px(18.))
+                                .bottom_0()
+                                .left_0()
+                                .right_0()
+                                .rounded(px(6.))
                                 .bg(gpui::checkerboard(rgb(0xd9dce2), 6.)),
                         )
-                        .child(div().absolute().inset_0().bg(preview.background())),
+                        .child(
+                            div()
+                                .absolute()
+                                .top(px(18.))
+                                .bottom_0()
+                                .left_0()
+                                .right_0()
+                                .rounded(px(6.))
+                                .bg(preview.background()),
+                        ),
                 )
+                .when(gradient.kind == gpui::GradientKind::Angular, |el| {
+                    el.child(self.gradient_seam_control(false, cx))
+                })
                 .child(
                     div()
                         .flex()

@@ -50,6 +50,7 @@ impl Workspace {
             .child(
                 div()
                     .id("asset-colors-list")
+                    .track_scroll(&self.colors.scroll)
                     .max_h(px(180.))
                     .overflow_y_scroll()
                     .flex()
@@ -85,11 +86,17 @@ impl Workspace {
         let add = style.clone();
         let stroke = self.selected_shape().is_some_and(|shape| !shape.can_fill());
         let can_apply = self.color_source(stroke, cx).is_some();
+        let selected = self
+            .colors
+            .selected
+            .as_ref()
+            .is_some_and(|(s, selected)| *s == scope && selected == &id);
         div()
             .id(gpui::SharedString::from(format!("color-asset-{id}")))
             .h(px(34.))
             .px(px(6.))
             .rounded(px(7.))
+            .when(selected, |el| el.bg(rgb(0x302a40)))
             .flex()
             .items_center()
             .gap(px(8.))
@@ -110,6 +117,9 @@ impl Workspace {
                             .text_size(px(12.))
                             .child(style.name),
                     )
+                    .when(selected, |el| {
+                        el.child(icon(LucideIcons::Check, 12.).text_color(rgb(ACCENT)))
+                    })
                     .when(can_apply, |el| {
                         el.cursor_pointer()
                             .on_click(cx.listener(move |this, _, window, cx| {
@@ -324,6 +334,7 @@ impl Workspace {
         let mut ramp = gradient.clone();
         ramp.kind = gpui::GradientKind::Linear;
         ramp.angle = 90.;
+        let bounds = self.colors.ramp_bounds.clone();
         div()
             .flex()
             .flex_col()
@@ -357,52 +368,90 @@ impl Workspace {
             )
             .child(
                 div()
-                    .h(px(24.))
-                    .rounded(px(5.))
-                    .bg(gpui::checkerboard(rgb(0x50515b), 5.))
-                    .child(div().size_full().rounded(px(5.)).bg(ramp.background())),
-            )
-            .child(
-                div()
                     .flex()
                     .items_center()
-                    .gap(px(6.))
-                    .children(gradient.stops().iter().map(|stop| {
-                        let id = stop.id;
+                    .gap(px(8.))
+                    .child(
                         div()
-                            .id(("style-stop", id))
-                            .size(px(30.))
-                            .rounded(px(7.))
-                            .border_1()
-                            .border_color(rgb(if id == dialog.active_stop {
-                                ACCENT
-                            } else {
-                                0x3a3b45
-                            }))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .cursor_pointer()
-                            .child(swatch(stop.color, 22.))
-                            .on_click(
-                                cx.listener(move |this, _, _, cx| this.select_style_stop(id, cx)),
+                            .flex_1()
+                            .min_w_0()
+                            .mx(px(9.))
+                            .relative()
+                            .h(px(62.))
+                            .on_paint_before_children(move |rect, _, _, _| bounds.set(rect))
+                            .id("style-gradient-track")
+                            .debug_selector(|| "style-gradient-track".into())
+                            .child(self.gradient_midpoints(true, gradient, cx))
+                            .child(
+                                div()
+                                    .id("style-gradient-ramp")
+                                    .debug_selector(|| "style-gradient-ramp".into())
+                                    .h(px(22.))
+                                    .w_full()
+                                    .rounded(px(5.))
+                                    .bg(gpui::checkerboard(rgb(0x50515b), 5.))
+                                    .on_mouse_down(
+                                        MouseButton::Left,
+                                        cx.listener(|this, event, window, cx| {
+                                            this.begin_style_stop(None, event, window, cx)
+                                        }),
+                                    )
+                                    .child(div().size_full().rounded(px(5.)).bg(ramp.background())),
                             )
-                    }))
-                    .child(div().flex_1())
+                            .children(gradient.stops().iter().map(|stop| {
+                                let id = stop.id;
+                                div()
+                                    .id(("style-stop", id))
+                                    .debug_selector(move || format!("style-stop-{id}"))
+                                    .absolute()
+                                    .left(gpui::relative(stop.position))
+                                    .ml(px(-9.))
+                                    .top(px(36.))
+                                    .w(px(18.))
+                                    .h(px(24.))
+                                    .rounded(px(5.))
+                                    .bg(rgb(0x1d1e25))
+                                    .border_1()
+                                    .border_color(rgb(if id == dialog.active_stop {
+                                        ACCENT
+                                    } else {
+                                        0x3a3b45
+                                    }))
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .cursor(gpui::CursorStyle::ResizeLeftRight)
+                                    .child(swatch(stop.color, 12.))
+                                    .on_mouse_down(
+                                        MouseButton::Left,
+                                        cx.listener(move |this, event, window, cx| {
+                                            this.begin_style_stop(Some(id), event, window, cx)
+                                        }),
+                                    )
+                            })),
+                    )
                     .child(
                         button("add-style-stop", "+")
                             .debug_selector(|| "add-style-stop".into())
                             .opacity(if gradient.stops().len() < 4 { 1. } else { 0.3 })
-                            .on_click(
-                                cx.listener(|this, _, _, cx| this.change_style_stops(true, cx)),
-                            ),
+                            .when(gradient.stops().len() < 4, |el| {
+                                el.on_click(
+                                    cx.listener(|this, _, _, cx| this.change_style_stops(true, cx)),
+                                )
+                            })
+                            .when(gradient.stops().len() >= 4, |el| el.cursor_default()),
                     )
                     .child(
                         button("remove-style-stop", "−")
                             .opacity(if gradient.stops().len() > 2 { 1. } else { 0.3 })
-                            .on_click(
-                                cx.listener(|this, _, _, cx| this.change_style_stops(false, cx)),
-                            ),
+                            .when(gradient.stops().len() > 2, |el| {
+                                el.on_click(
+                                    cx.listener(|this, _, _, cx| {
+                                        this.change_style_stops(false, cx)
+                                    }),
+                                )
+                            })
+                            .when(gradient.stops().len() <= 2, |el| el.cursor_default()),
                     ),
             )
             .child(
@@ -412,6 +461,9 @@ impl Workspace {
                     .child(self.style_number_input(true, cx))
                     .child(self.style_number_input(false, cx)),
             )
+            .when(gradient.kind == gpui::GradientKind::Angular, |el| {
+                el.child(self.gradient_seam_control(true, cx))
+            })
     }
 
     fn style_number_input(&self, angle: bool, cx: &mut Context<Self>) -> Div {
@@ -490,7 +542,8 @@ impl Workspace {
             .occlude()
             .bg(gpui::rgba(0x00000070))
             .flex()
-            .items_center()
+            .items_start()
+            .pt(px(24.))
             .justify_center()
             .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
             .child(
@@ -498,7 +551,7 @@ impl Workspace {
                     .id("color-style-dialog")
                     .debug_selector(|| "color-style-dialog".into())
                     .w(px(360.))
-                    .max_h(window.viewport_size().height - px(32.))
+                    .max_h(window.viewport_size().height - px(48.))
                     .overflow_y_scroll()
                     .p(px(20.))
                     .rounded(px(14.))

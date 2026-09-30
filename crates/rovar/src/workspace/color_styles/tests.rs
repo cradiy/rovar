@@ -26,6 +26,60 @@ fn gradient_style(name: &str, color: u32) -> ColorStyle {
 }
 
 #[gpui::test]
+fn gradient_midpoint_in_style_dialog_stays_in_draft_until_saved(cx: &mut TestAppContext) {
+    use crate::workspace::tests::{click, draw, open};
+    let window = open(cx);
+    window
+        .update(cx, |w, window, cx| {
+            w.open_color_dialog(Scope::Document, None, false, window, cx);
+            w.set_style_gradient(true, cx);
+        })
+        .unwrap();
+    let mut visual = gpui::VisualTestContext::from_window(window.into(), cx);
+    draw(&mut visual);
+    let start = visual.debug_bounds("style-midpoint-0").unwrap().center();
+    let end = start + point(px(30.), px(0.));
+    visual.simulate_mouse_down(start, MouseButton::Left, Default::default());
+    visual.simulate_mouse_move(end, MouseButton::Left, Default::default());
+    visual.simulate_mouse_up(end, MouseButton::Left, Default::default());
+    draw(&mut visual);
+    window
+        .update(&mut visual.cx, |w, _, _| {
+            let g = w.colors.dialog.as_ref().unwrap().gradient.as_ref().unwrap();
+            assert!(g.stop(0).unwrap().midpoint > 0.5);
+            // Clicking the midpoint must not bubble to the stop-insertion track.
+            assert_eq!(g.stops().len(), 2);
+            assert!(w.colors.palette.is_empty());
+        })
+        .unwrap();
+    let start = visual.debug_bounds("style-midpoint-0").unwrap().center();
+    visual.simulate_mouse_down(start, MouseButton::Left, Default::default());
+    visual.simulate_mouse_move(
+        start - point(px(60.), px(0.)),
+        MouseButton::Left,
+        Default::default(),
+    );
+    visual.simulate_keystrokes("escape");
+    visual.simulate_mouse_up(start, MouseButton::Left, Default::default());
+    draw(&mut visual);
+    let expected = window
+        .update(&mut visual.cx, |w, _, _| {
+            w.colors.dialog.as_ref().unwrap().gradient.clone().unwrap()
+        })
+        .unwrap();
+    assert!(expected.stop(0).unwrap().midpoint > 0.5);
+    click(&mut visual, "save-color-style");
+    window
+        .update(&mut visual.cx, |w, _, _| {
+            assert_eq!(
+                w.colors.palette.values().next().unwrap().gradient.as_ref(),
+                Some(&expected)
+            );
+        })
+        .unwrap();
+}
+
+#[gpui::test]
 fn cross_document_paste_preserves_conflicting_colors_and_undo_removes_import(
     cx: &mut TestAppContext,
 ) {
@@ -290,6 +344,207 @@ fn gradient_numbers_scrub_clamp_and_cancel_without_editing_document(cx: &mut Tes
         })
         .unwrap();
     assert!(visual.debug_bounds("color-style-dialog").is_some());
+}
+
+#[gpui::test]
+fn style_scrub_reverses_at_boundary_and_changes_precision_without_jumping(cx: &mut TestAppContext) {
+    let window = crate::workspace::tests::open(cx);
+    window
+        .update(cx, |w, window, cx| {
+            w.open_color_dialog(Scope::Document, None, false, window, cx);
+            w.set_style_gradient(true, cx);
+        })
+        .unwrap();
+    let mut visual = gpui::VisualTestContext::from_window(window.into(), cx);
+    crate::workspace::tests::draw(&mut visual);
+    let start = visual.debug_bounds("style-position-drag").unwrap().center();
+    visual.simulate_mouse_down(start, MouseButton::Left, Default::default());
+    for (delta, fine, shift, expected) in [
+        (300., false, false, 100.),
+        (299., false, false, 99.),
+        (298., true, false, 98.9),
+        (298., false, true, 98.9),
+        (297., false, true, 89.),
+    ] {
+        visual.simulate_mouse_move(
+            start + point(px(delta), px(0.)),
+            MouseButton::Left,
+            gpui::Modifiers {
+                alt: fine,
+                shift,
+                ..Default::default()
+            },
+        );
+        crate::workspace::tests::draw(&mut visual);
+        window
+            .update(&mut visual.cx, |w, _, _| {
+                let dialog = w.colors.dialog.as_ref().unwrap();
+                let position = dialog
+                    .gradient
+                    .as_ref()
+                    .unwrap()
+                    .stop(dialog.active_stop)
+                    .unwrap()
+                    .position
+                    * 100.;
+                assert!(
+                    (position - expected).abs() < 0.01,
+                    "{position} != {expected}"
+                );
+            })
+            .unwrap();
+    }
+    visual.simulate_keystrokes("escape");
+    crate::workspace::tests::draw(&mut visual);
+    window
+        .update(&mut visual.cx, |w, _, _| {
+            assert_eq!(
+                w.colors
+                    .dialog
+                    .as_ref()
+                    .unwrap()
+                    .gradient
+                    .as_ref()
+                    .unwrap()
+                    .stop(0)
+                    .unwrap()
+                    .position,
+                0.
+            );
+        })
+        .unwrap();
+}
+
+#[gpui::test]
+fn gradient_track_inserts_at_pointer_and_preserves_stop_identity_when_crossing(
+    cx: &mut TestAppContext,
+) {
+    let window = crate::workspace::tests::open(cx);
+    window
+        .update(cx, |w, window, cx| {
+            w.open_color_dialog(Scope::Document, None, false, window, cx);
+            w.set_style_gradient(true, cx);
+        })
+        .unwrap();
+    let mut visual = gpui::VisualTestContext::from_window(window.into(), cx);
+    crate::workspace::tests::draw(&mut visual);
+    let track = visual.debug_bounds("style-gradient-ramp").unwrap();
+    let at = |fraction| {
+        point(
+            track.left() + track.size.width * fraction,
+            track.top() + px(8.),
+        )
+    };
+    visual.simulate_click(at(0.25), Default::default());
+    crate::workspace::tests::draw(&mut visual);
+    visual.simulate_click(at(0.6), Default::default());
+    crate::workspace::tests::draw(&mut visual);
+    window
+        .update(&mut visual.cx, |w, _, _| {
+            let gradient = w.colors.dialog.as_ref().unwrap().gradient.as_ref().unwrap();
+            assert!((gradient.stop(2).unwrap().position - 0.25).abs() < 0.001);
+            assert!((gradient.stop(2).unwrap().color.a - 0.75).abs() < 0.001);
+            assert_eq!(gradient.stops().len(), 4);
+        })
+        .unwrap();
+    let start = visual.debug_bounds("style-stop-2").unwrap().center();
+    let end = start + point(track.size.width * 0.6, px(0.));
+    visual.simulate_mouse_down(start, MouseButton::Left, Default::default());
+    visual.simulate_mouse_move(end, MouseButton::Left, Default::default());
+    visual.simulate_mouse_up(end, MouseButton::Left, Default::default());
+    crate::workspace::tests::draw(&mut visual);
+    window
+        .update(&mut visual.cx, |w, _, _| {
+            let dialog = w.colors.dialog.as_ref().unwrap();
+            assert_eq!(dialog.active_stop, 2);
+            let gradient = dialog.gradient.as_ref().unwrap();
+            assert!((gradient.stop(2).unwrap().position - 0.85).abs() < 0.001);
+            assert!((gradient.stop(3).unwrap().position - 0.6).abs() < 0.001);
+        })
+        .unwrap();
+}
+
+#[gpui::test]
+fn style_modes_keep_drafts_and_enter_confirms_field_without_saving(cx: &mut TestAppContext) {
+    let window = crate::workspace::tests::open(cx);
+    window
+        .update(cx, |w, window, cx| {
+            w.open_color_dialog(Scope::Document, None, false, window, cx)
+        })
+        .unwrap();
+    let mut visual = gpui::VisualTestContext::from_window(window.into(), cx);
+    crate::workspace::tests::draw(&mut visual);
+    let top = visual.debug_bounds("color-style-dialog").unwrap().top();
+    window
+        .update(&mut visual.cx, |w, _, cx| {
+            w.colors
+                .value
+                .update(cx, |i, cx| i.set_value("#226688FF", cx));
+        })
+        .unwrap();
+    crate::workspace::tests::draw(&mut visual);
+    let gradient = visual.debug_bounds("gradient").unwrap().center();
+    visual.simulate_click(gradient, Default::default());
+    crate::workspace::tests::draw(&mut visual);
+    window
+        .update(&mut visual.cx, |w, _, cx| {
+            w.change_style_stops(true, cx);
+            w.set_style_number(true, 135., cx);
+        })
+        .unwrap();
+    crate::workspace::tests::draw(&mut visual);
+    let solid = visual.debug_bounds("solid").unwrap().center();
+    visual.simulate_click(solid, Default::default());
+    crate::workspace::tests::draw(&mut visual);
+    assert_eq!(
+        visual.debug_bounds("color-style-dialog").unwrap().top(),
+        top
+    );
+    window
+        .update(&mut visual.cx, |w, _, cx| {
+            assert_eq!(w.colors.value.read(cx).value().as_ref(), "#226688FF")
+        })
+        .unwrap();
+    visual.simulate_click(gradient, Default::default());
+    crate::workspace::tests::draw(&mut visual);
+    window
+        .update(&mut visual.cx, |w, window, cx| {
+            let g = w.colors.dialog.as_ref().unwrap().gradient.as_ref().unwrap();
+            assert_eq!(g.stops().len(), 3);
+            assert_eq!(g.angle, 135.);
+            w.colors.angle.focus_handle(cx).focus(window, cx);
+        })
+        .unwrap();
+    crate::workspace::tests::draw(&mut visual);
+    visual.simulate_keystrokes("ctrl-a");
+    visual.simulate_input("-");
+    visual.simulate_keystrokes("escape");
+    crate::workspace::tests::draw(&mut visual);
+    window
+        .update(&mut visual.cx, |w, _, cx| {
+            assert_eq!(w.colors.angle.read(cx).value().as_ref(), "135")
+        })
+        .unwrap();
+    visual.simulate_keystrokes("ctrl-a");
+    visual.simulate_input("120");
+    visual.simulate_keystrokes("enter");
+    crate::workspace::tests::draw(&mut visual);
+    window
+        .update(&mut visual.cx, |w, _, _| {
+            assert_eq!(
+                w.colors
+                    .dialog
+                    .as_ref()
+                    .unwrap()
+                    .gradient
+                    .as_ref()
+                    .unwrap()
+                    .angle,
+                120.
+            );
+            assert!(w.colors.palette.is_empty());
+        })
+        .unwrap();
 }
 
 #[gpui::test]

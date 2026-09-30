@@ -176,6 +176,58 @@ fn all_gradient_kinds_match_expected_colors_and_have_no_sector_seams() {
 }
 
 #[test]
+fn gradient_midpoint_survives_serialization_and_controls_exported_color() {
+    for midpoint in [0.01, 0.2, 0.5, 0.8, 0.99] {
+        let mut shape = Shape::new(1, None, ShapeKind::Rectangle, rect(0., 0., 100., 100.));
+        shape.fill_mode = FillMode::Linear;
+        shape.gradient.stop_mut(0).unwrap().color = rgb(0xff0000);
+        shape.gradient.stop_mut(1).unwrap().color = rgb(0x0000ff);
+        shape.gradient.set_midpoint(0, midpoint);
+        let saved = serde_json::to_vec(&shape).unwrap();
+        let restored: Shape = serde_json::from_slice(&saved).unwrap();
+        assert_eq!(restored.gradient, shape.gradient);
+        let gradient = restored.gradient.clone();
+        let image = png(&job_for_shape(restored), 1);
+        for x in [1, 10, 20, 40, 60, 80, 98] {
+            let expected = gradient.sample((x as f32 + 0.5) / 100.);
+            let actual = image.get_pixel(x, 50).0;
+            for (channel, expected) in [expected.r, expected.g, expected.b].into_iter().enumerate()
+            {
+                assert!(
+                    (actual[channel] as f32 - expected * 255.).abs() < 4.,
+                    "midpoint={midpoint}, x={x}, actual={actual:?}, expected={expected}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn angular_seam_export_blends_across_wrap_and_preserves_the_palette() {
+    for angle in [90., 270.] {
+        let mut shape = Shape::new(1, None, ShapeKind::Rectangle, rect(0., 0., 256., 256.));
+        shape.fill_mode = FillMode::Linear;
+        shape.gradient.kind = GradientKind::Angular;
+        shape.gradient.angle = angle;
+        shape.gradient.stop_mut(0).unwrap().color = rgb(0xdd0099);
+        shape.gradient.stop_mut(1).unwrap().color = rgb(0x220088);
+        let stops = shape.gradient.stops().to_vec();
+        let smooth = png(&job_for_shape(shape.clone()), 1);
+        shape.gradient.seam_width = 0.;
+        let hard = png(&job_for_shape(shape.clone()), 1);
+        let x = if angle == 90. { 230 } else { 25 };
+        let difference = |image: &image::RgbaImage| {
+            let a = image.get_pixel(x, 127).0;
+            let b = image.get_pixel(x, 128).0;
+            (a[0] as i16 - b[0] as i16).abs()
+        };
+        assert!(difference(&hard) > 100);
+        assert!(difference(&smooth) < 12);
+        assert_eq!(shape.gradient.stops(), stops);
+    }
+}
+
+#[test]
 fn image_export_embeds_full_pixels_and_preserves_fit_opacity_and_clipping() {
     let dir = tempfile::tempdir().unwrap();
     let source = dir.path().join("source.png");

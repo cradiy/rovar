@@ -6,6 +6,7 @@ use gpui::Focusable;
 use uic::components::dropdown::DropdownState;
 
 mod gradient;
+mod input;
 #[cfg(test)]
 mod tests;
 mod view;
@@ -14,7 +15,10 @@ pub(super) struct Dialog {
     scope: Scope,
     id: String,
     existing: bool,
-    gradient: Option<crate::artboard::LinearGradient>,
+    pub(in crate::workspace) gradient: Option<crate::artboard::LinearGradient>,
+    saved_gradient: Option<crate::artboard::LinearGradient>,
+    solid: gpui::Rgba,
+    scrub: Option<gradient::Scrub>,
     active_stop: usize,
 }
 
@@ -29,6 +33,10 @@ pub(super) struct State {
     position: Entity<TextInput>,
     picker: Entity<ColorPickerState>,
     error: Option<String>,
+    selected: Option<(Scope, String)>,
+    ramp_bounds: std::rc::Rc<std::cell::Cell<gpui::Bounds<Pixels>>>,
+    scroll: gpui::ScrollHandle,
+    baselines: [gpui::SharedString; 4],
     _subscriptions: Vec<Subscription>,
 }
 
@@ -41,12 +49,22 @@ impl State {
         let picker = cx.new(|cx| ColorPickerState::new(rgb(ACCENT), cx));
         let mut subscriptions: Vec<_> = [&name, &value, &angle, &position]
             .into_iter()
-            .flat_map(|input| {
+            .enumerate()
+            .flat_map(|(index, input)| {
+                let focus = input.focus_handle(cx);
                 [
                     cx.observe(input, |_, _, cx| cx.notify()),
-                    cx.subscribe_in(input, window, |this, _, event: &InputEvent, window, cx| {
+                    cx.subscribe_in(input, window, move |this, _, event: &InputEvent, _, cx| {
                         if matches!(event, InputEvent::Submit(_)) {
-                            this.save_color_dialog(window, cx);
+                            this.finish_style_input(index, cx);
+                        }
+                    }),
+                    cx.on_focus(&focus, window, move |this, _, cx| {
+                        this.colors.baselines[index] = this.style_inputs()[index].read(cx).value();
+                    }),
+                    cx.on_blur(&focus, window, move |this, _, cx| {
+                        if this.colors.dialog.is_some() {
+                            this.finish_style_input(index, cx);
                         }
                     }),
                 ]
@@ -65,6 +83,7 @@ impl State {
         );
         subscriptions.push(cx.subscribe(&value, |this, _, event: &InputEvent, cx| {
             if let InputEvent::Change(value) = event
+                && value == &this.colors.value.read(cx).value()
                 && let Some(color) = parse_color(value)
             {
                 this.colors
@@ -77,6 +96,10 @@ impl State {
         for (input, is_angle) in [(&angle, true), (&position, false)] {
             subscriptions.push(cx.subscribe(input, move |this, _, event: &InputEvent, cx| {
                 if let InputEvent::Change(value) = event
+                    && value
+                        == &this.style_inputs()[if is_angle { 2 } else { 3 }]
+                            .read(cx)
+                            .value()
                     && let Ok(value) = value.parse::<f32>()
                     && value.is_finite()
                     && let Some(dialog) = &mut this.colors.dialog
@@ -102,6 +125,10 @@ impl State {
             position,
             picker,
             error: None,
+            selected: None,
+            ramp_bounds: Default::default(),
+            scroll: gpui::ScrollHandle::new(),
+            baselines: Default::default(),
             _subscriptions: subscriptions,
         }
     }
@@ -195,6 +222,7 @@ impl Workspace {
             self.record_page_edit(before);
         }
         self.colors.menu[usize::from(stroke)].update(cx, |m, cx| m.close(window, cx));
+        self.colors.selected = Some((scope, id.to_owned()));
         cx.notify();
     }
 
@@ -288,6 +316,9 @@ impl Workspace {
             existing: existing.is_some(),
             active_stop: style.gradient.as_ref().map_or(0, |g| g.stops()[0].id),
             gradient: style.gradient.clone(),
+            saved_gradient: None,
+            solid: style.color,
+            scrub: None,
         });
         self.colors.error = None;
         self.colors
@@ -354,9 +385,10 @@ impl Workspace {
             return;
         }
         if scope == Scope::Document {
-            self.set_document_color(id, Some(style), window, cx);
+            self.set_document_color(id.clone(), Some(style), window, cx);
         } else if let Some(library) = self.assets.library.clone() {
-            if let Err(error) = library.update(cx, |l, cx| l.set_color(id, Some(style), cx)) {
+            if let Err(error) = library.update(cx, |l, cx| l.set_color(id.clone(), Some(style), cx))
+            {
                 self.colors.error = Some(error.to_string());
                 cx.notify();
                 return;
@@ -364,6 +396,17 @@ impl Workspace {
         } else {
             return;
         }
+        let position = self
+            .color_palette(scope, cx)
+            .keys()
+            .position(|key| key == &id)
+            .unwrap_or(0);
+        self.colors.scroll.scroll_to_item(position);
+        self.colors.selected = Some((scope, id));
+        self.assets.scope = scope;
+        self.assets
+            .search
+            .update(cx, |input, cx| input.set_value("", cx));
         self.close_color_dialog(window, cx);
     }
 

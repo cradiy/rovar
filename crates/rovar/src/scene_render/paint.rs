@@ -11,38 +11,43 @@ fn color(c: Rgba) -> String {
     )
 }
 fn stops(gradient: &LinearGradient) -> String {
-    gradient
-        .stops()
+    let first = gradient.stops()[0];
+    let mut samples = vec![(first.position, first.color)];
+    for pair in gradient.stops().windows(2) {
+        let [a, b] = [pair[0], pair[1]];
+        // SVG has no color hints. Sample at equal color increments so even
+        // extreme midpoint curves keep each interval below one 8-bit level.
+        let count = if a.midpoint == 0.5 || a.position == b.position {
+            1
+        } else {
+            256
+        };
+        for index in 1..=count {
+            let weight = index as f32 / count as f32;
+            let t = weight.powf(a.midpoint.ln() / 0.5_f32.ln());
+            let mix = |x, y| x + (y - x) * weight;
+            samples.push((
+                a.position + (b.position - a.position) * t,
+                Rgba {
+                    r: mix(a.color.r, b.color.r),
+                    g: mix(a.color.g, b.color.g),
+                    b: mix(a.color.b, b.color.b),
+                    a: mix(a.color.a, b.color.a),
+                },
+            ));
+        }
+    }
+    samples
         .iter()
-        .map(|s| {
+        .map(|(position, c)| {
             format!(
                 "<stop offset=\"{}\" stop-color=\"{}\" stop-opacity=\"{}\"/>",
-                s.position,
-                color(s.color),
-                s.color.a
+                position,
+                color(*c),
+                c.a
             )
         })
         .collect()
-}
-fn sample(gradient: &LinearGradient, t: f32) -> Rgba {
-    let stops = gradient.stops();
-    if t <= stops[0].position {
-        return stops[0].color;
-    }
-    for pair in stops.windows(2) {
-        let [a, b] = [pair[0], pair[1]];
-        if t <= b.position {
-            let f = ((t - a.position) / (b.position - a.position).max(f32::EPSILON)).clamp(0., 1.);
-            let mix = |x, y| x + (y - x) * f;
-            return Rgba {
-                r: mix(a.color.r, b.color.r),
-                g: mix(a.color.g, b.color.g),
-                b: mix(a.color.b, b.color.b),
-                a: mix(a.color.a, b.color.a),
-            };
-        }
-    }
-    stops.last().unwrap().color
 }
 pub(super) fn paint(
     mode: FillMode,
@@ -114,7 +119,7 @@ pub(super) fn paint(
                 for i in 0..SECTORS {
                     let a = i as f32 / SECTORS as f32 * std::f32::consts::TAU;
                     let b = (i + 1) as f32 / SECTORS as f32 * std::f32::consts::TAU;
-                    let c = sample(gradient, (i as f32 + 0.5) / SECTORS as f32);
+                    let c = gradient.sample_angular((i as f32 + 0.5) / SECTORS as f32);
                     write!(
                         content,
                         "<path d=\"M 0 0 L {} {} L {} {} Z\" fill=\"{}\" fill-opacity=\"{}\"/>",
