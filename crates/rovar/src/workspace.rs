@@ -158,6 +158,7 @@ pub struct Workspace {
     colors: color_styles::State,
     export: export::ExportState,
     snapping: layout::Snapping,
+    measure_target: Option<usize>,
     hierarchy: crate::layer::Hierarchy,
     auto_layout: auto_layout::State,
     components: components::State,
@@ -398,11 +399,17 @@ impl Workspace {
         }
         let focus = cx.focus_handle();
         subscriptions.push(cx.on_blur(&focus, window, |this, window, cx| {
+            if this.measure_target.take().is_some() {
+                cx.notify();
+            }
             this.space_down = false;
             this.cancel_gesture(window, cx);
         }));
         subscriptions.push(cx.observe_window_activation(window, |this, window, cx| {
             if !window.is_window_active() {
+                if this.measure_target.take().is_some() {
+                    cx.notify();
+                }
                 this.space_down = false;
                 this.cancel_gesture(window, cx);
             }
@@ -421,6 +428,7 @@ impl Workspace {
             auto_layout: auto_layout::State::new(window, cx),
             components: components::State::default(),
             snapping: Default::default(),
+            measure_target: None,
             export: export::ExportState::new(window, cx),
             rename_input,
             layer_drag: None,
@@ -584,6 +592,7 @@ impl Workspace {
         }
         self.seal_text_edits(cx);
         self.begin_snapping(kind);
+        self.measure_target = None;
         self.gesture = Some(Gesture {
             kind,
             start: position,
@@ -885,6 +894,12 @@ impl Render for Workspace {
             })
             .on_modifiers_changed(cx.listener(
                 |this, event: &gpui::ModifiersChangedEvent, window, cx| {
+                    this.update_measurement(
+                        window.mouse_position(),
+                        event.modifiers.alt,
+                        window,
+                        cx,
+                    );
                     if this.gesture.is_some_and(|g| {
                         matches!(
                             g.kind,

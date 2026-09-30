@@ -8,7 +8,10 @@ extern "C" {
     async fn initialize() -> Result<JsValue, JsValue>;
     #[wasm_bindgen(catch)]
     async fn persist(changes: js_sys::Array) -> Result<(), JsValue>;
-    fn status(message: &str, failed: bool);
+    #[wasm_bindgen(js_name = reportError)]
+    fn report_error(message: &str);
+    #[wasm_bindgen(js_name = clearStorageError)]
+    fn clear_storage_error();
     fn watch(callback: &js_sys::Function);
     fn downloadBytes(name: &str, bytes: &[u8]);
     #[wasm_bindgen(js_name = editorReady)]
@@ -71,7 +74,7 @@ pub fn start() {
         }
         .await;
         if let Err(error) = result {
-            status(&error.to_string(), true);
+            report_error(&error.to_string());
         }
     });
 }
@@ -81,16 +84,6 @@ pub async fn flush_workspace() {
     let (revision, changes) = rovar_storage::pending();
     if changes.is_empty() {
         return;
-    }
-    // Session writes remember pan, zoom and active pages without changing a
-    // document. Keep those background writes out of the document save feedback.
-    let notify = changes.iter().any(|(name, _)| {
-        Path::new(name)
-            .extension()
-            .is_some_and(|ext| ext == "rovar")
-    });
-    if notify {
-        status("Saving locally…", false);
     }
     let entries = js_sys::Array::new();
     for (name, bytes) in changes {
@@ -106,17 +99,15 @@ pub async fn flush_workspace() {
     match persist(entries).await {
         Ok(()) => {
             rovar_storage::acknowledge(revision);
-            let recovered = SAVE_FAILED.swap(false, Ordering::Relaxed);
-            if notify || recovered {
-                status("Saved locally", false);
+            if SAVE_FAILED.swap(false, Ordering::Relaxed) {
+                clear_storage_error();
             }
         }
         Err(error) => {
             SAVE_FAILED.store(true, Ordering::Relaxed);
-            status(
-                &format!("Could not save locally: {error:?}. Export your document to keep a copy."),
-                true,
-            );
+            report_error(&format!(
+                "Could not save locally: {error:?}. Export your document to keep a copy."
+            ));
         }
     }
 }

@@ -2,6 +2,135 @@ use super::*;
 use crate::workspace::tests::{click, draw, open};
 use gpui::{Modifiers, TestAppContext, VisualTestContext, WindowHandle};
 
+#[gpui::test]
+fn equal_gaps_snap_while_dragging_release_with_alt_and_undo_as_one_edit(cx: &mut TestAppContext) {
+    let window = fixture(cx);
+    window
+        .update(cx, |this, _, cx| {
+            this.shapes.clear();
+            for (id, x, width) in [(1, 0., 60.), (2, 80., 80.), (3, 240., 40.)] {
+                this.shapes.push(Shape::new(
+                    id,
+                    None,
+                    ShapeKind::Rectangle,
+                    Rect {
+                        x,
+                        y: 100.,
+                        width,
+                        height: 60.,
+                    },
+                ));
+            }
+            this.next_id = 4;
+            this.select_shape(3, cx);
+        })
+        .unwrap();
+    let mut visual = VisualTestContext::from_window(window.into(), cx);
+    draw(&mut visual);
+    let start = visual.debug_bounds("shape-3").unwrap().center();
+    let end = start - point(px(57.), px(0.));
+    visual.simulate_mouse_down(start, MouseButton::Left, Default::default());
+    visual.simulate_mouse_move(end, MouseButton::Left, Default::default());
+    draw(&mut visual);
+    window
+        .update(&mut visual.cx, |this, _, _| {
+            assert_eq!(this.shapes[2].rect.x, 180.);
+            assert_eq!(
+                this.snapping
+                    .gaps
+                    .iter()
+                    .map(|g| g.end - g.start)
+                    .collect::<Vec<_>>(),
+                vec![20., 20.]
+            );
+        })
+        .unwrap();
+    modifiers(
+        &mut visual,
+        Modifiers {
+            alt: true,
+            ..Default::default()
+        },
+    );
+    window
+        .update(&mut visual.cx, |this, _, _| {
+            assert_eq!(this.shapes[2].rect.x, 183.);
+            assert!(this.snapping.gaps.is_empty());
+        })
+        .unwrap();
+    modifiers(&mut visual, Default::default());
+    visual.simulate_mouse_up(end, MouseButton::Left, Default::default());
+    draw(&mut visual);
+    window
+        .update(&mut visual.cx, |this, _, _| {
+            assert_eq!(this.shapes[2].rect.x, 180.);
+            assert!(this.snapping.gaps.is_empty());
+            assert_eq!(this.history.borrow().undo_len(), 1);
+        })
+        .unwrap();
+    visual.simulate_keystrokes("ctrl-z");
+    draw(&mut visual);
+    window
+        .update(&mut visual.cx, |this, _, _| {
+            assert_eq!(this.shapes[2].rect.x, 240.)
+        })
+        .unwrap();
+}
+
+#[gpui::test]
+fn spacing_between_neighbors_respects_zoom_and_parent_scope(cx: &mut TestAppContext) {
+    let window = fixture(cx);
+    window
+        .update(cx, |this, _, cx| {
+            this.shapes.clear();
+            for (id, x) in [(1, 0.), (2, 200.), (3, 400.)] {
+                this.shapes.push(Shape::new(
+                    id,
+                    None,
+                    ShapeKind::Rectangle,
+                    Rect {
+                        x,
+                        y: 100.,
+                        width: 40.,
+                        height: 40.,
+                    },
+                ));
+            }
+            this.view.zoom = 2.;
+            this.select_shape(3, cx);
+            this.begin_snapping(GestureKind::Shape {
+                id: 3,
+                original: this.shapes[2].rect,
+                handle: None,
+            });
+            assert_eq!(this.snap_delta(point(-298., 0.)).x, -300.); // Two equal 60-unit gaps.
+            assert_eq!(this.snapping.gaps.len(), 2);
+            assert_eq!(this.snap_delta(point(-296., 0.)).x, -296.); // Eight screen pixels is outside tolerance.
+            assert!(this.snapping.gaps.is_empty());
+            // A different parent cannot supply a spacing neighbor, even if nearby.
+            this.next_id = 4;
+            this.add_artboard(
+                Rect {
+                    x: 0.,
+                    y: 0.,
+                    width: 600.,
+                    height: 400.,
+                },
+                cx,
+            );
+            this.shapes[1].board = this.selected;
+            this.select_shape(3, cx);
+            this.begin_snapping(GestureKind::Shape {
+                id: 3,
+                original: this.shapes[2].rect,
+                handle: None,
+            });
+            assert_eq!(this.snap_delta(point(-298., 0.)).x, -298.);
+            assert!(this.snapping.gaps.is_empty());
+        })
+        .unwrap();
+}
+
 fn fixture(cx: &mut TestAppContext) -> WindowHandle<Workspace> {
     let window = open(cx);
     window

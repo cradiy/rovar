@@ -3,19 +3,21 @@ let flushing = false;
 let inFlight = false;
 let releaseLock;
 
-export function status(message, failed) {
-    if (failed && !document.getElementById('shell').hidden) {
+export function reportError(message) {
+    if (!document.getElementById('shell').hidden) {
         document.getElementById('loading').textContent = message;
         document.getElementById('retry').hidden = false;
         return;
     }
     const element = document.getElementById('storage-status');
     element.textContent = message;
-    element.dataset.failed = String(failed);
     element.hidden = false;
-    if (!failed && message === 'Saved locally') {
-        setTimeout(() => { if (element.textContent === message) element.hidden = true; }, 2000);
-    }
+}
+
+export function clearStorageError() {
+    const element = document.getElementById('storage-status');
+    element.hidden = true;
+    element.textContent = '';
 }
 
 let loadedFonts = [];
@@ -45,7 +47,7 @@ export async function initialize() {
             request.onerror = () => reject(request.error);
             request.onblocked = () => reject(new Error('Close other Rovar tabs to open this workspace.'));
         });
-        database.onversionchange = () => { database.close(); status('Workspace changed in another tab. Export your work and reload.', true); };
+        database.onversionchange = () => { database.close(); reportError('Workspace changed in another tab. Export your work and reload.'); };
         const files = await new Promise((resolve, reject) => {
             const tx = database.transaction('files', 'readonly');
             const store = tx.objectStore('files');

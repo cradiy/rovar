@@ -105,6 +105,7 @@ impl Workspace {
                 match event.keystroke.key.as_str() {
                     "space" => this.space_down = true,
                     "escape" => {
+                        this.measure_target = None;
                         this.toolbar.hand = false;
                         this.cancel_gesture(window, cx);
                         this.discard_bezier();
@@ -177,6 +178,12 @@ impl Workspace {
                                 }
                                 this.update_bezier_hover(event.position, cx);
                                 this.update_vector_hover(event.position, cx);
+                                this.update_measurement(
+                                    event.position,
+                                    event.modifiers.alt,
+                                    window,
+                                    cx,
+                                );
                             });
                         });
                         let ending = weak.clone();
@@ -191,6 +198,12 @@ impl Workspace {
                                     this.finish_gesture(window, cx);
                                     this.update_bezier_hover(event.position, cx);
                                     this.update_vector_hover(event.position, cx);
+                                    this.update_measurement(
+                                        event.position,
+                                        event.modifiers.alt,
+                                        window,
+                                        cx,
+                                    );
                                     cx.stop_propagation();
                                     cx.notify();
                                 }
@@ -267,7 +280,7 @@ impl Workspace {
     pub(super) fn scroll_canvas(
         &mut self,
         event: &gpui::ScrollWheelEvent,
-        _: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         if self.gesture.is_none() {
@@ -281,6 +294,7 @@ impl Workspace {
             } else {
                 self.view.pan += point(f32::from(delta.x), f32::from(delta.y));
             }
+            self.update_measurement(event.position, event.modifiers.alt, window, cx);
             cx.notify();
         }
         cx.stop_propagation();
@@ -289,7 +303,7 @@ impl Workspace {
     pub(super) fn pinch_canvas(
         &mut self,
         event: &gpui::PinchEvent,
-        _: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         if self.gesture.is_none() {
@@ -299,6 +313,7 @@ impl Workspace {
                 point(f32::from(local.x), f32::from(local.y)),
                 self.view.zoom * (1. + event.delta).max(0.01),
             );
+            self.update_measurement(event.position, window.modifiers().alt, window, cx);
             cx.notify();
         }
         cx.stop_propagation();
@@ -361,6 +376,7 @@ impl Workspace {
             .children(self.creation_preview())
             .child(self.selection_overlay())
             .child(self.snap_guides())
+            .child(self.measurement_overlay())
             .children(self.vector_hover_preview(cx))
             .when(
                 self.boards.is_empty()

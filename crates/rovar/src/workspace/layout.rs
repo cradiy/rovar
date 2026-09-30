@@ -1,6 +1,7 @@
 use super::*;
 use crate::i18n::t;
 use std::collections::BTreeSet;
+mod measurement;
 mod snapping;
 pub(super) use snapping::Snapping;
 

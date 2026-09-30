@@ -315,6 +315,7 @@ impl Workspace {
     }
 
     pub(crate) fn suspend(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.measure_target = None;
         self.suspend_assets();
         self.colors.dialog = None;
         for menu in &self.colors.menu {

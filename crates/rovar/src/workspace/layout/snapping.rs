@@ -1,5 +1,7 @@
 use super::*;
 mod resize;
+mod spacing;
+use super::measurement::{Dimension, dimension_overlay};
 
 #[derive(Clone, Copy)]
 struct Target {
@@ -20,6 +22,8 @@ pub(in crate::workspace) struct Snapping {
     original: Option<Rect>,
     targets: [Vec<Target>; 2],
     guides: Vec<Guide>,
+    neighbors: [Vec<Rect>; 2],
+    gaps: Vec<Dimension>,
 }
 impl Default for Snapping {
     fn default() -> Self {
@@ -29,6 +33,8 @@ impl Default for Snapping {
             original: None,
             targets: Default::default(),
             guides: Vec::new(),
+            neighbors: Default::default(),
+            gaps: Vec::new(),
         }
     }
 }
@@ -37,6 +43,8 @@ impl Snapping {
         self.original = None;
         self.targets.iter_mut().for_each(Vec::clear);
         self.guides.clear();
+        self.neighbors.iter_mut().for_each(Vec::clear);
+        self.gaps.clear();
     }
 }
 impl Workspace {
@@ -78,6 +86,15 @@ impl Workspace {
             .filter_map(|id| self.world_bounds(*id))
             .reduce(union);
         let moving = self.descendants(&ids);
+        let parent = ids.first().map(|id| self.layer_parent(*id));
+        let measure_spacing = matches!(
+            kind,
+            GestureKind::SelectionMove
+                | GestureKind::Move { .. }
+                | GestureKind::Text { handle: None, .. }
+                | GestureKind::Shape { handle: None, .. }
+        ) && parent
+            .is_some_and(|parent| ids.iter().all(|id| self.layer_parent(*id) == parent));
         // Do not attract an individual member back to its own group bounds.
         let ancestors: BTreeSet<_> = ids
             .iter()
@@ -96,6 +113,11 @@ impl Workspace {
             let Some(r) = self.world_bounds(id) else {
                 continue;
             };
+            if measure_spacing && Some(self.layer_parent(id)) == parent {
+                for neighbors in &mut self.snapping.neighbors {
+                    neighbors.push(r);
+                }
+            }
             for (axis, values, low, high) in [
                 (
                     0,
@@ -117,6 +139,13 @@ impl Workspace {
         }
         for targets in &mut self.snapping.targets {
             targets.sort_by(|a, b| a.value.total_cmp(&b.value));
+        }
+        for (axis, neighbors) in self.snapping.neighbors.iter_mut().enumerate() {
+            neighbors.sort_by(|a, b| {
+                super::measurement::interval(*a, axis)
+                    .0
+                    .total_cmp(&super::measurement::interval(*b, axis).0)
+            });
         }
     }
     fn nearest_target(&self, axis: usize, value: f32, tolerance: f32) -> Option<Target> {
@@ -216,6 +245,7 @@ impl Workspace {
 
     pub(in crate::workspace) fn snap_delta(&mut self, delta: Point<f32>) -> Point<f32> {
         self.snapping.guides.clear();
+        self.snapping.gaps.clear();
         if (delta.x.abs() + delta.y.abs()) * self.view.zoom < 3. {
             return delta;
         }
@@ -254,7 +284,26 @@ impl Workspace {
                     }
                 }
             }
-            if let Some((correction, target)) = closest {
+            let moved = Rect {
+                x: r.x + delta.x,
+                y: r.y + delta.y,
+                ..r
+            };
+            let gap = spacing::nearest(
+                &self.snapping.neighbors[axis],
+                moved,
+                axis,
+                6. / self.view.zoom,
+            );
+            if let Some(gap) = gap.filter(|g| {
+                closest.is_none_or(|(correction, _)| g.correction.abs() <= correction.abs())
+            }) {
+                if axis == 0 {
+                    snapped.x += gap.correction;
+                } else {
+                    snapped.y += gap.correction;
+                }
+            } else if let Some((correction, target)) = closest {
                 if axis == 0 {
                     snapped.x += correction;
                 } else {
@@ -266,6 +315,21 @@ impl Workspace {
                     low: target.low,
                     high: target.high,
                 });
+            }
+        }
+        let moved = Rect {
+            x: r.x + snapped.x,
+            y: r.y + snapped.y,
+            ..r
+        };
+        for axis in 0..2 {
+            if let Some(gap) = spacing::nearest(
+                &self.snapping.neighbors[axis],
+                moved,
+                axis,
+                0.01 / self.view.zoom,
+            ) {
+                self.snapping.gaps.extend(gap.dimensions);
             }
         }
         for guide in &mut self.snapping.guides {
@@ -298,7 +362,11 @@ impl Workspace {
                     .bg(gpui::rgba(0xf28bd9cc)),
             );
         }
-        el
+        el.child(dimension_overlay(
+            self.view,
+            self.snapping.gaps.clone(),
+            None,
+        ))
     }
 }
 
