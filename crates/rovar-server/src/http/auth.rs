@@ -8,7 +8,7 @@ use salvo::prelude::*;
 
 pub struct Authenticated {
     pub identity: Identity,
-    token: String,
+    pub(super) token: String,
 }
 
 #[handler]

@@ -1,3 +1,4 @@
+mod comparison;
 mod export;
 mod files;
 mod home;
@@ -85,6 +86,7 @@ pub(crate) struct Studio {
     _remote_subscription: Subscription,
     source: Option<String>,
     servers: Option<servers::Panel>,
+    comparison: Option<comparison::Panel>,
     spaces: Option<spaces::Panel>,
     signing_out: bool,
     source_menu: Entity<DropdownState>,
@@ -286,6 +288,7 @@ impl Studio {
             _remote_subscription: remote_subscription,
             source: None,
             servers: None,
+            comparison: None,
             spaces: None,
             signing_out: false,
             source_menu: cx.new(|cx| DropdownState::new(window, cx)),
@@ -485,6 +488,20 @@ impl Render for Studio {
                 }
             }))
             .capture_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, window, cx| {
+                if let Some(panel) = &this.comparison {
+                    if event.keystroke.key == "escape" {
+                        this.close_comparison(window, cx);
+                        cx.stop_propagation();
+                        window.prevent_default();
+                    } else if panel.server_visible {
+                        if let Some(editor) = panel.editor() {
+                            editor.update(cx, |editor, cx| editor.preview_key(event, cx));
+                        }
+                        cx.stop_propagation();
+                        window.prevent_default();
+                    }
+                    return;
+                }
                 if !this.open_errors.is_empty() {
                     if matches!(event.keystroke.key.as_str(), "escape" | "enter") {
                         this.dismiss_open_error(window, cx);
@@ -599,11 +616,9 @@ impl Render for Studio {
                                     .id("server-save-copy")
                                     .cursor_pointer()
                                     .text_color(rgb(ACCENT))
-                                    .child(t("server-save-copy"))
-                                    .on_click(cx.listener(move |this, _, _, cx| {
-                                        this.remote.update(cx, |remote, cx| {
-                                            remote.fork_conflict(&path, cx)
-                                        });
+                                    .child(t("compare-versions"))
+                                    .on_click(cx.listener(move |this, _, window, cx| {
+                                        this.open_comparison(&path, window, cx);
                                     })),
                             )
                         }),
@@ -639,7 +654,10 @@ impl Render for Studio {
                     .flex_1()
                     .min_h_0()
                     .flex()
-                    .when_some(self.active_editor(), |el, editor| el.child(editor))
+                    .when_some(
+                        self.active_editor().filter(|_| self.comparison.is_none()),
+                        |el, editor| el.child(editor),
+                    )
                     .when(self.active.is_none(), |el| el.child(self.home(window, cx)))
                     .when(
                         self.active.is_some() && self.active_editor().is_none(),
@@ -675,6 +693,9 @@ impl Render for Studio {
             })
             .when(!self.open_errors.is_empty(), |el| {
                 el.child(self.open_error_dialog(cx))
+            })
+            .when(self.comparison.is_some(), |el| {
+                el.child(self.comparison_view(window, cx))
             })
             .map(|el| {
                 #[cfg(target_os = "macos")]

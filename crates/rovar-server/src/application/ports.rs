@@ -9,9 +9,28 @@ use async_trait::async_trait;
 pub trait Accounts: Send + Sync {
     async fn create_user(&self, username: &str, hash: &str, team: Option<&str>) -> Result<()>;
     async fn find_user(&self, username: &str) -> Result<Option<User>>;
-    async fn create_session(&self, user_id: &str, hash: &[u8], expires_at: i64) -> Result<()>;
+    async fn create_session(
+        &self,
+        user_id: &str,
+        hash: &[u8],
+        expires_at: i64,
+        password_hash: &str,
+    ) -> Result<()>;
     async fn session_user(&self, hash: &[u8], now: i64) -> Result<Option<(String, String)>>;
     async fn delete_session(&self, hash: &[u8]) -> Result<()>;
+    async fn sessions(
+        &self,
+        user: &str,
+        current: &[u8],
+    ) -> Result<Vec<crate::domain::identity::AccountSession>>;
+    async fn revoke_sessions(&self, user: &str, current: &[u8], id: Option<&str>) -> Result<()>;
+    async fn change_password(
+        &self,
+        user: &str,
+        current: &[u8],
+        previous: &str,
+        next: &str,
+    ) -> Result<()>;
 }
 
 #[async_trait]

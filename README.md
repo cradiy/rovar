@@ -26,24 +26,28 @@ cargo run --locked -p rovar
 
 ## Build
 
-Linux, using Nushell:
+Install [just](https://github.com/casey/just) and [Nushell](https://www.nushell.sh/), then run from the checkout. `just` lists commands. Each build has its own recipe for shell completion, using release builds and the default output directories.
+
+Linux:
 
 ```nu
-nu scripts/build.nu
-nu scripts/build.nu all
+just build-linux
+just build-linux-all
+just build-linux-deb
+just build-linux-tar
 ```
 
-Packages: AppImage, tar.gz, RPM, DEB and Arch. Output: `dist/`.
+`build-linux` only builds the release binary. Packaging recipes: `build-linux-appimage`, `build-linux-tar` (tar.gz), `build-linux-rpm`, `build-linux-deb`, `build-linux-arch`, and `build-linux-all`. Packages go to `dist/`.
 
-macOS, using Nushell and Xcode Command Line Tools:
+On macOS, also install Xcode Command Line Tools:
 
 ```sh
-nu scripts/build.nu macos
+just build-macos
 ```
 
 Builds release packages in `.app`, ZIP and DMG formats.
 Output: `dist/Rovar.app` and versioned archives, SHA-256 checksums and build metadata.
-Supports Apple Silicon (arm64) only. `--output` and `--keep-work` are also supported.
+Supports Apple Silicon (arm64) only. To build one format, use e.g. `just build-macos-dmg`.
 
 See [macOS packaging](packaging/macos/README.md) for details.
 
@@ -52,18 +56,18 @@ See [macOS packaging](packaging/macos/README.md) for details.
 Install [Trunk](https://trunkrs.dev/) and the Rust `wasm32-unknown-unknown` target, then:
 
 ```nu
-nu scripts/web.nu --serve
-nu scripts/web.nu --release
+just serve
+just build-web
 ```
 
 Requires WebGPU on HTTPS or localhost. Build output: `dist/web/`.
-For `--serve`, start the backend on `127.0.0.1:8699` with `server.public_origin = "http://127.0.0.1:8080"`, then open that browser origin. Trunk forwards `/api/v1/` to the backend; use a separate development TOML configuration. The embedded server uses its own public origin instead.
+For `just serve`, start the backend on `127.0.0.1:8699` with `server.public_origin = "http://127.0.0.1:8080"`, then open that browser origin. Trunk forwards `/api/v1/` to the backend; use a separate development TOML configuration. The embedded server uses its own public origin instead.
 Sign-in, registration, and the editor share the GPUI interface and language setting. HTML only displays startup progress while WASM loads; PNG/SVG export and thumbnail rendering use a separate WASM module loaded on demand.
 Auto language follows the browser's preferred languages and falls back to English. Login background motion respects reduced-motion preferences and pauses in hidden tabs.
 Connect to the server hosting the editor. Documents are cached in IndexedDB and synchronized to the server; export `.rovar` files to keep independent copies. One browser tab owns the workspace; multiple document tabs work inside it. Use file dialogs for imports. Web panels use solid backgrounds, and fonts are bundled.
 
 ## Server
 
-Run `nu scripts/server.nu` to build a server binary with the Web editor embedded. Desktop can switch between local storage and multiple servers. See [server setup](crates/rovar-server/README.md).
+Run `just build-server` to build a server binary with the Web editor embedded. Desktop can switch between local storage and multiple servers. See [server setup](crates/rovar-server/README.md).
 
 [File format](crates/rovar-format/FORMAT.md) · [MIT License](LICENSE)

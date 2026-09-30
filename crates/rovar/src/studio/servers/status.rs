@@ -2,27 +2,23 @@ use super::*;
 use gpui::FontWeight;
 use uic::components::dropdown::{DropdownPlacement, dropdown};
 
-fn detail(label: &'static str, value: String) -> gpui::Div {
+fn status_action(id: &'static str, label: &'static str) -> gpui::Stateful<gpui::Div> {
     div()
+        .id(id)
+        .rounded(px(7.))
+        .cursor_pointer()
         .flex()
-        .items_start()
-        .gap(px(16.))
-        .child(
-            div()
-                .w(px(80.))
-                .flex_shrink_0()
-                .whitespace_nowrap()
-                .text_color(rgb(MUTED))
-                .child(label),
-        )
-        .child(
-            div()
-                .flex_1()
-                .min_w_0()
-                .truncate()
-                .text_color(rgb(TEXT))
-                .child(value),
-        )
+        .items_center()
+        .child(label)
+        .mx(px(16.))
+        .mb(px(16.))
+        .h(px(34.))
+        .py_0()
+        .justify_center()
+        .text_size(px(12.))
+        .text_color(rgb(ACCENT))
+        .bg(rgb(0x322b42))
+        .hover(|s| s.bg(rgb(0x403550)))
 }
 
 impl Studio {
@@ -39,12 +35,12 @@ impl Studio {
         let link = remote.link(&tab.file.path)?;
         let connection = remote.connection(&link.connection)?;
         let name = remote.server_name(&connection.url).to_owned();
-        let (status, mark, color) = if link.conflict {
-            ("server-conflict", LucideIcons::CircleAlert, 0xf08e83)
-        } else if link.error.is_some() {
-            ("server-local-copy", LucideIcons::CircleAlert, 0xf08e83)
-        } else if !connection.authenticated {
+        let (status, mark, color) = if !connection.authenticated {
             ("server-session-expired", LucideIcons::LogOut, 0xd5b777)
+        } else if link.conflict {
+            ("server-conflict-title", LucideIcons::CircleAlert, 0xd5b777)
+        } else if link.error.is_some() {
+            ("server-sync-paused", LucideIcons::CircleAlert, 0xd5b777)
         } else if tab.saving || (link.dirty && remote.busy) {
             ("server-syncing", LucideIcons::RefreshCw, ACCENT)
         } else if link.dirty || tab.saved_revision != Some(editor.read(cx).document_revision()) {
@@ -83,6 +79,9 @@ impl Studio {
                     .justify_center()
                     .child(icon(mark, 9.).text_color(rgb(color))),
             );
+        let connection_id = connection.id.clone();
+        let authenticated = connection.authenticated;
+        let conflict_path = tab.file.path.clone();
         let panel = div()
             .debug_selector(|| "server-info-panel".into())
             .flex()
@@ -121,7 +120,12 @@ impl Studio {
                                 div()
                                     .text_size(px(11.))
                                     .text_color(rgb(MUTED))
-                                    .child(t("server-connection-details")),
+                                    .truncate()
+                                    .child(format!(
+                                        "{} · {}",
+                                        connection.identity.username,
+                                        connection.space_label()
+                                    )),
                             ),
                     ),
             )
@@ -129,10 +133,6 @@ impl Studio {
                 div()
                     .mx(px(16.))
                     .mb(px(16.))
-                    .px(px(10.))
-                    .py(px(9.))
-                    .rounded(px(8.))
-                    .bg(rgba((color << 8) | 0x12))
                     .flex()
                     .items_start()
                     .gap(px(8.))
@@ -146,33 +146,57 @@ impl Studio {
                         div()
                             .flex_1()
                             .min_w_0()
+                            .flex()
+                            .flex_col()
+                            .gap(px(5.))
                             .text_size(px(12.))
                             .text_color(rgb(color))
-                            .child(t(status)),
+                            .child(t(status))
+                            .when(link.conflict || link.error.is_some(), |el| {
+                                el.child(
+                                    div()
+                                        .text_size(px(11.))
+                                        .text_color(rgb(MUTED))
+                                        .child(t("server-local-copy")),
+                                )
+                            }),
                     ),
             )
-            .child(
-                div()
-                    .px(px(16.))
-                    .pb(px(16.))
-                    .flex()
-                    .flex_col()
-                    .gap(px(10.))
-                    .text_size(px(12.))
-                    .child(detail(
-                        t("server-account"),
-                        connection.identity.username.clone(),
-                    ))
-                    .child(detail(t("server-workspace"), connection.space_label())),
-            )
-            .when_some(link.error.clone(), |el, error| {
+            .when(!authenticated, |el| {
                 el.child(
-                    div()
-                        .px(px(16.))
-                        .pb(px(12.))
-                        .text_size(px(11.))
-                        .text_color(rgb(0xf08e83))
-                        .child(error),
+                    status_action("sync-sign-in", t("server-reconnect")).on_click(cx.listener(
+                        move |this, _, window, cx| {
+                            this.server_info
+                                .update(cx, |menu, cx| menu.close(window, cx));
+                            this.reauthenticate(connection_id.clone(), window, cx);
+                        },
+                    )),
+                )
+            })
+            .when(
+                authenticated
+                    && !link.conflict
+                    && !remote.busy
+                    && !tab.saving
+                    && (link.dirty || link.error.is_some()),
+                |el| {
+                    el.child(status_action("sync-retry", t("server-retry-now")).on_click(
+                        cx.listener(|this, _, _, cx| {
+                            this.remote.update(cx, |remote, cx| {
+                                remote.retry(cx);
+                                remote.sync(cx);
+                            });
+                        }),
+                    ))
+                },
+            )
+            .when(authenticated && link.conflict, |el| {
+                el.child(
+                    status_action("sync-save-copy", t("compare-versions")).on_click(cx.listener(
+                        move |this, _, window, cx| {
+                            this.open_comparison(&conflict_path, window, cx);
+                        },
+                    )),
                 )
             });
         Some(

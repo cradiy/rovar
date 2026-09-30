@@ -1,6 +1,7 @@
 use super::*;
 use crate::remote::Client;
 use gpui::{Focusable, SharedString, rgba};
+mod account;
 mod authentication;
 #[cfg(any(target_family = "wasm", test))]
 mod login;
@@ -15,6 +16,7 @@ enum View {
     Accounts,
     Login,
     Rename,
+    Settings,
 }
 
 pub(super) struct Panel {
@@ -25,6 +27,12 @@ pub(super) struct Panel {
     name: Entity<TextInput>,
     username: Entity<TextInput>,
     password: Entity<TextInput>,
+    new_password: Entity<TextInput>,
+    confirm_password: Entity<TextInput>,
+    account: Option<String>,
+    sessions: Vec<rovar_api::AccountSession>,
+    success: Option<String>,
+    resume: Option<String>,
     team_name: Entity<TextInput>,
     registration: Option<rovar_api::RegistrationPolicy>,
     mode: &'static str,
@@ -40,6 +48,8 @@ impl Panel {
         for (input, key) in [
             (&self.username, "server-username"),
             (&self.password, "server-password"),
+            (&self.new_password, "account-new-password"),
+            (&self.confirm_password, "account-confirm-password"),
             (&self.team_name, "space-team-name"),
         ] {
             input.update(cx, |input, cx| {
@@ -64,19 +74,10 @@ impl Studio {
                 let credentials = cx.read_credentials(&format!("rovar-server/{}", connection.id));
                 cx.spawn(async move |this, cx| {
                     if let Ok(Some((_, token))) = credentials.await {
-                        let mut client = connection.client();
-                        client.token = String::from_utf8_lossy(&token).into_owned();
-                        let Ok(identity) = client
-                            .json::<rovar_api::Identity>("GET", "session", None)
-                            .await
-                        else {
-                            return;
-                        };
                         let _ = this.update(cx, |this, cx| {
                             this.remote.update(cx, |remote, cx| {
-                                let _ = remote.connect(
-                                    connection.url,
-                                    identity,
+                                remote.restore_credentials(
+                                    &connection.id,
                                     String::from_utf8_lossy(&token).into_owned(),
                                     cx,
                                 );
@@ -189,33 +190,72 @@ impl Studio {
 
     pub(super) fn refresh_server(&mut self, cx: &mut Context<Self>) {
         if let Some(id) = self.source.clone() {
-            if self
-                .remote
-                .read(cx)
-                .connection(&id)
-                .is_some_and(|c| !c.authenticated)
-            {
-                return;
+            self.refresh_connection(id, cx);
+        }
+    }
+
+    pub(in crate::studio) fn keep_conflict_versions(
+        &mut self,
+        path: &std::path::Path,
+        cx: &mut Context<Self>,
+    ) {
+        if self.remote.read(cx).busy {
+            return;
+        }
+        let Some(connection) = self
+            .remote
+            .read(cx)
+            .link(path)
+            .map(|link| link.connection.clone())
+        else {
+            return;
+        };
+        self.remote
+            .update(cx, |remote, cx| remote.fork_conflict(path, cx));
+        self.refresh_connection(connection, cx);
+    }
+
+    fn refresh_connection(&mut self, id: String, cx: &mut Context<Self>) {
+        if self
+            .remote
+            .read(cx)
+            .connection(&id)
+            .is_some_and(|c| !c.authenticated)
+        {
+            return;
+        }
+        let mut open = std::collections::BTreeSet::new();
+        for handle in cx
+            .windows()
+            .into_iter()
+            .filter_map(|w| w.downcast::<Studio>())
+        {
+            if handle.window_id().as_u64() == self.window_id {
+                open.extend(self.tabs.iter().map(|tab| tab.file.path.clone()));
+            } else {
+                let _ = handle.update(cx, |studio, _, _| {
+                    open.extend(studio.tabs.iter().map(|tab| tab.file.path.clone()));
+                });
             }
-            let mut open = std::collections::BTreeSet::new();
-            for handle in cx
-                .windows()
-                .into_iter()
-                .filter_map(|w| w.downcast::<Studio>())
-            {
-                if handle.window_id().as_u64() == self.window_id {
-                    open.extend(self.tabs.iter().map(|tab| tab.file.path.clone()));
-                } else {
-                    let _ = handle.update(cx, |studio, _, _| {
-                        open.extend(studio.tabs.iter().map(|tab| tab.file.path.clone()));
-                    });
-                }
-            }
-            self.remote.update(cx, |remote, cx| {
-                remote.retry(cx);
-                remote.refresh(id, open, cx);
+        }
+        self.remote.update(cx, |remote, cx| {
+            remote.retry(cx);
+            remote.refresh(id, open, cx);
+        });
+    }
+
+    pub(crate) fn open_document_paths(cx: &mut gpui::App) -> std::collections::BTreeSet<PathBuf> {
+        let mut open = std::collections::BTreeSet::new();
+        for handle in cx
+            .windows()
+            .into_iter()
+            .filter_map(|w| w.downcast::<Studio>())
+        {
+            let _ = handle.update(cx, |studio, _, _| {
+                open.extend(studio.tabs.iter().map(|tab| tab.file.path.clone()))
             });
         }
+        open
     }
 
     pub(super) fn remote_status(&self, cx: &gpui::App) -> Option<String> {
@@ -275,6 +315,20 @@ impl Studio {
                     .password()
                     .placeholder(t("server-password"))
             }),
+            new_password: cx.new(|cx| {
+                TextInput::new(cx)
+                    .password()
+                    .placeholder(t("account-new-password"))
+            }),
+            confirm_password: cx.new(|cx| {
+                TextInput::new(cx)
+                    .password()
+                    .placeholder(t("account-confirm-password"))
+            }),
+            account: None,
+            sessions: Vec::new(),
+            success: None,
+            resume: None,
             team_name: cx.new(|cx| TextInput::new(cx).placeholder(t("space-team-name"))),
             registration: None,
             mode: "login",
@@ -310,13 +364,27 @@ impl Studio {
                 }
             },
         ));
-        for input in [&panel.username, &panel.password, &panel.team_name] {
+        for input in [
+            &panel.username,
+            &panel.password,
+            &panel.team_name,
+            &panel.new_password,
+            &panel.confirm_password,
+        ] {
             panel._subscriptions.push(cx.subscribe_in(
                 input,
                 window,
                 |this, _, event: &InputEvent, window, cx| {
                     if matches!(event, InputEvent::Submit(_)) {
-                        this.server_login(window, cx);
+                        if this
+                            .servers
+                            .as_ref()
+                            .is_some_and(|p| p.view == View::Settings)
+                        {
+                            this.save_account_password(window, cx);
+                        } else {
+                            this.server_login(window, cx);
+                        }
                     }
                 },
             ));
@@ -366,6 +434,13 @@ impl Studio {
             return;
         }
         panel.error = None;
+        panel.success = None;
+        panel
+            .new_password
+            .update(cx, |input, cx| input.set_value("", cx));
+        panel
+            .confirm_password
+            .update(cx, |input, cx| input.set_value("", cx));
         panel.busy = true;
         cx.spawn_in(window, async move |this, cx| {
             let result = client
@@ -413,6 +488,14 @@ impl Studio {
             return;
         }
         panel.view = view;
+        panel.success = None;
+        panel.resume = None;
+        panel
+            .new_password
+            .update(cx, |input, cx| input.set_value("", cx));
+        panel
+            .confirm_password
+            .update(cx, |input, cx| input.set_value("", cx));
         panel.mode = "login";
         panel.error = None;
         panel
@@ -432,7 +515,7 @@ impl Studio {
             }
             View::Rename => panel.name.focus_handle(cx).focus(window, cx),
             View::Login => panel.username.focus_handle(cx).focus(window, cx),
-            View::Accounts => self.focus.focus(window, cx),
+            View::Accounts | View::Settings => self.focus.focus(window, cx),
         }
         cx.notify();
     }
@@ -470,6 +553,47 @@ impl Studio {
                     .update(cx, |input, cx| input.set_value("", cx));
             }
             Err(error) => self.servers.as_mut().unwrap().error = Some(error.to_string()),
+        }
+        cx.notify();
+    }
+
+    fn remove_server(&mut self, url: String, cx: &mut Context<Self>) {
+        let open = cx
+            .windows()
+            .into_iter()
+            .filter_map(|w| w.downcast::<Studio>())
+            .any(|handle| {
+                if handle.window_id().as_u64() == self.window_id {
+                    self.tabs.iter().any(|tab| {
+                        self.remote
+                            .read(cx)
+                            .link(&tab.file.path)
+                            .and_then(|l| self.remote.read(cx).connection(&l.connection))
+                            .is_some_and(|c| c.url == url)
+                    })
+                } else {
+                    handle
+                        .update(cx, |studio, _, cx| {
+                            studio.tabs.iter().any(|tab| {
+                                studio
+                                    .remote
+                                    .read(cx)
+                                    .link(&tab.file.path)
+                                    .and_then(|l| studio.remote.read(cx).connection(&l.connection))
+                                    .is_some_and(|c| c.url == url)
+                            })
+                        })
+                        .unwrap_or(true)
+                }
+            });
+        let result = if open {
+            Err(anyhow::anyhow!(t("server-remove-hint")))
+        } else {
+            self.remote
+                .update(cx, |remote, cx| remote.remove_server(&url, cx))
+        };
+        if let Some(panel) = &mut self.servers {
+            panel.error = result.err().map(|e| e.to_string());
         }
         cx.notify();
     }

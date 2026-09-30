@@ -78,6 +78,9 @@ impl Panels {
 
 impl Workspace {
     pub(super) fn canvas_insets(&self) -> (f32, f32) {
+        if self.preview.is_some() {
+            return (16., 16.);
+        }
         let left = if self.sidebar.collapsed {
             46.
         } else {

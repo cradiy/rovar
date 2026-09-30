@@ -1,4 +1,6 @@
+mod account;
 mod spaces;
+pub use account::*;
 use serde::{Deserialize, Serialize};
 pub use spaces::*;
 

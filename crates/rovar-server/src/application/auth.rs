@@ -6,6 +6,7 @@ use crate::domain::{
 use sha2::{Digest, Sha256};
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Mutex;
+mod account;
 
 pub const SESSION_SECONDS: i64 = 30 * 86400;
 
@@ -100,7 +101,11 @@ impl AuthService {
             .find_user(&username)
             .await?
             .ok_or(Error::Unauthorized)?;
-        if !self.passwords.verify(password, user.password_hash).await? {
+        if !self
+            .passwords
+            .verify(password, user.password_hash.clone())
+            .await?
+        {
             return Err(Error::Unauthorized);
         }
         let token = format!(
@@ -109,7 +114,12 @@ impl AuthService {
             uuid::Uuid::new_v4().simple()
         );
         self.accounts
-            .create_session(&user.id, &token_hash(&token), now() + SESSION_SECONDS)
+            .create_session(
+                &user.id,
+                &token_hash(&token),
+                now() + SESSION_SECONDS,
+                &user.password_hash,
+            )
             .await?;
         Ok(Session {
             identity: self.identity(user.id, user.username).await?,

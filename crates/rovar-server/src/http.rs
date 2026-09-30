@@ -1,3 +1,4 @@
+mod account;
 mod auth;
 mod documents;
 mod mapping;
@@ -32,6 +33,13 @@ fn routes(config: &Config, app: Application) -> Router {
                         .hoop(auth::authenticate)
                         .push(Router::with_path("session").get(auth::session))
                         .push(Router::with_path("logout").post(auth::logout))
+                        .push(Router::with_path("account/password").put(account::password))
+                        .push(
+                            Router::with_path("account/sessions")
+                                .get(account::sessions)
+                                .delete(account::revoke_others),
+                        )
+                        .push(Router::with_path("account/sessions/{id}").delete(account::revoke))
                         .push(Router::with_path("spaces").get(spaces::list))
                         .push(Router::with_path("teams").post(spaces::create))
                         .push(Router::with_path("teams/join").post(spaces::join))

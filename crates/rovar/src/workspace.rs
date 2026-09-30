@@ -19,6 +19,7 @@ mod media;
 mod organization;
 pub(crate) mod pages;
 mod panels;
+mod preview;
 mod shapes;
 #[cfg(test)]
 mod tests;
@@ -185,6 +186,7 @@ pub struct Workspace {
     #[cfg(test)]
     pub(crate) snapshot_count: Cell<usize>,
     view: Viewport,
+    preview: Option<preview::State>,
     bounds: Rc<Cell<Bounds<Pixels>>>,
     capture: Rc<Cell<Option<HitboxId>>>,
     gesture: Option<Gesture>,
@@ -445,6 +447,7 @@ impl Workspace {
             #[cfg(test)]
             snapshot_count: Cell::new(0),
             view: Viewport::default(),
+            preview: None,
             bounds: Rc::new(Cell::new(Bounds::default())),
             capture: Rc::new(Cell::new(None)),
             gesture: None,
@@ -739,6 +742,9 @@ impl Render for Workspace {
         self.sync_layout_inputs(cx);
         self.sync_video_visibility(cx);
         self.load_visible_media(window, cx);
+        if self.preview_read_only() {
+            return self.preview_canvas(cx).into_any_element();
+        }
         self.panels.window_width = f32::from(window.viewport_size().width);
         let drag_cursor = self.gesture.map(|gesture| match gesture.kind {
             GestureKind::Rotate { .. } => gpui::CursorStyle::Crosshair,
@@ -892,5 +898,6 @@ impl Render for Workspace {
             .when(self.pages.delete.is_some(), |el| {
                 el.child(self.page_delete_dialog(cx))
             })
+            .into_any_element()
     }
 }

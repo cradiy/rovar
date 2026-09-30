@@ -1,6 +1,13 @@
 [workspace]
 resolver = "2"
-members = ["crates/rovar", "crates/rovar-format", "crates/rovar-storage", "crates/rovar-api", "crates/rovar-server", "crates/rovar-render"]
+members = [
+  "crates/rovar",
+  "crates/rovar-format",
+  "crates/rovar-storage",
+  "crates/rovar-api",
+  "crates/rovar-server",
+  "crates/rovar-render",
+]
 default-members = ["crates/rovar"]
 
 [profile.dev]

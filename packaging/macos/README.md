@@ -2,18 +2,18 @@
 
 ## Build
 
-Run on Apple Silicon macOS with Rust, Nushell and Xcode Command Line Tools installed.
+Run on Apple Silicon macOS with Rust, just, Nushell and Xcode Command Line Tools installed.
 
 ```sh
 # Build release and produce all three formats.
-nu scripts/build.nu macos
+just build-macos
 
-# Choose individual formats and a destination.
-nu scripts/build.nu macos app dmg --output dist/macos
+# Build only a DMG.
+just build-macos-dmg
 ```
 
-`--keep-work` retains intermediate files under `target/`.
-Relative output paths are interpreted relative to the caller's working directory.
+`build-macos` builds all three formats. Use `build-macos-app`, `build-macos-zip`, or `build-macos-dmg` for a single format.
+`just` runs from the repository root and uses release builds.
 
 ## Output
 

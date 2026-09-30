@@ -251,9 +251,11 @@ impl Workspace {
                 )
             })
             .child(self.view_controls(cx))
-            .child(self.sidebar(cx))
-            .child(self.properties(cx))
-            .child(self.tool_bar(cx))
+            .when(self.preview.is_none(), |el| {
+                el.child(self.sidebar(cx))
+                    .child(self.properties(cx))
+                    .child(self.tool_bar(cx))
+            })
             .when(self.media_loading || self.media_error.is_some(), |el| {
                 el.child(self.media_status(cx))
             })
@@ -262,7 +264,7 @@ impl Workspace {
             })
     }
 
-    fn scroll_canvas(
+    pub(super) fn scroll_canvas(
         &mut self,
         event: &gpui::ScrollWheelEvent,
         _: &mut Window,
@@ -284,7 +286,7 @@ impl Workspace {
         cx.stop_propagation();
     }
 
-    fn pinch_canvas(
+    pub(super) fn pinch_canvas(
         &mut self,
         event: &gpui::PinchEvent,
         _: &mut Window,
@@ -346,7 +348,7 @@ impl Workspace {
         .size_full()
     }
 
-    fn scene_content(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+    pub(super) fn scene_content(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         div()
             .absolute()
             .size_full()
@@ -542,7 +544,7 @@ impl Workspace {
             })
     }
 
-    fn view_controls(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    pub(super) fn view_controls(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let button = |id: &'static str, label: gpui::SharedString| {
             div()
                 .id(id)
@@ -559,7 +561,11 @@ impl Workspace {
         div()
             .absolute()
             .top(px(16.))
-            .right(px(self.canvas_insets().1))
+            .right(px(if self.preview.is_some() {
+                16.
+            } else {
+                self.canvas_insets().1
+            }))
             .p(px(4.))
             .rounded(px(8.))
             .bg(rgb(PANEL))
@@ -587,10 +593,12 @@ impl Workspace {
                 button("zoom-in", "+".into())
                     .on_click(cx.listener(|this, _, _, cx| this.zoom_center(1.25, cx))),
             )
-            .child(
-                button("zoom-fit", t("zoom-fit").into())
-                    .on_click(cx.listener(|this, _, _, cx| this.fit_selected(cx))),
-            )
+            .when(self.preview.is_none(), |el| {
+                el.child(
+                    button("zoom-fit", t("zoom-fit").into())
+                        .on_click(cx.listener(|this, _, _, cx| this.fit_selected(cx))),
+                )
+            })
     }
 
     fn zoom_center(&mut self, factor: f32, cx: &mut Context<Self>) {

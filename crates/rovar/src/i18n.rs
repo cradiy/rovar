@@ -257,6 +257,7 @@ mod tests {
         args.set("start", 1);
         args.set("end", 6);
         args.set("total", 11);
+        args.set("revision", 3);
         let keys = |source: &str| {
             FluentResource::try_new(source.into())
                 .unwrap()

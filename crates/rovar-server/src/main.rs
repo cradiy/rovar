@@ -1,3 +1,5 @@
+#[cfg(test)]
+mod account_tests;
 mod application;
 mod bootstrap;
 mod domain;

@@ -85,6 +85,21 @@ impl Studio {
                 }
                 match result {
                     Ok(login) => {
+                        let resume = this.servers.as_ref().and_then(|p| p.resume.clone());
+                        if resume
+                            .as_deref()
+                            .and_then(|id| this.remote.read(cx).connection(id))
+                            .is_some_and(|c| {
+                                c.identity.server_id != login.identity.server_id
+                                    || c.identity.user_id != login.identity.user_id
+                            })
+                        {
+                            let panel = this.servers.as_mut().unwrap();
+                            panel.busy = false;
+                            panel.error = Some(t("server-account-mismatch").into());
+                            cx.notify();
+                            return;
+                        }
                         let token = login.token.clone();
                         let username = login.identity.username.clone();
                         match this.remote.update(cx, |remote, cx| {
@@ -111,7 +126,12 @@ impl Studio {
                                 }
                                 let _ = (token, username);
                                 this.servers = None;
-                                this.select_source(Some(id), window, cx);
+                                this.remote.update(cx, |remote, cx| remote.retry(cx));
+                                if resume.is_some() {
+                                    this.focus.focus(window, cx);
+                                } else {
+                                    this.select_source(Some(id), window, cx);
+                                }
                             }
                             Err(error) => {
                                 if let Some(panel) = &mut this.servers {

@@ -77,7 +77,7 @@ impl Workspace {
             folded: self.sidebar.folded.clone(),
         }
     }
-    fn park_page(&mut self, cx: &gpui::App) {
+    pub(super) fn park_page(&mut self, cx: &gpui::App) {
         let state = self.current_page_state(cx);
         *self
             .pages

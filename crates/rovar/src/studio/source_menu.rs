@@ -178,6 +178,21 @@ impl Studio {
             .when(active.is_some(), |el| {
                 el.child(
                     row(
+                        "account-settings",
+                        LucideIcons::User,
+                        t("account-settings"),
+                        false,
+                    )
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.source_menu
+                            .update(cx, |menu, cx| menu.close(window, cx));
+                        if let Some(id) = this.source.clone() {
+                            this.open_account(id, window, cx);
+                        }
+                    })),
+                )
+                .child(
+                    row(
                         "space-manage",
                         LucideIcons::Settings,
                         t("space-manage"),

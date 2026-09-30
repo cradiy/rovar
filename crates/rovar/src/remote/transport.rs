@@ -17,6 +17,13 @@ impl std::fmt::Display for HttpError {
 impl std::error::Error for HttpError {}
 
 impl HttpError {
+    pub fn account_changed() -> Self {
+        Self {
+            status: 401,
+            code: "account_changed".into(),
+            message: crate::i18n::t("server-account-mismatch").into(),
+        }
+    }
     fn from_response(status: reqwest::StatusCode, bytes: &[u8]) -> Self {
         let error = serde_json::from_slice::<rovar_api::ApiError>(bytes).unwrap_or_else(|_| {
             rovar_api::ApiError {

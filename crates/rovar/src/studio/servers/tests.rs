@@ -3,6 +3,98 @@ use gpui::{TestAppContext, VisualTestContext, size};
 
 struct LoginPage(Entity<Studio>);
 
+#[gpui::test]
+fn account_settings_validate_passwords_and_reauthentication_preserves_tabs(
+    cx: &mut TestAppContext,
+) {
+    cx.update(uic::init);
+    let root = tempfile::tempdir().unwrap();
+    let window = cx.open_window(size(px(360.), px(740.)), |window, cx| {
+        Studio::new(root.path().into(), window, cx)
+    });
+    let mut visual = VisualTestContext::from_window(window.into(), cx);
+    let id = window
+        .update(&mut visual.cx, |studio, window, cx| {
+            let id = studio.remote.update(cx, |r, cx| {
+                r.connect(
+                    "https://example.test".into(),
+                    rovar_api::Identity {
+                        server_id: "test".into(),
+                        user_id: "alice".into(),
+                        username: "Alice".into(),
+                        api_version: rovar_api::VERSION,
+                        registration: rovar_api::RegistrationPolicy {
+                            personal: true,
+                            teams: true,
+                        },
+                        spaces: vec![rovar_api::Space {
+                            id: "personal".into(),
+                            name: "Personal".into(),
+                            kind: "personal".into(),
+                            role: "owner".into(),
+                        }],
+                    },
+                    "token".into(),
+                    cx,
+                )
+                .unwrap()
+            });
+            studio.new_document(window, cx);
+            studio.open_servers(None, window, cx);
+            let panel = studio.servers.as_mut().unwrap();
+            panel.view = View::Settings;
+            panel.account = Some(id.clone());
+            panel.mode = "password";
+            panel
+                .password
+                .update(cx, |input, cx| input.set_value("current", cx));
+            panel
+                .new_password
+                .update(cx, |input, cx| input.set_value("一二三四五", cx));
+            studio.save_account_password(window, cx);
+            assert_eq!(
+                studio.servers.as_ref().unwrap().error.as_deref(),
+                Some(t("server-password-short"))
+            );
+            let panel = studio.servers.as_mut().unwrap();
+            panel
+                .new_password
+                .update(cx, |input, cx| input.set_value("一二三四五六", cx));
+            panel
+                .confirm_password
+                .update(cx, |input, cx| input.set_value("different", cx));
+            studio.save_account_password(window, cx);
+            let panel = studio.servers.as_ref().unwrap();
+            assert_eq!(panel.error.as_deref(), Some(t("account-password-mismatch")));
+            assert!(!panel.busy);
+            assert_eq!(panel.password.read(cx).value().as_ref(), "current");
+            id
+        })
+        .unwrap();
+    visual.update(|window, cx| window.draw(cx).clear());
+    let dialog = visual.debug_bounds("server-dialog").unwrap();
+    for field in [
+        "account-current-password",
+        "account-new-password",
+        "account-confirm-password",
+    ] {
+        let bounds = visual.debug_bounds(field).unwrap();
+        assert!(bounds.left() >= dialog.left() && bounds.right() <= dialog.right());
+    }
+    window
+        .update(&mut visual.cx, |studio, window, cx| {
+            let active = studio.active;
+            let count = studio.tabs.len();
+            studio.reauthenticate(id.clone(), window, cx);
+            assert_eq!(studio.active, active);
+            assert_eq!(studio.tabs.len(), count);
+            let panel = studio.servers.as_ref().unwrap();
+            assert_eq!(panel.resume.as_ref(), Some(&id));
+            assert_eq!(panel.username.read(cx).value().as_ref(), "Alice");
+        })
+        .unwrap();
+}
+
 impl Render for LoginPage {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.0.update(cx, |studio, cx| {

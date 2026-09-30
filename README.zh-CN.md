@@ -26,24 +26,28 @@ cargo run --locked -p rovar
 
 ## 构建
 
-Linux 下使用 Nushell：
+先安装 [just](https://github.com/casey/just) 和 [Nushell](https://www.nushell.sh/)，在仓库内执行。`just` 列出命令。每种构建均有独立配方，方便 shell 自动补全，统一使用 release 构建和默认输出目录。
+
+Linux：
 
 ```nu
-nu scripts/build.nu
-nu scripts/build.nu all
+just build-linux
+just build-linux-all
+just build-linux-deb
+just build-linux-tar
 ```
 
-支持 AppImage、tar.gz、RPM、DEB 和 Arch，产物输出到 `dist/`。
+`build-linux` 仅编译 release 二进制。打包命令为 `build-linux-appimage`、`build-linux-tar`（tar.gz）、`build-linux-rpm`、`build-linux-deb`、`build-linux-arch` 和 `build-linux-all`，打包产物输出到 `dist/`。
 
-macOS 下使用 Nushell 和 Xcode Command Line Tools：
+macOS 还需安装 Xcode Command Line Tools：
 
 ```sh
-nu scripts/build.nu macos
+just build-macos
 ```
 
 构建 release 版本，生成 `.app`、ZIP 和 DMG。
 产物包含 `dist/Rovar.app`、带版本号的压缩包、SHA-256 校验文件和构建信息。
-仅支持 Apple Silicon（arm64），也可使用 `--output` 和 `--keep-work`。
+仅支持 Apple Silicon（arm64）。单独打包某种格式可执行如 `just build-macos-dmg`。
 
 详见 [macOS 打包说明](packaging/macos/README.md)。
 
@@ -52,18 +56,18 @@ nu scripts/build.nu macos
 安装 [Trunk](https://trunkrs.dev/) 和 Rust 的 `wasm32-unknown-unknown` 编译目标后：
 
 ```nu
-nu scripts/web.nu --serve
-nu scripts/web.nu --release
+just serve
+just build-web
 ```
 
 需要支持 WebGPU 的浏览器，通过 HTTPS 或 localhost 访问。构建产物：`dist/web/`。
-使用 `--serve` 时，先启动监听 `127.0.0.1:8699` 的后端，在独立的开发 TOML 配置中设置 `server.public_origin = "http://127.0.0.1:8080"`，然后用浏览器打开该地址。Trunk 会将 `/api/v1/` 转发给后端；嵌入版服务器使用自身的公开地址。
+使用 `just serve` 时，先启动监听 `127.0.0.1:8699` 的后端，在独立的开发 TOML 配置中设置 `server.public_origin = "http://127.0.0.1:8080"`，然后用浏览器打开该地址。Trunk 会将 `/api/v1/` 转发给后端；嵌入版服务器使用自身的公开地址。
 登录、注册和编辑器共用 GPUI 界面与语言设置。HTML 仅在 WASM 加载时显示启动提示；PNG/SVG 导出和缩略图渲染使用按需加载的独立 WASM 模块。
 语言设为“自动”时，按浏览器偏好匹配，无匹配则回退英文。登录背景动效遵循减少动态效果设置，标签页隐藏时暂停。
 连接提供编辑器的服务器，文档缓存在 IndexedDB 并同步到服务器，可导出 `.rovar` 文件保留独立副本。同一工作区只允许一个浏览器标签页打开，应用内支持多文档标签页。导入请使用文件选择框。Web 面板使用实色背景，字体随应用提供。
 
 ## 服务器
 
-执行 `nu scripts/server.nu` 构建内嵌 Web 编辑器的服务器二进制。桌面端可在本地存储与多个服务器之间切换。详见[服务器配置](crates/rovar-server/README.zh-CN.md)。
+执行 `just build-server` 构建内嵌 Web 编辑器的服务器二进制。桌面端可在本地存储与多个服务器之间切换。详见[服务器配置](crates/rovar-server/README.zh-CN.md)。
 
 [文件格式](crates/rovar-format/FORMAT.zh-CN.md) · [MIT 许可证](LICENSE)

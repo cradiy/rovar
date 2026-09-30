@@ -3,8 +3,7 @@
 use linux.nu *
 use macos.nu [preflight-macos package-macos]
 
-# Build Rovar. Use the macos subcommand for macOS packages.
-# Examples: nu scripts/build.nu; nu scripts/build.nu macos
+# Build Rovar for the current platform. See justfile for the unified build entry.
 def main [
     ...formats: string # Linux: appimage, tar.gz, rpm, deb, arch; macOS: app, zip, dmg; or all
     --profile: string = "release" # Cargo profile (release or dev)

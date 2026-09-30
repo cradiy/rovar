@@ -464,7 +464,7 @@ impl Studio {
     }
 }
 
-fn edited_time(modified: u64) -> String {
+pub(super) fn edited_time(modified: u64) -> String {
     let seconds = now().saturating_sub(modified);
     let (key, count) = match seconds {
         0..60 => return t("edited-now").into(),

@@ -1,3 +1,6 @@
+mod conflict;
+#[cfg(all(test, not(target_family = "wasm")))]
+mod tests;
 mod transport;
 pub(crate) use transport::{Client, HttpError};
 
@@ -23,6 +26,8 @@ pub(crate) struct Connection {
     pub token: String,
     #[serde(skip)]
     pub authenticated: bool,
+    #[serde(skip)]
+    pub generation: u64,
 }
 impl Connection {
     pub fn client(&self) -> Client {
@@ -65,6 +70,8 @@ pub(crate) struct Remote {
     pub error: Option<String>,
     libraries_changed: BTreeSet<String>,
     retry_at: web_time::Instant,
+    reconnect_at: BTreeMap<String, web_time::Instant>,
+    auth_generation: u64,
 }
 struct SharedRemote(Entity<Remote>);
 impl Global for SharedRemote {}
@@ -123,6 +130,8 @@ impl Remote {
             error,
             libraries_changed: BTreeSet::new(),
             retry_at: web_time::Instant::now(),
+            reconnect_at: BTreeMap::new(),
+            auth_generation: 0,
         });
         cx.set_global(SharedRemote(remote.clone()));
         remote
@@ -213,6 +222,7 @@ impl Remote {
             "Unsupported server API version"
         );
         let mut first = None;
+        self.auth_generation += 1;
         for connection in &mut self.catalog.connections {
             if connection.url == url && connection.identity.user_id == identity.user_id {
                 connection.authenticated = false;
@@ -240,6 +250,7 @@ impl Remote {
                 space: space.clone(),
                 token: token.clone(),
                 authenticated: true,
+                generation: self.auth_generation,
             });
             if first.is_none() || space.kind == "personal" {
                 first = Some(id);
@@ -256,15 +267,120 @@ impl Remote {
         Ok(id)
     }
     pub fn sign_out(&mut self, id: &str, cx: &mut Context<Self>) {
+        self.auth_generation += 1;
         if let Some(account) = self.connection(id).cloned() {
             for c in &mut self.catalog.connections {
                 if c.url == account.url && c.identity.user_id == account.identity.user_id {
                     c.token.clear();
                     c.authenticated = false;
+                    c.generation = self.auth_generation;
                 }
             }
         }
         cx.notify();
+    }
+    #[cfg(not(target_family = "wasm"))]
+    pub fn restore_credentials(&mut self, id: &str, token: String, cx: &mut Context<Self>) {
+        if let Some(connection) = self
+            .catalog
+            .connections
+            .iter_mut()
+            .find(|c| c.id == id && !c.authenticated)
+        {
+            connection.token = token;
+            self.reconnect_at.remove(id);
+            cx.notify();
+        }
+    }
+
+    fn reconnect(&mut self, cx: &mut Context<Self>) -> bool {
+        let candidate = self
+            .catalog
+            .connections
+            .iter()
+            .find(|c| {
+                !c.authenticated
+                    && !c.token.is_empty()
+                    && self.catalog.servers.contains_key(&c.url)
+                    && self
+                        .reconnect_at
+                        .get(&c.id)
+                        .is_none_or(|at| at.elapsed().as_secs() >= 30)
+            })
+            .cloned();
+        let Some(connection) = candidate else {
+            return false;
+        };
+        self.reconnect_at
+            .insert(connection.id.clone(), web_time::Instant::now());
+        self.busy = true;
+        cx.spawn(async move |this, cx| {
+            let result = connection
+                .client()
+                .json::<Identity>("GET", "session", None)
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                this.busy = false;
+                if this.connection(&connection.id).is_none_or(|c| {
+                    c.token != connection.token || c.generation != connection.generation
+                }) {
+                    return;
+                }
+                match result {
+                    Ok(identity)
+                        if identity.server_id == connection.identity.server_id
+                            && identity.user_id == connection.identity.user_id =>
+                    {
+                        let _ = this.connect(connection.url, identity, connection.token, cx);
+                        this.retry(cx);
+                    }
+                    Ok(_) => this.sign_out(&connection.id, cx),
+                    Err(error)
+                        if error
+                            .downcast_ref::<HttpError>()
+                            .is_some_and(|e| e.status == 401) =>
+                    {
+                        this.sign_out(&connection.id, cx)
+                    }
+                    Err(error) => this.error = Some(error.to_string()),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+        true
+    }
+
+    pub fn remove_server(&mut self, url: &str, cx: &mut Context<Self>) -> Result<()> {
+        ensure!(
+            !self.busy
+                && !self
+                    .catalog
+                    .connections
+                    .iter()
+                    .any(|c| c.url == url && c.authenticated),
+            "{}",
+            crate::i18n::t("server-remove-hint")
+        );
+        ensure!(
+            !self
+                .catalog
+                .links
+                .values()
+                .any(|l| l.dirty && self.connection(&l.connection).is_some_and(|c| c.url == url)),
+            "{}",
+            crate::i18n::t("server-remove-hint")
+        );
+        let previous = self.catalog.servers.remove(url);
+        if !self.persist() {
+            if let Some(name) = previous {
+                self.catalog.servers.insert(url.into(), name);
+            }
+            anyhow::bail!(self.error.clone().unwrap_or_default());
+        }
+        // Keep document caches and their identity mapping for a future reconnect.
+        cx.notify();
+        Ok(())
     }
     pub fn track(
         &mut self,
@@ -311,6 +427,7 @@ impl Remote {
         }
     }
     pub fn retry(&mut self, cx: &mut Context<Self>) {
+        self.reconnect_at.clear();
         for link in self.catalog.links.values_mut() {
             link.error = None;
         }
@@ -321,6 +438,9 @@ impl Remote {
     /// A single shared worker owns uploads across all application windows.
     pub fn sync(&mut self, cx: &mut Context<Self>) {
         if self.busy {
+            return;
+        }
+        if self.reconnect(cx) {
             return;
         }
         if self.retry_at.elapsed().as_secs() >= 30 {
@@ -354,9 +474,10 @@ impl Remote {
                 connection.client(),
                 connection.identity.clone(),
                 connection.space.id.clone(),
+                connection.generation,
             ))
         });
-        let Some((path, link, client, identity, space)) = next else {
+        let Some((path, link, client, identity, space, generation)) = next else {
             return;
         };
         self.busy = true;
@@ -368,10 +489,9 @@ impl Remote {
         cx.spawn(async move |this, cx| {
             let result = async {
                 let actual: Identity = client.json("GET", "session", None).await?;
-                ensure!(
-                    actual.server_id == identity.server_id && actual.user_id == identity.user_id,
-                    "Server account changed; sign in again"
-                );
+                if actual.server_id != identity.server_id || actual.user_id != identity.user_id {
+                    return Err(HttpError::account_changed().into());
+                }
                 let input: Save = if rovar_storage::exists(&pending_path) {
                     serde_json::from_slice(&rovar_storage::fs::read(&pending_path)?)?
                 } else {
@@ -412,6 +532,25 @@ impl Remote {
             .await;
             let _ = this.update(cx, |this, cx| {
                 this.busy = false;
+                if result.is_err()
+                    && this
+                        .connection(&link.connection)
+                        .is_none_or(|c| c.generation != generation)
+                {
+                    cx.notify();
+                    return;
+                }
+                if this
+                    .connection(&link.connection)
+                    .is_some_and(|c| c.generation == generation)
+                    && result.as_ref().err().is_some_and(|error| {
+                        error
+                            .downcast_ref::<HttpError>()
+                            .is_some_and(|e| e.status == 401)
+                    })
+                {
+                    this.sign_out(&link.connection, cx);
+                }
                 if let Some(current) = this.catalog.links.get_mut(&path) {
                     match result {
                         Ok((object, sent_digest)) => {
@@ -492,6 +631,7 @@ impl Remote {
             return;
         };
         let client = server.client();
+        let generation = server.generation;
         let identity = server.identity.clone();
         let space = server.space.id.clone();
         let known = self.catalog.links.clone();
@@ -502,11 +642,11 @@ impl Remote {
             let mut observed_identity = None;
             let result = async {
                 let remote_identity: Identity = client.json("GET", "session", None).await?;
-                ensure!(
-                    remote_identity.server_id == identity.server_id
-                        && remote_identity.user_id == identity.user_id,
-                    "Server account changed; sign in again"
-                );
+                if remote_identity.server_id != identity.server_id
+                    || remote_identity.user_id != identity.user_id
+                {
+                    return Err(HttpError::account_changed().into());
+                }
                 observed_identity = Some(remote_identity);
                 let objects: Vec<Object> = client
                     .json("GET", &format!("spaces/{space}/objects"), None)
@@ -554,6 +694,13 @@ impl Remote {
             .await;
             let _ = this.update(cx, |this, cx| {
                 this.busy = false;
+                if this
+                    .connection(&connection)
+                    .is_none_or(|c| c.generation != generation)
+                {
+                    cx.notify();
+                    return;
+                }
                 if let Some(identity) = observed_identity
                     && this.connection(&connection).is_some_and(|current| {
                         current.authenticated && current.token == client.token
@@ -563,9 +710,12 @@ impl Remote {
                 }
                 match result {
                     Ok(updates) => {
+                        let currently_open = crate::studio::Studio::open_document_paths(cx);
                         for (path, object, bytes) in updates {
                             // An editor may have saved while the request was in flight.
-                            if this.catalog.links.get(&path).is_some_and(|link| link.dirty) {
+                            if currently_open.contains(&path)
+                                || this.catalog.links.get(&path).is_some_and(|link| link.dirty)
+                            {
                                 continue;
                             }
                             let hash = if let Some(bytes) = bytes {
@@ -595,7 +745,15 @@ impl Remote {
                         }
                         this.persist();
                     }
-                    Err(error) => this.error = Some(error.to_string()),
+                    Err(error) => {
+                        if error
+                            .downcast_ref::<HttpError>()
+                            .is_some_and(|e| e.status == 401)
+                        {
+                            this.sign_out(&connection, cx);
+                        }
+                        this.error = Some(error.to_string());
+                    }
                 }
                 cx.notify();
             });

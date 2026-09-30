@@ -6,10 +6,10 @@ Salvo + SQLx + PostgreSQL，内嵌 Web 编辑器。文档和组件快照加密�
 
 ## 运行
 
-在仓库根目录使用 Nushell：
+安装 just 和 Nushell 后，在仓库根目录执行：
 
 ```nu
-nu scripts/server.nu
+just build-server
 cp dist/rovar-server.example.toml rovar-server.toml
 # 设置 PostgreSQL 地址、公开访问源地址和存储目录。
 ./dist/rovar-server --config rovar-server.toml
@@ -26,6 +26,16 @@ cp dist/rovar-server.example.toml rovar-server.toml
 ```
 
 密码至少 6 个字符。
+
+## 账号与同步恢复
+
+从空间菜单打开「账号设置」，输入当前密码即可修改密码，也可以查看和撤销已登录的会话。修改密码会退出其他会话，当前编辑器保持连接。会话标识与登录令牌分离。
+
+桌面端可保存服务器名称、切换多个账号。服务器列表支持重命名；移除前需要先同步待上传修改、关闭其文档并退出账号。移除地址保留文档缓存，方便以后重新连接。
+
+编辑内容先保存到本地再上传。失败上传每 30 秒重试，也可在云同步状态面板立即重试。待上传请求可跨重启恢复，先使用原幂等键重放，再上传之后的修改。会话过期后暂停上传，通过「重新登录」使用原账号恢复，无需关闭文档。「保留双方版本」将本地内容另存为新文档，并单独取回服务器版本。
+
+账号接口（需要登录）：`PUT /api/v1/account/password`、`GET /api/v1/account/sessions`、`DELETE /api/v1/account/sessions/{id}`，以及 `DELETE /api/v1/account/sessions`（仅退出其他会话）。
 
 ## 空间
 

@@ -4,7 +4,11 @@ use uic::components::input::{Input, InputAppearance};
 
 const CARD: u32 = 0x24232e;
 
-fn primary(id: &'static str, label: &'static str, busy: bool) -> gpui::Stateful<gpui::Div> {
+pub(super) fn primary(
+    id: &'static str,
+    label: &'static str,
+    busy: bool,
+) -> gpui::Stateful<gpui::Div> {
     div()
         .id(id)
         .flex()
@@ -34,7 +38,7 @@ fn tile(symbol: LucideIcons) -> gpui::Div {
         .child(icon(symbol, 19.).text_color(rgb(ACCENT)))
 }
 
-fn field(
+pub(super) fn field(
     id: &'static str,
     label: &'static str,
     input: &Entity<TextInput>,
@@ -85,24 +89,29 @@ impl Studio {
             .flex()
             .items_center()
             .gap(px(12.))
-            .when(panel.view != View::Servers, |el| {
-                el.child(
-                    button("servers-back", "")
-                        .size(px(32.))
-                        .p_0()
-                        .justify_center()
-                        .child(icon(LucideIcons::ArrowLeft, 18.))
-                        .on_click(cx.listener(|this, _, window, cx| {
-                            let view =
-                                if this.servers.as_ref().is_some_and(|p| p.view == View::Login) {
-                                    View::Accounts
-                                } else {
-                                    View::Servers
-                                };
-                            this.server_view(view, window, cx);
-                        })),
-                )
-            })
+            .when(
+                panel.view != View::Servers && !cfg!(target_family = "wasm"),
+                |el| {
+                    el.child(
+                        button("servers-back", "")
+                            .size(px(32.))
+                            .p_0()
+                            .justify_center()
+                            .child(icon(LucideIcons::ArrowLeft, 18.))
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                let view =
+                                    if this.servers.as_ref().is_some_and(|p| {
+                                        matches!(p.view, View::Login | View::Settings)
+                                    }) {
+                                        View::Accounts
+                                    } else {
+                                        View::Servers
+                                    };
+                                this.server_view(view, window, cx);
+                            })),
+                    )
+                },
+            )
             .child(
                 div()
                     .flex_1()
@@ -118,6 +127,7 @@ impl Studio {
                                 View::Servers => "server-manage",
                                 View::Accounts => "server-accounts",
                                 View::Rename => "server-rename",
+                                View::Settings => "account-settings",
                                 View::Login if panel.mode == "login" => "server-sign-in",
                                 View::Login => "server-register",
                             })),
@@ -167,6 +177,7 @@ impl Studio {
                                     |(index, (url, name))| {
                                         let address = url.clone();
                                         let rename = url.clone();
+                                        let remove = url.clone();
                                         let active = self
                                             .source
                                             .as_ref()
@@ -233,6 +244,19 @@ impl Studio {
                                                                 window,
                                                                 cx,
                                                             );
+                                                        },
+                                                    )),
+                                            )
+                                            .child(
+                                                button(("remove-server", index), "")
+                                                    .child(
+                                                        icon(LucideIcons::X, 15.)
+                                                            .text_color(rgb(MUTED)),
+                                                    )
+                                                    .on_click(cx.listener(
+                                                        move |this, _, _, cx| {
+                                                            cx.stop_propagation();
+                                                            this.remove_server(remove.clone(), cx);
                                                         },
                                                     )),
                                             )
@@ -339,6 +363,7 @@ impl Studio {
                             .children(accounts.into_iter().enumerate().map(|(index, account)| {
                                 let id = account.id.clone();
                                 let logout = id.clone();
+                                let settings = id.clone();
                                 let username = account.identity.username.clone();
                                 let authenticated = account.authenticated;
                                 div()
@@ -423,6 +448,19 @@ impl Studio {
                                     )
                                     .when(authenticated, |el| {
                                         el.child(
+                                            button(("account-settings", index), "")
+                                                .child(icon(LucideIcons::Settings, 16.))
+                                                .on_click(cx.listener(
+                                                    move |this, _, window, cx| {
+                                                        this.open_account(
+                                                            settings.clone(),
+                                                            window,
+                                                            cx,
+                                                        );
+                                                    },
+                                                )),
+                                        )
+                                        .child(
                                             button(("account-logout", index), t("server-sign-out"))
                                                 .text_size(px(12.))
                                                 .text_color(rgb(MUTED))
@@ -449,6 +487,7 @@ impl Studio {
                     )
             }
             View::Login => self.server_login_form(cx),
+            View::Settings => self.account_settings(cx),
         };
         gpui::deferred(
             div()

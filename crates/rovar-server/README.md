@@ -6,10 +6,10 @@ Salvo + SQLx + PostgreSQL, with the Web editor embedded. Document and component 
 
 ## Run
 
-From the repository root, using Nushell:
+From the repository root, with just and Nushell installed:
 
 ```nu
-nu scripts/server.nu
+just build-server
 cp dist/rovar-server.example.toml rovar-server.toml
 # Set the PostgreSQL URL, public origin and storage directory.
 ./dist/rovar-server --config rovar-server.toml
@@ -26,6 +26,16 @@ Administrators can provision a personal account regardless of these switches:
 ```
 
 Passwords require at least 6 characters.
+
+## Account and sync recovery
+
+Open **Account settings** from the workspace menu. Change your password using the current password, or view and revoke active sessions. Password changes revoke every other session while keeping the current editor connected. Session identifiers are separate from authentication tokens.
+
+Desktop saves server names and supports multiple accounts. Rename a server in the server list; removal requires signing out, closing its documents, and synchronizing pending changes. Removing an address retains document caches for a future reconnect.
+
+Edits are saved locally before upload. Failed uploads retry every 30 seconds, or immediately from the cloud status panel. Pending requests survive restarts and reuse their original idempotency key before uploading newer edits. An expired session pauses uploads; **Sign in again** resumes with the original account without closing the document. **Keep both versions** saves local work as a new document and fetches the server version separately.
+
+Account endpoints (authenticated): `PUT /api/v1/account/password`, `GET /api/v1/account/sessions`, `DELETE /api/v1/account/sessions/{id}`, and `DELETE /api/v1/account/sessions` (other sessions only).
 
 ## Spaces
 

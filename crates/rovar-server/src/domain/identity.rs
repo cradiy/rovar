@@ -17,3 +17,9 @@ pub struct Session {
     pub identity: Identity,
     pub token: String,
 }
+pub struct AccountSession {
+    pub id: String,
+    pub created_at: i64,
+    pub expires_at: i64,
+    pub current: bool,
+}

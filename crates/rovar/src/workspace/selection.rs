@@ -5,7 +5,7 @@ mod properties;
 
 #[derive(Clone)]
 pub(super) struct Marquee {
-    start: Point<f32>,
+    pub(super) start: Point<f32>,
     pub rect: Rect,
     pub initial: BTreeSet<usize>,
 }
