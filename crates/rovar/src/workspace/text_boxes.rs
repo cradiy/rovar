@@ -38,6 +38,9 @@ impl Workspace {
         if !self.layer_editable(id) {
             return;
         }
+        if self.selection_ids() != std::collections::BTreeSet::from([id]) {
+            self.duplicate = None;
+        }
         self.multi_selection.clear();
         self.seal_text_edits(cx);
         self.selected_shape = None;

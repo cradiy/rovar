@@ -315,6 +315,8 @@ impl Workspace {
     }
 
     pub(crate) fn suspend(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.duplicate = None;
+        self.finish_spacing_input(false, cx);
         self.measure_target = None;
         self.suspend_assets();
         self.colors.dialog = None;

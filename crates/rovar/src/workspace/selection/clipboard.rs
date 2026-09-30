@@ -271,14 +271,28 @@ impl Workspace {
     ) {
         self.seal_text_edits(cx);
         self.sync_components(window, cx);
-        self.insert_copies(
-            self.snapshot_selection(cx),
-            point(20., 20.),
-            false,
-            true,
-            window,
-            cx,
-        );
+        let ids = self.selection_ids();
+        if ids.iter().any(|id| !self.layer_editable(*id)) {
+            return;
+        }
+        let Some(bounds) = ids
+            .iter()
+            .filter_map(|id| self.world_bounds(*id))
+            .reduce(super::super::layout::union)
+        else {
+            return;
+        };
+        let origin = point(bounds.x, bounds.y);
+        let offset = self
+            .duplicate
+            .as_ref()
+            .filter(|d| d.ids == ids)
+            .map_or(point(20., 20.), |d| origin - d.source_origin);
+        self.insert_copies(self.snapshot_selection(cx), offset, false, true, window, cx);
+        self.duplicate = Some(super::Duplicate {
+            ids: self.selection_ids(),
+            source_origin: origin,
+        });
     }
 
     pub(in crate::workspace) fn move_selection_to_page(

@@ -2,6 +2,46 @@ use super::*;
 use crate::workspace::tests::{click, draw, open};
 use gpui::{EntityInputHandler, Modifiers, TestAppContext, VisualTestContext, WindowHandle};
 
+#[gpui::test]
+fn repeated_multiselection_copy_keeps_relative_geometry_and_cancelled_motion(
+    cx: &mut TestAppContext,
+) {
+    let window = fixture(cx);
+    window
+        .update(cx, |this, window, cx| {
+            this.set_selection(BTreeSet::from([1, 2]), cx);
+            this.duplicate_selection(window, cx);
+            assert_eq!(this.selection_ids(), BTreeSet::from([4, 5]));
+            this.batch_before = this.before_geometry();
+            this.move_selection(point(-100., 0.));
+            this.finish_selection_move(cx);
+            this.duplicate_selection(window, cx);
+            assert_eq!(this.selection_ids(), BTreeSet::from([6, 7]));
+            assert_eq!(this.world_rect(6).unwrap().x, -60.);
+            assert_eq!(this.world_rect(6).unwrap().y, 140.);
+            assert_eq!(
+                this.world_rect(7).unwrap().x - this.world_rect(6).unwrap().x,
+                120.
+            );
+            let original = this.world_rect(6).unwrap();
+            this.batch_before = this.before_geometry();
+            this.begin(
+                GestureKind::SelectionMove,
+                point(px(100.), px(100.)),
+                MouseButton::Left,
+                window,
+                cx,
+            );
+            this.move_gesture(point(px(160.), px(120.)), false, cx);
+            this.cancel_gesture(window, cx);
+            assert_eq!(this.world_rect(6), Some(original));
+            this.duplicate_selection(window, cx);
+            assert_eq!(this.world_rect(8).unwrap().x, -140.);
+            assert_eq!(this.world_rect(8).unwrap().y, 160.);
+        })
+        .unwrap();
+}
+
 fn rect(x: f32, y: f32, width: f32, height: f32) -> Rect {
     Rect {
         x,
@@ -47,6 +87,47 @@ fn screen(visual: &mut VisualTestContext, p: Point<f32>) -> Point<Pixels> {
         let p = this.view.screen(p);
         this.bounds.get().origin + point(px(p.x), px(p.y))
     })
+}
+
+#[gpui::test]
+fn duplicate_repeats_adjusted_displacement_and_resets_after_selection_changes(
+    cx: &mut TestAppContext,
+) {
+    let window = fixture(cx);
+    window
+        .update(cx, |this, window, cx| {
+            this.select_shape(1, cx);
+            this.duplicate_selection(window, cx);
+        })
+        .unwrap();
+    let mut visual = VisualTestContext::from_window(window.into(), cx);
+    draw(&mut visual);
+    let start = visual.debug_bounds("shape-4").unwrap().center();
+    let end = start + point(px(80.), px(-16.));
+    visual.simulate_mouse_down(start, MouseButton::Left, Default::default());
+    visual.simulate_mouse_move(end, MouseButton::Left, Default::default());
+    visual.simulate_mouse_up(end, MouseButton::Left, Default::default());
+    draw(&mut visual);
+    visual.simulate_keystrokes("ctrl-d");
+    visual.simulate_keystrokes("ctrl-d");
+    draw(&mut visual);
+    window
+        .update(&mut visual.cx, |this, window, cx| {
+            for (id, x) in [(4, 220.), (5, 340.), (6, 460.)] {
+                let rect = this.world_rect(id).unwrap();
+                assert!((rect.x - x).abs() < 0.001, "{id}: {rect:?}");
+                assert!((rect.y - 100.).abs() < 0.001);
+            }
+            this.select_shape(1, cx);
+            this.select_shape(6, cx);
+            this.duplicate_selection(window, cx);
+            assert!((this.world_rect(7).unwrap().x - 480.).abs() < 0.001);
+            assert!((this.world_rect(7).unwrap().y - 120.).abs() < 0.001);
+            this.replay_history(false, window, cx);
+            assert!(this.world_rect(7).is_none());
+            assert!(this.duplicate.is_none());
+        })
+        .unwrap();
 }
 fn pointer_click(visual: &mut VisualTestContext, p: Point<f32>, shift: bool) {
     let p = screen(visual, p);

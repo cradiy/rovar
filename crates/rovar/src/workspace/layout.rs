@@ -3,7 +3,9 @@ use crate::i18n::t;
 use std::collections::BTreeSet;
 mod measurement;
 mod snapping;
+mod spacing;
 pub(super) use snapping::Snapping;
+pub(super) use spacing::State as Spacing;
 
 #[derive(Clone, Copy, Debug)]
 pub(super) enum LayoutAction {
@@ -112,6 +114,15 @@ impl Workspace {
     }
     // Move each selected root as a unit. Frames already carry their children.
     fn translate_root(&mut self, id: usize, delta: Point<f32>) {
+        if self.hierarchy.groups.contains_key(&id)
+            && self.hierarchy.layouts.contains_key(&id)
+            && let Some((parent, mut rect)) = self.object_rect(id)
+        {
+            rect.x += delta.x;
+            rect.y += delta.y;
+            self.set_object_rect(id, parent, rect);
+            return;
+        }
         let all = self.descendants(&BTreeSet::from([id]));
         let objects: Vec<_> = all
             .iter()

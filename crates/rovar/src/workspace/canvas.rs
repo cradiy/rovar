@@ -377,6 +377,7 @@ impl Workspace {
             .child(self.selection_overlay())
             .child(self.snap_guides())
             .child(self.measurement_overlay())
+            .child(self.spacing_controls(cx))
             .children(self.vector_hover_preview(cx))
             .when(
                 self.boards.is_empty()

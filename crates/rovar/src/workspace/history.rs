@@ -138,6 +138,10 @@ impl Workspace {
                     self.finish_selection_move(cx);
                     None
                 }
+                GestureKind::Spacing { .. } => {
+                    self.finish_spacing(true, cx);
+                    None
+                }
                 GestureKind::MultiProperty { .. } => {
                     self.finish_multi_property(cx);
                     None
@@ -364,6 +368,8 @@ impl Workspace {
             self.cancel_gesture(window, cx);
             return;
         }
+        self.duplicate = None;
+        self.finish_spacing_input(false, cx);
         self.seal_text_edits(cx);
         let page = self.history.borrow().replay_page(redo).map(str::to_owned);
         let changes = self.history.borrow_mut().take(redo);

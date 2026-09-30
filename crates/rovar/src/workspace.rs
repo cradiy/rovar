@@ -75,6 +75,10 @@ enum GestureKind {
     LayerSort,
     Marquee,
     SelectionMove,
+    Spacing {
+        axis: usize,
+        original: f32,
+    },
     MultiProperty {
         property: Property,
     },
@@ -158,6 +162,7 @@ pub struct Workspace {
     colors: color_styles::State,
     export: export::ExportState,
     snapping: layout::Snapping,
+    spacing: layout::Spacing,
     measure_target: Option<usize>,
     hierarchy: crate::layer::Hierarchy,
     auto_layout: auto_layout::State,
@@ -166,6 +171,7 @@ pub struct Workspace {
     layer_drag: Option<organization::LayerDrag>,
     layer_row_bounds: Rc<std::cell::RefCell<std::collections::HashMap<usize, Bounds<Pixels>>>>,
     multi_selection: std::collections::BTreeSet<usize>,
+    duplicate: Option<selection::Duplicate>,
     marquee: Option<selection::Marquee>,
     marquee_additive: bool,
     batch_before: Vec<Change>,
@@ -428,12 +434,14 @@ impl Workspace {
             auto_layout: auto_layout::State::new(window, cx),
             components: components::State::default(),
             snapping: Default::default(),
+            spacing: layout::Spacing::new(window, cx),
             measure_target: None,
             export: export::ExportState::new(window, cx),
             rename_input,
             layer_drag: None,
             layer_row_bounds: Default::default(),
             multi_selection: Default::default(),
+            duplicate: None,
             marquee: None,
             marquee_additive: false,
             batch_before: Vec::new(),
@@ -501,6 +509,9 @@ impl Workspace {
     fn select(&mut self, id: Option<usize>, cx: &mut Context<Self>) {
         if id.is_some_and(|id| !self.layer_editable(id)) {
             return;
+        }
+        if self.selection_ids() != id.into_iter().collect() {
+            self.duplicate = None;
         }
         self.multi_selection.clear();
         self.seal_text_edits(cx);
@@ -645,6 +656,9 @@ impl Workspace {
             GestureKind::LayerSort => self.move_layer_sort(position),
             GestureKind::Marquee => self.move_marquee(position, cx),
             GestureKind::SelectionMove => self.move_selection(snapped),
+            GestureKind::Spacing { axis, original } => {
+                self.move_spacing(axis, original, delta, cx);
+            }
             GestureKind::MultiProperty { property } => {
                 self.move_multi_property(property, delta.x, shift, cx)
             }
@@ -771,6 +785,7 @@ impl Workspace {
                     self.restore_batch(&before, cx);
                     self.batch_values.clear();
                 }
+                GestureKind::Spacing { .. } => self.finish_spacing(false, cx),
                 GestureKind::Panel { side, original, .. } => self.panels.set(side, original),
                 GestureKind::Property { .. } => self.finish_property_scrub(false, cx),
                 GestureKind::LayoutProperty { .. } => self.finish_layout_scrub(false, cx),
@@ -848,6 +863,13 @@ impl Render for Workspace {
         }
         self.panels.window_width = f32::from(window.viewport_size().width);
         let drag_cursor = self.gesture.map(|gesture| match gesture.kind {
+            GestureKind::Spacing { axis, .. } => {
+                if axis == 0 {
+                    gpui::CursorStyle::ResizeLeftRight
+                } else {
+                    gpui::CursorStyle::ResizeUpDown
+                }
+            }
             GestureKind::Rotate { .. } => gpui::CursorStyle::Crosshair,
             GestureKind::LayerSort => gpui::CursorStyle::ClosedHand,
             GestureKind::Panel { .. }
@@ -919,6 +941,14 @@ impl Render for Workspace {
                 },
             ))
             .capture_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, window, cx| {
+                if this.spacing.editing() {
+                    if event.keystroke.key == "escape" {
+                        this.finish_spacing_input(false, cx);
+                        this.focus.focus(window, cx);
+                        cx.stop_propagation();
+                    }
+                    return;
+                }
                 if let Some(id) = this.pages.delete.clone() {
                     if event.keystroke.key == "escape" {
                         this.pages.delete = None;
@@ -977,6 +1007,7 @@ impl Render for Workspace {
                     matches!(
                         g.kind,
                         GestureKind::LayerSort
+                            | GestureKind::Spacing { .. }
                             | GestureKind::Property { .. }
                             | GestureKind::LayoutProperty { .. }
                             | GestureKind::Panel { .. }

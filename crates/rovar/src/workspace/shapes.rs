@@ -65,8 +65,13 @@ impl Workspace {
             return;
         };
         let changed = self.selected_shape != Some(id);
+        let duplicate = self
+            .duplicate
+            .take()
+            .filter(|d| d.ids == std::collections::BTreeSet::from([id]));
         self.select(board, cx);
         self.selected_shape = Some(id);
+        self.duplicate = duplicate;
         if changed {
             self.stroke_editing = self.selected_shape().unwrap().kind.is_path();
             let shape = self.selected_shape().unwrap();

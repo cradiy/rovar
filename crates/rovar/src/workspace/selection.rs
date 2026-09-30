@@ -3,6 +3,11 @@ use std::collections::BTreeSet;
 mod clipboard;
 mod properties;
 
+pub(super) struct Duplicate {
+    pub ids: BTreeSet<usize>,
+    pub source_origin: Point<f32>,
+}
+
 #[derive(Clone)]
 pub(super) struct Marquee {
     pub(super) start: Point<f32>,
