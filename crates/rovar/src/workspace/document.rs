@@ -174,11 +174,19 @@ impl Workspace {
             })
             .collect();
         let mut document = Document {
+            colors: self.colors.palette.clone(),
             id: id.into(),
             pages,
             components: self.components.definitions.clone(),
         };
         crate::components::synchronize(&mut document.pages, &mut document.components)?;
+        for page in document
+            .pages
+            .iter_mut()
+            .chain(document.components.values_mut().map(|d| &mut d.page))
+        {
+            crate::color_styles::resolve(page, &document.colors);
+        }
         let mut sources = std::collections::BTreeMap::new();
         for page in document
             .pages
@@ -218,6 +226,7 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) -> anyhow::Result<String> {
         let document = loaded.into_document()?;
+        self.colors.palette = document.colors;
         self.components.definitions = document.components;
         self.components.revision = None;
         self.suspend(window, cx);
@@ -307,6 +316,10 @@ impl Workspace {
 
     pub(crate) fn suspend(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.suspend_assets();
+        self.colors.dialog = None;
+        for menu in &self.colors.menu {
+            menu.update(cx, |menu, cx| menu.close(window, cx));
+        }
         self.cancel_gesture(window, cx);
         self.finish_inspector_input(cx);
         self.seal_text_edits(cx);

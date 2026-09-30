@@ -1337,7 +1337,11 @@ impl Workspace {
                             |el| el.child(self.shape_paint_controls(cx)),
                         )
                         .when(self.selected_shape.is_none(), |el| {
-                            el.child(inspector_section(t("fill")).child(self.paint_value_row(cx)))
+                            el.child(
+                                inspector_section(t("fill"))
+                                    .child(self.color_style_control(false, cx))
+                                    .child(self.paint_value_row(cx)),
+                            )
                         })
                         .child(self.auto_layout_controls(cx)),
                 )
@@ -1548,6 +1552,7 @@ mod tests {
     #[test]
     fn invalid_properties_preserve_geometry_and_hex_preserves_alpha() {
         let mut board = Artboard {
+            color_style: None,
             id: 1,
             layer: Default::default(),
             name: "A".into(),

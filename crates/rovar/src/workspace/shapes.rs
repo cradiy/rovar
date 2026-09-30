@@ -30,6 +30,19 @@ impl Workspace {
             .position(|s| Some(s.id) == self.selected_shape)?;
         let before = self.shapes[index].clone();
         let result = change(&mut self.shapes[index]);
+        let shape = &mut self.shapes[index];
+        if shape.color != before.color
+            || shape.fill_mode != before.fill_mode
+            || shape.gradient != before.gradient
+        {
+            shape.color_style = None;
+        }
+        if shape.stroke.color != before.stroke.color
+            || shape.stroke.fill_mode != before.stroke.fill_mode
+            || shape.stroke.gradient != before.stroke.gradient
+        {
+            shape.stroke.color_style = None;
+        }
         if before != self.shapes[index] {
             let mut changes: Vec<_> = self
                 .fix_layout_size(before.id, before.rect, self.shapes[index].rect)

@@ -120,6 +120,7 @@ fn artboard_bounds_clip_children_without_editor_checkerboard() {
     doc.shapes[0].color = rgb(0xff0000);
     let bounds = rect(100., 200., 100., 80.);
     doc.boards.push(Artboard {
+        color_style: None,
         id: 1,
         layer: Default::default(),
         name: "Board".into(),

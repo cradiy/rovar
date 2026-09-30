@@ -350,6 +350,7 @@ fn assets_panel_search_save_cancel_and_drop_respect_the_canvas(cx: &mut TestAppC
 
 fn board(id: usize, rect: Rect) -> Artboard {
     Artboard {
+        color_style: None,
         id,
         rect,
         name: "Frame".into(),

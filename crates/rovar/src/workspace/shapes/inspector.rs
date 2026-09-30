@@ -199,7 +199,8 @@ impl Workspace {
                                 .child(self.paint_toggle(enabled, stroke, cx)),
                         )
                         .when(enabled, |el| {
-                            el.child(self.active_paint_controls(stroke, cx))
+                            el.child(self.color_style_control(stroke, cx))
+                                .child(self.active_paint_controls(stroke, cx))
                         })
                 }),
         )

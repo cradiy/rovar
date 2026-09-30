@@ -22,6 +22,13 @@ impl Workspace {
             .position(|b| Some(b.id) == self.selected)?;
         let before = self.boards[index].clone();
         let result = edit(&mut self.boards[index]);
+        let board = &mut self.boards[index];
+        if board.color != before.color
+            || board.fill_mode != before.fill_mode
+            || board.gradient != before.gradient
+        {
+            board.color_style = None;
+        }
         if self.boards[index] != before {
             let mut changes: Vec<_> = self
                 .fix_layout_size(before.id, before.rect, self.boards[index].rect)
@@ -209,7 +216,9 @@ impl Workspace {
                             value: Some(before),
                         }
                     }),
-                GestureKind::Pan { .. } | GestureKind::Panel { .. } => None,
+                GestureKind::Pan { .. }
+                | GestureKind::Panel { .. }
+                | GestureKind::ColorStyleProperty { .. } => None,
             };
             let moving = match gesture.kind {
                 GestureKind::Shape {

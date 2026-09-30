@@ -28,8 +28,8 @@ pub(super) enum Dialog {
 
 pub(super) struct State {
     pub scope: Scope,
-    library: Option<Entity<Library>>,
-    search: Entity<TextInput>,
+    pub(super) library: Option<Entity<Library>>,
+    pub(super) search: Entity<TextInput>,
     name: Entity<TextInput>,
     pub dialog: Option<Dialog>,
     pub inserting: bool,

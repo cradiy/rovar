@@ -52,6 +52,8 @@ pub(crate) struct Page {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub(crate) struct Document {
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub colors: crate::color_styles::Palette,
     pub id: String,
     pub pages: Vec<Page>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -61,6 +63,7 @@ pub(crate) struct Document {
 impl Document {
     pub fn single(page: Page) -> Self {
         Self {
+            colors: Default::default(),
             id: uuid::Uuid::new_v4().to_string(),
             pages: vec![page],
             components: Default::default(),
@@ -72,6 +75,10 @@ impl Document {
         Ok(document)
     }
     pub fn validate(&self) -> Result<()> {
+        for (id, style) in &self.colors {
+            ensure!(uuid::Uuid::parse_str(id).is_ok(), "Invalid color style ID");
+            style.validate()?;
+        }
         ensure!(
             uuid::Uuid::parse_str(&self.id).is_ok(),
             "Invalid document ID"

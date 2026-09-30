@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 
 #[derive(Clone, Default)]
 struct ObjectClipboard {
+    colors: crate::color_styles::Palette,
     source: Option<gpui::EntityId>,
     source_page: Option<String>,
     hierarchy: crate::layer::Hierarchy,
@@ -21,7 +22,90 @@ struct ObjectClipboard {
 struct Clipboard(Option<ObjectClipboard>);
 impl gpui::Global for Clipboard {}
 
+fn visit_clipboard_colors(
+    clipboard: &mut ObjectClipboard,
+    mut f: impl FnMut(
+        &mut Option<String>,
+        &mut gpui::Rgba,
+        &mut FillMode,
+        &mut crate::artboard::LinearGradient,
+    ),
+) {
+    for board in &mut clipboard.boards {
+        f(
+            &mut board.color_style,
+            &mut board.color,
+            &mut board.fill_mode,
+            &mut board.gradient,
+        );
+    }
+    for shape in &mut clipboard.shapes {
+        f(
+            &mut shape.color_style,
+            &mut shape.color,
+            &mut shape.fill_mode,
+            &mut shape.gradient,
+        );
+        f(
+            &mut shape.stroke.color_style,
+            &mut shape.stroke.color,
+            &mut shape.stroke.fill_mode,
+            &mut shape.stroke.gradient,
+        );
+    }
+    for text in &mut clipboard.texts {
+        text.text.visit_color_styles(&mut f);
+    }
+    for definition in clipboard.definitions.values_mut() {
+        crate::color_styles::visit(&mut definition.page, &mut f);
+    }
+    for binding in clipboard.hierarchy.components.values_mut() {
+        if let Ok(mut page) =
+            serde_json::from_value::<crate::document::Page>(binding.baseline.clone())
+        {
+            crate::color_styles::visit(&mut page, &mut f);
+            binding.baseline = serde_json::to_value(page).unwrap();
+        }
+    }
+}
+
 impl Workspace {
+    fn import_clipboard_colors(&mut self, clipboard: &mut ObjectClipboard, same_document: bool) {
+        let mut used = BTreeSet::new();
+        visit_clipboard_colors(clipboard, |reference, _, _, _| {
+            if let Some(id) = reference {
+                used.insert(id.clone());
+            }
+        });
+        let mut mapped = BTreeMap::new();
+        for id in used {
+            let Some(color) = clipboard.colors.get(&id) else {
+                continue;
+            };
+            let target =
+                if !same_document && self.colors.palette.get(&id).is_some_and(|c| c != color) {
+                    uuid::Uuid::new_v4().to_string()
+                } else {
+                    id.clone()
+                };
+            self.colors
+                .palette
+                .entry(target.clone())
+                .or_insert_with(|| color.clone());
+            mapped.insert(id, target);
+        }
+        visit_clipboard_colors(clipboard, |reference, color, mode, gradient| {
+            if let Some(id) = reference.clone() {
+                *reference = mapped.get(&id).cloned();
+                if let Some(style) = reference
+                    .as_ref()
+                    .and_then(|id| self.colors.palette.get(id))
+                {
+                    style.apply(color, mode, gradient);
+                }
+            }
+        });
+    }
     pub(in crate::workspace) fn can_paste_objects(&self, cx: &gpui::App) -> bool {
         cx.try_global::<Clipboard>()
             .and_then(|c| c.0.as_ref())
@@ -98,6 +182,7 @@ impl Workspace {
             .map(|id| (*id, self.layer_parent(*id)))
             .collect();
         ObjectClipboard {
+            colors: self.colors.palette.clone(),
             definitions: self
                 .components
                 .definitions
@@ -317,7 +402,7 @@ impl Workspace {
     }
     fn insert_copies(
         &mut self,
-        clipboard: ObjectClipboard,
+        mut clipboard: ObjectClipboard,
         offset: Point<f32>,
         in_place: bool,
         rename: bool,
@@ -325,11 +410,19 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) {
         let before = self.snapshot_hierarchy();
-        let import_before = clipboard
-            .definitions
-            .keys()
-            .any(|id| !self.components.definitions.contains_key(id))
-            .then(|| self.page_edit(std::slice::from_ref(&self.pages.active), cx));
+        let import_before = (clipboard
+            .colors
+            .iter()
+            .any(|(id, c)| self.colors.palette.get(id) != Some(c))
+            || clipboard
+                .definitions
+                .keys()
+                .any(|id| !self.components.definitions.contains_key(id)))
+        .then(|| self.page_edit(std::slice::from_ref(&self.pages.active), cx));
+        let same_document = clipboard
+            .source
+            .is_none_or(|source| source == cx.entity_id());
+        self.import_clipboard_colors(&mut clipboard, same_document);
         for (id, definition) in clipboard.definitions {
             self.components.definitions.entry(id).or_insert(definition);
         }

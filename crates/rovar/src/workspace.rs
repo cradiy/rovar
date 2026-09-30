@@ -1,6 +1,7 @@
 mod assets;
 mod auto_layout;
 mod canvas;
+mod color_styles;
 mod components;
 mod context_menu;
 mod creation;
@@ -91,6 +92,10 @@ enum GestureKind {
         index: usize,
         original: f32,
     },
+    ColorStyleProperty {
+        angle: bool,
+        original: f32,
+    },
     BezierPlace,
     BezierEdit {
         id: usize,
@@ -134,6 +139,7 @@ struct Gesture {
 pub struct Workspace {
     pages: pages::State,
     assets: assets::State,
+    colors: color_styles::State,
     export: export::ExportState,
     snapping: layout::Snapping,
     hierarchy: crate::layer::Hierarchy,
@@ -394,6 +400,7 @@ impl Workspace {
         Self {
             pages,
             assets: assets::State::new(window, cx),
+            colors: color_styles::State::new(window, cx),
             hierarchy: Default::default(),
             auto_layout: auto_layout::State::new(window, cx),
             components: components::State::default(),
@@ -501,6 +508,7 @@ impl Workspace {
         let id = self.next_id;
         self.next_id += 1;
         self.boards.push(Artboard {
+            color_style: None,
             id,
             layer: Default::default(),
             name: crate::i18n::message("frame-name", &[("id", id.to_string())]),
@@ -576,9 +584,11 @@ impl Workspace {
                 })
             })
             .flatten();
-        popover_focus
-            .unwrap_or_else(|| self.focus.clone())
-            .focus(window, cx);
+        if !matches!(kind, GestureKind::ColorStyleProperty { .. }) {
+            popover_focus
+                .unwrap_or_else(|| self.focus.clone())
+                .focus(window, cx);
+        }
         if let Some(hitbox) = self.capture.get() {
             window.capture_pointer(hitbox);
         }
@@ -625,6 +635,9 @@ impl Workspace {
             }
             GestureKind::LayoutProperty { index, original } => {
                 self.scrub_layout_number(index, original, delta.x, shift, cx)
+            }
+            GestureKind::ColorStyleProperty { angle, original } => {
+                self.scrub_style_number(angle, original, delta.x, shift, cx)
             }
             GestureKind::Draw => self.move_drawing(position, shift),
             GestureKind::BezierPlace => self.move_bezier_place(position, shift),
@@ -698,6 +711,9 @@ impl Workspace {
                 GestureKind::Panel { side, original, .. } => self.panels.set(side, original),
                 GestureKind::Property { .. } => self.finish_property_scrub(false, cx),
                 GestureKind::LayoutProperty { .. } => self.finish_layout_scrub(false, cx),
+                GestureKind::ColorStyleProperty { angle, original } => {
+                    self.set_style_number(angle, original, cx);
+                }
                 GestureKind::Draw => {
                     self.box_draft = None;
                     self.draft = None;
@@ -752,6 +768,7 @@ impl Render for Workspace {
             GestureKind::Panel { .. }
             | GestureKind::Property { .. }
             | GestureKind::LayoutProperty { .. }
+            | GestureKind::ColorStyleProperty { .. }
             | GestureKind::MultiProperty { .. } => gpui::CursorStyle::ResizeLeftRight,
             GestureKind::Resize { handle, .. } => resize_cursor(handle),
             GestureKind::Text {
@@ -825,6 +842,19 @@ impl Render for Workspace {
                     }
                     return;
                 }
+                if this.colors.dialog.is_some() {
+                    if event.keystroke.key == "escape" {
+                        if this.gesture.is_some_and(|g| {
+                            matches!(g.kind, GestureKind::ColorStyleProperty { .. })
+                        }) {
+                            this.cancel_gesture(window, cx);
+                        } else {
+                            this.close_color_dialog(window, cx);
+                        }
+                        cx.stop_propagation();
+                    }
+                    return;
+                }
                 if this.assets.dialog.is_some() {
                     if event.keystroke.key == "escape" {
                         this.cancel_asset_dialog(window, cx);
@@ -894,6 +924,9 @@ impl Render for Workspace {
             .child(uic::components::context_menu::layer(cx))
             .when(self.assets.dialog.is_some(), |el| {
                 el.child(self.asset_dialog(cx))
+            })
+            .when(self.colors.dialog.is_some(), |el| {
+                el.child(self.color_style_dialog(window, cx))
             })
             .when(self.pages.delete.is_some(), |el| {
                 el.child(self.page_delete_dialog(cx))

@@ -16,6 +16,7 @@ fn rect(x: f32, y: f32, width: f32, height: f32) -> Rect {
 fn fixture() -> Page {
     let mut page = Page::empty("Page 1".into());
     page.boards.push(Artboard {
+        color_style: None,
         id: 1,
         name: "Frame".into(),
         rect: rect(100., 200., 300., 160.),

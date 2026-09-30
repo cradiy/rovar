@@ -78,6 +78,7 @@ impl Workspace {
                     .bg(rgb(0x24262f))
                     .border_color(gpui::rgba(0xffffff10)),
             )
+            .child(self.color_assets(cx))
             .child(
                 div()
                     .h(px(28.))

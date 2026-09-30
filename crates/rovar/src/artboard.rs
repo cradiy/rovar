@@ -16,6 +16,8 @@ pub struct Rect {
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Artboard {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color_style: Option<String>,
     pub id: usize,
     pub layer: crate::layer::LayerState,
     pub name: String,

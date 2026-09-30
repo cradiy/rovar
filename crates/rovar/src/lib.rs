@@ -2,6 +2,7 @@ mod artboard;
 mod assets;
 mod auto_layout;
 mod bezier;
+mod color_styles;
 mod component_export;
 mod component_library;
 mod components;

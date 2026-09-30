@@ -1,7 +1,7 @@
 use super::*;
 
 impl Workspace {
-    fn numeric_limits(property: Property) -> (f32, f32, f32, f32) {
+    pub(in crate::workspace) fn numeric_limits(property: Property) -> (f32, f32, f32, f32) {
         use Property::*;
         // Minimum, maximum, units per screen pixel, quantization.
         match property {

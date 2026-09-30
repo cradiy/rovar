@@ -60,6 +60,8 @@ pub(crate) enum StrokeAlign {
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub(crate) struct Stroke {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color_style: Option<String>,
     pub enabled: bool,
     pub width: f32,
     pub align: StrokeAlign,
@@ -72,6 +74,7 @@ pub(crate) struct Stroke {
 impl Default for Stroke {
     fn default() -> Self {
         Self {
+            color_style: None,
             enabled: false,
             width: 1.,
             align: StrokeAlign::Inside,
@@ -113,6 +116,8 @@ impl PartialEq for PathPoints {
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub(crate) struct Shape {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color_style: Option<String>,
     pub id: usize,
     pub layer: crate::layer::LayerState,
     pub board: Option<usize>,
@@ -143,6 +148,7 @@ pub(crate) struct Shape {
 impl Shape {
     pub fn new(id: usize, board: Option<usize>, kind: ShapeKind, rect: Rect) -> Self {
         Self {
+            color_style: None,
             id,
             layer: Default::default(),
             board,

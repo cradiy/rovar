@@ -166,7 +166,12 @@ impl Workspace {
             .detach();
         }
     }
-    fn apply_component_page(&mut self, page: Page, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn apply_component_page(
+        &mut self,
+        page: Page,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.boards = page.boards;
         self.shapes = page.shapes;
         self.hierarchy = page.hierarchy;

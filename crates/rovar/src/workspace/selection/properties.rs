@@ -192,12 +192,15 @@ impl Workspace {
             });
         } else {
             let target = if let Some(b) = self.boards.iter_mut().find(|b| b.id == id) {
+                b.color_style = None;
                 Some(&mut b.color)
             } else {
                 self.shapes.iter_mut().find(|s| s.id == id).map(|s| {
                     if s.can_fill() {
+                        s.color_style = None;
                         &mut s.color
                     } else {
+                        s.stroke.color_style = None;
                         &mut s.stroke.color
                     }
                 })

@@ -58,6 +58,7 @@ fn thumbnail_preserves_rich_text_alignment_wrapping_and_clipped_overflow(
         id: uuid::Uuid::new_v4().to_string(),
         next_id: 3,
         boards: vec![Artboard {
+            color_style: None,
             id: 1,
             layer: Default::default(),
             name: "Frame".into(),

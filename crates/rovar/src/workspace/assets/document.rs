@@ -114,6 +114,7 @@ impl Workspace {
         let hashes: BTreeSet<_> = document.assets.iter().map(|a| &a.hash).collect();
         sources.retain(|a| hashes.contains(&a.hash));
         document.validate()?;
+        crate::color_styles::visit(&mut document, |reference, _, _, _| *reference = None);
         Ok(SavedComponent {
             json: serde_json::to_vec(&Document::single(document))?,
             sources,

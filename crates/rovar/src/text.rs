@@ -34,6 +34,8 @@ pub(crate) enum VerticalAlign {
 
 #[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TextStyle {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color_style: Option<String>,
     pub family: SharedString,
     pub weight: f32,
     pub size: f32,
@@ -53,6 +55,7 @@ impl Default for TextStyle {
         gradient.stop_mut(0).unwrap().color = rgb(0x20232b);
         Self {
             family: "Noto Sans CJK SC".into(),
+            color_style: None,
             weight: 400.,
             size: 24.,
             line_height: 1.5,
@@ -88,6 +91,21 @@ pub(crate) struct Snapshot {
 }
 
 impl Snapshot {
+    pub(crate) fn visit_color_styles(
+        &mut self,
+        mut f: impl FnMut(&mut Option<String>, &mut Rgba, &mut FillMode, &mut LinearGradient),
+    ) {
+        for style in std::iter::once(&mut self.styles.default)
+            .chain(self.styles.runs.iter_mut().map(|r| &mut r.style))
+        {
+            f(
+                &mut style.color_style,
+                &mut style.color,
+                &mut style.fill_mode,
+                &mut style.gradient,
+            );
+        }
+    }
     pub(crate) fn from_document(text: crate::document::Text) -> Self {
         Self {
             content: text.content,

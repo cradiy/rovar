@@ -11,6 +11,7 @@ pub(crate) type SharedHistory = Rc<RefCell<History>>;
 
 #[derive(Clone)]
 pub(crate) struct PageEdit {
+    pub colors: crate::color_styles::Palette,
     pub components: crate::components::Definitions,
     pub pages: std::collections::BTreeMap<String, Option<SavedPage>>,
     pub order: Vec<String>,

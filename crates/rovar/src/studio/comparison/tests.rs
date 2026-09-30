@@ -62,6 +62,7 @@ fn comparison_copies_server_objects_into_local_history_without_modifying_server(
             ));
             page.next_id = 2;
             let document = Document {
+                colors: Default::default(),
                 id: studio.tabs[0].document_id.clone(),
                 pages: vec![page],
                 components: Default::default(),

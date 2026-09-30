@@ -70,6 +70,46 @@ struct TestView {
 }
 
 #[gpui::test]
+fn color_styles_apply_to_selected_text_and_manual_color_detaches_with_undo(
+    cx: &mut TestAppContext,
+) {
+    let window = cx.open_window(size(px(500.), px(400.)), |window, cx| TestView {
+        editor: cx.new(|cx| TextEditor::new(0, Default::default(), window, cx)),
+    });
+    window
+        .update(cx, |view, window, cx| {
+            view.editor.update(cx, |text, cx| {
+                text.replace_text_in_range(None, "A中😀B", window, cx);
+                text.move_cursor(1, false);
+                text.move_cursor(8, true);
+                let id = uuid::Uuid::new_v4().to_string();
+                text.apply_style(
+                    StyleChange::ColorStyle(
+                        Some(id.clone()),
+                        crate::color_styles::ColorStyle {
+                            name: "Brand".into(),
+                            color: gpui::rgb(0x334455),
+                            gradient: None,
+                        },
+                    ),
+                    cx,
+                );
+                assert!(text.styles.at(0).color_style.is_none());
+                assert_eq!(text.styles.at(1).color_style.as_deref(), Some(id.as_str()));
+                assert!(text.styles.at(8).color_style.is_none());
+                text.history.borrow_mut().break_group();
+                text.apply_style(StyleChange::Opacity(0.5), cx);
+                assert!(text.styles.at(1).color_style.is_none());
+                assert_eq!(text.styles.at(1).color.a, 0.5);
+                replay(text, false);
+                assert_eq!(text.styles.at(1).color_style.as_deref(), Some(id.as_str()));
+                assert_eq!(text.styles.at(1).color.a, 1.);
+            });
+        })
+        .unwrap();
+}
+
+#[gpui::test]
 fn merged_typing_style_edits_and_replay_advance_document_revision(cx: &mut TestAppContext) {
     let window = cx.open_window(size(px(500.), px(400.)), |window, cx| TestView {
         editor: cx.new(|cx| TextEditor::new(0, Default::default(), window, cx)),

@@ -6,6 +6,8 @@ use std::ops::Range;
 
 #[derive(Clone, Debug)]
 pub(crate) enum StyleChange {
+    ColorStyle(Option<String>, crate::color_styles::ColorStyle),
+    DetachColorStyle,
     Family(SharedString),
     Weight(f32),
     Size(f32),
@@ -25,6 +27,7 @@ impl StyleChange {
     }
     pub fn key(&self) -> TextProperty {
         match self {
+            Self::ColorStyle(..) | Self::DetachColorStyle => TextProperty::Color,
             Self::Family(_) => TextProperty::Family,
             Self::Color(_) => TextProperty::Color,
             Self::Opacity(_) => TextProperty::Opacity,
@@ -39,7 +42,18 @@ impl StyleChange {
         }
     }
     fn apply(&self, style: &mut TextStyle) {
+        if matches!(
+            self,
+            Self::Color(_) | Self::Opacity(_) | Self::FillMode(_) | Self::Gradient(_)
+        ) {
+            style.color_style = None;
+        }
         match self {
+            Self::ColorStyle(id, value) => {
+                style.color_style = id.clone();
+                value.apply(&mut style.color, &mut style.fill_mode, &mut style.gradient);
+            }
+            Self::DetachColorStyle => style.color_style = None,
             Self::Family(value) => style.family = value.clone(),
             Self::Weight(value) => style.weight = *value,
             Self::Size(value) => style.size = *value,

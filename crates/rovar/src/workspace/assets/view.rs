@@ -85,6 +85,7 @@ impl Workspace {
                     .bg(rgb(0x24262f))
                     .border_color(rgba(0xffffff10)),
             )
+            .child(self.color_assets(cx))
             .child(
                 div()
                     .flex()

@@ -7,6 +7,7 @@ use std::{
     collections::HashMap,
     path::{Path, PathBuf},
 };
+mod colors;
 
 #[derive(Serialize, Deserialize)]
 struct Metadata {
@@ -25,6 +26,7 @@ pub(crate) struct Entry {
 }
 
 pub(crate) struct Library {
+    pub colors: crate::color_styles::Palette,
     directory: PathBuf,
     pub entries: Vec<Entry>,
     pub busy: bool,
@@ -47,6 +49,7 @@ impl Library {
             return library;
         }
         let library = cx.new(|_| Self {
+            colors: Default::default(),
             directory: directory.clone(),
             entries: Vec::new(),
             busy: false,
@@ -87,13 +90,14 @@ impl Library {
                         crate::raster::prepare_preview().await;
                     }
                     operation(&directory)?;
-                    catalog(&directory)
+                    Ok::<_, anyhow::Error>((catalog(&directory)?, colors::read(&directory)?))
                 })
                 .await;
             let _ = this.update(cx, |this, cx| {
                 this.busy = false;
                 match result {
-                    Ok(entries) => {
+                    Ok((entries, colors)) => {
+                        this.colors = colors;
                         this.entries = entries;
                         this.ready = true;
                         if let Some(remote) = crate::remote::Remote::existing(cx) {

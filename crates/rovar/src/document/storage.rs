@@ -7,6 +7,8 @@ const METADATA_LIMIT: u64 = 64 * 1024 * 1024;
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Manifest {
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    colors: crate::color_styles::Palette,
     schema: u32,
     id: String,
     #[serde(default, skip_serializing, rename = "cover")]
@@ -148,6 +150,7 @@ pub(crate) fn read_document(reader: &Reader) -> Result<Document> {
             }
             Document {
                 id: info.id,
+                colors: info.colors,
                 pages,
                 components,
             }
@@ -169,6 +172,7 @@ pub(crate) fn read_document(reader: &Reader) -> Result<Document> {
             )?;
             Document {
                 id: info.id,
+                colors: Default::default(),
                 pages: vec![page],
                 components: Default::default(),
             }
@@ -264,6 +268,7 @@ fn write_document(
         "Missing media source"
     );
     let info = Manifest {
+        colors: document.colors.clone(),
         schema: 2,
         id: document.id.clone(),
         previous_cover: None,

@@ -172,6 +172,7 @@ impl Workspace {
     }
     pub(in crate::workspace) fn page_edit(&self, ids: &[String], cx: &gpui::App) -> PageEdit {
         PageEdit {
+            colors: self.colors.palette.clone(),
             components: self.components.definitions.clone(),
             pages: ids
                 .iter()
@@ -215,6 +216,7 @@ impl Workspace {
         self.suspend(window, cx);
         self.park_page(cx);
         let inverse = self.page_edit(&ids, cx);
+        self.colors.palette = value.colors;
         self.components.definitions = value.components;
         self.components.revision = None;
         for (id, state) in value.pages {
