@@ -1,6 +1,8 @@
 use super::*;
 use std::collections::BTreeSet;
 mod clipboard;
+mod labels;
+mod picking;
 mod properties;
 mod resize;
 pub(super) use resize::Resize;
@@ -274,6 +276,24 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
+        if event.modifiers.control || event.modifiers.platform {
+            self.focus.focus(window, cx);
+            if event.modifiers.shift {
+                self.toggle_selection(id, cx);
+                cx.stop_propagation();
+            } else {
+                self.set_selection(BTreeSet::from([id]), cx);
+                self.batch_before = self.before_geometry();
+                self.begin(
+                    GestureKind::SelectionMove,
+                    event.position,
+                    event.button,
+                    window,
+                    cx,
+                );
+            }
+            return true;
+        }
         if event.click_count >= 2
             && !event.modifiers.shift
             && (!self.is_selected(id) || self.multi_selection.len() > 1)

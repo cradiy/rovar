@@ -76,6 +76,7 @@ impl Workspace {
         if self.gesture.is_some() || self.bezier_draft.is_some() {
             return;
         }
+        self.pick_hover = None;
         self.close_tool_menus(window, cx);
         self.finish_rename(true, window, cx);
         self.seal_text_edits(cx);
@@ -129,7 +130,11 @@ impl Workspace {
         };
         let order_enabled = editable && self.common_parent(&self.selection_ids()).is_some();
         let paste_enabled = self.can_paste_objects(cx);
-        let mut menu = menu(238., "editor-context-glass")
+        let mut menu = menu(238., "editor-context-glass");
+        if !tree {
+            menu = self.with_layer_picker(menu, position, cx);
+        }
+        menu = menu
             .item(item(
                 "context-undo",
                 t("undo"),

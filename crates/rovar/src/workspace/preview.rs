@@ -88,7 +88,11 @@ impl Workspace {
                     })
             });
             if let Some(id) = hit {
-                let id = if event.click_count >= 2 || event.modifiers.alt {
+                let id = if event.click_count >= 2
+                    || event.modifiers.alt
+                    || event.modifiers.control
+                    || event.modifiers.platform
+                {
                     id
                 } else {
                     self.group_target(id)

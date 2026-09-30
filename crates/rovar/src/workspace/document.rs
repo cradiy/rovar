@@ -318,6 +318,7 @@ impl Workspace {
         self.duplicate = None;
         self.finish_spacing_input(false, cx);
         self.measure_target = None;
+        self.pick_hover = None;
         self.suspend_assets();
         self.colors.dialog = None;
         for menu in &self.colors.menu {

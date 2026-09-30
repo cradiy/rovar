@@ -168,6 +168,7 @@ pub struct Workspace {
     snapping: layout::Snapping,
     spacing: layout::Spacing,
     measure_target: Option<usize>,
+    pick_hover: Option<usize>,
     hierarchy: crate::layer::Hierarchy,
     auto_layout: auto_layout::State,
     components: components::State,
@@ -409,6 +410,14 @@ impl Workspace {
             ));
         }
         let focus = cx.focus_handle();
+        subscriptions.push(cx.observe(
+            &uic::components::context_menu::layer(cx),
+            |this, menu, cx| {
+                if !menu.read(cx).is_open() && this.pick_hover.take().is_some() {
+                    cx.notify();
+                }
+            },
+        ));
         subscriptions.push(cx.on_blur(&focus, window, |this, window, cx| {
             if this.measure_target.take().is_some() {
                 cx.notify();
@@ -441,6 +450,7 @@ impl Workspace {
             snapping: Default::default(),
             spacing: layout::Spacing::new(window, cx),
             measure_target: None,
+            pick_hover: None,
             export: export::ExportState::new(window, cx),
             rename_input,
             layer_drag: None,
@@ -1014,6 +1024,9 @@ impl Render for Workspace {
                     return;
                 }
                 if uic::components::context_menu::is_open(cx) {
+                    if this.pick_hover.take().is_some() {
+                        cx.notify();
+                    }
                     return;
                 }
                 if this.gesture.is_some_and(|g| {

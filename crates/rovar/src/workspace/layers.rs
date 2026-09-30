@@ -306,6 +306,7 @@ impl Workspace {
             .occlude()
             .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
             .on_scroll_wheel(|_, _, cx| cx.stop_propagation());
+        let collapsed = self.sidebar.collapsed;
         let toggle = div()
             .id("toggle-layers")
             .debug_selector(|| "toggle-layers".into())
@@ -317,14 +318,23 @@ impl Workspace {
             .justify_center()
             .cursor_pointer()
             .hover(|s| s.bg(rgba(0xb4a2ee22)))
-            .tooltip(|_, cx| {
-                cx.new(|_| toolbar::ToolTip(t("toggle-sidebar").into()))
-                    .into()
+            .tooltip(move |_, cx| {
+                cx.new(|_| {
+                    toolbar::ToolTip(
+                        t(if collapsed {
+                            "expand-sidebar"
+                        } else {
+                            "collapse-sidebar"
+                        })
+                        .into(),
+                    )
+                })
+                .into()
             })
             .child(
                 icon(
                     if self.sidebar.collapsed {
-                        LucideIcons::PanelLeft
+                        LucideIcons::ChevronsRight
                     } else {
                         LucideIcons::ChevronsLeft
                     },
