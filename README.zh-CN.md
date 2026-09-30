@@ -2,13 +2,9 @@
 
 [English](README.md) | 简体中文
 
-使用 Rust 和 GPUI 构建的桌面设计编辑器。支持画板、矢量、文字、图片、视频、组件复用、多页面文档和多文档标签页，设计自动保存到本地工作区。
+使用 Rust 和 GPUI 构建的设计编辑器，支持桌面端和 Web。
 
-画板和分组支持自动布局，包括横纵排列、嵌套、间距、内边距、对齐，以及固定、适应内容和填满容器。通过右键菜单或 `Shift+A` 切换；多选对象时先创建分组。
-
-Assets 分为本文档组件和本机资源库。主组件修改同步到各页实例，并保留实例的局部修改；组件及媒体随 `.rovar` 文件保存。本机资源可导入不同文档复用。
-
-支持 PNG、SVG、视频原文件和 `.rovar` 文档导出，提供英文和简体中文界面。
+提供画板、矢量、文字、图片与视频、自动布局、组件复用、多页面文档和 PNG/SVG 导出。可完全本地使用，也可连接服务器，使用个人和团队空间。支持英文与简体中文。
 
 这个类 Figma 项目主要由 GPT-6 Astra 开发，目的是展示我的 GPUI 的能力。目前功能已比较完善，但我不一定会把它做成完整产品。如果想用的人多，或者以后我自己需要，可能会继续完善。
 
@@ -26,48 +22,21 @@ cargo run --locked -p rovar
 
 ## 构建
 
-先安装 [just](https://github.com/casey/just) 和 [Nushell](https://www.nushell.sh/)，在仓库内执行。`just` 列出命令。每种构建均有独立配方，方便 shell 自动补全，统一使用 release 构建和默认输出目录。
-
-Linux：
-
-```nu
-just build-linux
-just build-linux-all
-just build-linux-deb
-just build-linux-tar
-```
-
-`build-linux` 仅编译 release 二进制。打包命令为 `build-linux-appimage`、`build-linux-tar`（tar.gz）、`build-linux-rpm`、`build-linux-deb`、`build-linux-arch` 和 `build-linux-all`，打包产物输出到 `dist/`。
-
-macOS 还需安装 Xcode Command Line Tools：
+安装 [just](https://github.com/casey/just) 和 [Nushell](https://www.nushell.sh/)，运行 `just` 查看全部构建命令。
 
 ```sh
-just build-macos
+just build-linux       # 桌面二进制
+just build-linux-rpm   # RPM 安装包
+just build-macos       # App、ZIP 和 DMG
+just build-server      # 内嵌 Web 编辑器的服务器
 ```
 
-构建 release 版本，生成 `.app`、ZIP 和 DMG。
-产物包含 `dist/Rovar.app`、带版本号的压缩包、SHA-256 校验文件和构建信息。
-仅支持 Apple Silicon（arm64）。单独打包某种格式可执行如 `just build-macos-dmg`。
+打包产物位于 `dist/`。macOS 构建需要 Apple Silicon 和 Xcode Command Line Tools，详见 [macOS 打包说明](packaging/macos/README.md)。
 
-详见 [macOS 打包说明](packaging/macos/README.md)。
+## Web 与服务器
 
-## Web（实验性）
+Web 编辑器目前为实验性功能，使用支持 WebGPU 的浏览器，通过 HTTPS 或 localhost 打开服务器地址。
 
-安装 [Trunk](https://trunkrs.dev/) 和 Rust 的 `wasm32-unknown-unknown` 编译目标后：
-
-```nu
-just serve
-just build-web
-```
-
-需要支持 WebGPU 的浏览器，通过 HTTPS 或 localhost 访问。构建产物：`dist/web/`。
-使用 `just serve` 时，先启动监听 `127.0.0.1:8699` 的后端，在独立的开发 TOML 配置中设置 `server.public_origin = "http://127.0.0.1:8080"`，然后用浏览器打开该地址。Trunk 会将 `/api/v1/` 转发给后端；嵌入版服务器使用自身的公开地址。
-登录、注册和编辑器共用 GPUI 界面与语言设置。HTML 仅在 WASM 加载时显示启动提示；PNG/SVG 导出和缩略图渲染使用按需加载的独立 WASM 模块。
-语言设为“自动”时，按浏览器偏好匹配，无匹配则回退英文。登录背景动效遵循减少动态效果设置，标签页隐藏时暂停。
-连接提供编辑器的服务器，文档缓存在 IndexedDB 并同步到服务器，可导出 `.rovar` 文件保留独立副本。同一工作区只允许一个浏览器标签页打开，应用内支持多文档标签页。导入请使用文件选择框。Web 面板使用实色背景，字体随应用提供。
-
-## 服务器
-
-执行 `just build-server` 构建内嵌 Web 编辑器的服务器二进制。桌面端可在本地存储与多个服务器之间切换。详见[服务器配置](crates/rovar-server/README.zh-CN.md)。
+构建 Web 编辑器需要 [Trunk](https://trunkrs.dev/) 和 Rust 的 `wasm32-unknown-unknown` 编译目标。部署和注册配置详见[服务器说明](crates/rovar-server/README.zh-CN.md)。
 
 [文件格式](crates/rovar-format/FORMAT.zh-CN.md) · [MIT 许可证](LICENSE)
