@@ -2,6 +2,8 @@ use super::*;
 use std::collections::BTreeSet;
 mod clipboard;
 mod properties;
+mod resize;
+pub(super) use resize::Resize;
 
 pub(super) struct Duplicate {
     pub ids: BTreeSet<usize>,
@@ -166,6 +168,10 @@ impl Workspace {
                     }),
             );
         }
+        self.geometry_changes(ids)
+    }
+
+    fn geometry_changes(&self, ids: BTreeSet<usize>) -> Vec<Change> {
         ids.into_iter()
             .filter_map(|id| {
                 if let Some((index, b)) = self.boards.iter().enumerate().find(|(_, b)| b.id == id) {

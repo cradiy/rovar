@@ -39,6 +39,11 @@ impl Default for Snapping {
     }
 }
 impl Snapping {
+    pub(in crate::workspace) fn clear_guides(&mut self) {
+        self.guides.clear();
+        self.gaps.clear();
+    }
+
     pub(in crate::workspace) fn clear(&mut self) {
         self.original = None;
         self.targets.iter_mut().for_each(Vec::clear);
@@ -54,7 +59,9 @@ impl Workspace {
             return;
         }
         let ids: BTreeSet<_> = match kind {
-            GestureKind::SelectionMove => self.selection_ids(),
+            GestureKind::SelectionMove | GestureKind::SelectionResize { .. } => {
+                self.selection_ids()
+            }
             GestureKind::Move { id, .. }
             | GestureKind::Resize { id, .. }
             | GestureKind::Text { id, .. }

@@ -389,16 +389,17 @@ impl Handle {
         Self(-1, 0),
     ];
 
-    pub fn resize(self, start: Rect, delta: Point<f32>) -> Rect {
+    pub fn resize(self, start: Rect, delta: Point<f32>, limits: (Point<f32>, Point<f32>)) -> Rect {
+        let (min, max) = limits;
         let mut result = start;
         if self.0 != 0 {
-            result.width = (start.width + delta.x * self.0 as f32).clamp(MIN_SIZE, MAX_SIZE);
+            result.width = (start.width + delta.x * self.0 as f32).clamp(min.x, max.x);
             if self.0 < 0 {
                 result.x = start.x + start.width - result.width;
             }
         }
         if self.1 != 0 {
-            result.height = (start.height + delta.y * self.1 as f32).clamp(MIN_SIZE, MAX_SIZE);
+            result.height = (start.height + delta.y * self.1 as f32).clamp(min.y, max.y);
             if self.1 < 0 {
                 result.y = start.y + start.height - result.height;
             }
@@ -493,7 +494,8 @@ mod tests {
             width: 200.,
             height: 100.,
         };
-        let result = Handle(-1, -1).resize(start, point(500., 400.));
+        let limits = (point(MIN_SIZE, MIN_SIZE), point(MAX_SIZE, MAX_SIZE));
+        let result = Handle(-1, -1).resize(start, point(500., 400.), limits);
         assert_eq!(
             result,
             Rect {
@@ -503,7 +505,7 @@ mod tests {
                 height: 1.
             }
         );
-        let right = Handle(1, 0).resize(start, point(80., 999.));
+        let right = Handle(1, 0).resize(start, point(80., 999.), limits);
         assert_eq!(
             right,
             Rect {

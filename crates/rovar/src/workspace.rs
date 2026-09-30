@@ -75,6 +75,10 @@ enum GestureKind {
     LayerSort,
     Marquee,
     SelectionMove,
+    SelectionResize {
+        original: Rect,
+        handle: Handle,
+    },
     Spacing {
         axis: usize,
         original: f32,
@@ -172,6 +176,7 @@ pub struct Workspace {
     layer_row_bounds: Rc<std::cell::RefCell<std::collections::HashMap<usize, Bounds<Pixels>>>>,
     multi_selection: std::collections::BTreeSet<usize>,
     duplicate: Option<selection::Duplicate>,
+    selection_resize: Option<selection::Resize>,
     marquee: Option<selection::Marquee>,
     marquee_additive: bool,
     batch_before: Vec<Change>,
@@ -442,6 +447,7 @@ impl Workspace {
             layer_row_bounds: Default::default(),
             multi_selection: Default::default(),
             duplicate: None,
+            selection_resize: None,
             marquee: None,
             marquee_additive: false,
             batch_before: Vec::new(),
@@ -656,6 +662,9 @@ impl Workspace {
             GestureKind::LayerSort => self.move_layer_sort(position),
             GestureKind::Marquee => self.move_marquee(position, cx),
             GestureKind::SelectionMove => self.move_selection(snapped),
+            GestureKind::SelectionResize { original, handle } => {
+                self.resize_selection(original, handle, delta / self.view.zoom, shift, cx);
+            }
             GestureKind::Spacing { axis, original } => {
                 self.move_spacing(axis, original, delta, cx);
             }
@@ -786,6 +795,7 @@ impl Workspace {
                     self.batch_values.clear();
                 }
                 GestureKind::Spacing { .. } => self.finish_spacing(false, cx),
+                GestureKind::SelectionResize { .. } => self.finish_selection_resize(false, cx),
                 GestureKind::Panel { side, original, .. } => self.panels.set(side, original),
                 GestureKind::Property { .. } => self.finish_property_scrub(false, cx),
                 GestureKind::LayoutProperty { .. } => self.finish_layout_scrub(false, cx),
@@ -880,7 +890,9 @@ impl Render for Workspace {
             | GestureKind::GradientMidpoint { .. }
             | GestureKind::GradientSeam { .. }
             | GestureKind::MultiProperty { .. } => gpui::CursorStyle::ResizeLeftRight,
-            GestureKind::Resize { handle, .. } => resize_cursor(handle),
+            GestureKind::Resize { handle, .. } | GestureKind::SelectionResize { handle, .. } => {
+                resize_cursor(handle)
+            }
             GestureKind::Text {
                 id,
                 handle: Some(handle),
@@ -926,6 +938,7 @@ impl Render for Workspace {
                         matches!(
                             g.kind,
                             GestureKind::SelectionMove
+                                | GestureKind::SelectionResize { .. }
                                 | GestureKind::Rotate { .. }
                                 | GestureKind::Move { .. }
                                 | GestureKind::Resize { .. }
@@ -1007,6 +1020,7 @@ impl Render for Workspace {
                     matches!(
                         g.kind,
                         GestureKind::LayerSort
+                            | GestureKind::SelectionResize { .. }
                             | GestureKind::Spacing { .. }
                             | GestureKind::Property { .. }
                             | GestureKind::LayoutProperty { .. }

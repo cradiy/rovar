@@ -138,6 +138,10 @@ impl Workspace {
                     self.finish_selection_move(cx);
                     None
                 }
+                GestureKind::SelectionResize { .. } => {
+                    self.finish_selection_resize(true, cx);
+                    None
+                }
                 GestureKind::Spacing { .. } => {
                     self.finish_spacing(true, cx);
                     None
