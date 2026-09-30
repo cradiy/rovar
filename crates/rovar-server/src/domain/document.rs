@@ -6,6 +6,7 @@ pub const MAX_CONTENT_BYTES: usize = 128 * 1024 * 1024;
 pub enum DocumentKind {
     Document,
     Component,
+    ColorStyle,
 }
 
 #[derive(Clone, Debug)]

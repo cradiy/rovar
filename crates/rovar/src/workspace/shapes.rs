@@ -179,7 +179,7 @@ impl Workspace {
                 if edit_hatch {
                     // Reuse the actual filled contour, including holes and curves.
                     // This is only a paint overlay; document fills and hitboxes stay intact.
-                    let scale = window.scale_factor();
+                    let scale = window.raster_scale_factor();
                     paint_path(
                         &geometry.fill,
                         bounds.origin,

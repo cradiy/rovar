@@ -62,7 +62,11 @@ impl Documents for DocumentRepository {
         let mut tx = self.0.begin().await?;
         super::spaces::require(&mut tx, actor, space_id, false).await?;
         sqlx::query("INSERT INTO objects(space_id,id,kind,title,created,modified) VALUES($1,$2,$3,$4,$5,$5) ON CONFLICT DO NOTHING")
-            .bind(space_id).bind(id).bind(if input.kind == DocumentKind::Document { "document" } else { "component" })
+            .bind(space_id).bind(id).bind(match input.kind {
+                DocumentKind::Document => "document",
+                DocumentKind::Component => "component",
+                DocumentKind::ColorStyle => "color_style",
+            })
             .bind(&input.title).bind(now()).execute(&mut *tx).await?;
         let row = sqlx::query("SELECT * FROM objects WHERE space_id=$1 AND id=$2 FOR UPDATE")
             .bind(space_id)
@@ -111,10 +115,11 @@ impl DocumentWrite for PreparedWrite {
 fn object(row: &PgRow) -> Document {
     Document {
         id: row.get("id"),
-        kind: if row.get::<String, _>("kind") == "component" {
-            DocumentKind::Component
-        } else {
-            DocumentKind::Document
+        kind: match row.get::<String, _>("kind").as_str() {
+            "document" => DocumentKind::Document,
+            "component" => DocumentKind::Component,
+            "color_style" => DocumentKind::ColorStyle,
+            _ => unreachable!("object kind is constrained by the database"),
         },
         title: row.get("title"),
         revision: row.get("revision"),

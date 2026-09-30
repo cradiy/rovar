@@ -203,7 +203,6 @@ impl Workspace {
             .child(crate::text::element(
                 &text.editor,
                 self.view.zoom,
-                text.layer.rotation,
                 self.focus.clone(),
                 cx,
             ))

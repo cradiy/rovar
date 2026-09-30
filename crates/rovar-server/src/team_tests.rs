@@ -193,6 +193,77 @@ async fn registration_invitation_membership_and_space_isolation() {
         app.documents.list(&outsider.identity.user_id, team).await,
         Err(Error::Forbidden)
     ));
+    let color_id = uuid::Uuid::new_v4().to_string();
+    for (space, content) in [
+        (personal, b"private-color".as_slice()),
+        (team, b"team-color".as_slice()),
+    ] {
+        let mut color = command(content, DocumentKind::ColorStyle);
+        color.id = color_id.clone();
+        let saved = app.documents.save(owner_id, space, color).await.unwrap();
+        assert_eq!(saved.kind, DocumentKind::ColorStyle);
+        assert_eq!(
+            app.documents
+                .read(owner_id, space, &color_id)
+                .await
+                .unwrap()
+                .content,
+            content
+        );
+    }
+    assert!(matches!(
+        app.documents.read(member_id, personal, &color_id).await,
+        Err(Error::Forbidden)
+    ));
+    assert_eq!(
+        app.documents
+            .read(member_id, team, &color_id)
+            .await
+            .unwrap()
+            .content,
+        b"team-color"
+    );
+    let mut edit = command(b"edited-color", DocumentKind::ColorStyle);
+    edit.id = color_id.clone();
+    edit.base_revision = 1;
+    assert_eq!(
+        app.documents
+            .save(member_id, team, edit)
+            .await
+            .unwrap()
+            .revision,
+        2
+    );
+    let mut stale = command(b"stale-color", DocumentKind::ColorStyle);
+    stale.id = color_id.clone();
+    stale.base_revision = 1;
+    assert!(matches!(
+        app.documents.save(owner_id, team, stale).await,
+        Err(Error::Conflict)
+    ));
+    let mut delete = command(b"", DocumentKind::ColorStyle);
+    delete.id = color_id.clone();
+    delete.base_revision = 2;
+    delete.deleted = true;
+    assert!(
+        app.documents
+            .save(owner_id, team, delete)
+            .await
+            .unwrap()
+            .deleted
+    );
+    assert!(matches!(
+        app.documents.read(member_id, team, &color_id).await,
+        Err(Error::NotFound)
+    ));
+    assert_eq!(
+        app.documents
+            .read(owner_id, personal, &color_id)
+            .await
+            .unwrap()
+            .content,
+        b"private-color"
+    );
     app.spaces.remove(owner_id, team, member_id).await.unwrap();
     assert_eq!(
         app.auth

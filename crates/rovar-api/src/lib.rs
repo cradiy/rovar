@@ -4,7 +4,7 @@ pub use account::*;
 use serde::{Deserialize, Serialize};
 pub use spaces::*;
 
-pub const VERSION: u32 = 1;
+pub const VERSION: u32 = 2;
 pub const MAX_CONTENT_BYTES: usize = 128 * 1024 * 1024;
 
 #[derive(Serialize, Deserialize)]
@@ -34,6 +34,7 @@ pub struct Login {
 pub enum Kind {
     Document,
     Component,
+    ColorStyle,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

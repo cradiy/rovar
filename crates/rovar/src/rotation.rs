@@ -1,5 +1,7 @@
 use crate::artboard::Rect;
-use gpui::{Bounds, Pixels, Point, point, px};
+#[cfg(test)]
+use gpui::{Bounds, Pixels, px};
+use gpui::{Point, point};
 
 pub fn normalize(angle: f32) -> f32 {
     (angle + 180.).rem_euclid(360.) - 180.
@@ -18,6 +20,7 @@ pub fn around(p: Point<f32>, center: Point<f32>, angle: f32) -> Point<f32> {
     center + vector(p - center, angle)
 }
 
+#[cfg(test)]
 pub fn pixels(p: Point<Pixels>, center: Point<Pixels>, angle: f32) -> Point<Pixels> {
     center + vector((p - center).map(f32::from), angle).map(px)
 }
@@ -54,6 +57,7 @@ pub fn intersects(rect: Rect, angle: f32, marquee: Rect) -> bool {
         })
 }
 
+#[cfg(test)]
 pub fn pixel_bounds(rect: Bounds<Pixels>, pivot: Point<Pixels>, angle: f32) -> Bounds<Pixels> {
     let c = pixels(rect.center(), pivot, angle);
     let r = bounds(

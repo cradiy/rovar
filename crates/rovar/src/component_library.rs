@@ -7,7 +7,7 @@ use std::{
     collections::HashMap,
     path::{Path, PathBuf},
 };
-mod colors;
+pub(crate) mod colors;
 
 #[derive(Serialize, Deserialize)]
 struct Metadata {
@@ -32,6 +32,7 @@ pub(crate) struct Library {
     pub busy: bool,
     pub ready: bool,
     pub error: Option<String>,
+    refresh_pending: bool,
 }
 
 #[derive(Default)]
@@ -55,6 +56,7 @@ impl Library {
             busy: false,
             ready: false,
             error: None,
+            refresh_pending: false,
         });
         if cx.try_global::<Libraries>().is_none() {
             cx.set_global(Libraries::default());
@@ -67,6 +69,10 @@ impl Library {
     }
 
     pub fn refresh(&mut self, cx: &mut Context<Self>) {
+        if self.busy {
+            self.refresh_pending = true;
+            return;
+        }
         self.run(|_| Ok(()), false, cx);
     }
 
@@ -95,6 +101,10 @@ impl Library {
                 .await;
             let _ = this.update(cx, |this, cx| {
                 this.busy = false;
+                if std::mem::take(&mut this.refresh_pending) && result.is_ok() {
+                    this.refresh(cx);
+                    return;
+                }
                 match result {
                     Ok((entries, colors)) => {
                         this.colors = colors;
@@ -104,6 +114,11 @@ impl Library {
                             remote.update(cx, |remote, cx| {
                                 remote.library_changed(&this.directory, &this.entries, cx)
                             });
+                            if let Err(error) = remote.update(cx, |remote, cx| {
+                                remote.colors_changed(&this.directory, &this.colors, cx)
+                            }) {
+                                this.error = Some(error.to_string());
+                            }
                         }
                     }
                     Err(error) => this.error = Some(format!("{error:#}")),

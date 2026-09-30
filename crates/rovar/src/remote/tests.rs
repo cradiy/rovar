@@ -1,4 +1,5 @@
 use super::*;
+mod colors;
 use gpui::TestAppContext;
 use std::{
     io::{Read, Write},
@@ -198,6 +199,7 @@ fn failed_upload_survives_restart_and_replays_before_newer_edits(cx: &mut TestAp
         libraries_changed: BTreeSet::new(),
         retry_at: web_time::Instant::now(),
         reconnect_at: BTreeMap::new(),
+        refresh_at: BTreeMap::new(),
         auth_generation: 0,
     });
     restarted.update(cx, |r, cx| r.restore_credentials(&id, "token".into(), cx));

@@ -1,3 +1,4 @@
+mod colors;
 mod conflict;
 #[cfg(all(test, not(target_family = "wasm")))]
 mod tests;
@@ -71,6 +72,7 @@ pub(crate) struct Remote {
     libraries_changed: BTreeSet<String>,
     retry_at: web_time::Instant,
     reconnect_at: BTreeMap<String, web_time::Instant>,
+    refresh_at: BTreeMap<String, web_time::Instant>,
     auth_generation: u64,
 }
 struct SharedRemote(Entity<Remote>);
@@ -131,6 +133,7 @@ impl Remote {
             libraries_changed: BTreeSet::new(),
             retry_at: web_time::Instant::now(),
             reconnect_at: BTreeMap::new(),
+            refresh_at: BTreeMap::new(),
             auth_generation: 0,
         });
         cx.set_global(SharedRemote(remote.clone()));
@@ -252,6 +255,9 @@ impl Remote {
                 authenticated: true,
                 generation: self.auth_generation,
             });
+            self.refresh_at
+                .entry(id.clone())
+                .or_insert_with(web_time::Instant::now);
             if first.is_none() || space.kind == "personal" {
                 first = Some(id);
             }
@@ -478,6 +484,38 @@ impl Remote {
             ))
         });
         let Some((path, link, client, identity, space, generation)) = next else {
+            if let Some(connection) = self
+                .catalog
+                .connections
+                .iter()
+                .filter(|c| {
+                    c.authenticated && (cfg!(target_family = "wasm") || !c.token.is_empty())
+                })
+                .filter(|c| {
+                    self.refresh_at
+                        .get(&c.id)
+                        .is_none_or(|last| last.elapsed().as_secs() >= 5)
+                })
+                .min_by_key(|c| self.refresh_at.get(&c.id).copied())
+                .map(|c| c.id.clone())
+            {
+                self.refresh_at
+                    .insert(connection.clone(), web_time::Instant::now());
+                // Autosave calls sync while its Studio entity is leased. Wait
+                // until that update ends before collecting open document paths.
+                let remote = cx.entity().downgrade();
+                cx.defer(move |cx| {
+                    let open = crate::studio::Studio::open_document_paths(cx);
+                    let _ = remote.update(cx, |this, cx| {
+                        if this
+                            .connection(&connection)
+                            .is_some_and(|c| c.authenticated)
+                        {
+                            this.refresh(connection, open, cx);
+                        }
+                    });
+                });
+            }
             return;
         };
         self.busy = true;
@@ -584,6 +622,15 @@ impl Remote {
                         }
                     }
                 }
+                if this
+                    .catalog
+                    .links
+                    .get(&path)
+                    .is_some_and(|link| link.conflict && link.object.kind == Kind::ColorStyle)
+                    && let Err(error) = this.preserve_color_conflict(&path, cx)
+                {
+                    this.error = Some(error.to_string());
+                }
                 cx.notify();
             });
         })
@@ -636,6 +683,8 @@ impl Remote {
         let space = server.space.id.clone();
         let known = self.catalog.links.clone();
         let root = self.root.clone();
+        self.refresh_at
+            .insert(connection.clone(), web_time::Instant::now());
         self.busy = true;
         self.error = None;
         cx.spawn(async move |this, cx| {
@@ -660,21 +709,28 @@ impl Remote {
                         && (link.dirty
                             || open.contains(path)
                             || (link.object.revision == object.revision
-                                && rovar_storage::exists(path)))
+                                && (link.object.deleted || rovar_storage::exists(path))))
                     {
                         continue;
                     }
-                    let path = existing.map(|(p, _)| p.clone()).unwrap_or_else(|| {
-                        if object.kind == Kind::Document {
-                            root.join("documents")
-                                .join(format!("{}.rovar", uuid::Uuid::new_v4()))
-                        } else {
-                            root.join("servers")
-                                .join(&connection)
-                                .join("components")
-                                .join(format!("{}.rovar", object.id))
-                        }
-                    });
+                    let path =
+                        existing
+                            .map(|(p, _)| p.clone())
+                            .unwrap_or_else(|| match object.kind {
+                                Kind::Document => root
+                                    .join("documents")
+                                    .join(format!("{}.rovar", uuid::Uuid::new_v4())),
+                                Kind::Component => root
+                                    .join("servers")
+                                    .join(&connection)
+                                    .join("components")
+                                    .join(format!("{}.rovar", object.id)),
+                                Kind::ColorStyle => root
+                                    .join("servers")
+                                    .join(&connection)
+                                    .join("colors")
+                                    .join(format!("{}.json", object.id)),
+                            });
                     if object.deleted {
                         updates.push((path, object, None));
                         continue;
@@ -718,6 +774,13 @@ impl Remote {
                             {
                                 continue;
                             }
+                            if object.kind == Kind::ColorStyle
+                                && let Err(error) =
+                                    this.apply_color(&connection, &object, bytes.as_deref())
+                            {
+                                this.error = Some(error.to_string());
+                                continue;
+                            }
                             let hash = if let Some(bytes) = bytes {
                                 if let Err(error) = write_atomic(&path, &bytes) {
                                     this.error = Some(error.to_string());
@@ -728,7 +791,7 @@ impl Remote {
                                 let _ = rovar_storage::fs::remove_file(&path);
                                 String::new()
                             };
-                            if object.kind == Kind::Component {
+                            if matches!(object.kind, Kind::Component | Kind::ColorStyle) {
                                 this.libraries_changed.insert(connection.clone());
                             }
                             this.catalog.links.insert(

@@ -22,6 +22,7 @@ pub fn document(value: Document) -> rovar_api::Object {
         kind: match value.kind {
             DocumentKind::Document => rovar_api::Kind::Document,
             DocumentKind::Component => rovar_api::Kind::Component,
+            DocumentKind::ColorStyle => rovar_api::Kind::ColorStyle,
         },
         title: value.title,
         revision: value.revision,
@@ -47,6 +48,7 @@ pub fn save(id: String, value: rovar_api::Save) -> Result<SaveDocument> {
         kind: match value.kind {
             rovar_api::Kind::Document => DocumentKind::Document,
             rovar_api::Kind::Component => DocumentKind::Component,
+            rovar_api::Kind::ColorStyle => DocumentKind::ColorStyle,
         },
         title: value.title,
         base_revision: value.base_revision,

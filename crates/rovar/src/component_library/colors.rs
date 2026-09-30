@@ -1,7 +1,7 @@
 use super::*;
 use crate::color_styles::{ColorStyle, Palette};
 
-pub(super) fn read(directory: &Path) -> Result<Palette> {
+pub(crate) fn read(directory: &Path) -> Result<Palette> {
     match rovar_storage::fs::read(directory.join("colors.json")) {
         Ok(bytes) => {
             let palette: Palette = serde_json::from_slice(&bytes)?;
@@ -39,6 +39,11 @@ impl Library {
             &serde_json::to_vec(&palette)?,
         )?;
         self.colors = palette;
+        if let Some(remote) = crate::remote::Remote::existing(cx) {
+            remote.update(cx, |remote, cx| {
+                remote.colors_changed(&self.directory, &self.colors, cx)
+            })?;
+        }
         cx.notify();
         Ok(())
     }

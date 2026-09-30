@@ -130,7 +130,6 @@ pub struct TextEditor {
     composition: Option<Snapshot>,
     selecting: bool,
     layout: Option<TextLayout>,
-    display_rotation: f32,
     layout_dirty: bool,
     layout_zoom: f32,
     _blur: Subscription,
@@ -187,7 +186,6 @@ impl TextEditor {
             composition: None,
             selecting: false,
             layout: None,
-            display_rotation: 0.,
             layout_dirty: true,
             layout_zoom: 0.,
             _blur: blur,
@@ -609,11 +607,7 @@ impl EntityInputHandler for TextEditor {
         _: &mut Context<Self>,
     ) -> Option<Bounds<Pixels>> {
         let layout = self.layout.as_ref()?;
-        Some(crate::rotation::pixel_bounds(
-            layout.caret_bounds(from_utf16(&self.content, range.start)),
-            layout.bounds.center(),
-            self.display_rotation,
-        ))
+        Some(layout.caret_bounds(from_utf16(&self.content, range.start)))
     }
     fn character_index_for_point(
         &mut self,
@@ -621,9 +615,6 @@ impl EntityInputHandler for TextEditor {
         _: &mut Window,
         _: &mut Context<Self>,
     ) -> Option<usize> {
-        let position = self.layout.as_ref().map_or(position, |l| {
-            crate::rotation::pixels(position, l.bounds.center(), -self.display_rotation)
-        });
         Some(to_utf16(&self.content, self.mouse_index(position)))
     }
 }
@@ -631,7 +622,6 @@ impl EntityInputHandler for TextEditor {
 pub fn element(
     editor: &Entity<TextEditor>,
     zoom: f32,
-    rotation: f32,
     exit_focus: FocusHandle,
     cx: &App,
 ) -> impl IntoElement + use<> {
@@ -666,10 +656,8 @@ pub fn element(
         .child(
             canvas(
                 move |bounds, window, cx| {
-                    let layout = prepaint.update(cx, |text, _| {
-                        text.display_rotation = rotation;
-                        text.layout_for_bounds(zoom, bounds, window)
-                    });
+                    let layout =
+                        prepaint.update(cx, |text, _| text.layout_for_bounds(zoom, bounds, window));
                     (layout, window.insert_hitbox(bounds, HitboxBehavior::Normal))
                 },
                 move |bounds, (layout, hitbox), window, cx| {

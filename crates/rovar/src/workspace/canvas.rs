@@ -319,7 +319,7 @@ impl Workspace {
                     view.pan.y.rem_euclid(spacing),
                 );
                 // One primitive regardless of the number of visible grid cells.
-                let scale = window.scale_factor();
+                let scale = window.raster_scale_factor();
                 let _ = window.paint_effect(
                     gpui::PaintEffect::new(
                         bounds,

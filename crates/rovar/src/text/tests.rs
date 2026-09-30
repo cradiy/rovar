@@ -239,7 +239,7 @@ fn mixed_sizes_wrap_and_align_to_one_baseline_and_paragraph_styles_do_not_leak(
 }
 impl Render for TestView {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        element(&self.editor, 1., 0., self.editor.read(cx).focus.clone(), cx)
+        element(&self.editor, 1., self.editor.read(cx).focus.clone(), cx)
     }
 }
 

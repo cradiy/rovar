@@ -153,9 +153,7 @@ impl Studio {
             .update(cx, |remote, _| remote.take_library_updates());
         for id in libraries {
             let library = self.source_library(Some(id), cx);
-            if !library.read(cx).busy {
-                library.update(cx, |library, cx| library.refresh(cx));
-            }
+            library.update(cx, |library, cx| library.refresh(cx));
         }
         self.persist_session();
         cx.notify();

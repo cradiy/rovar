@@ -235,9 +235,7 @@ fn shape_edges_resize_away_from_midpoints_with_only_four_visible_corners(cx: &mu
 }
 
 #[gpui::test]
-fn rotated_text_pointer_selection_and_ime_bounds_follow_display_coordinates(
-    cx: &mut TestAppContext,
-) {
+fn rotated_text_input_uses_source_geometry_and_displayed_pointer(cx: &mut TestAppContext) {
     let window = fixture(cx);
     let editor = window
         .update(cx, |this, window, cx| {
@@ -257,13 +255,14 @@ fn rotated_text_pointer_selection_and_ime_bounds_follow_display_coordinates(
         .unwrap();
     let mut visual = VisualTestContext::from_window(window.into(), cx);
     draw(&mut visual);
+    let pivot = visual.debug_bounds("text-box-2").unwrap().center();
     let caret = visual.update(|window, cx| {
         editor.update(cx, |e, cx| {
             let b = e
                 .bounds_for_range(4..4, Default::default(), window, cx)
                 .unwrap();
             assert_eq!(e.character_index_for_point(b.center(), window, cx), Some(4));
-            b
+            geometry::pixel_bounds(b, pivot, 45.)
         })
     });
     visual.simulate_click(caret.center(), Default::default());

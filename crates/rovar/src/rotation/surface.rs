@@ -1,10 +1,10 @@
 use gpui::{
     App, Bounds, Element, ElementId, GlobalElementId, InspectorElementId, IntoElement, LayoutId,
-    Pixels, PointerTransform, Window, px,
+    Pixels, Size, TransformationMatrix, Window, px, size,
 };
 
-/// Capture only this object, including its handles. Identity objects bypass the
-/// capture entirely. Pointer mapping also runs on the headless test platform.
+/// Rotate pixels and input together, leaving room for the object's handles and
+/// rotated corners without changing its layout bounds.
 pub fn surface<E: IntoElement>(
     element: E,
     angle: f32,
@@ -12,38 +12,54 @@ pub fn surface<E: IntoElement>(
     height: f32,
     overflow: f32,
 ) -> impl IntoElement {
+    if angle == 0. {
+        return element.into_any_element();
+    }
     let (s, c) = angle.to_radians().sin_cos();
     let extent = (c.abs() * width + s.abs() * height - width)
         .max(s.abs() * width + c.abs() * height - height)
         .max(0.)
         / 2.;
-    let padding = px((extent + 36.).max(overflow));
-    let inner = gpui_effects::subtree_effect(
+    let padding = (extent + 36.).max(overflow);
+    let x = width / 2. + padding;
+    let y = height / 2. + padding;
+    let inner = gpui_effects::transform_group(
         element,
-        gpui::EffectShader::wgsl_image(include_str!("rotate.wgsl")),
-    )
-    .uniform(0, [s, c, 0., 0.])
-    .capture_padding(padding)
-    .enabled(angle != 0.);
-    PointerScope {
+        TransformationMatrix {
+            rotation_scale: [[c, -s], [s, c]],
+            translation: [x - c * x + s * y, y - s * x - c * y],
+        },
+    );
+    RotationCapture {
         inner,
-        angle,
-        padding,
+        capture_size: size(px(width + padding * 2.), px(height + padding * 2.)),
     }
+    .into_any_element()
 }
 
-struct PointerScope<E: Element> {
+// The child keeps its original Taffy layout. Only the transform viewport expands,
+// so overflow (selection handles, strokes and rotated corners) stays visible.
+struct RotationCapture<E: Element> {
     inner: E,
-    angle: f32,
-    padding: Pixels,
+    capture_size: Size<Pixels>,
 }
-impl<E: Element> IntoElement for PointerScope<E> {
+impl<E: Element> RotationCapture<E> {
+    fn capture_bounds(&self, bounds: Bounds<Pixels>) -> Bounds<Pixels> {
+        // Keep the matrix's local pivot on the resolved layout center, including
+        // any device-pixel snapping applied to the authored width and height.
+        Bounds::new(
+            bounds.center() - (self.capture_size / 2.).into(),
+            self.capture_size,
+        )
+    }
+}
+impl<E: Element> IntoElement for RotationCapture<E> {
     type Element = Self;
     fn into_element(self) -> Self {
         self
     }
 }
-impl<E: Element> Element for PointerScope<E> {
+impl<E: Element> Element for RotationCapture<E> {
     type RequestLayoutState = E::RequestLayoutState;
     type PrepaintState = E::PrepaintState;
     fn id(&self) -> Option<ElementId> {
@@ -70,18 +86,14 @@ impl<E: Element> Element for PointerScope<E> {
         window: &mut Window,
         cx: &mut App,
     ) -> Self::PrepaintState {
-        let angle = self.angle;
-        if angle == 0. {
-            return self
-                .inner
-                .prepaint(id, inspector, bounds, state, window, cx);
-        }
-        let pivot = bounds.center();
-        let transform = PointerTransform::new(move |p, _, _| super::pixels(p, pivot, -angle));
-        window.with_pointer_transform(bounds.dilate(self.padding), transform, |window| {
-            self.inner
-                .prepaint(id, inspector, bounds, state, window, cx)
-        })
+        self.inner.prepaint(
+            id,
+            inspector,
+            self.capture_bounds(bounds),
+            state,
+            window,
+            cx,
+        )
     }
     fn paint(
         &mut self,
@@ -93,17 +105,14 @@ impl<E: Element> Element for PointerScope<E> {
         window: &mut Window,
         cx: &mut App,
     ) {
-        let angle = self.angle;
-        if angle == 0. {
-            self.inner
-                .paint(id, inspector, bounds, state, prepaint, window, cx);
-            return;
-        }
-        let pivot = bounds.center();
-        let transform = PointerTransform::new(move |p, _, _| super::pixels(p, pivot, -angle));
-        window.with_pointer_transform(bounds.dilate(self.padding), transform, |window| {
-            self.inner
-                .paint(id, inspector, bounds, state, prepaint, window, cx)
-        });
+        self.inner.paint(
+            id,
+            inspector,
+            self.capture_bounds(bounds),
+            state,
+            prepaint,
+            window,
+            cx,
+        );
     }
 }

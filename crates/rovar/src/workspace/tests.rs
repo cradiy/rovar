@@ -10,6 +10,7 @@ pub(super) fn open(cx: &mut TestAppContext) -> WindowHandle<Workspace> {
         workspace.snapping.enabled = false; // Geometry fixtures exercise unsnapped coordinates.
         workspace
     });
+    cx.set_subtree_effects_supported(window.into(), true);
     window
         .update(cx, |_, window, _| window.activate_window())
         .unwrap();
