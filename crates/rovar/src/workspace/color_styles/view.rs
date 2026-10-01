@@ -331,10 +331,6 @@ impl Workspace {
     fn gradient_style_controls(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let dialog = self.colors.dialog.as_ref().unwrap();
         let gradient = dialog.gradient.as_ref().unwrap();
-        let mut ramp = gradient.clone();
-        ramp.kind = gpui::GradientKind::Linear;
-        ramp.angle = 90.;
-        let bounds = self.colors.ramp_bounds.clone();
         div()
             .flex()
             .flex_col()
@@ -371,75 +367,13 @@ impl Workspace {
                     .flex()
                     .items_center()
                     .gap(px(8.))
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .mx(px(9.))
-                            .relative()
-                            .h(px(62.))
-                            .on_paint_before_children(move |rect, _, _, _| bounds.set(rect))
-                            .id("style-gradient-track")
-                            .debug_selector(|| "style-gradient-track".into())
-                            .child(self.gradient_midpoints(true, gradient, cx))
-                            .child(
-                                div()
-                                    .id("style-gradient-ramp")
-                                    .debug_selector(|| "style-gradient-ramp".into())
-                                    .h(px(22.))
-                                    .w_full()
-                                    .rounded(px(5.))
-                                    .bg(gpui::checkerboard(rgb(0x50515b), 5.))
-                                    .on_mouse_down(
-                                        MouseButton::Left,
-                                        cx.listener(|this, event, window, cx| {
-                                            this.begin_style_stop(None, event, window, cx)
-                                        }),
-                                    )
-                                    .child(div().size_full().rounded(px(5.)).bg(ramp.background())),
-                            )
-                            .children(gradient.stops().iter().map(|stop| {
-                                let id = stop.id;
-                                div()
-                                    .id(("style-stop", id))
-                                    .debug_selector(move || format!("style-stop-{id}"))
-                                    .absolute()
-                                    .left(gpui::relative(stop.position))
-                                    .ml(px(-9.))
-                                    .top(px(36.))
-                                    .w(px(18.))
-                                    .h(px(24.))
-                                    .rounded(px(5.))
-                                    .bg(rgb(0x1d1e25))
-                                    .border_1()
-                                    .border_color(rgb(if id == dialog.active_stop {
-                                        ACCENT
-                                    } else {
-                                        0x3a3b45
-                                    }))
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .cursor(gpui::CursorStyle::ResizeLeftRight)
-                                    .child(swatch(stop.color, 12.))
-                                    .on_mouse_down(
-                                        MouseButton::Left,
-                                        cx.listener(move |this, event, window, cx| {
-                                            this.begin_style_stop(Some(id), event, window, cx)
-                                        }),
-                                    )
-                            })),
-                    )
+                    .child(self.gradient_track(true, gradient, cx))
                     .child(
                         button("add-style-stop", "+")
                             .debug_selector(|| "add-style-stop".into())
-                            .opacity(if gradient.stops().len() < 4 { 1. } else { 0.3 })
-                            .when(gradient.stops().len() < 4, |el| {
-                                el.on_click(
-                                    cx.listener(|this, _, _, cx| this.change_style_stops(true, cx)),
-                                )
-                            })
-                            .when(gradient.stops().len() >= 4, |el| el.cursor_default()),
+                            .on_click(
+                                cx.listener(|this, _, _, cx| this.change_style_stops(true, cx)),
+                            ),
                     )
                     .child(
                         button("remove-style-stop", "−")
@@ -708,10 +642,6 @@ fn button(id: impl Into<gpui::ElementId>, text: &'static str) -> gpui::Stateful<
 
 fn label(text: &'static str) -> Div {
     div().text_size(px(11.)).text_color(rgb(MUTED)).child(text)
-}
-
-fn swatch(color: gpui::Rgba, size: f32) -> Div {
-    paint_swatch(color.into(), size)
 }
 
 fn paint_swatch(background: gpui::Background, size: f32) -> Div {

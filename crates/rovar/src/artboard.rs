@@ -103,10 +103,7 @@ impl Default for LinearGradient {
 
 impl LinearGradient {
     pub(crate) fn validate(&self) -> anyhow::Result<()> {
-        anyhow::ensure!(
-            (2..=4).contains(&self.stops.len()),
-            "Invalid gradient stop count"
-        );
+        anyhow::ensure!(self.stops.len() >= 2, "Invalid gradient stop count");
         let mut ids = std::collections::BTreeSet::new();
         for stop in &self.stops {
             anyhow::ensure!(
@@ -212,9 +209,6 @@ impl LinearGradient {
     }
 
     pub fn add_stop(&mut self) -> Option<usize> {
-        if self.stops.len() >= 4 {
-            return None;
-        }
         // Split the largest interval using the same sRGB interpolation as
         // the GPUI gradient, so insertion preserves its appearance.
         let pair = self.stops.windows(2).max_by(|a, b| {
@@ -224,7 +218,7 @@ impl LinearGradient {
     }
 
     pub fn add_stop_at(&mut self, position: f32) -> Option<usize> {
-        if self.stops.len() >= 4 || !position.is_finite() || !(0. ..=1.).contains(&position) {
+        if !position.is_finite() || !(0. ..=1.).contains(&position) {
             return None;
         }
         let color = self.sample(position);
@@ -271,14 +265,9 @@ impl LinearGradient {
             .iter()
             .map(|s| linear_color_stop(s.color, s.position))
             .collect();
-        let mut background = (match stops.as_slice() {
-            [a, b] => multi_linear_gradient(self.angle, [*a, *b]),
-            [a, b, c] => multi_linear_gradient(self.angle, [*a, *b, *c]),
-            [a, b, c, d] => multi_linear_gradient(self.angle, [*a, *b, *c, *d]),
-            _ => unreachable!("gradient mutations preserve 2–4 stops"),
-        })
-        .gradient_kind(self.kind)
-        .angular_seam_width(self.seam_width);
+        let mut background = multi_linear_gradient(self.angle, stops)
+            .gradient_kind(self.kind)
+            .angular_seam_width(self.seam_width);
         for (index, stop) in self.stops.iter().take(self.stops.len() - 1).enumerate() {
             background = background.gradient_midpoint(index, stop.midpoint);
         }
@@ -479,7 +468,6 @@ mod tests {
         assert!(gradient.set_position(1, 1.));
         let _ = gradient.background();
         let fourth = gradient.add_stop().unwrap();
-        assert!(gradient.add_stop().is_none());
         assert!(gradient.remove_stop(fourth));
         assert!(gradient.remove_stop(inserted));
         assert!(!gradient.remove_stop(0));

@@ -19,7 +19,8 @@ pub(super) struct Dialog {
     saved_gradient: Option<crate::artboard::LinearGradient>,
     solid: gpui::Rgba,
     scrub: Option<gradient::Scrub>,
-    active_stop: usize,
+    stop_before: Option<(crate::artboard::LinearGradient, usize)>,
+    pub(super) active_stop: usize,
 }
 
 pub(super) struct State {
@@ -34,7 +35,7 @@ pub(super) struct State {
     picker: Entity<ColorPickerState>,
     error: Option<String>,
     selected: Option<(Scope, String)>,
-    ramp_bounds: std::rc::Rc<std::cell::Cell<gpui::Bounds<Pixels>>>,
+    pub(super) ramp_bounds: std::rc::Rc<std::cell::Cell<gpui::Bounds<Pixels>>>,
     scroll: gpui::ScrollHandle,
     baselines: [gpui::SharedString; 4],
     _subscriptions: Vec<Subscription>,
@@ -319,6 +320,7 @@ impl Workspace {
             saved_gradient: None,
             solid: style.color,
             scrub: None,
+            stop_before: None,
         });
         self.colors.error = None;
         self.colors

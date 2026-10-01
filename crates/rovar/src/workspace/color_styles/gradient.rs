@@ -113,7 +113,7 @@ impl Workspace {
         self.set_style_number(angle, value.clamp(min, max), cx);
     }
 
-    pub(super) fn begin_style_stop(
+    pub(in crate::workspace) fn begin_style_stop(
         &mut self,
         id: Option<usize>,
         event: &gpui::MouseDownEvent,
@@ -135,6 +135,7 @@ impl Workspace {
         let Some(gradient) = &mut dialog.gradient else {
             return;
         };
+        dialog.stop_before = Some((gradient.clone(), dialog.active_stop));
         let id = match id {
             Some(id) => id,
             None => {
@@ -156,16 +157,23 @@ impl Workspace {
         // Preserve the pointer's offset within the handle to avoid a jump on click.
         let left = f32::from(event.position.x) - original / 100. * width;
         self.begin(
-            GestureKind::ColorStyleStop {
-                original,
-                left,
-                width,
-            },
+            GestureKind::ColorStyleStop { left, width },
             event.position,
             event.button,
             window,
             cx,
         );
+    }
+
+    pub(in crate::workspace) fn finish_style_stop(&mut self, commit: bool, cx: &mut Context<Self>) {
+        if let Some(dialog) = &mut self.colors.dialog
+            && let Some((gradient, active)) = dialog.stop_before.take()
+            && !commit
+        {
+            dialog.gradient = Some(gradient);
+            dialog.active_stop = active;
+            self.sync_gradient_inputs(cx);
+        }
     }
 
     pub(super) fn selected_gradient(&self, stroke: bool, cx: &gpui::App) -> Option<LinearGradient> {

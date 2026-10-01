@@ -435,6 +435,21 @@ fn gradient_track_inserts_at_pointer_and_preserves_stop_identity_when_crossing(
             track.top() + px(8.),
         )
     };
+    let original = window
+        .update(&mut visual.cx, |w, _, _| {
+            w.colors.dialog.as_ref().unwrap().gradient.clone()
+        })
+        .unwrap();
+    visual.simulate_mouse_down(at(0.5), MouseButton::Left, Default::default());
+    crate::workspace::tests::draw(&mut visual);
+    visual.simulate_keystrokes("escape");
+    visual.simulate_mouse_up(at(0.5), MouseButton::Left, Default::default());
+    crate::workspace::tests::draw(&mut visual);
+    window
+        .update(&mut visual.cx, |w, _, _| {
+            assert_eq!(w.colors.dialog.as_ref().unwrap().gradient, original);
+        })
+        .unwrap();
     visual.simulate_click(at(0.25), Default::default());
     crate::workspace::tests::draw(&mut visual);
     visual.simulate_click(at(0.6), Default::default());
@@ -460,6 +475,20 @@ fn gradient_track_inserts_at_pointer_and_preserves_stop_identity_when_crossing(
             let gradient = dialog.gradient.as_ref().unwrap();
             assert!((gradient.stop(2).unwrap().position - 0.85).abs() < 0.001);
             assert!((gradient.stop(3).unwrap().position - 0.6).abs() < 0.001);
+        })
+        .unwrap();
+    for _ in 4..20 {
+        let add = visual.debug_bounds("add-style-stop").unwrap().center();
+        visual.simulate_click(add, Default::default());
+        crate::workspace::tests::draw(&mut visual);
+    }
+    window
+        .update(&mut visual.cx, |w, _, _| {
+            let dialog = w.colors.dialog.as_ref().unwrap();
+            let gradient = dialog.gradient.as_ref().unwrap();
+            assert_eq!(gradient.stops().len(), 20);
+            assert_eq!(dialog.active_stop, 19);
+            assert!((gradient.stop(2).unwrap().position - 0.85).abs() < 0.001);
         })
         .unwrap();
 }

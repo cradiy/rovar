@@ -3,6 +3,129 @@ use crate::workspace::tests::{click, create, draw, open};
 use gpui::{TestAppContext, VisualTestContext};
 
 #[gpui::test]
+fn gradient_track_inserts_drags_and_cancels_as_one_edit(cx: &mut TestAppContext) {
+    for (tool, stroke) in [
+        ("add-artboard", false),
+        ("add-rectangle", false),
+        ("add-rectangle", true),
+        ("add-text", false),
+    ] {
+        let window = open(cx);
+        let mut visual = VisualTestContext::from_window(window.into(), cx);
+        create(&mut visual, tool);
+        if tool == "add-text" {
+            visual.simulate_input("Gradient");
+        }
+        if stroke {
+            click(&mut visual, "stroke-visibility");
+        }
+        click(
+            &mut visual,
+            if stroke {
+                "property-drag-16"
+            } else {
+                "property-drag-5"
+            },
+        );
+        click(&mut visual, "fill-linear");
+        let (original, undo) = window
+            .update(&mut visual.cx, |w, _, cx| {
+                (w.fill_state(cx).unwrap().1, w.history.borrow().undo_len())
+            })
+            .unwrap();
+        let ramp = visual.debug_bounds("fill-gradient-ramp").unwrap();
+        let at = |position| point(ramp.left() + ramp.size.width * position, ramp.center().y);
+        visual.simulate_mouse_down(at(0.25), MouseButton::Left, Default::default());
+        visual.simulate_mouse_move(at(0.8), MouseButton::Left, Default::default());
+        visual.simulate_mouse_up(at(0.8), MouseButton::Left, Default::default());
+        draw(&mut visual);
+        let added = window
+            .update(&mut visual.cx, |w, _, cx| {
+                let g = w.fill_state(cx).unwrap().1;
+                assert_eq!(w.active_stop, 2);
+                assert_eq!(g.stops().len(), 3);
+                assert!((g.stop(2).unwrap().position - 0.8).abs() < 0.001);
+                assert_eq!(w.history.borrow().undo_len(), undo + 1);
+                g
+            })
+            .unwrap();
+        // Clicking off-center selects the handle without moving it or adding history.
+        let handle = visual.debug_bounds("fill-stop-2").unwrap().center() + point(px(4.), px(0.));
+        visual.simulate_click(handle, Default::default());
+        draw(&mut visual);
+        window
+            .update(&mut visual.cx, |w, _, cx| {
+                assert_eq!(w.fill_state(cx).unwrap().1, added);
+                assert_eq!(w.history.borrow().undo_len(), undo + 1);
+            })
+            .unwrap();
+        // Crossing another stop keeps identity, and Escape restores the entire preview.
+        let start = visual.debug_bounds("fill-stop-1").unwrap().center();
+        let end = start - point(ramp.size.width * 0.9, px(0.));
+        visual.simulate_mouse_down(start, MouseButton::Left, Default::default());
+        visual.simulate_mouse_move(end, MouseButton::Left, Default::default());
+        draw(&mut visual);
+        window
+            .update(&mut visual.cx, |w, _, cx| {
+                let g = w.fill_state(cx).unwrap().1;
+                assert_eq!(w.active_stop, 1);
+                assert_eq!(g.stops()[1].id, 1);
+                assert!((g.stop(1).unwrap().position - 0.1).abs() < 0.001);
+            })
+            .unwrap();
+        visual.simulate_keystrokes("escape");
+        visual.simulate_mouse_up(end, MouseButton::Left, Default::default());
+        draw(&mut visual);
+        let ramp = visual.debug_bounds("fill-gradient-ramp").unwrap();
+        visual.simulate_mouse_down(ramp.center(), MouseButton::Left, Default::default());
+        draw(&mut visual);
+        visual.simulate_keystrokes("escape");
+        visual.simulate_mouse_up(ramp.center(), MouseButton::Left, Default::default());
+        draw(&mut visual);
+        window
+            .update(&mut visual.cx, |w, window, cx| {
+                assert_eq!(w.fill_state(cx).unwrap().1, added);
+                assert_eq!(w.history.borrow().undo_len(), undo + 1);
+                w.replay_history(false, window, cx);
+                assert_eq!(w.fill_state(cx).unwrap().1, original);
+                w.replay_history(true, window, cx);
+                assert_eq!(w.fill_state(cx).unwrap().1, added);
+            })
+            .unwrap();
+    }
+}
+
+#[gpui::test]
+fn gradient_list_grows_until_viewport_limit_without_displacing_picker(cx: &mut TestAppContext) {
+    let window = open(cx);
+    let mut visual = VisualTestContext::from_window(window.into(), cx);
+    create(&mut visual, "add-artboard");
+    click(&mut visual, "property-drag-5");
+    click(&mut visual, "fill-linear");
+    for _ in 2..5 {
+        click(&mut visual, "gradient-add");
+    }
+    let initial = visual.debug_bounds("color-panel").unwrap().size.height;
+    click(&mut visual, "gradient-add");
+    assert!(visual.debug_bounds("color-panel").unwrap().size.height > initial + px(30.));
+    for _ in 6..20 {
+        click(&mut visual, "gradient-add");
+    }
+    for height in [800., 640., 1100.] {
+        visual.simulate_resize(size(px(1280.), px(height)));
+        draw(&mut visual);
+        let panel = visual.debug_bounds("color-panel").unwrap();
+        let list = visual.debug_bounds("gradient-stop-list").unwrap();
+        let picker = visual.debug_bounds("color-picker-sv").unwrap();
+        assert!(panel.top() >= px(0.) && panel.bottom() <= px(height));
+        assert!(list.size.height <= px(374.));
+        assert!(picker.top() >= list.bottom());
+        assert!(picker.bottom() <= panel.bottom());
+        assert_eq!(picker.size.height, px(152.));
+    }
+}
+
+#[gpui::test]
 fn angular_seam_drag_keeps_colors_and_can_be_undone(cx: &mut TestAppContext) {
     let window = open(cx);
     let mut visual = VisualTestContext::from_window(window.into(), cx);

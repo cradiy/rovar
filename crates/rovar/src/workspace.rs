@@ -111,9 +111,14 @@ enum GestureKind {
         original: f32,
     },
     ColorStyleStop {
-        original: f32,
         left: f32,
         width: f32,
+    },
+    FillGradientStop {
+        id: usize,
+        original: f32,
+        width: f32,
+        inserted: bool,
     },
     GradientMidpoint {
         style: bool,
@@ -239,6 +244,7 @@ pub struct Workspace {
     pending: Vec<(usize, gpui::SharedString)>,
     invalid: [bool; PROPERTY_COUNT * PROPERTY_SURFACES],
     active_stop: usize,
+    gradient_stop_scroll: gpui::ScrollHandle,
     picker: Entity<ColorPickerState>,
     alpha_picker: Entity<ColorPickerState>,
     font_picker: Entity<font_picker::FontPicker>,
@@ -523,6 +529,7 @@ impl Workspace {
             pending: Vec::new(),
             invalid: [false; PROPERTY_COUNT * PROPERTY_SURFACES],
             active_stop: 0,
+            gradient_stop_scroll: gpui::ScrollHandle::default(),
             picker,
             alpha_picker,
             font_picker,
@@ -644,6 +651,7 @@ impl Workspace {
         let popover_focus = matches!(
             kind,
             GestureKind::Property { .. }
+                | GestureKind::FillGradientStop { .. }
                 | GestureKind::GradientMidpoint { style: false, .. }
                 | GestureKind::GradientSeam { style: false, .. }
         )
@@ -727,11 +735,23 @@ impl Workspace {
                 self.scrub_style_number(angle, delta.x, shift, self.snapping.bypass, cx)
             }
             GestureKind::ColorStyleStop { left, width, .. } => {
-                self.set_style_number(
-                    false,
-                    ((f32::from(position.x) - left) / width * 100.).clamp(0., 100.),
-                    cx,
-                );
+                let mut value = ((f32::from(position.x) - left) / width * 100.).clamp(0., 100.);
+                if shift {
+                    value = (value / 5.).round() * 5.;
+                }
+                self.set_style_number(false, value, cx);
+            }
+            GestureKind::FillGradientStop {
+                id,
+                original,
+                width,
+                ..
+            } => {
+                let mut position = (original + delta.x / width).clamp(0., 1.);
+                if shift {
+                    position = (position * 20.).round() / 20.;
+                }
+                self.move_fill_gradient_stop(id, position, cx);
             }
             GestureKind::GradientMidpoint {
                 style,
@@ -832,13 +852,12 @@ impl Workspace {
                 GestureKind::SelectionResize { .. } => self.finish_selection_resize(false, cx),
                 GestureKind::Panel { side, original, .. } => self.panels.set(side, original),
                 GestureKind::Property { .. } => self.finish_property_scrub(false, cx),
+                GestureKind::FillGradientStop { .. } => self.finish_property_scrub(false, cx),
                 GestureKind::LayoutProperty { .. } => self.finish_layout_scrub(false, cx),
                 GestureKind::ColorStyleProperty { angle, original } => {
                     self.set_style_number(angle, original, cx);
                 }
-                GestureKind::ColorStyleStop { original, .. } => {
-                    self.set_style_number(false, original, cx)
-                }
+                GestureKind::ColorStyleStop { .. } => self.finish_style_stop(false, cx),
                 GestureKind::GradientMidpoint {
                     style,
                     id,
@@ -923,6 +942,7 @@ impl Render for Workspace {
             | GestureKind::LayoutProperty { .. }
             | GestureKind::ColorStyleProperty { .. }
             | GestureKind::ColorStyleStop { .. }
+            | GestureKind::FillGradientStop { .. }
             | GestureKind::GradientMidpoint { .. }
             | GestureKind::GradientSeam { .. }
             | GestureKind::MultiProperty { .. } => gpui::CursorStyle::ResizeLeftRight,
@@ -1082,6 +1102,9 @@ impl Render for Workspace {
                             | GestureKind::SelectionResize { .. }
                             | GestureKind::Spacing { .. }
                             | GestureKind::Property { .. }
+                            | GestureKind::FillGradientStop { .. }
+                            | GestureKind::GradientMidpoint { style: false, .. }
+                            | GestureKind::GradientSeam { style: false, .. }
                             | GestureKind::LayoutProperty { .. }
                             | GestureKind::Panel { .. }
                             | GestureKind::MultiProperty { .. }

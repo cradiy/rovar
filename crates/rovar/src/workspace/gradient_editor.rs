@@ -3,6 +3,211 @@ use crate::{artboard::LinearGradient, i18n::t};
 use std::{cell::Cell, rc::Rc};
 
 impl Workspace {
+    pub(super) fn gradient_track(
+        &self,
+        style: bool,
+        gradient: &LinearGradient,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement + use<> {
+        let mut ramp = gradient.clone();
+        ramp.angle = 90.;
+        ramp.kind = gpui::GradientKind::Linear;
+        let active = if style {
+            self.colors.dialog.as_ref().unwrap().active_stop
+        } else {
+            self.active_stop
+        };
+        let prefix = if style { "style" } else { "fill" };
+        let bounds = if style {
+            self.colors.ramp_bounds.clone()
+        } else {
+            Rc::new(Cell::new(gpui::Bounds::<Pixels>::default()))
+        };
+        let paint_bounds = bounds.clone();
+        let ramp_bounds = bounds.clone();
+        div()
+            .on_paint_before_children(move |rect, _, _, _| paint_bounds.set(rect))
+            .id(gpui::SharedString::from(format!("{prefix}-gradient-track")))
+            .debug_selector(move || format!("{prefix}-gradient-track"))
+            .flex_1()
+            .min_w_0()
+            .mx(px(9.))
+            .relative()
+            .h(px(64.))
+            .child(self.gradient_midpoints(style, gradient, cx))
+            .child(
+                div()
+                    .id(gpui::SharedString::from(format!("{prefix}-gradient-ramp")))
+                    .debug_selector(move || format!("{prefix}-gradient-ramp"))
+                    .absolute()
+                    .top(px(18.))
+                    .left_0()
+                    .right_0()
+                    .h(px(22.))
+                    .rounded(px(5.))
+                    .bg(gpui::checkerboard(rgb(0x50515b), 5.))
+                    .cursor(gpui::CursorStyle::Crosshair)
+                    .tooltip(|_, cx| cx.new(|_| toolbar::ToolTip(t("stop-add").into())).into())
+                    .child(div().size_full().rounded(px(5.)).bg(ramp.background()))
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(move |this, event, window, cx| {
+                            if style {
+                                this.begin_style_stop(None, event, window, cx);
+                            } else {
+                                this.begin_fill_gradient_stop(
+                                    None,
+                                    ramp_bounds.get(),
+                                    event,
+                                    window,
+                                    cx,
+                                );
+                            }
+                        }),
+                    ),
+            )
+            .children(
+                gradient
+                    .stops()
+                    .iter()
+                    .filter(|s| s.id != active)
+                    .chain(gradient.stops().iter().filter(|s| s.id == active))
+                    .map(|stop| {
+                        let id = stop.id;
+                        let bounds = bounds.clone();
+                        let hint = format!(
+                            "{} {}%",
+                            t("stop-position"),
+                            inspector::number(stop.position * 100.)
+                        );
+                        div()
+                            .id((gpui::SharedString::from(format!("{prefix}-stop")), id))
+                            .debug_selector(move || format!("{prefix}-stop-{id}"))
+                            .absolute()
+                            .left(gpui::relative(stop.position))
+                            .ml(px(-8.))
+                            .top(px(38.))
+                            .w(px(16.))
+                            .h(px(22.))
+                            .rounded(px(5.))
+                            .border_2()
+                            .border_color(rgb(if id == active { ACCENT } else { 0x595563 }))
+                            .bg(rgb(0x1d1e25))
+                            .p(px(2.))
+                            .cursor(gpui::CursorStyle::ResizeLeftRight)
+                            .hover(|s| s.border_color(rgb(TEXT)))
+                            .child(
+                                div()
+                                    .size_full()
+                                    .rounded(px(2.))
+                                    .overflow_hidden()
+                                    .bg(gpui::checkerboard(rgb(0x50515b), 4.))
+                                    .child(div().size_full().bg(stop.color)),
+                            )
+                            .tooltip(move |_, cx| cx.new(|_| toolbar::ToolTip(hint.clone())).into())
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(move |this, event, window, cx| {
+                                    if style {
+                                        this.begin_style_stop(Some(id), event, window, cx);
+                                    } else {
+                                        this.begin_fill_gradient_stop(
+                                            Some(id),
+                                            bounds.get(),
+                                            event,
+                                            window,
+                                            cx,
+                                        );
+                                    }
+                                }),
+                            )
+                    }),
+            )
+    }
+
+    pub(super) fn reveal_gradient_stop(&self, cx: &gpui::App) {
+        if let Some(index) = self
+            .fill_state(cx)
+            .and_then(|(_, g)| g.stops().iter().position(|s| s.id == self.active_stop))
+        {
+            self.gradient_stop_scroll.scroll_to_item(index);
+        }
+    }
+
+    fn begin_fill_gradient_stop(
+        &mut self,
+        id: Option<usize>,
+        bounds: gpui::Bounds<Pixels>,
+        event: &gpui::MouseDownEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        cx.stop_propagation();
+        let width = f32::from(bounds.size.width);
+        if self.gesture.is_some() || width <= 0. {
+            return;
+        }
+        let Some((_, gradient)) = self.fill_state(cx) else {
+            return;
+        };
+        let position = (f32::from(event.position.x - bounds.left()) / width).clamp(0., 1.);
+        let id = id.or_else(|| {
+            gradient
+                .stops()
+                .iter()
+                .filter(|s| (s.position - position).abs() * width < 8.)
+                .min_by(|a, b| {
+                    (a.position - position)
+                        .abs()
+                        .total_cmp(&(b.position - position).abs())
+                })
+                .map(|s| s.id)
+        });
+        self.seal_text_edits(cx);
+        self.history.borrow_mut().begin_preview();
+        let inserted = id.is_none();
+        let id = id.unwrap_or_else(|| {
+            self.mutate_gradient(|g| g.add_stop_at(position), cx)
+                .flatten()
+                .unwrap()
+        });
+        let original = gradient.stop(id).map_or(position, |s| s.position);
+        self.active_stop = id;
+        self.sync_fields(cx);
+        self.reveal_gradient_stop(cx);
+        self.begin(
+            GestureKind::FillGradientStop {
+                id,
+                original,
+                width,
+                inserted,
+            },
+            event.position,
+            event.button,
+            window,
+            cx,
+        );
+    }
+
+    pub(super) fn move_fill_gradient_stop(
+        &mut self,
+        id: usize,
+        position: f32,
+        cx: &mut Context<Self>,
+    ) {
+        if self
+            .fill_state(cx)
+            .and_then(|(_, g)| g.stop(id).map(|s| s.position))
+            == Some(position)
+        {
+            return;
+        }
+        self.mutate_gradient(|g| g.set_position(id, position), cx);
+        self.sync_fields(cx);
+        self.reveal_gradient_stop(cx);
+        cx.notify();
+    }
+
     fn edited_gradient(&self, style: bool, cx: &gpui::App) -> Option<LinearGradient> {
         if style {
             self.colors.dialog.as_ref()?.gradient.clone()

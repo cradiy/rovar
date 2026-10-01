@@ -232,7 +232,24 @@ impl Workspace {
                 GestureKind::Pan { .. }
                 | GestureKind::Panel { .. }
                 | GestureKind::ColorStyleProperty { .. } => None,
-                GestureKind::ColorStyleStop { .. } => None,
+                GestureKind::ColorStyleStop { .. } => {
+                    self.finish_style_stop(true, cx);
+                    None
+                }
+                GestureKind::FillGradientStop {
+                    id,
+                    original,
+                    inserted,
+                    ..
+                } => {
+                    let changed = inserted
+                        || self
+                            .fill_state(cx)
+                            .and_then(|(_, g)| g.stop(id).map(|s| s.position))
+                            != Some(original);
+                    self.finish_property_scrub(changed, cx);
+                    None
+                }
                 GestureKind::GradientSeam { style, original } => {
                     if !style {
                         let changed = self

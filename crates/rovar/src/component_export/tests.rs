@@ -203,6 +203,53 @@ fn gradient_midpoint_survives_serialization_and_controls_exported_color() {
 }
 
 #[test]
+fn twenty_stop_gradient_survives_storage_gpui_conversion_and_export() {
+    let mut shape = Shape::new(1, None, ShapeKind::Rectangle, rect(0., 0., 380., 100.));
+    shape.fill_mode = FillMode::Linear;
+    for index in 1..19 {
+        shape.gradient.add_stop_at(index as f32 / 19.).unwrap();
+    }
+    let ids: Vec<_> = shape.gradient.stops().iter().map(|stop| stop.id).collect();
+    for (index, id) in ids.into_iter().enumerate() {
+        shape.gradient.stop_mut(id).unwrap().color = if index % 2 == 0 {
+            rgb(0xff0000)
+        } else {
+            rgb(0x0000ff)
+        };
+        if index < 19 {
+            assert!(shape.gradient.set_midpoint(id, 0.25));
+        }
+    }
+    let page = document(vec![shape]);
+    let restored: Page = serde_json::from_slice(&serde_json::to_vec(&page).unwrap()).unwrap();
+    restored.validate().unwrap();
+    let gradient = &restored.shapes[0].gradient;
+    assert_eq!(gradient, &page.shapes[0].gradient);
+    let background = gradient.background();
+    assert_eq!(background.gradient_stops().len(), 20);
+    for (index, stop) in gradient.stops().iter().enumerate() {
+        assert_eq!(
+            background.gradient_stops()[index],
+            gpui::linear_color_stop(stop.color, stop.position)
+        );
+        if index < 19 {
+            assert_eq!(background.gradient_midpoint_at(index), Some(0.25));
+        }
+    }
+    let image = png(&job(&restored, restored.shapes[0].rect), 1);
+    for x in (5..380).step_by(10) {
+        let expected = gradient.sample((x as f32 + 0.5) / 380.);
+        let actual = image.get_pixel(x, 50).0;
+        for (channel, expected) in [expected.r, expected.g, expected.b].into_iter().enumerate() {
+            assert!(
+                (actual[channel] as f32 - expected * 255.).abs() < 4.,
+                "x={x}, actual={actual:?}, expected={expected}"
+            );
+        }
+    }
+}
+
+#[test]
 fn angular_seam_export_blends_across_wrap_and_preserves_the_palette() {
     for angle in [90., 270.] {
         let mut shape = Shape::new(1, None, ShapeKind::Rectangle, rect(0., 0., 256., 256.));

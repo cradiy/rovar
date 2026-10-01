@@ -167,13 +167,14 @@ impl Workspace {
         )
     }
 
-    pub(super) fn fill_controls(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    pub(super) fn fill_controls(
+        &self,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let Some((mode, gradient)) = self.fill_state(cx) else {
             return div();
         };
-        let mut preview = gradient.clone();
-        preview.angle = 90.;
-        preview.kind = gpui::GradientKind::Linear;
         let text_selected = self.selected_text.is_some();
         let color_index = if self.selected_shape.is_some() && self.stroke_editing {
             16
@@ -186,6 +187,14 @@ impl Workspace {
             6
         };
         let stop_count = gradient.stops().len();
+        // Reserve room for the picker, controls, and the panel's viewport margin.
+        let reserved_height = if gradient.kind == gpui::GradientKind::Angular {
+            520.
+        } else {
+            482.
+        };
+        let stop_list_height =
+            (window.viewport_size().height - px(reserved_height)).clamp(px(38.), px(374.));
         let image_allowed = !text_selected
             && (self.selected_shape.is_none() || !self.stroke_editing)
             && self.current_image_fill().is_some()
@@ -325,30 +334,8 @@ impl Workspace {
                 )
                 .child(
                     div()
-                        .relative()
-                        .h(px(42.))
-                        .rounded(px(6.))
-                        .child(self.gradient_midpoints(false, &gradient, cx))
-                        .child(
-                            div()
-                                .absolute()
-                                .top(px(18.))
-                                .bottom_0()
-                                .left_0()
-                                .right_0()
-                                .rounded(px(6.))
-                                .bg(gpui::checkerboard(rgb(0xd9dce2), 6.)),
-                        )
-                        .child(
-                            div()
-                                .absolute()
-                                .top(px(18.))
-                                .bottom_0()
-                                .left_0()
-                                .right_0()
-                                .rounded(px(6.))
-                                .bg(preview.background()),
-                        ),
+                        .flex()
+                        .child(self.gradient_track(false, &gradient, cx)),
                 )
                 .when(gradient.kind == gpui::GradientKind::Angular, |el| {
                     el.child(self.gradient_seam_control(false, cx))
@@ -365,23 +352,26 @@ impl Workspace {
                                 .child(t("stops")),
                         )
                         .child(
-                            gradient_button(
-                                "gradient-add",
-                                t("stop-add"),
-                                LucideIcons::Plus,
-                                stop_count < 4,
-                            )
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                if let Some(Some(id)) = this.mutate_gradient(|g| g.add_stop(), cx) {
-                                    this.active_stop = id;
-                                    this.sync_fields(cx);
-                                    cx.notify();
-                                }
-                            })),
+                            gradient_button("gradient-add", t("stop-add"), LucideIcons::Plus, true)
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    if let Some(Some(id)) =
+                                        this.mutate_gradient(|g| g.add_stop(), cx)
+                                    {
+                                        this.active_stop = id;
+                                        this.sync_fields(cx);
+                                        this.reveal_gradient_stop(cx);
+                                        cx.notify();
+                                    }
+                                })),
                         ),
                 )
                 .child(
                     div()
+                        .id("gradient-stop-list")
+                        .debug_selector(|| "gradient-stop-list".into())
+                        .track_scroll(&self.gradient_stop_scroll)
+                        .max_h(stop_list_height)
+                        .overflow_y_scroll()
                         .flex()
                         .flex_col()
                         .gap(px(4.))
@@ -392,6 +382,7 @@ impl Workspace {
                                 .id(("gradient-stop", id))
                                 .debug_selector(move || format!("gradient-stop-{id}"))
                                 .h(px(38.))
+                                .flex_shrink_0()
                                 .rounded(px(6.))
                                 .p(px(3.))
                                 .flex()
@@ -1043,7 +1034,7 @@ impl Workspace {
                     .text_color(rgb(MUTED))
                     .when(draggable, |el| {
                         el.cursor(gpui::CursorStyle::ResizeLeftRight)
-                            .hover(|s| s.text_color(rgb(TEXT)).bg(rgb(0x383d47)))
+                            .hover(|s| s.text_color(rgb(ACCENT)))
                     })
                     .tooltip(move |_, cx| {
                         cx.new(|_| {
@@ -1489,7 +1480,7 @@ impl Workspace {
                 el.child(self.color_picker())
             })
             .when(self.multi_selection.is_empty(), |el| {
-                el.child(self.fill_controls(cx))
+                el.child(self.fill_controls(window, cx))
             })
     }
 }
