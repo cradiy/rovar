@@ -2,8 +2,10 @@ use super::*;
 use crate::shape::{Shape, ShapeKind};
 use gpui::{AnyElement, CursorStyle, Path, canvas};
 mod bezier_tool;
+mod corners;
 mod drawing;
 pub(super) use bezier_tool::BezierDraft;
+pub(super) use corners::State as Corners;
 #[cfg(test)]
 mod expanded_tests;
 mod geometry;

@@ -138,6 +138,10 @@ impl Workspace {
                     self.finish_selection_move(cx);
                     None
                 }
+                GestureKind::CornerRadius => {
+                    self.commit_corner_radius(window, cx);
+                    None
+                }
                 GestureKind::SelectionResize { .. } => {
                     self.finish_selection_resize(true, cx);
                     None
@@ -374,6 +378,7 @@ impl Workspace {
         }
         self.duplicate = None;
         self.finish_spacing_input(false, cx);
+        self.finish_corner_input(false, cx);
         self.seal_text_edits(cx);
         let page = self.history.borrow().replay_page(redo).map(str::to_owned);
         let changes = self.history.borrow_mut().take(redo);

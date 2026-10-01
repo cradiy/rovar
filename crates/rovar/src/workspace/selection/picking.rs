@@ -6,7 +6,7 @@ use uic::components::context_menu::{self, ContextMenu, ContextMenuItem};
 mod tests;
 
 impl Workspace {
-    fn layers_at(&self, position: Point<Pixels>) -> Vec<usize> {
+    pub(in crate::workspace) fn layers_at(&self, position: Point<Pixels>) -> Vec<usize> {
         let world = self.board_point(None, position);
         self.canvas_layer_order()
             .into_iter()

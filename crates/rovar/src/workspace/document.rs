@@ -317,6 +317,8 @@ impl Workspace {
     pub(crate) fn suspend(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.duplicate = None;
         self.finish_spacing_input(false, cx);
+        self.finish_corner_input(false, cx);
+        self.corner_editor.clear_hover();
         self.measure_target = None;
         self.pick_hover = None;
         self.suspend_assets();

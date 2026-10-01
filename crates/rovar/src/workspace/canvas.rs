@@ -178,6 +178,7 @@ impl Workspace {
                                 }
                                 this.update_bezier_hover(event.position, cx);
                                 this.update_vector_hover(event.position, cx);
+                                this.update_corner_hover(event.position, window, cx);
                                 this.update_measurement(
                                     event.position,
                                     event.modifiers.alt,
@@ -198,6 +199,7 @@ impl Workspace {
                                     this.finish_gesture(window, cx);
                                     this.update_bezier_hover(event.position, cx);
                                     this.update_vector_hover(event.position, cx);
+                                    this.update_corner_hover(event.position, window, cx);
                                     this.update_measurement(
                                         event.position,
                                         event.modifiers.alt,
@@ -381,6 +383,7 @@ impl Workspace {
             .child(self.selection_resize_controls(cx))
             .child(self.layer_pick_preview(cx))
             .child(self.selection_labels(cx))
+            .child(self.corner_controls(cx))
             .children(self.vector_hover_preview(cx))
             .when(
                 self.boards.is_empty()

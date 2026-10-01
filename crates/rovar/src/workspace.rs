@@ -75,6 +75,7 @@ enum GestureKind {
     LayerSort,
     Marquee,
     SelectionMove,
+    CornerRadius,
     SelectionResize {
         original: Rect,
         handle: Handle,
@@ -167,6 +168,7 @@ pub struct Workspace {
     export: export::ExportState,
     snapping: layout::Snapping,
     spacing: layout::Spacing,
+    corner_editor: shapes::Corners,
     measure_target: Option<usize>,
     pick_hover: Option<usize>,
     hierarchy: crate::layer::Hierarchy,
@@ -419,7 +421,8 @@ impl Workspace {
             },
         ));
         subscriptions.push(cx.on_blur(&focus, window, |this, window, cx| {
-            if this.measure_target.take().is_some() {
+            let had_corner = this.corner_editor.clear_hover();
+            if this.measure_target.take().is_some() || had_corner {
                 cx.notify();
             }
             this.space_down = false;
@@ -427,7 +430,8 @@ impl Workspace {
         }));
         subscriptions.push(cx.observe_window_activation(window, |this, window, cx| {
             if !window.is_window_active() {
-                if this.measure_target.take().is_some() {
+                let had_corner = this.corner_editor.clear_hover();
+                if this.measure_target.take().is_some() || had_corner {
                     cx.notify();
                 }
                 this.space_down = false;
@@ -449,6 +453,7 @@ impl Workspace {
             components: components::State::default(),
             snapping: Default::default(),
             spacing: layout::Spacing::new(window, cx),
+            corner_editor: shapes::Corners::new(window, cx),
             measure_target: None,
             pick_hover: None,
             export: export::ExportState::new(window, cx),
@@ -523,6 +528,8 @@ impl Workspace {
         self.boards.iter().find(|b| Some(b.id) == self.selected)
     }
     fn select(&mut self, id: Option<usize>, cx: &mut Context<Self>) {
+        self.finish_corner_input(false, cx);
+        self.corner_editor.clear_hover();
         if id.is_some_and(|id| !self.layer_editable(id)) {
             return;
         }
@@ -672,6 +679,7 @@ impl Workspace {
             GestureKind::LayerSort => self.move_layer_sort(position),
             GestureKind::Marquee => self.move_marquee(position, cx),
             GestureKind::SelectionMove => self.move_selection(snapped),
+            GestureKind::CornerRadius => self.move_corner_radius(delta / self.view.zoom, cx),
             GestureKind::SelectionResize { original, handle } => {
                 self.resize_selection(original, handle, delta / self.view.zoom, shift, cx);
             }
@@ -805,6 +813,7 @@ impl Workspace {
                     self.batch_values.clear();
                 }
                 GestureKind::Spacing { .. } => self.finish_spacing(false, cx),
+                GestureKind::CornerRadius => self.finish_corner_radius(false, cx),
                 GestureKind::SelectionResize { .. } => self.finish_selection_resize(false, cx),
                 GestureKind::Panel { side, original, .. } => self.panels.set(side, original),
                 GestureKind::Property { .. } => self.finish_property_scrub(false, cx),
@@ -892,6 +901,7 @@ impl Render for Workspace {
             }
             GestureKind::Rotate { .. } => gpui::CursorStyle::Crosshair,
             GestureKind::LayerSort => gpui::CursorStyle::ClosedHand,
+            GestureKind::CornerRadius => gpui::CursorStyle::ClosedHand,
             GestureKind::Panel { .. }
             | GestureKind::Property { .. }
             | GestureKind::LayoutProperty { .. }
@@ -948,6 +958,7 @@ impl Render for Workspace {
                         matches!(
                             g.kind,
                             GestureKind::SelectionMove
+                                | GestureKind::CornerRadius
                                 | GestureKind::SelectionResize { .. }
                                 | GestureKind::Rotate { .. }
                                 | GestureKind::Move { .. }
@@ -964,6 +975,14 @@ impl Render for Workspace {
                 },
             ))
             .capture_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, window, cx| {
+                if this.corner_editor.editing() {
+                    if event.keystroke.key == "escape" {
+                        this.finish_corner_input(false, cx);
+                        this.focus.focus(window, cx);
+                        cx.stop_propagation();
+                    }
+                    return;
+                }
                 if this.spacing.editing() {
                     if event.keystroke.key == "escape" {
                         this.finish_spacing_input(false, cx);
@@ -1033,6 +1052,7 @@ impl Render for Workspace {
                     matches!(
                         g.kind,
                         GestureKind::LayerSort
+                            | GestureKind::CornerRadius
                             | GestureKind::SelectionResize { .. }
                             | GestureKind::Spacing { .. }
                             | GestureKind::Property { .. }
