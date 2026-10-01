@@ -6,13 +6,37 @@ A design editor built with Rust and GPUI, available on desktop and the Web.
 
 Supports artboards, vectors, text, images and video, auto layout, reusable components, multi-page documents, and PNG/SVG export. Use it locally or connect to a server with personal and team workspaces. Available in English and Simplified Chinese.
 
-Primarily developed by GPT-6 Astra, Rovar is a Figma-like project I created to showcase what my GPUI can do. It already has a fairly broad feature set, though a complete product is not the main goal. I may keep developing it if enough people want to use it, or if I need it myself.
+I want to build a beautiful, cross-platform UI design tool that is easy for AI agents to operate, while using the project's real-world needs to improve and extend the GPUI framework.
 
 ![Forma analytics dashboard](docs/screenshots/analytics.png)
 
 ![Morrow music player](docs/screenshots/music.png)
 
 ![Sora interface components](docs/screenshots/components.png)
+
+## Features
+
+- **Canvas editing** — artboards, layers, multi-page documents, vector shapes, Bézier paths, and text.
+- **Auto layout** — horizontal and vertical layouts, alignment, padding, gaps, and fixed, hug-content, or fill sizing.
+- **Precision tools** — snapping, distance measurements, equal spacing, multi-selection resizing, repeated duplication, and on-canvas corner editing.
+- **Colors and gradients** — document color styles, color libraries, and linear, radial, angular, and diamond gradients.
+- **Reusable components** — component libraries, instances, overrides, and updates.
+- **Images and video** — media import, image fills, non-destructive cropping, and video playback.
+- **Local and self-hosted workspaces** — personal and team spaces, document and library synchronization, and version-conflict comparison.
+- **Export** — `.rovar` documents, PNG, and SVG.
+- **Desktop and Web** — a shared GPUI interface, English and Simplified Chinese; Web support is experimental.
+
+## Planned
+
+- [ ] **Responsive layouts** — constraints, grids, wrapping, and previews at multiple sizes.
+- [ ] **Component variants** — sizes, styles, and hover, pressed, and disabled states.
+- [ ] **Vector composition** — Boolean operations and masks.
+- [ ] **Visual effects** — shadows, layer and background blur, glass, glow, blend modes, and effect stacks.
+- [ ] **Animation** — keyframes, easing, animated gradients, and layer effects.
+- [ ] **Interactive presentations** — event triggers, screen navigation, overlays, scrollable areas, state switching, and transitions.
+- [ ] **Presentation sharing** — standalone playback and browser sharing through a self-hosted server.
+- [ ] **AI-assisted design** — natural-language generation, selection editing, layout refinement, and previews of editable results.
+- [ ] **GPUI DSL export** — layouts, styles, components, and assets for GPUI applications.
 
 ## Run
 
@@ -40,5 +64,9 @@ Windows packaging requires x64 MSVC, 7-Zip and Inno Setup; see [Windows packagin
 The Web editor is experimental. Open your server's address in a browser that supports WebGPU, using HTTPS or localhost.
 
 Building the Web editor requires [Trunk](https://trunkrs.dev/) and the Rust `wasm32-unknown-unknown` target. See [server setup](crates/rovar-server/README.md) for deployment and registration settings.
+
+## Development and contributions
+
+Issues and pull requests are welcome! Feel free to report bugs, suggest features, discuss design improvements, or contribute code and documentation.
 
 [File format](crates/rovar-format/FORMAT.md) · [MIT License](LICENSE)
