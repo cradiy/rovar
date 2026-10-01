@@ -28,7 +28,13 @@ impl Workspace {
         &self,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let independent = self.selected_shape().unwrap().independent_corners;
+        let shape = self.selected_shape().unwrap();
+        let independent = shape.independent_corners;
+        let limit = shape.rect.width.min(shape.rect.height) / 2.;
+        let full = shape
+            .displayed_radii()
+            .iter()
+            .all(|radius| *radius == limit);
         div()
             .flex_shrink_0()
             .flex()
@@ -40,44 +46,75 @@ impl Workspace {
                     .items_center()
                     .gap(px(6.))
                     .when(!independent, |el| {
-                        el.child(self.property_field(9, t("corner-radius"), cx))
+                        el.child(
+                            self.property_field(9, t("corner-radius"), cx)
+                                .pr(px(3.))
+                                .child(self.full_corner_button(full, cx)),
+                        )
                     })
                     .when(independent, |el| {
                         el.child(
                             div()
                                 .flex_1()
+                                .min_w_0()
+                                .h(px(32.))
+                                .pl(px(10.))
+                                .pr(px(3.))
+                                .rounded(px(6.))
+                                .bg(rgb(0x282b33))
+                                .border_1()
+                                .border_color(rgb(0x30333d))
+                                .flex()
+                                .items_center()
                                 .text_size(px(11.))
                                 .text_color(rgb(MUTED))
-                                .child(t("corner-radius")),
+                                .child(div().flex_1().child(t("corner-radius")))
+                                .child(self.full_corner_button(full, cx)),
                         )
                     })
-                    .children(
-                        [
-                            (
-                                false,
-                                "corners-unified",
-                                t("corners-unified"),
-                                LucideIcons::Radius,
+                    .child(
+                        div()
+                            .h(px(32.))
+                            .p(px(3.))
+                            .flex_shrink_0()
+                            .rounded(px(6.))
+                            .bg(rgb(0x14151b))
+                            .flex()
+                            .items_center()
+                            .gap(px(2.))
+                            .children(
+                                [
+                                    (
+                                        false,
+                                        "corners-unified",
+                                        t("corners-unified"),
+                                        LucideIcons::Link,
+                                    ),
+                                    (
+                                        true,
+                                        "corners-independent",
+                                        t("corners-independent"),
+                                        LucideIcons::Scan,
+                                    ),
+                                ]
+                                .into_iter()
+                                .map(
+                                    |(value, id, label, glyph)| {
+                                        icon_button(id, label, glyph, independent == value)
+                                            .size(px(26.))
+                                            .rounded(px(4.))
+                                            .on_click(cx.listener(move |this, _, window, cx| {
+                                                this.history.borrow_mut().break_group();
+                                                this.edit_shape(|shape| {
+                                                    shape.set_independent_corners(value)
+                                                });
+                                                this.focus.focus(window, cx);
+                                                this.sync_fields(cx);
+                                                cx.notify();
+                                            }))
+                                    },
+                                ),
                             ),
-                            (
-                                true,
-                                "corners-independent",
-                                t("corners-independent"),
-                                LucideIcons::Scan,
-                            ),
-                        ]
-                        .into_iter()
-                        .map(|(value, id, label, glyph)| {
-                            icon_button(id, label, glyph, independent == value).on_click(
-                                cx.listener(move |this, _, window, cx| {
-                                    this.history.borrow_mut().break_group();
-                                    this.edit_shape(|shape| shape.set_independent_corners(value));
-                                    this.focus.focus(window, cx);
-                                    this.sync_fields(cx);
-                                    cx.notify();
-                                }),
-                            )
-                        }),
                     ),
             )
             .when(independent, |el| {
@@ -95,6 +132,46 @@ impl Workspace {
                         .child(self.property_field(13, t("bottom-left"), cx))
                         .child(self.property_field(12, t("bottom-right"), cx)),
                 )
+            })
+    }
+
+    fn full_corner_button(&self, full: bool, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+        div()
+            .id("corners-full")
+            .debug_selector(|| "corners-full".into())
+            .h(px(22.))
+            .px(px(6.))
+            .flex_shrink_0()
+            .rounded(px(4.))
+            .flex()
+            .items_center()
+            .justify_center()
+            .text_size(px(10.))
+            .font_weight(gpui::FontWeight::MEDIUM)
+            .text_color(rgb(if full { ACCENT } else { MUTED }))
+            .when(full, |el| el.bg(gpui::rgba(0xb4a2ee18)))
+            .hover(|s| s.bg(gpui::rgba(0xffffff0a)).text_color(rgb(ACCENT)))
+            .cursor_pointer()
+            .child(t("corners-full"))
+            .tooltip(|_, cx| {
+                cx.new(|_| toolbar::ToolTip(t("corners-full-hint").into()))
+                    .into()
+            })
+            .when(!full, |el| {
+                el.on_click(cx.listener(|this, _, window, cx| {
+                    this.history.borrow_mut().break_group();
+                    this.edit_shape(|shape| {
+                        let radius = shape.rect.width.min(shape.rect.height) / 2.;
+                        if shape.independent_corners {
+                            shape.corners = Some([radius; 4]);
+                        } else {
+                            shape.radius = radius;
+                        }
+                    });
+                    this.focus.focus(window, cx);
+                    this.sync_fields(cx);
+                    cx.notify();
+                }))
             })
     }
 

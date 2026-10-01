@@ -71,6 +71,10 @@ impl Workspace {
             .hierarchy
             .sizing
             .retain(|id, _| included.contains(id));
+        document
+            .hierarchy
+            .exports
+            .retain(|id, _| included.contains(id));
         for (id, layout) in &mut document.hierarchy.layouts {
             if document
                 .hierarchy

@@ -356,6 +356,8 @@ fn closing_a_tab_waits_for_component_export(cx: &mut TestAppContext) {
             Default::default(),
         );
         draw(&mut visual);
+        visual.simulate_resize(gpui::size(px(1280.), px(1200.)));
+        click(&mut visual, "export-add");
         click(&mut visual, "export-submit");
         window
             .update(&mut visual.cx, |studio, window, cx| {

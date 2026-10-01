@@ -28,6 +28,7 @@ mod shapes;
 mod tests;
 mod text_boxes;
 mod toolbar;
+mod zoom;
 
 use crate::artboard::{Artboard, FillMode, Handle, Rect, Viewport};
 use crate::history::{Change, Group, SharedHistory};
@@ -224,6 +225,8 @@ pub struct Workspace {
     toolbar: toolbar::Toolbar,
     sidebar: layers::Sidebar,
     panels: panels::Panels,
+    inspector_scroll: gpui::ScrollHandle,
+    zoom_menu: zoom::ZoomMenu,
     scene: Entity<canvas::CanvasScene>,
     draft: Option<shapes::Draft>,
     path_before: Option<Shape>,
@@ -277,6 +280,7 @@ impl Workspace {
         let picker = cx.new(|cx| ColorPickerState::new(rgb(0xffffff), cx));
         let alpha_picker = cx.new(|cx| ColorPickerState::new(rgb(0xffffff), cx));
         let mut subscriptions = Vec::new();
+        let zoom_menu = zoom::ZoomMenu::new(window, cx, &mut subscriptions);
         subscriptions.push(cx.observe(&fields[0], |_, _, cx| cx.notify()));
         for (index, popover) in paint_popovers.iter().enumerate() {
             subscriptions.push(cx.subscribe_in(
@@ -468,7 +472,7 @@ impl Workspace {
             image_crop: None,
             measure_target: None,
             pick_hover: None,
-            export: export::ExportState::new(window, cx),
+            export: export::ExportState::new(),
             rename_input,
             layer_drag: None,
             layer_row_bounds: Default::default(),
@@ -509,6 +513,8 @@ impl Workspace {
             stroke_editing: false,
             paint_stops: [0; 2],
             paint_popovers,
+            zoom_menu,
+            inspector_scroll: Default::default(),
             draw_tool: None,
             box_draft: None,
             draft: None,
@@ -599,22 +605,6 @@ impl Workspace {
             None,
         );
         self.select(Some(id), cx);
-    }
-    fn fit_selected(&mut self, cx: &mut Context<Self>) {
-        if let Some(board) = self.selected_board() {
-            let rect = board.rect;
-            let size = self.bounds.get().size;
-            let width = f32::from(size.width).max(100.);
-            let height = f32::from(size.height).max(100.);
-            self.view.zoom = ((width - 96.) / rect.width)
-                .min((height - 120.) / rect.height)
-                .clamp(0.1, 1.);
-            self.view.pan = point(
-                width / 2. - (rect.x + rect.width / 2.) * self.view.zoom,
-                height / 2. - (rect.y + rect.height / 2.) * self.view.zoom,
-            );
-            cx.notify();
-        }
     }
     fn begin(
         &mut self,
@@ -920,6 +910,7 @@ impl Render for Workspace {
         self.sync_components(window, cx);
         self.sync_layout_inputs(cx);
         self.sync_video_visibility(cx);
+        self.sync_export_controls(window, cx);
         self.load_visible_media(window, cx);
         if self.preview_read_only() {
             return self.preview_canvas(cx).into_any_element();

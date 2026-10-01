@@ -269,6 +269,20 @@ impl Page {
             "Invalid layer reference"
         );
         crate::auto_layout::validate(self, &ids)?;
+        for (id, presets) in &self.hierarchy.exports {
+            ensure!(ids.contains(id), "Invalid export object");
+            for preset in presets {
+                ensure!((1..=4).contains(&preset.scale), "Invalid export scale");
+                ensure!(
+                    preset.suffix.chars().count() <= 100
+                        && !preset
+                            .suffix
+                            .chars()
+                            .any(|c| c.is_control() || "/\\:*?\"<>|".contains(c)),
+                    "Invalid export suffix"
+                );
+            }
+        }
         let boards: BTreeSet<_> = self.boards.iter().map(|b| b.id).collect();
         for board in self
             .shapes

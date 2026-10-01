@@ -898,7 +898,7 @@ impl Workspace {
         index: usize,
         label: &'static str,
         cx: &mut Context<Self>,
-    ) -> impl IntoElement + use<> {
+    ) -> Div {
         self.property_field_impl(index, label, true, cx)
     }
     fn paint_input_field(
@@ -915,7 +915,7 @@ impl Workspace {
         label: &'static str,
         popup: bool,
         cx: &mut Context<Self>,
-    ) -> impl IntoElement + use<> {
+    ) -> Div {
         let is_color = matches!(index, 5 | 16);
         let sizing =
             if matches!(index, 3 | 4) && !self.selected_shape().is_some_and(|s| s.kind.is_line()) {
@@ -1185,7 +1185,7 @@ impl Workspace {
             )))
     }
 
-    pub(super) fn properties(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    pub(super) fn properties(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
         let selected = self.selected_board().is_some()
             || self.selected_shape.is_some()
             || self.selected_text.is_some();
@@ -1225,14 +1225,29 @@ impl Workspace {
         } else {
             (t("design"), LucideIcons::SlidersHorizontal)
         };
-        layers::glass_surface()
+        let collapsed = self.panels.right_collapsed;
+        let toggle = icon_button(
+            "toggle-properties",
+            t(if collapsed {
+                "expand-properties"
+            } else {
+                "collapse-properties"
+            }),
+            if collapsed {
+                LucideIcons::ChevronsLeft
+            } else {
+                LucideIcons::ChevronsRight
+            },
+            false,
+        )
+        .size(px(28.))
+        .on_click(cx.listener(|this, _, window, cx| this.toggle_properties(window, cx)));
+        let surface = layers::glass_surface()
             .id("properties-panel")
             .debug_selector(|| "properties-panel".into())
             .absolute()
             .top(px(panels::PANEL_TOP))
-            .bottom(px(panels::PANEL_BOTTOM))
             .right(px(14.))
-            .w(px(self.panels.width(panels::Side::Right)))
             .flex_shrink_0()
             .rounded(px(16.))
             .border_1()
@@ -1240,35 +1255,72 @@ impl Workspace {
             .shadow_lg()
             .occlude()
             .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
-            .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
+            .on_scroll_wheel(|_, _, cx| cx.stop_propagation());
+        if collapsed {
+            return surface.p(px(8.)).child(toggle).into_any_element();
+        }
+        surface
+            .bottom(px(panels::PANEL_BOTTOM))
+            .w(px(self.panels.width(panels::Side::Right)))
             .flex()
             .flex_col()
-            .child(
-                div()
-                    .h(px(48.))
-                    .px(px(16.))
-                    .flex_shrink_0()
-                    .flex()
-                    .items_center()
-                    .gap(px(9.))
-                    .child(icon(glyph, 17.).text_color(rgb(ACCENT)))
-                    .child(
-                        div()
-                            .flex_1()
-                            .text_size(px(13.))
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .child(title),
-                    )
-                    .when(selected || !self.multi_selection.is_empty(), |el| {
-                        el.child(
-                            div()
-                                .text_size(px(10.))
-                                .text_color(rgb(MUTED))
-                                .child(t("design")),
-                        )
-                    }),
-            )
+            .child(self.inspector_modes(toggle, cx))
             .child(div().h(px(1.)).flex_shrink_0().bg(rgb(BORDER)))
+            .when(selected || !self.multi_selection.is_empty(), |el| {
+                el.child(
+                    div()
+                        .h(px(48.))
+                        .px(px(12.))
+                        .flex_shrink_0()
+                        .flex()
+                        .items_center()
+                        .gap(px(8.))
+                        .child(
+                            div()
+                                .size(px(28.))
+                                .flex_shrink_0()
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .child(icon(glyph, 16.).text_color(rgb(MUTED))),
+                        )
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .truncate()
+                                .text_size(px(13.))
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .child(title),
+                        )
+                        .when(self.multi_selection.len() > 1, |el| {
+                            el.child(
+                                div()
+                                    .text_size(px(10.))
+                                    .text_color(rgb(MUTED))
+                                    .child(self.multi_selection.len().to_string()),
+                            )
+                        })
+                        .child(div().flex().items_center().gap(px(2.)).when(
+                            self.can_create_component(),
+                            |el| {
+                                el.child(
+                                    icon_button(
+                                        "inspector-create-component",
+                                        t("component-create"),
+                                        LucideIcons::Component,
+                                        false,
+                                    )
+                                    .size(px(28.))
+                                    .on_click(cx.listener(
+                                        |this, _, window, cx| this.create_component(window, cx),
+                                    )),
+                                )
+                            },
+                        )),
+                )
+                .child(div().h(px(1.)).flex_shrink_0().bg(rgb(BORDER)))
+            })
             .when(self.selected_text.is_some(), |el| {
                 el.child(self.text_properties(cx))
             })
@@ -1276,6 +1328,7 @@ impl Workspace {
                 el.child(
                     div()
                         .id("properties-scroll")
+                        .track_scroll(&self.inspector_scroll)
                         .flex_1()
                         .min_h_0()
                         .overflow_y_scroll()
@@ -1352,7 +1405,8 @@ impl Workspace {
                                     .child(self.paint_value_row(cx)),
                             )
                         })
-                        .child(self.auto_layout_controls(cx)),
+                        .child(self.auto_layout_controls(cx))
+                        .child(self.export_properties(cx)),
                 )
             })
             .when(!self.multi_selection.is_empty(), |el| {
@@ -1361,11 +1415,15 @@ impl Workspace {
             .when(!selected && self.multi_selection.is_empty(), |el| {
                 el.child(
                     div()
-                        .pt(px(48.))
-                        .px(px(20.))
+                        .debug_selector(|| "inspector-empty".into())
+                        .flex_1()
+                        .min_h_0()
+                        .p(px(24.))
                         .flex()
                         .flex_col()
                         .items_center()
+                        .justify_center()
+                        .text_center()
                         .gap(px(12.))
                         .child(icon(LucideIcons::SlidersHorizontal, 24.).text_color(rgb(MUTED)))
                         .child(
@@ -1376,13 +1434,11 @@ impl Workspace {
                         ),
                 )
             })
-            .when(
-                !self.selection_ids().is_empty()
-                    || self.export.busy
-                    || self.export.status.is_some(),
-                |el| el.child(self.export_controls(cx)),
-            )
+            .when(self.export.busy || self.export.status.is_some(), |el| {
+                el.child(self.export_feedback(cx))
+            })
             .child(self.panel_resize_handle(panels::Side::Right, cx))
+            .into_any_element()
     }
     pub(super) fn geometry_controls(&self, cx: &mut Context<Self>) -> Div {
         let line = self.selected_shape().is_some_and(|s| s.kind.is_line());
@@ -1519,14 +1575,15 @@ pub(super) fn hex(color: gpui::Rgba) -> String {
 }
 
 pub(super) fn icon_button(
-    id: &'static str,
+    id: impl Into<gpui::SharedString>,
     label: &'static str,
     glyph: LucideIcons,
     active: bool,
 ) -> gpui::Stateful<Div> {
+    let id = id.into();
     div()
-        .id(id)
-        .debug_selector(move || id.into())
+        .id(id.clone())
+        .debug_selector(move || id.to_string())
         .size(px(30.))
         .flex_shrink_0()
         .rounded(px(5.))

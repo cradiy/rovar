@@ -149,7 +149,7 @@ impl Studio {
                                     .debug_selector(|| "new-tab".into())
                                     .absolute()
                                     .left(px(slot_left(count, width)))
-                                    .top(px(9.))
+                                    .top(px(TAB_TOP + (TAB_HEIGHT - 28.) / 2.))
                                     .size(px(28.))
                                     .rounded(px(6.))
                                     .flex()

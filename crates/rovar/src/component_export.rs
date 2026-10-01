@@ -17,8 +17,10 @@ impl std::fmt::Display for ExportError {
 }
 impl std::error::Error for ExportError {}
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub(crate) enum Format {
+    #[default]
     Png,
     Svg,
 }
@@ -36,7 +38,26 @@ impl Format {
         }
     }
 }
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(crate) struct Preset {
+    pub format: Format,
+    pub scale: u32,
+    pub suffix: String,
+}
+
+impl Default for Preset {
+    fn default() -> Self {
+        Self {
+            format: Format::Png,
+            scale: 1,
+            suffix: String::new(),
+        }
+    }
+}
+
+#[derive(Clone)]
 pub(crate) struct Job {
+    pub preset: Preset,
     pub original: Option<AssetSource>,
     pub name: String,
     pub json: Arc<Vec<u8>>,
@@ -75,7 +96,11 @@ impl Job {
         } else {
             name
         };
-        Ok(format!("{}.{}", filename(&stem), extension))
+        Ok(format!(
+            "{}.{}",
+            filename(&format!("{stem}{}", self.preset.suffix)),
+            extension
+        ))
     }
 
     pub fn svg(&self) -> Result<String> {
@@ -141,16 +166,10 @@ pub(crate) fn filename(name: &str) -> String {
     }
 }
 
-pub(crate) fn write(
-    jobs: Vec<Job>,
-    destination: PathBuf,
-    format: Format,
-    scale: u32,
-    batch: bool,
-) -> Result<Vec<PathBuf>> {
+pub(crate) fn write(jobs: Vec<Job>, destination: PathBuf, batch: bool) -> Result<Vec<PathBuf>> {
     ensure!(!jobs.is_empty(), "Empty export");
     if !batch {
-        let extension = jobs[0].extension(format)?;
+        let extension = jobs[0].extension(jobs[0].preset.format)?;
         ensure!(
             destination
                 .extension()
@@ -166,14 +185,14 @@ pub(crate) fn write(
     let options = render_options(jobs.iter().any(|job| !job.text.is_empty()))?;
     let mut prepared = Vec::new();
     for job in jobs {
-        let name = job.output_name(format)?;
+        let name = job.output_name(job.preset.format)?;
         let mut file = rovar_storage::tempfile::NamedTempFile::new_in(parent)?;
         if let Some(source) = &job.original {
             source.path.verify()?;
             let mut input = source.path.open()?;
             std::io::copy(&mut input, &mut file)?;
         } else {
-            file.write_all(&job.render(format, scale, &options)?)?;
+            file.write_all(&job.render(job.preset.format, job.preset.scale, &options)?)?;
         }
         file.as_file().sync_all()?;
         prepared.push((name, file));

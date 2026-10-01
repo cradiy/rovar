@@ -55,6 +55,101 @@ fn drag(visual: &mut VisualTestContext, selector: &'static str, delta: f32, canc
 }
 
 #[gpui::test]
+fn properties_collapse_preserves_selection_width_and_canvas_view(cx: &mut TestAppContext) {
+    let window = open(cx);
+    let mut visual = VisualTestContext::from_window(window.into(), cx);
+    create(&mut visual, "add-rectangle");
+    window
+        .update(&mut visual.cx, |this, _, cx| {
+            this.panels.set(Side::Right, 360.);
+            cx.notify();
+        })
+        .unwrap();
+    draw(&mut visual);
+    let (selection, shape, view, undo, right) = window
+        .update(&mut visual.cx, |this, _, _| {
+            (
+                this.selection_ids(),
+                this.shapes[0].clone(),
+                this.view,
+                this.history.borrow().undo_len(),
+                this.canvas_insets().1,
+            )
+        })
+        .unwrap();
+    click(&mut visual, "property-drag-5");
+    assert!(visual.debug_bounds("color-panel").is_some());
+    click(&mut visual, "toggle-properties");
+    assert!(visual.debug_bounds("color-panel").is_none());
+    assert!(visual.debug_bounds("resize-right-panel").is_none());
+    assert!(visual.debug_bounds("property-0").is_none());
+    assert!(visual.debug_bounds("properties-panel").unwrap().size.width < px(60.));
+    for (width, height) in [(840., 520.), (1280., 800.)] {
+        visual.simulate_resize(size(px(width), px(height)));
+        draw(&mut visual);
+        let toggle = visual.debug_bounds("toggle-properties").unwrap();
+        let fit = visual.debug_bounds("zoom-fit").unwrap();
+        assert!(toggle.right() <= px(width));
+        assert!(fit.right() < toggle.left());
+    }
+    window
+        .update(&mut visual.cx, |this, _, _| {
+            assert!(this.canvas_insets().1 < right);
+            assert_eq!(this.selection_ids(), selection);
+            assert_eq!(this.shapes[0], shape);
+            assert_eq!(this.view, view);
+            assert_eq!(this.history.borrow().undo_len(), undo);
+        })
+        .unwrap();
+    click(&mut visual, "toggle-properties");
+    assert_eq!(
+        visual.debug_bounds("properties-panel").unwrap().size.width,
+        px(360.)
+    );
+    assert!(visual.debug_bounds("resize-right-panel").is_some());
+    assert!(visual.debug_bounds("property-0").is_some());
+    window
+        .update(&mut visual.cx, |this, _, _| {
+            assert_eq!(this.canvas_insets().1, right);
+            assert_eq!(this.selection_ids(), selection);
+            assert_eq!(this.history.borrow().undo_len(), undo);
+        })
+        .unwrap();
+}
+
+#[gpui::test]
+fn inspector_component_action_uses_selection_and_supports_undo(cx: &mut TestAppContext) {
+    let window = open(cx);
+    let mut visual = VisualTestContext::from_window(window.into(), cx);
+    draw(&mut visual);
+    assert!(visual.debug_bounds("inspector-create-component").is_none());
+    create(&mut visual, "add-rectangle");
+    let before = window
+        .update(&mut visual.cx, |this, _, _| {
+            this.history.borrow().undo_len()
+        })
+        .unwrap();
+    click(&mut visual, "inspector-create-component");
+    window
+        .update(&mut visual.cx, |this, _, _| {
+            assert_eq!(this.components.definitions.len(), 1);
+            assert!(this.hierarchy.components[&1].master);
+            assert_eq!(this.history.borrow().undo_len(), before + 1);
+        })
+        .unwrap();
+    assert!(visual.debug_bounds("inspector-create-component").is_none());
+    visual.simulate_keystrokes("ctrl-z");
+    draw(&mut visual);
+    window
+        .update(&mut visual.cx, |this, _, _| {
+            assert!(this.components.definitions.is_empty());
+            assert!(this.hierarchy.components.is_empty());
+        })
+        .unwrap();
+    assert!(visual.debug_bounds("inspector-create-component").is_some());
+}
+
+#[gpui::test]
 fn text_commits_refresh_cached_canvas_during_resize_and_remain_editable_afterwards(
     cx: &mut TestAppContext,
 ) {

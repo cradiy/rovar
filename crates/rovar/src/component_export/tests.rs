@@ -30,6 +30,7 @@ fn document(shapes: Vec<Shape>) -> Page {
 }
 fn job(doc: &Page, bounds: Rect) -> Job {
     Job {
+        preset: Default::default(),
         original: None,
         name: "Export".into(),
         json: Arc::new(serde_json::to_vec(doc).unwrap()),
@@ -431,14 +432,7 @@ fn batch_export_keeps_existing_files_numbers_duplicates_and_is_atomic_on_render_
             rect(0., 0., 10., 10.),
         ))
     };
-    let outputs = write(
-        vec![make(), make()],
-        dir.path().into(),
-        Format::Png,
-        1,
-        true,
-    )
-    .unwrap();
+    let outputs = write(vec![make(), make()], dir.path().into(), true).unwrap();
     assert_eq!(
         outputs,
         [
@@ -456,39 +450,12 @@ fn batch_export_keeps_existing_files_numbers_duplicates_and_is_atomic_on_render_
         ShapeKind::Video,
         rect(0., 0., 10., 10.),
     ));
-    assert!(
-        write(
-            vec![make(), invalid],
-            dir.path().into(),
-            Format::Png,
-            1,
-            true
-        )
-        .is_err()
-    );
+    assert!(write(vec![make(), invalid], dir.path().into(), true).is_err());
     assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 3);
-    assert!(
-        write(
-            vec![make()],
-            dir.path().join("image.svg"),
-            Format::Png,
-            1,
-            false
-        )
-        .is_err()
-    );
+    assert!(write(vec![make()], dir.path().join("image.svg"), false).is_err());
     let mut huge = make();
     huge.bounds.width = 20_000.;
-    assert!(
-        write(
-            vec![huge],
-            dir.path().join("huge.png"),
-            Format::Png,
-            1,
-            false
-        )
-        .is_err()
-    );
+    assert!(write(vec![huge], dir.path().join("huge.png"), false).is_err());
     assert!(!dir.path().join("huge.png").exists());
 }
 
@@ -517,22 +484,19 @@ fn original_video_export_copies_cached_bytes_and_mixed_batch_keeps_each_extensio
     let folder = tempfile::tempdir().unwrap();
     // No decoding, resizing, frame extraction, or re-encoding is involved.
     let path = folder.path().join("clip.mp4");
-    write(vec![video()], path.clone(), Format::Svg, 4, false).unwrap();
+    let mut original = video();
+    original.preset.format = Format::Svg;
+    original.preset.scale = 4;
+    write(vec![original], path.clone(), false).unwrap();
     assert_eq!(std::fs::read(&path).unwrap(), bytes);
-    let image = job_for_shape(Shape::new(
+    let mut image = job_for_shape(Shape::new(
         2,
         None,
         ShapeKind::Rectangle,
         rect(0., 0., 10., 20.),
     ));
-    let paths = write(
-        vec![video(), video(), image],
-        folder.path().into(),
-        Format::Png,
-        2,
-        true,
-    )
-    .unwrap();
+    image.preset.scale = 2;
+    let paths = write(vec![video(), video(), image], folder.path().into(), true).unwrap();
     assert_eq!(
         paths,
         vec![
@@ -543,16 +507,7 @@ fn original_video_export_copies_cached_bytes_and_mixed_batch_keeps_each_extensio
     );
     assert_eq!(std::fs::read(&paths[1]).unwrap(), bytes);
     assert_eq!(image::open(&paths[2]).unwrap().width(), 20);
-    assert!(
-        write(
-            vec![video()],
-            folder.path().join("wrong.png"),
-            Format::Png,
-            1,
-            false
-        )
-        .is_err()
-    );
+    assert!(write(vec![video()], folder.path().join("wrong.png"), false).is_err());
     let mut missing = video();
     missing.original.as_mut().unwrap().path =
         crate::media::Source::file(tempfile::NamedTempFile::new().unwrap().into_temp_path());
@@ -566,15 +521,6 @@ fn original_video_export_copies_cached_bytes_and_mixed_batch_keeps_each_extensio
             .unwrap(),
     )
     .unwrap();
-    assert!(
-        write(
-            vec![video(), missing],
-            folder.path().into(),
-            Format::Png,
-            1,
-            true
-        )
-        .is_err()
-    );
+    assert!(write(vec![video(), missing], folder.path().into(), true).is_err());
     assert!(!folder.path().join("clip (3).mp4").exists());
 }

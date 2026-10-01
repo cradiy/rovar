@@ -9,26 +9,23 @@ use std::{
     sync::Arc,
 };
 use uic::components::dropdown::{Dropdown, DropdownPlacement, DropdownState, dropdown};
+mod controls;
 
 pub(super) struct ExportState {
     pub busy: bool,
     pub status: Option<String>,
     failure: Option<String>,
-    scale: u32,
-    format: Format,
-    format_menu: Entity<DropdownState>,
-    menu: Entity<DropdownState>,
+    controls: controls::Controls,
+    status_dismiss: Option<gpui::Task<()>>,
 }
 impl ExportState {
-    pub fn new(window: &mut Window, cx: &mut Context<Workspace>) -> Self {
+    pub fn new() -> Self {
         Self {
             busy: false,
             status: None,
             failure: None,
-            scale: 1,
-            format: Format::Png,
-            format_menu: cx.new(|cx| DropdownState::new(window, cx)),
-            menu: cx.new(|cx| DropdownState::new(window, cx)),
+            controls: Default::default(),
+            status_dismiss: None,
         }
     }
 }
@@ -87,11 +84,20 @@ impl Workspace {
         window: &Window,
         cx: &gpui::App,
     ) -> Result<Vec<Job>> {
+        self.export_jobs(self.selection_ids(), window, cx)
+    }
+
+    fn export_jobs(
+        &self,
+        roots: BTreeSet<usize>,
+        window: &Window,
+        cx: &gpui::App,
+    ) -> Result<Vec<Job>> {
         let (doc, assets) = self.snapshot_page(cx);
         let json = Arc::new(serde_json::to_vec(&doc)?);
         let assets = Arc::new(assets);
         let mut jobs = Vec::new();
-        for root in self.selection_ids() {
+        for root in roots {
             let ids = self.descendants(&BTreeSet::from([root]));
             let order: Vec<_> = self
                 .paint_order()
@@ -115,6 +121,7 @@ impl Workspace {
                     .context("Missing video source")?
                     .clone();
                 jobs.push(Job {
+                    preset: Default::default(),
                     original: Some(source),
                     name: self.layer_name(root, cx),
                     json: json.clone(),
@@ -184,6 +191,7 @@ impl Workspace {
                 })
                 .collect();
             jobs.push(Job {
+                preset: Default::default(),
                 original: None,
                 name: self.layer_name(root, cx),
                 json: json.clone(),
@@ -200,15 +208,25 @@ impl Workspace {
 
     pub(super) fn export_selection(
         &mut self,
-        format: Format,
+        quick_format: Option<Format>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         if self.export.busy {
             return;
         }
+        self.export.status_dismiss = None;
         self.suspend(window, cx);
-        let jobs = match self.component_export_jobs(window, cx) {
+        let jobs = match if let Some(format) = quick_format {
+            self.component_export_jobs(window, cx).map(|mut jobs| {
+                for job in &mut jobs {
+                    job.preset.format = format;
+                }
+                jobs
+            })
+        } else {
+            self.configured_export_jobs(window, cx)
+        } {
             Ok(jobs) => jobs,
             Err(error) => {
                 self.export.status = Some(error.to_string());
@@ -216,6 +234,7 @@ impl Workspace {
                 return;
             }
         };
+        let format = jobs[0].preset.format;
         let filename = match jobs[0].output_name(format) {
             Ok(name) => name,
             Err(error) => {
@@ -226,16 +245,10 @@ impl Workspace {
         };
         let extension = jobs[0].extension(format).unwrap();
         let batch = jobs.len() > 1;
-        let scale = self.export.scale;
         self.export.busy = true;
         self.export.status = None;
         self.export.failure = None;
-        self.export
-            .menu
-            .update(cx, |menu, cx| menu.close(window, cx));
-        self.export
-            .format_menu
-            .update(cx, |menu, cx| menu.close(window, cx));
+        self.close_export_menus(window, cx);
         let directory = crate::platform::export_directory();
         let file_dialog =
             (!batch).then(|| crate::platform::prompt_for_new_path(cx, &directory, Some(&filename)));
@@ -266,7 +279,7 @@ impl Workspace {
                     cx.background_executor()
                         .spawn(async move {
                             crate::raster::prepare().await?;
-                            let paths = component_export::write(jobs, path, format, scale, batch)?;
+                            let paths = component_export::write(jobs, path, batch)?;
                             for path in &paths {
                                 crate::platform::download(path)?;
                             }
@@ -280,6 +293,7 @@ impl Workspace {
             };
             let _ = this.update(cx, |this, cx| {
                 this.export.busy = false;
+                let complete = matches!(&result, Ok(Some(_)));
                 this.export.status = match result {
                     Ok(Some(paths)) => Some(crate::i18n::count("export-complete", paths.len())),
                     Ok(None) => None,
@@ -290,6 +304,9 @@ impl Workspace {
                         Some(message)
                     }
                 };
+                if complete {
+                    this.dismiss_export_status_later(cx);
+                }
                 cx.notify();
             });
         })
@@ -322,56 +339,22 @@ impl Workspace {
         }
     }
 
-    pub(super) fn export_controls(&self, cx: &mut Context<Self>) -> Div {
+    fn dismiss_export_status_later(&mut self, cx: &mut Context<Self>) {
+        self.export.status_dismiss = Some(cx.spawn(async move |this, cx| {
+            cx.background_executor()
+                .timer(std::time::Duration::from_secs(4))
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                this.export.status = None;
+                cx.notify();
+            });
+        }));
+    }
+
+    pub(super) fn export_feedback(&self, cx: &mut Context<Self>) -> Div {
         let busy = self.export.busy;
-        let enabled = !busy && !self.selection_ids().is_empty();
-        let videos = self.export_video_count();
-        let only_videos = videos > 0 && videos == self.selection_ids().len();
-        let selected_format = self.export.format;
-        let format =
-            export_menu(&self.export.format_menu)
-                .trigger(export_trigger("export-format", selected_format.label()).w_full())
-                .menu(div().flex().flex_col().children(
-                    [Format::Png, Format::Svg].into_iter().map(|format| {
-                        export_choice(format.label(), format.label(), selected_format == format)
-                            .debug_selector(move || format!("export-format-{}", format.extension()))
-                            .on_click(cx.listener(move |this, _, window, cx| {
-                                this.export.format = format;
-                                this.export
-                                    .format_menu
-                                    .update(cx, |menu, cx| menu.close(window, cx));
-                                this.export
-                                    .menu
-                                    .update(cx, |menu, cx| menu.close(window, cx));
-                                cx.notify();
-                            }))
-                    }),
-                ));
-        let scale = export_menu(&self.export.menu)
-            .trigger(export_trigger("export-scale", format!("{}×", self.export.scale)).w(px(62.)))
-            .menu(
-                div()
-                    .flex()
-                    .flex_col()
-                    .children([1, 2, 4].into_iter().map(|scale| {
-                        export_choice(
-                            ("export-scale-choice", scale as usize),
-                            format!("{scale}×"),
-                            self.export.scale == scale,
-                        )
-                        .debug_selector(move || format!("export-scale-{scale}"))
-                        .on_click(cx.listener(
-                            move |this, _, window, cx| {
-                                this.export.scale = scale;
-                                this.export
-                                    .menu
-                                    .update(cx, |menu, cx| menu.close(window, cx));
-                                cx.notify();
-                            },
-                        ))
-                    })),
-            );
         div()
+            .debug_selector(|| "export-footer".into())
             .flex()
             .flex_col()
             .flex_shrink_0()
@@ -381,81 +364,6 @@ impl Workspace {
             .border_color(rgb(BORDER))
             .text_size(px(12.))
             .text_color(rgb(TEXT))
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(8.))
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .flex()
-                            .items_center()
-                            .rounded(px(6.))
-                            .border_1()
-                            .border_color(rgb(BORDER))
-                            .bg(gpui::rgba(0xffffff04))
-                            .when(only_videos, |el| {
-                                el.child(
-                                    div()
-                                        .id("export-video-format")
-                                        .debug_selector(|| "export-video-format".into())
-                                        .h(px(30.))
-                                        .px(px(10.))
-                                        .flex()
-                                        .items_center()
-                                        .gap(px(8.))
-                                        .child(icon(LucideIcons::Film, 13.).text_color(rgb(MUTED)))
-                                        .child(self.video_export_label()),
-                                )
-                            })
-                            .when(!only_videos, |el| {
-                                el.child(div().flex_1().min_w_0().child(format))
-                            })
-                            .when(!only_videos && selected_format == Format::Png, |el| {
-                                el.child(div().w(px(1.)).h(px(14.)).bg(rgb(BORDER)))
-                                    .child(scale)
-                            }),
-                    )
-                    .child(
-                        div()
-                            .id("export-submit")
-                            .debug_selector(|| "export-submit".into())
-                            .w(px(80.))
-                            .h(px(32.))
-                            .flex_shrink_0()
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .rounded(px(6.))
-                            .border_1()
-                            .border_color(gpui::rgba(0xb4a2ee35))
-                            .bg(gpui::rgba(0xb4a2ee18))
-                            .text_color(rgb(ACCENT))
-                            .font_weight(FontWeight::MEDIUM)
-                            .opacity(if enabled { 1. } else { 0.35 })
-                            .child(t("export-action"))
-                            .when(enabled, |el| {
-                                el.cursor_pointer()
-                                    .hover(|s| {
-                                        s.bg(gpui::rgba(0xb4a2ee30))
-                                            .border_color(gpui::rgba(0xb4a2ee65))
-                                    })
-                                    .on_click(cx.listener(move |this, _, window, cx| {
-                                        this.export_selection(selected_format, window, cx)
-                                    }))
-                            }),
-                    ),
-            )
-            .when(videos > 0 && !only_videos, |el| {
-                el.child(
-                    div()
-                        .text_size(px(11.))
-                        .text_color(rgb(MUTED))
-                        .child(t("export-video-original-note")),
-                )
-            })
             .when(busy, |el| {
                 el.child(
                     div()
@@ -468,6 +376,7 @@ impl Workspace {
                 el.child(
                     div()
                         .flex()
+                        .items_center()
                         .gap(px(6.))
                         .child(
                             div()
@@ -480,10 +389,19 @@ impl Workspace {
                         .child(
                             div()
                                 .id("export-dismiss")
+                                .debug_selector(|| "export-dismiss".into())
+                                .size(px(24.))
+                                .flex_shrink_0()
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .rounded(px(5.))
                                 .cursor_pointer()
+                                .hover(|el| el.bg(rgb(BORDER)))
                                 .child(icon(LucideIcons::X, 13.))
                                 .on_click(cx.listener(|this, _, _, cx| {
                                     this.export.status = None;
+                                    this.export.status_dismiss = None;
                                     cx.notify();
                                 })),
                         ),
@@ -507,10 +425,10 @@ fn export_menu(state: &Entity<DropdownState>) -> Dropdown {
         .text_color(rgb(TEXT))
 }
 
-fn export_trigger(id: &'static str, label: impl Into<gpui::SharedString>) -> gpui::Stateful<Div> {
+fn export_trigger(id: String, label: impl Into<gpui::SharedString>) -> gpui::Stateful<Div> {
     div()
-        .id(id)
-        .debug_selector(move || id.into())
+        .id(gpui::SharedString::from(id.clone()))
+        .debug_selector(move || id.clone())
         .h(px(30.))
         .px(px(10.))
         .flex()

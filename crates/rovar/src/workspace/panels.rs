@@ -32,6 +32,7 @@ impl Side {
 pub(super) struct Panels {
     left: f32,
     right: f32,
+    pub right_collapsed: bool,
     pub window_width: f32,
 }
 
@@ -40,6 +41,7 @@ impl Default for Panels {
         Self {
             left: 280.,
             right: 288.,
+            right_collapsed: false,
             window_width: 1280.,
         }
     }
@@ -63,6 +65,7 @@ impl Panels {
     // Keep the user's preferred sizes when a smaller window temporarily constrains them.
     pub fn width(&self, side: Side) -> f32 {
         let other = match side {
+            Side::Left if self.right_collapsed => 46.,
             Side::Left => self.width(Side::Right),
             Side::Right => Side::Left.minimum(),
         };
@@ -86,7 +89,29 @@ impl Workspace {
         } else {
             self.panels.width(Side::Left)
         };
-        (left + 28., self.panels.width(Side::Right) + 28.)
+        let right = if self.panels.right_collapsed {
+            46.
+        } else {
+            self.panels.width(Side::Right)
+        };
+        (left + 28., right + 28.)
+    }
+
+    pub(super) fn toggle_properties(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.cancel_gesture(window, cx);
+        self.close_export_menus(window, cx);
+        for popover in &self.paint_popovers {
+            popover.update(cx, |state, cx| state.close(window, cx));
+        }
+        self.gradient_menu
+            .update(cx, |state, cx| state.close(window, cx));
+        self.zoom_menu
+            .popover
+            .update(cx, |state, cx| state.close(window, cx));
+        self.panels.right_collapsed = !self.panels.right_collapsed;
+        self.focus.focus(window, cx);
+        cx.stop_propagation();
+        cx.notify();
     }
 
     pub(super) fn panel_resize_handle(
@@ -118,6 +143,7 @@ impl Workspace {
                         return;
                     }
                     let other = match side {
+                        Side::Left if this.panels.right_collapsed => 46.,
                         Side::Left => this.panels.width(Side::Right),
                         Side::Right => this.panels.width(Side::Left),
                     };

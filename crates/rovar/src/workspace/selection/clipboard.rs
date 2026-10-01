@@ -165,6 +165,7 @@ impl Workspace {
         hierarchy.order.retain(|id| included_ids.contains(id));
         hierarchy.layouts.retain(|id, _| included_ids.contains(id));
         hierarchy.sizing.retain(|id, _| included_ids.contains(id));
+        hierarchy.exports.retain(|id, _| included_ids.contains(id));
         hierarchy
             .components
             .retain(|id, _| included_ids.contains(id));
@@ -531,6 +532,9 @@ impl Workspace {
         }
         for (id, sizing) in clipboard.hierarchy.sizing {
             self.hierarchy.sizing.insert(id_map[&id], sizing);
+        }
+        for (id, presets) in clipboard.hierarchy.exports {
+            self.hierarchy.exports.insert(id_map[&id], presets);
         }
         for (root, mut link) in clipboard.hierarchy.components {
             for id in link.nodes.values_mut() {

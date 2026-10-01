@@ -91,6 +91,7 @@ pub(crate) enum Change {
 
 #[derive(Clone, PartialEq, Eq)]
 pub(crate) enum Group {
+    ExportSuffix(Vec<usize>, usize),
     SelectionProperty(Vec<usize>, Property),
     Typing(usize),
     Style(usize, TextProperty, Range<usize>),

@@ -541,7 +541,7 @@ impl Workspace {
         self.choose_tool(toolbar::Tool::Move, window, cx);
         match command {
             Command::SaveAsset => self.begin_save_asset(window, cx),
-            Command::Export(format) => self.export_selection(format, window, cx),
+            Command::Export(format) => self.export_selection(Some(format), window, cx),
             Command::Node(action) => self.run_node_action(action, cx),
             Command::Undo => self.replay_history(false, window, cx),
             Command::Redo => self.replay_history(true, window, cx),

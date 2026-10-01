@@ -125,6 +125,7 @@ fn high_zoom_keeps_pointer_anchor_and_grid_allows_object_selection(cx: &mut Test
             assert_eq!(this.selected_shape().unwrap().rect, original);
         })
         .unwrap();
+    click(&mut visual, "inspector-zoom");
     click(&mut visual, "zoom-reset");
     window
         .update(&mut visual.cx, |this, _, _| assert_eq!(this.view.zoom, 1.))

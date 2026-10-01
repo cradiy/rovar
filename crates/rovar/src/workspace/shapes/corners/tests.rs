@@ -46,6 +46,62 @@ fn hover(
 }
 
 #[gpui::test]
+fn full_corner_preset_preserves_geometry_and_mode_and_undoes_once(cx: &mut TestAppContext) {
+    for (kind, width, height, independent) in [
+        (ShapeKind::Rectangle, 200., 200., false),
+        (ShapeKind::Rectangle, 240., 120., true),
+        (ShapeKind::Image, 120., 240., false),
+    ] {
+        let window = fixture(cx);
+        let original = window
+            .update(cx, |this, _, cx| {
+                let shape = &mut this.shapes[0];
+                shape.kind = kind;
+                shape.rect.width = width;
+                shape.rect.height = height;
+                shape.radius = 10.;
+                shape.independent_corners = independent;
+                shape.corners = Some([8., 16., 24., 32.]);
+                let original = shape.clone();
+                this.sync_fields(cx);
+                cx.notify();
+                original
+            })
+            .unwrap();
+        let mut visual = VisualTestContext::from_window(window.into(), cx);
+        draw(&mut visual);
+        click(&mut visual, "corners-full");
+        let rounded = window
+            .update(&mut visual.cx, |this, _, _| {
+                let shape = &this.shapes[0];
+                assert_eq!(shape.rect, original.rect);
+                assert_eq!(shape.kind, kind);
+                assert_eq!(shape.independent_corners, independent);
+                assert_eq!(shape.displayed_radii(), [width.min(height) / 2.; 4]);
+                assert_eq!(this.history.borrow().undo_len(), 1);
+                shape.clone()
+            })
+            .unwrap();
+        click(&mut visual, "corners-full");
+        visual.simulate_keystrokes("ctrl-z");
+        draw(&mut visual);
+        window
+            .update(&mut visual.cx, |this, _, _| {
+                assert_eq!(this.shapes[0], original);
+            })
+            .unwrap();
+        visual.simulate_keystrokes("ctrl-shift-z");
+        draw(&mut visual);
+        window
+            .update(&mut visual.cx, |this, _, _| {
+                assert_eq!(this.shapes[0], rounded);
+                assert_eq!(this.history.borrow().undo_len(), 1);
+            })
+            .unwrap();
+    }
+}
+
+#[gpui::test]
 fn drag_linked_radius_and_undo_are_one_edit_without_resizing(cx: &mut TestAppContext) {
     let window = fixture(cx);
     let mut visual = VisualTestContext::from_window(window.into(), cx);

@@ -293,54 +293,124 @@ impl Workspace {
             return div();
         };
         let asset = asset.clone();
-        inspector::inspector_section(if shape.kind == ShapeKind::Video {
-            t("shape-video")
+        let video = shape.kind == ShapeKind::Video;
+        let loading = self.video_loading.contains(&id);
+        let name = asset.name();
+        inspector::inspector_section(t(if video {
+            "video-source"
         } else {
-            t("shape-image")
-        })
+            "image-source"
+        }))
         .child(
             div()
-                .text_size(px(12.))
-                .text_color(rgb(MUTED))
-                .overflow_hidden()
-                .child(asset.name()),
-        )
-        .child(
-            div()
-                .text_size(px(11.))
-                .text_color(rgb(MUTED))
-                .child(format!("{} × {}", asset.width, asset.height)),
-        )
-        .when(shape.kind == ShapeKind::Video, |el| {
-            if let Some(runtime) = self.videos.get(&id) {
-                el.child(runtime.controls.clone())
-            } else {
-                el.child(
+                .debug_selector(move || {
+                    if video {
+                        "video-source-row"
+                    } else {
+                        "image-source-row"
+                    }
+                    .into()
+                })
+                .flex()
+                .items_center()
+                .gap(px(10.))
+                .child(
                     div()
-                        .id("video-start")
-                        .debug_selector(|| "video-start".into())
-                        .h(px(32.))
+                        .size(px(40.))
+                        .flex_shrink_0()
                         .rounded(px(6.))
-                        .bg(rgb(0x353044))
+                        .overflow_hidden()
+                        .bg(gpui::checkerboard(rgb(0x30343d), 4.))
                         .flex()
                         .items_center()
                         .justify_center()
-                        .gap(px(6.))
-                        .cursor_pointer()
-                        .child(icon(LucideIcons::Play, 16.))
-                        .child(if self.video_loading.contains(&id) {
-                            t("video-loading")
-                        } else {
-                            t("play")
-                        })
-                        .on_click(
-                            cx.listener(move |this, _, window, cx| this.play_video(id, window, cx)),
-                        ),
+                        .child(match asset.content() {
+                            Some(MediaContent::Image(image)) => gpui::img(image.clone())
+                                .size_full()
+                                .object_fit(gpui::ObjectFit::Contain)
+                                .into_any_element(),
+                            Some(MediaContent::Video(frame)) => gpui::surface(frame.clone())
+                                .size_full()
+                                .object_fit(gpui::ObjectFit::Contain)
+                                .into_any_element(),
+                            _ => icon(
+                                if video {
+                                    LucideIcons::Film
+                                } else {
+                                    LucideIcons::Image
+                                },
+                                18.,
+                            )
+                            .text_color(rgb(MUTED))
+                            .into_any_element(),
+                        }),
                 )
-            }
-        })
-        .when(shape.kind == ShapeKind::Image, |el| {
-            el.child(self.image_crop_button(id, cx))
+                .child(
+                    div()
+                        .id("media-source-info")
+                        .flex_1()
+                        .min_w_0()
+                        .flex()
+                        .flex_col()
+                        .gap(px(3.))
+                        .child(div().truncate().text_size(px(12.)).child(name.clone()))
+                        .child(
+                            div()
+                                .text_size(px(11.))
+                                .text_color(rgb(MUTED))
+                                .child(format!("{} × {} px", asset.width, asset.height)),
+                        )
+                        .tooltip(move |_, cx| cx.new(|_| toolbar::ToolTip(name.clone())).into()),
+                )
+                .when(!video, |el| el.child(self.image_crop_button(id, cx)))
+                .when(video && !self.videos.contains_key(&id), |el| {
+                    el.child(
+                        div()
+                            .id("video-start")
+                            .debug_selector(|| "video-start".into())
+                            .size(px(28.))
+                            .flex_shrink_0()
+                            .rounded(px(6.))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .child(
+                                icon(
+                                    if loading {
+                                        LucideIcons::Loader
+                                    } else {
+                                        LucideIcons::Play
+                                    },
+                                    16.,
+                                )
+                                .text_color(rgb(if loading {
+                                    ACCENT
+                                } else {
+                                    MUTED
+                                })),
+                            )
+                            .tooltip(move |_, cx| {
+                                cx.new(|_| {
+                                    toolbar::ToolTip(
+                                        t(if loading { "video-loading" } else { "play" }).into(),
+                                    )
+                                })
+                                .into()
+                            })
+                            .when(!loading, |el| {
+                                el.cursor_pointer().hover(|el| el.bg(rgb(BORDER))).on_click(
+                                    cx.listener(move |this, _, window, cx| {
+                                        this.play_video(id, window, cx)
+                                    }),
+                                )
+                            }),
+                    )
+                }),
+        )
+        .when(video, |el| {
+            el.when_some(self.videos.get(&id), |el, runtime| {
+                el.child(runtime.controls.clone())
+            })
         })
     }
 

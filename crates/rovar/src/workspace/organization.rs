@@ -331,6 +331,7 @@ impl Workspace {
             self.hierarchy.order.retain(|i| *i != id);
             self.hierarchy.layouts.remove(&id);
             self.hierarchy.sizing.remove(&id);
+            self.hierarchy.exports.remove(&id);
             self.set_sibling_order(&order);
             selected.remove(&id);
             selected.extend(children);
@@ -455,6 +456,7 @@ impl Workspace {
         self.hierarchy.order.retain(|id| ids.contains(id));
         self.hierarchy.layouts.retain(|id, _| ids.contains(id));
         self.hierarchy.sizing.retain(|id, _| ids.contains(id));
+        self.hierarchy.exports.retain(|id, _| ids.contains(id));
         self.hierarchy.components.retain(|id, _| ids.contains(id));
     }
 }

@@ -284,6 +284,7 @@ impl Workspace {
             .flex_1()
             .min_h_0()
             .overflow_y_scroll()
+            .track_scroll(&self.inspector_scroll)
             .flex()
             .flex_col()
             .child(self.geometry_controls(cx))
@@ -409,5 +410,6 @@ impl Workspace {
             )
             .child(inspector_section(t("fill")).child(self.paint_value_row(cx)))
             .child(self.auto_layout_controls(cx))
+            .child(self.export_properties(cx))
     }
 }

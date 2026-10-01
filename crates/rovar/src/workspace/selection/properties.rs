@@ -378,6 +378,7 @@ impl Workspace {
         }
         div()
             .id("multi-properties")
+            .track_scroll(&self.inspector_scroll)
             .debug_selector(|| "multi-properties".into())
             .flex_1()
             .min_h_0()
@@ -416,6 +417,7 @@ impl Workspace {
             .when(self.batch_color_supported(cx), |el| {
                 el.child(section(t("color")).child(self.paint_value_row(cx)))
             })
+            .child(self.export_properties(cx))
     }
 }
 

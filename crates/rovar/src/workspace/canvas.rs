@@ -265,7 +265,10 @@ impl Workspace {
                         ),
                 )
             })
-            .child(self.view_controls(cx))
+            .when(
+                self.preview.is_some() || self.panels.right_collapsed,
+                |el| el.child(self.view_controls(cx)),
+            )
             .when(self.preview.is_none(), |el| {
                 el.child(self.sidebar(cx))
                     .child(self.properties(cx))
@@ -641,18 +644,22 @@ impl Workspace {
             .when(self.preview.is_none(), |el| {
                 el.child(
                     button("zoom-fit", t("zoom-fit").into())
-                        .on_click(cx.listener(|this, _, _, cx| this.fit_selected(cx))),
+                        .on_click(cx.listener(|this, _, _, cx| this.fit_content(false, cx))),
                 )
             })
     }
 
-    fn zoom_center(&mut self, factor: f32, cx: &mut Context<Self>) {
+    pub(super) fn zoom_center(&mut self, factor: f32, cx: &mut Context<Self>) {
         if self.gesture.is_some() {
             return;
         }
         let size = self.bounds.get().size;
+        let (left, right) = self.canvas_insets();
         self.view.zoom_at(
-            point(f32::from(size.width) / 2., f32::from(size.height) / 2.),
+            point(
+                (left + f32::from(size.width) - right) / 2.,
+                f32::from(size.height) / 2.,
+            ),
             self.view.zoom * factor,
         );
         cx.notify();

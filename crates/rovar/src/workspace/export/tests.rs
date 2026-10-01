@@ -10,6 +10,58 @@ use crate::{
 };
 use gpui::{TestAppContext, VisualTestContext};
 
+#[gpui::test]
+fn export_feedback_without_selection_stays_in_footer_and_success_expires(cx: &mut TestAppContext) {
+    let window = open(cx);
+    let mut visual = VisualTestContext::from_window(window.into(), cx);
+    window
+        .update(&mut visual.cx, |this, _, cx| {
+            this.export.status = Some("Exported 1 file".into());
+            this.dismiss_export_status_later(cx);
+            cx.notify();
+        })
+        .unwrap();
+    draw(&mut visual);
+    assert!(visual.debug_bounds("export-submit").is_none());
+    assert!(visual.debug_bounds("export-format").is_none());
+    let panel = visual.debug_bounds("properties-panel").unwrap();
+    let footer = visual.debug_bounds("export-footer").unwrap();
+    let empty = visual.debug_bounds("inspector-empty").unwrap();
+    assert!(footer.bottom() > panel.bottom() - px(4.));
+    assert!(empty.bottom() <= footer.top());
+    visual
+        .cx
+        .executor()
+        .advance_clock(std::time::Duration::from_secs(4));
+    draw(&mut visual);
+    assert!(visual.debug_bounds("export-footer").is_none());
+
+    window
+        .update(&mut visual.cx, |this, _, cx| {
+            this.export.busy = true;
+            cx.notify();
+        })
+        .unwrap();
+    draw(&mut visual);
+    assert!(visual.debug_bounds("export-footer").is_some());
+    assert!(visual.debug_bounds("export-submit").is_none());
+    window
+        .update(&mut visual.cx, |this, _, cx| {
+            this.export.busy = false;
+            this.export.status = Some("Export failed".into());
+            cx.notify();
+        })
+        .unwrap();
+    visual
+        .cx
+        .executor()
+        .advance_clock(std::time::Duration::from_secs(5));
+    draw(&mut visual);
+    assert!(visual.debug_bounds("export-footer").is_some());
+    click(&mut visual, "export-dismiss");
+    assert!(visual.debug_bounds("export-footer").is_none());
+}
+
 fn rect(x: f32, y: f32, width: f32, height: f32) -> Rect {
     Rect {
         x,
@@ -93,6 +145,8 @@ fn component_export_dialog_cancellation_and_batch_capture(cx: &mut TestAppContex
         })
         .unwrap();
     let mut visual = VisualTestContext::from_window(window.into(), cx);
+    visual.simulate_resize(size(px(1280.), px(1200.)));
+    click(&mut visual, "export-add");
     click(&mut visual, "export-submit");
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -106,6 +160,9 @@ fn component_export_dialog_cancellation_and_batch_capture(cx: &mut TestAppContex
         .update(&mut visual.cx, |this, _, cx| {
             assert!(!this.is_exporting());
             assert!(this.export.status.is_none());
+            this.hierarchy
+                .exports
+                .insert(2, this.hierarchy.exports[&1].clone());
             this.set_selection(BTreeSet::from([1, 2]), cx);
         })
         .unwrap();
@@ -115,7 +172,8 @@ fn component_export_dialog_cancellation_and_batch_capture(cx: &mut TestAppContex
     click(&mut visual, "export-scale-2");
     window
         .update(&mut visual.cx, |this, _, _| {
-            assert_eq!(this.export.scale, 2)
+            assert_eq!(this.hierarchy.exports[&1][0].scale, 2);
+            assert_eq!(this.hierarchy.exports[&2][0].scale, 2);
         })
         .unwrap();
     click(&mut visual, "export-submit");
@@ -271,6 +329,8 @@ fn video_selection_exports_original_and_hides_image_options(cx: &mut TestAppCont
         .unwrap();
     let mut visual = VisualTestContext::from_window(window.into(), cx);
     draw(&mut visual);
+    visual.simulate_resize(size(px(1280.), px(1200.)));
+    click(&mut visual, "export-add");
     assert!(visual.debug_bounds("export-video-format").is_some());
     assert!(visual.debug_bounds("export-format").is_none());
     assert!(visual.debug_bounds("export-scale").is_none());
