@@ -404,6 +404,14 @@ fn dropping_on_content_opens_a_window_and_cleans_up_drag_state(cx: &mut TestAppC
         Some(MouseButton::Left),
         Default::default(),
     );
+    #[cfg(target_os = "windows")]
+    handle
+        .update(&mut visual.cx, |studio, _, _| {
+            assert!(studio.error.is_none(), "{:?}", studio.error);
+            assert!(!drag.transaction.borrow().native);
+            assert_eq!(studio.tabs.len(), 2);
+        })
+        .unwrap();
     visual.simulate_mouse_up(
         point(px(660.), px(400.)),
         MouseButton::Left,

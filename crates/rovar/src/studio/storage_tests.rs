@@ -1,6 +1,61 @@
 use super::*;
 use gpui::{TestAppContext, VisualTestContext, size};
 
+#[test]
+fn internal_paths_accept_unsaved_documents_in_existing_directories() {
+    let directory = tempfile::tempdir().unwrap();
+    let documents = directory.path().join("documents");
+    std::fs::create_dir_all(&documents).unwrap();
+    let name = format!("{}.rovar", uuid::Uuid::new_v4());
+    let path = documents.join(&name);
+    assert!(files::is_internal(directory.path(), &path));
+    let canonical_root = std::fs::canonicalize(directory.path()).unwrap();
+    assert!(files::is_internal(&canonical_root, &path));
+    std::fs::write(&path, []).unwrap();
+    assert!(files::is_internal(directory.path(), &path));
+    assert!(!files::is_internal(
+        directory.path(),
+        &directory.path().join(&name)
+    ));
+    assert!(!files::is_internal(
+        directory.path(),
+        &documents.join("invalid.rovar")
+    ));
+}
+
+#[gpui::test]
+fn closing_new_documents_in_a_fresh_workspace_saves_before_closing(cx: &mut TestAppContext) {
+    cx.update(uic::init);
+    let directory = tempfile::tempdir().unwrap();
+    let handle = cx.open_window(size(px(1280.), px(800.)), |window, cx| {
+        Studio::new(directory.path().join("workspace"), window, cx)
+    });
+    let tab_path = handle
+        .update(cx, |studio, window, cx| {
+            studio.new_document(window, cx);
+            let path = studio.tabs[0].file.path.clone();
+            studio.close_tab(studio.tabs[0].token, window, cx);
+            path
+        })
+        .unwrap();
+    cx.run_until_parked();
+    handle
+        .update(cx, |studio, _, _| assert!(studio.tabs.is_empty()))
+        .unwrap();
+    assert!(crate::document::load(&tab_path).is_ok());
+    let window_path = handle
+        .update(cx, |studio, window, cx| {
+            studio.new_document(window, cx);
+            let path = studio.tabs[0].file.path.clone();
+            studio.begin_close(window, cx);
+            path
+        })
+        .unwrap();
+    cx.run_until_parked();
+    assert!(handle.update(cx, |_, _, _| ()).is_err());
+    assert!(crate::document::load(&window_path).is_ok());
+}
+
 #[gpui::test]
 fn autosave_skips_idle_snapshots_but_persists_view_and_content_changes(cx: &mut TestAppContext) {
     cx.update(uic::init);
@@ -129,8 +184,8 @@ fn save_is_internal_and_exported_files_are_independent(cx: &mut TestAppContext) 
         .update(&mut visual.cx, |studio, _, _| {
             let tab = &studio.tabs[0];
             assert_eq!(
-                tab.file.path.parent(),
-                Some(workspace.path().join("documents").as_path())
+                std::fs::canonicalize(tab.file.path.parent().unwrap()).unwrap(),
+                std::fs::canonicalize(workspace.path().join("documents")).unwrap()
             );
             (
                 tab.file.path.clone(),

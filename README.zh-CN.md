@@ -28,10 +28,12 @@ cargo run --locked -p rovar
 just build-linux       # 桌面二进制
 just build-linux-rpm   # RPM 安装包
 just build-macos       # App、ZIP 和 DMG
+just build-windows     # 安装包和免安装 ZIP
 just build-server      # 内嵌 Web 编辑器的服务器
 ```
 
 打包产物位于 `dist/`。macOS 构建需要 Apple Silicon 和 Xcode Command Line Tools，详见 [macOS 打包说明](packaging/macos/README.md)。
+Windows 打包需要 x64 MSVC、7-Zip 和 Inno Setup，详见 [Windows 打包说明](packaging/windows/README.md)。
 
 ## Web 与服务器
 

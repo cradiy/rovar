@@ -1,3 +1,5 @@
+set windows-shell := ["nu", "-c"]
+
 # Show available commands.
 default:
     @just --list
@@ -5,6 +7,16 @@ default:
 # Build the Linux release binary.
 build-linux:
     nu scripts/build.nu
+
+# Package all Windows formats.
+build-windows:
+    nu scripts/build.nu windows
+
+build-windows-zip:
+    nu scripts/build.nu windows zip
+
+build-windows-setup:
+    nu scripts/build.nu windows setup
 
 # Package all Linux formats.
 build-linux-all:

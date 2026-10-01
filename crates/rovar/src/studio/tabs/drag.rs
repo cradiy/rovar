@@ -1,4 +1,5 @@
 use super::*;
+#[cfg(not(target_os = "windows"))]
 use gpui::{DragSourceWindowPolicy, SystemDragOptions};
 
 impl Studio {
@@ -120,26 +121,32 @@ impl Studio {
             && payload.transaction.borrow().owner == Some((self.window_id, payload.token))
         {
             Self::preview_state(&payload, true, false, y, false, cx);
-            let source_window = if self.tabs.len() == 1 {
-                DragSourceWindowPolicy::HideWhileNative
-            } else {
-                DragSourceWindowPolicy::KeepVisible
-            };
-            match window.promote_active_drag_to_system_with_options(
-                SystemDragOptions {
-                    source_window,
-                    ..Default::default()
-                },
-                cx,
-            ) {
-                Ok(_) => {
-                    payload.transaction.borrow_mut().native = true;
-                    self.detach_owned_tab(&payload, window, cx);
-                    changed = true;
-                }
-                Err(error) => {
-                    self.error = Some(error.to_string());
-                    changed = true;
+            // GPUI's Windows backend has no native internal drag implementation.
+            // Keep the local drag alive; dropping it separates the tab via the
+            // existing drop/end handlers without requesting a platform icon.
+            #[cfg(not(target_os = "windows"))]
+            {
+                let source_window = if self.tabs.len() == 1 {
+                    DragSourceWindowPolicy::HideWhileNative
+                } else {
+                    DragSourceWindowPolicy::KeepVisible
+                };
+                match window.promote_active_drag_to_system_with_options(
+                    SystemDragOptions {
+                        source_window,
+                        ..Default::default()
+                    },
+                    cx,
+                ) {
+                    Ok(_) => {
+                        payload.transaction.borrow_mut().native = true;
+                        self.detach_owned_tab(&payload, window, cx);
+                        changed = true;
+                    }
+                    Err(error) => {
+                        self.error = Some(error.to_string());
+                        changed = true;
+                    }
                 }
             }
         } else {

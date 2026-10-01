@@ -28,10 +28,12 @@ Install [just](https://github.com/casey/just) and [Nushell](https://www.nushell.
 just build-linux       # Desktop binary
 just build-linux-rpm   # RPM package
 just build-macos       # App, ZIP and DMG
+just build-windows     # Installer and portable ZIP
 just build-server      # Server with the Web editor embedded
 ```
 
 Packages are written to `dist/`. macOS builds require Apple Silicon and Xcode Command Line Tools; see [macOS packaging](packaging/macos/README.md).
+Windows packaging requires x64 MSVC, 7-Zip and Inno Setup; see [Windows packaging](packaging/windows/README.md).
 
 ## Web and server
 

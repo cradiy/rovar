@@ -500,7 +500,19 @@ impl Studio {
 }
 
 pub(super) fn is_internal(directory: &std::path::Path, path: &std::path::Path) -> bool {
-    let path = rovar_storage::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let path = rovar_storage::fs::canonicalize(path).unwrap_or_else(|_| {
+        // Windows canonicalization adds a verbatim prefix. A new document has
+        // no file yet, so obtain the same path form from its existing parent.
+        #[cfg(windows)]
+        if let Some((parent, name)) = path
+            .parent()
+            .and_then(|parent| rovar_storage::fs::canonicalize(parent).ok())
+            .zip(path.file_name())
+        {
+            return parent.join(name);
+        }
+        path.to_path_buf()
+    });
     let root = directory.join("documents");
     let root = rovar_storage::fs::canonicalize(&root).unwrap_or(root);
     path.parent() == Some(root.as_path())

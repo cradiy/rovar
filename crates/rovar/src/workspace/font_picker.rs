@@ -234,6 +234,7 @@ impl FontPicker {
                                         div()
                                             .id(("font-option", index))
                                             .debug_selector(move || format!("font-option-{row}"))
+                                            .w_full()
                                             .h(px(32.))
                                             .px(px(8.))
                                             .flex()

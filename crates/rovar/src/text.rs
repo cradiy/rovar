@@ -54,7 +54,7 @@ impl Default for TextStyle {
         let mut gradient = LinearGradient::default();
         gradient.stop_mut(0).unwrap().color = rgb(0x20232b);
         Self {
-            family: "Noto Sans CJK SC".into(),
+            family: crate::ui_font::SYSTEM.into(),
             color_style: None,
             weight: 400.,
             size: 24.,

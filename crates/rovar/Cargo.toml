@@ -73,6 +73,9 @@ rust-embed = { version = "8", features = ["debug-embed"] }
 [dev-dependencies.tempfile]
 version = "3"
 
+[target.'cfg(windows)'.build-dependencies]
+embed-resource = "3"
+
 [dev-dependencies]
 gpui = { git = "https://github.com/cradiy/gpui-fusion.git", rev = "9a21b6a06b68084cd15de1c2324cee148e6742c1", features = [
   "test-support",

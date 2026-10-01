@@ -240,6 +240,7 @@ fn accepting_server_reloads_the_document_and_clears_conflict(cx: &mut TestAppCon
         crate::document::save_as(&path, &local_json, &[], cx.text_system()).unwrap();
         crate::document::save_as(&snapshot, &server_json, &[], cx.text_system()).unwrap();
     });
+    let path = std::fs::canonicalize(path).unwrap();
     let space =
         serde_json::json!({"id":"personal", "name":"Personal", "kind":"personal", "role":"owner"});
     let identity = serde_json::json!({

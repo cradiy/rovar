@@ -6014,6 +6014,7 @@ dependencies = [
  "base64 0.23.1",
  "console_error_panic_hook",
  "dirs 7.0.0",
+ "embed-resource",
  "fluent-bundle",
  "fluent-langneg 0.14.2",
  "fluent-syntax",

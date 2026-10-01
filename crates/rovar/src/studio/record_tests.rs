@@ -312,7 +312,9 @@ fn removing_recent_keeps_document_in_all_files_until_explicit_reopen(cx: &mut Te
     visual.cx.executor().advance_clock(Duration::from_secs(2));
     draw(&mut visual);
     assert!(visual.debug_bounds("recent-file-0").is_none());
-    assert!(records::removed_recent(directory.path()).contains(&path));
+    assert!(
+        records::removed_recent(&std::fs::canonicalize(directory.path()).unwrap()).contains(&path)
+    );
     // Recovered files must not undo a removal after restarting the home.
     let restored = visual
         .cx
