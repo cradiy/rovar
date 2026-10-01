@@ -99,6 +99,7 @@ impl Workspace {
             || self.toolbar.hand
             || self.draw_tool.is_some()
             || self.preview_read_only()
+            || self.image_crop.is_some()
             || self.colors.dialog.is_some()
             || self.assets.dialog.is_some()
             || uic::components::context_menu::is_open(cx)

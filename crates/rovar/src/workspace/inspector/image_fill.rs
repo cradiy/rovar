@@ -235,5 +235,8 @@ impl Workspace {
                     .on_click(cx.listener(|this, _, _, cx| this.import_image_fill(cx))),
             )
             .child(self.paint_input_field(6, t("opacity"), cx))
+            .when(fill.asset.is_some(), |el| {
+                el.child(self.image_crop_button(self.selected_shape.or(self.selected).unwrap(), cx))
+            })
     }
 }

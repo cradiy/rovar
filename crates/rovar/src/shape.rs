@@ -128,6 +128,8 @@ pub(crate) struct Shape {
     pub mirrored: [bool; 2],
     #[serde(skip)]
     pub media: Option<std::sync::Arc<crate::media::MediaAsset>>,
+    #[serde(default)]
+    pub media_placement: crate::image_fill::Placement,
     pub image_fill: crate::image_fill::ImageFill,
     pub points: PathPoints,
     pub nodes: crate::bezier::Nodes,
@@ -157,6 +159,7 @@ impl Shape {
             inner_radius: 0.45,
             mirrored: [false; 2],
             media: None,
+            media_placement: Default::default(),
             image_fill: Default::default(),
             points: PathPoints::default(),
             nodes: Default::default(),

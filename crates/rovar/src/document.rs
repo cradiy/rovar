@@ -360,6 +360,13 @@ impl Page {
             gradient.validate()?;
         }
         let mut slots = BTreeSet::new();
+        for placement in self.boards.iter().map(|b| &b.image_fill.placement).chain(
+            self.shapes
+                .iter()
+                .flat_map(|s| [&s.image_fill.placement, &s.media_placement]),
+        ) {
+            placement.validate()?;
+        }
         for asset in &self.assets {
             let shape = self.shapes.iter().find(|s| s.id == asset.object);
             ensure!(

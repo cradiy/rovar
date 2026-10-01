@@ -142,6 +142,7 @@ impl Workspace {
                     self.commit_corner_radius(window, cx);
                     None
                 }
+                GestureKind::ImageCrop { .. } => None,
                 GestureKind::SelectionResize { .. } => {
                     self.finish_selection_resize(true, cx);
                     None
@@ -377,6 +378,7 @@ impl Workspace {
             return;
         }
         self.duplicate = None;
+        self.image_crop = None;
         self.finish_spacing_input(false, cx);
         self.finish_corner_input(false, cx);
         self.seal_text_edits(cx);

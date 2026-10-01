@@ -140,7 +140,7 @@ impl Workspace {
         let stroke = shape.stroke.background();
         let image_fill =
             (shape.fill_enabled && shape.can_fill() && shape.fill_mode == FillMode::Image)
-                .then(|| shape.image_fill.clone());
+                .then(|| self.cropped_fill(id, &shape.image_fill));
         let paths = self.shape_paths.clone();
         let surface = canvas(
             move |_, _, _| {
@@ -258,6 +258,10 @@ impl Workspace {
                             return;
                         }
                         if event.click_count >= 2 && !event.modifiers.shift {
+                            if this.start_image_crop(id, window, cx) {
+                                cx.stop_propagation();
+                                return;
+                            }
                             if this.shapes.iter().any(|s| s.id == id && s.kind.is_media()) {
                                 this.select_shape(id, cx);
                                 if this.selected_shape().unwrap().kind == ShapeKind::Video {
@@ -292,7 +296,10 @@ impl Workspace {
                 el.child(self.media_surface(shape, outset))
             })
             .when(
-                selected && self.vector_edit != Some(id) && !shape.kind.is_line(),
+                selected
+                    && self.vector_edit != Some(id)
+                    && !shape.kind.is_line()
+                    && self.image_crop.is_none(),
                 |el| {
                     el.child(
                         div()
@@ -385,9 +392,10 @@ impl Workspace {
                 self.vector_edit == Some(id) || (shape.kind == ShapeKind::Bezier && id == 0),
                 |el| el.children(self.bezier_handles(&self.vector_handle_shape(shape), outset, cx)),
             )
-            .when(selected && self.vector_edit != Some(id), |el| {
-                el.children(self.rotation_handles(id, width, height, outset, cx))
-            });
+            .when(
+                selected && self.vector_edit != Some(id) && self.image_crop.is_none(),
+                |el| el.children(self.rotation_handles(id, width, height, outset, cx)),
+            );
         crate::rotation::surface(
             element,
             shape.layer.rotation,

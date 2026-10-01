@@ -269,13 +269,16 @@ impl Workspace {
             .when(self.preview.is_none(), |el| {
                 el.child(self.sidebar(cx))
                     .child(self.properties(cx))
-                    .child(self.tool_bar(cx))
+                    .when(self.image_crop.is_none(), |el| el.child(self.tool_bar(cx)))
             })
             .when(self.media_loading || self.media_error.is_some(), |el| {
                 el.child(self.media_status(cx))
             })
             .when(self.vector_edit.is_some(), |el| {
                 el.child(self.vector_toolbar(cx))
+            })
+            .when(self.image_crop.is_some(), |el| {
+                el.child(self.image_crop_overlay(cx))
             })
     }
 
@@ -285,6 +288,12 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.image_crop.is_some() {
+            let delta = f32::from(event.delta.pixel_delta(px(20.)).y);
+            self.zoom_image_crop((delta * 0.004).exp(), Some(event.position), cx);
+            cx.stop_propagation();
+            return;
+        }
         if self.gesture.is_none() {
             self.vector_hover = None;
             let delta = event.delta.pixel_delta(px(20.));
@@ -308,6 +317,11 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.image_crop.is_some() {
+            self.zoom_image_crop((1. + event.delta).max(0.01), Some(event.position), cx);
+            cx.stop_propagation();
+            return;
+        }
         if self.gesture.is_none() {
             self.vector_hover = None;
             let local = event.position - self.bounds.get().origin;
@@ -457,6 +471,10 @@ impl Workspace {
                         if this.selection_pointer(id, event, window, cx) {
                             return;
                         }
+                        if event.click_count >= 2 && this.start_image_crop(id, window, cx) {
+                            cx.stop_propagation();
+                            return;
+                        }
                         this.select(Some(id), cx);
                         if let Some(board) = this.selected_board() {
                             this.begin(
@@ -480,7 +498,11 @@ impl Workspace {
                     cx.stop_propagation();
                 }),
             )
-            .child(board.surface(self.view.zoom))
+            .child({
+                let mut board = board.clone();
+                board.image_fill = self.cropped_fill(id, &board.image_fill);
+                board.surface(self.view.zoom)
+            })
             .child(
                 div()
                     .absolute()
@@ -493,7 +515,7 @@ impl Workspace {
                     .text_color(rgb(if selected { ACCENT } else { MUTED }))
                     .child(board.name.clone()),
             )
-            .when(selected, |el| {
+            .when(selected && self.image_crop.is_none(), |el| {
                 el.child(
                     div()
                         .absolute()

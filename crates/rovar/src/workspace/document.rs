@@ -315,6 +315,7 @@ impl Workspace {
     }
 
     pub(crate) fn suspend(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.finish_image_crop(false, window, cx);
         self.duplicate = None;
         self.finish_spacing_input(false, cx);
         self.finish_corner_input(false, cx);

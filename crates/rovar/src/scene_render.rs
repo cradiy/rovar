@@ -193,16 +193,29 @@ impl Scene<'_> {
                     }
                     let key = format!("image-clip-{id}");
                     clip(&mut defs, &key, &contour);
-                    let fit = if media || image_fill.fit == crate::image_fill::ImageFit::Contain {
-                        "meet"
+                    let source = self
+                        .assets
+                        .iter()
+                        .find(|s| s.hash == asset.hash)
+                        .context("Missing image source")?;
+                    let (placement, fit) = if media {
+                        (
+                            shape.unwrap().media_placement,
+                            crate::image_fill::ImageFit::Contain,
+                        )
                     } else {
-                        "slice"
+                        (image_fill.placement, image_fill.fit)
                     };
+                    let image_rect = placement.rect(rect, source.size, fit);
                     let opacity = if media { 1. } else { image_fill.opacity };
                     write!(
                         body,
-                        "<image x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" preserveAspectRatio=\"xMidYMid {fit}\" opacity=\"{opacity}\" clip-path=\"url(#{key})\" href=\"{}\"/>",
-                        rect.x, rect.y, rect.width, rect.height, images[&asset.hash]
+                        "<image x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" preserveAspectRatio=\"none\" opacity=\"{opacity}\" clip-path=\"url(#{key})\" href=\"{}\"/>",
+                        image_rect.x,
+                        image_rect.y,
+                        image_rect.width,
+                        image_rect.height,
+                        images[&asset.hash]
                     )?;
                 }
                 if let Some(s) = shape.filter(|s| s.stroke.enabled && s.stroke.width > 0.) {

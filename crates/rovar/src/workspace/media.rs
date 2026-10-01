@@ -264,14 +264,15 @@ impl Workspace {
         let [tl, tr, br, bl] = shape.displayed_radii().map(|r| px(r * self.view.zoom));
         if let Some(asset) = &shape.media {
             content = match asset.content() {
-                Some(MediaContent::Image(image)) => content.child(
-                    gpui::img(image.clone())
-                        .size_full()
-                        .rounded_tl(tl)
-                        .rounded_tr(tr)
-                        .rounded_br(br)
-                        .rounded_bl(bl)
-                        .object_fit(gpui::ObjectFit::Contain),
+                Some(MediaContent::Image(_)) => content.child(
+                    self.cropped_media(shape)
+                        .element_with_radii(gpui::Corners {
+                            top_left: tl,
+                            top_right: tr,
+                            bottom_right: br,
+                            bottom_left: bl,
+                        })
+                        .size_full(),
                 ),
                 Some(MediaContent::Video(frame)) => content
                     .bg(rgb(0x101216))
@@ -337,6 +338,9 @@ impl Workspace {
                         ),
                 )
             }
+        })
+        .when(shape.kind == ShapeKind::Image, |el| {
+            el.child(self.image_crop_button(id, cx))
         })
     }
 

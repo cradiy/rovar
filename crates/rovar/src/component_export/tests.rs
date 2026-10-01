@@ -310,6 +310,69 @@ fn svg_text_is_outlined_and_png_contains_the_glyphs() {
 }
 
 #[test]
+fn cropped_media_and_image_fills_export_the_same_selected_source_region() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("two-colors.png");
+    image::RgbaImage::from_fn(200, 100, |x, _| {
+        if x < 100 {
+            image::Rgba([255, 0, 0, 255])
+        } else {
+            image::Rgba([0, 0, 255, 255])
+        }
+    })
+    .save(&path)
+    .unwrap();
+    let asset = crate::media::MediaAsset::load_image(&path).unwrap();
+    for media in [false, true] {
+        let mut shape = Shape::new(
+            1,
+            None,
+            if media {
+                ShapeKind::Image
+            } else {
+                ShapeKind::Ellipse
+            },
+            rect(0., 0., 100., 100.),
+        );
+        let placement = crate::image_fill::Placement {
+            zoom: 2.,
+            offset: [0.5, 0.],
+        };
+        if media {
+            shape.media_placement = placement;
+            shape.radius = 12.;
+        } else {
+            shape.fill_mode = FillMode::Image;
+            shape.image_fill.placement = placement;
+        }
+        let mut doc = document(vec![shape]);
+        doc.assets.push(AssetUse {
+            object: 1,
+            fill: !media,
+            hash: asset.hash.clone(),
+        });
+        let mut export = job(&doc, rect(0., 0., 100., 100.));
+        export.assets = Arc::new(vec![AssetSource {
+            hash: asset.hash.clone(),
+            name: asset.name(),
+            path: asset.source.clone(),
+            size: [200, 100],
+        }]);
+        let pixels = png(&export, 1);
+        assert_eq!(pixels.get_pixel(50, 50).0, [255, 0, 0, 255]);
+        assert_eq!(pixels.get_pixel(0, 0).0[3], 0);
+        let svg = export.render(Format::Svg, 1, &Default::default()).unwrap();
+        let tree = resvg::usvg::Tree::from_data(&svg, &Default::default()).unwrap();
+        let mut raster = resvg::tiny_skia::Pixmap::new(100, 100).unwrap();
+        resvg::render(&tree, Default::default(), &mut raster.as_mut());
+        assert_eq!(
+            &raster.data()[(50 * 100 + 50) * 4..(50 * 100 + 50) * 4 + 4],
+            &[255, 0, 0, 255]
+        );
+    }
+}
+
+#[test]
 fn batch_export_keeps_existing_files_numbers_duplicates_and_is_atomic_on_render_failure() {
     let dir = tempfile::tempdir().unwrap();
     std::fs::write(dir.path().join("Export.png"), b"original").unwrap();

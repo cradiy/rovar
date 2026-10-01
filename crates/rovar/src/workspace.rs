@@ -9,6 +9,7 @@ mod document;
 mod editing;
 mod export;
 mod gradient_editor;
+mod image_crop;
 mod layout;
 mod rotation;
 mod selection;
@@ -76,6 +77,9 @@ enum GestureKind {
     Marquee,
     SelectionMove,
     CornerRadius,
+    ImageCrop {
+        original: crate::image_fill::Placement,
+    },
     SelectionResize {
         original: Rect,
         handle: Handle,
@@ -169,6 +173,7 @@ pub struct Workspace {
     snapping: layout::Snapping,
     spacing: layout::Spacing,
     corner_editor: shapes::Corners,
+    image_crop: Option<image_crop::State>,
     measure_target: Option<usize>,
     pick_hover: Option<usize>,
     hierarchy: crate::layer::Hierarchy,
@@ -454,6 +459,7 @@ impl Workspace {
             snapping: Default::default(),
             spacing: layout::Spacing::new(window, cx),
             corner_editor: shapes::Corners::new(window, cx),
+            image_crop: None,
             measure_target: None,
             pick_hover: None,
             export: export::ExportState::new(window, cx),
@@ -528,6 +534,7 @@ impl Workspace {
         self.boards.iter().find(|b| Some(b.id) == self.selected)
     }
     fn select(&mut self, id: Option<usize>, cx: &mut Context<Self>) {
+        self.image_crop = None;
         self.finish_corner_input(false, cx);
         self.corner_editor.clear_hover();
         if id.is_some_and(|id| !self.layer_editable(id)) {
@@ -680,6 +687,9 @@ impl Workspace {
             GestureKind::Marquee => self.move_marquee(position, cx),
             GestureKind::SelectionMove => self.move_selection(snapped),
             GestureKind::CornerRadius => self.move_corner_radius(delta / self.view.zoom, cx),
+            GestureKind::ImageCrop { original } => {
+                self.move_image_crop(original, delta / self.view.zoom)
+            }
             GestureKind::SelectionResize { original, handle } => {
                 self.resize_selection(original, handle, delta / self.view.zoom, shift, cx);
             }
@@ -814,6 +824,11 @@ impl Workspace {
                 }
                 GestureKind::Spacing { .. } => self.finish_spacing(false, cx),
                 GestureKind::CornerRadius => self.finish_corner_radius(false, cx),
+                GestureKind::ImageCrop { original } => {
+                    if let Some(crop) = &mut self.image_crop {
+                        crop.image.placement = original;
+                    }
+                }
                 GestureKind::SelectionResize { .. } => self.finish_selection_resize(false, cx),
                 GestureKind::Panel { side, original, .. } => self.panels.set(side, original),
                 GestureKind::Property { .. } => self.finish_property_scrub(false, cx),
@@ -902,6 +917,7 @@ impl Render for Workspace {
             GestureKind::Rotate { .. } => gpui::CursorStyle::Crosshair,
             GestureKind::LayerSort => gpui::CursorStyle::ClosedHand,
             GestureKind::CornerRadius => gpui::CursorStyle::ClosedHand,
+            GestureKind::ImageCrop { .. } => gpui::CursorStyle::ClosedHand,
             GestureKind::Panel { .. }
             | GestureKind::Property { .. }
             | GestureKind::LayoutProperty { .. }
@@ -975,6 +991,16 @@ impl Render for Workspace {
                 },
             ))
             .capture_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, window, cx| {
+                if this.image_crop.is_some() {
+                    match event.keystroke.key.as_str() {
+                        "escape" => this.finish_image_crop(false, window, cx),
+                        "enter" => this.finish_image_crop(true, window, cx),
+                        _ => {}
+                    }
+                    window.prevent_default();
+                    cx.stop_propagation();
+                    return;
+                }
                 if this.corner_editor.editing() {
                     if event.keystroke.key == "escape" {
                         this.finish_corner_input(false, cx);
