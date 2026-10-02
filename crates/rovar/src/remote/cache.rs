@@ -11,6 +11,15 @@ struct Incoming {
     rejected_request: Option<String>,
 }
 
+enum Installation<'a> {
+    Replace(&'a [u8]),
+    Delete,
+    Preserve,
+}
+
+#[cfg(all(test, not(target_family = "wasm")))]
+mod resolution_tests;
+
 impl Remote {
     /// Write the baseline and recovery record before replacing the cache. A
     /// restart can then distinguish downloaded content from a new local edit.
@@ -40,7 +49,10 @@ impl Remote {
             installed_content: None,
             rejected_request: None,
         };
-        self.install_incoming(incoming, bytes)
+        self.install_incoming(
+            incoming,
+            bytes.map_or(Installation::Delete, Installation::Replace),
+        )
     }
 
     pub(super) fn install_merge(
@@ -76,16 +88,47 @@ impl Remote {
             installed_content: Some(hex::encode(Sha256::digest(&content))),
             rejected_request: Some(rejected_request),
         };
-        self.install_incoming(incoming, Some(merged))
+        self.install_incoming(incoming, Installation::Replace(merged))
     }
 
-    fn install_incoming(&mut self, incoming: Incoming, bytes: Option<&[u8]>) -> Result<()> {
+    pub(super) fn install_resolution(
+        &mut self,
+        path: &Path,
+        previous: Link,
+        next: Link,
+        server_bytes: Option<&[u8]>,
+        rejected_request: Option<String>,
+    ) -> Result<()> {
+        let content = match server_bytes {
+            Some(bytes) => baseline::snapshot_content(bytes, next.object.deleted)?,
+            None => baseline::content(path, next.object.deleted)?,
+        };
+        let incoming = Incoming {
+            path: path.into(),
+            previous: Some(previous),
+            next,
+            installed_content: Some(hex::encode(Sha256::digest(content))),
+            rejected_request,
+        };
+        self.install_incoming(
+            incoming,
+            server_bytes.map_or(Installation::Preserve, Installation::Replace),
+        )
+    }
+
+    fn install_incoming(
+        &mut self,
+        incoming: Incoming,
+        installation: Installation<'_>,
+    ) -> Result<()> {
         let journal = self.root.join("incoming.json");
         write_atomic(&journal, &serde_json::to_vec(&incoming)?)?;
-        if let Some(bytes) = bytes {
-            write_atomic(&incoming.path, bytes)?;
-        } else if rovar_storage::exists(&incoming.path) {
-            rovar_storage::fs::remove_file(&incoming.path)?;
+        match installation {
+            Installation::Replace(bytes) => write_atomic(&incoming.path, bytes)?,
+            Installation::Delete if rovar_storage::exists(&incoming.path) => {
+                rovar_storage::fs::remove_file(&incoming.path)?;
+            }
+            Installation::Delete | Installation::Preserve => {}
         }
         self.finish_incoming(&incoming)?;
         rovar_storage::fs::remove_file(journal)?;
@@ -169,24 +212,28 @@ impl Remote {
                 && link.object.revision == incoming.next.object.revision
                 && link.object.id == incoming.next.object.id
                 && link.connection == incoming.next.connection
+                && link.conflict == incoming.next.conflict
         });
         if already_applied {
             // The catalog committed before a crash, but retiring the rejected
             // request may not have. Do not reset any subsequent local edits.
             self.retire_rejected_request(&incoming)?;
         } else if unchanged {
-            let baseline = self
-                .read_baseline(&incoming.next)?
-                .ok_or_else(|| anyhow::anyhow!("Missing incoming baseline"))?;
+            // A present baseline must still pass integrity checks. Only the
+            // explicit local-resolution path may recover without one.
+            let baseline = self.read_baseline(&incoming.next)?;
             let installed = if incoming.next.object.deleted {
                 !rovar_storage::exists(&incoming.path)
+            } else if let Some(hash) = &incoming.installed_content {
+                // Keeping local content has no confirmed server baseline. Its
+                // recorded content hash is the recovery witness instead.
+                baseline::content(&incoming.path, false)
+                    .is_ok_and(|content| hex::encode(Sha256::digest(content)) == *hash)
             } else {
-                baseline::content(&incoming.path, false).is_ok_and(|content| {
-                    match &incoming.installed_content {
-                        Some(hash) => hex::encode(Sha256::digest(&content)) == *hash,
-                        None => STANDARD.encode(content) == baseline.content,
-                    }
-                })
+                let baseline =
+                    baseline.ok_or_else(|| anyhow::anyhow!("Missing incoming baseline"))?;
+                baseline::content(&incoming.path, false)
+                    .is_ok_and(|content| STANDARD.encode(content) == baseline.content)
             };
             if installed {
                 self.finish_incoming(&incoming)?;

@@ -11,6 +11,7 @@ impl Remote {
         cx: &mut Context<Self>,
     ) -> Result<()> {
         ensure!(!self.busy, "Sync is busy; try again");
+        self.recover_incoming()?;
         let previous = self
             .catalog
             .links
@@ -25,23 +26,16 @@ impl Remote {
                 && !reviewed.deleted,
             "The compared document has changed"
         );
-        let pending = self
-            .root
-            .join("pending")
-            .join(&previous.connection)
-            .join(format!("{}.json", reviewed.id));
-        // A rejected request must not be replayed after choosing a new base.
-        match rovar_storage::fs::remove_file(&pending) {
-            Ok(()) => {}
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-            Err(e) => return Err(e.into()),
-        }
-        let backup = if let Some(bytes) = server_bytes {
-            let backup = rovar_storage::fs::read(path)?;
-            write_atomic(path, bytes)?;
-            Some(backup)
-        } else {
-            None
+        // Retire only this rejected request, after the chosen revision has
+        // committed. A later request must survive replaying an old journal.
+        let rejected_request = match rovar_storage::fs::read(self.pending_path(&previous)) {
+            Ok(bytes) => Some(
+                serde_json::from_slice::<PendingSave>(&bytes)?
+                    .input
+                    .request_id,
+            ),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => return Err(error.into()),
         };
         let mut resolved = previous.clone();
         resolved.object.revision = reviewed.revision;
@@ -62,14 +56,7 @@ impl Remote {
             )?);
             resolved.dirty = false;
         }
-        self.catalog.links.insert(path.into(), resolved);
-        if !self.persist() {
-            self.catalog.links.insert(path.into(), previous);
-            if let Some(bytes) = backup {
-                write_atomic(path, &bytes)?;
-            }
-            anyhow::bail!("Could not save the conflict resolution");
-        }
+        self.install_resolution(path, previous, resolved, server_bytes, rejected_request)?;
         cx.notify();
         Ok(())
     }

@@ -489,7 +489,23 @@ fn resolving_with_server_snapshot_persists_clean_content_without_upload(cx: &mut
             .join("pending")
             .join(id)
             .join(format!("{}.json", reviewed.id));
-        write_atomic(&pending, b"old rejected request").unwrap();
+        write_atomic(
+            &pending,
+            &serde_json::to_vec(&PendingSave {
+                delta: None,
+                input: Save {
+                    kind: Kind::Document,
+                    title: "Design".into(),
+                    base_revision: 0,
+                    request_id: uuid::Uuid::new_v4().to_string(),
+                    content: STANDARD.encode(b"local version"),
+                    media: vec![],
+                    deleted: false,
+                },
+            })
+            .unwrap(),
+        )
+        .unwrap();
         r.resolve_conflict(&path, &reviewed, Some(b"server version"), cx)
             .unwrap();
         assert!(!pending.exists());
