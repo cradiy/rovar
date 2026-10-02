@@ -13,8 +13,62 @@ struct Incoming {
 
 enum Installation<'a> {
     Replace(&'a [u8]),
+    Prepared(rovar_storage::tempfile::NamedTempFile),
     Delete,
     Preserve,
+}
+
+pub(super) struct PreparedSnapshot {
+    pub object: Object,
+    baseline: String,
+    digest: String,
+    file: Option<rovar_storage::tempfile::NamedTempFile>,
+}
+
+/// Prepare immutable files without changing the editable cache or publishing a
+/// recovery journal. The shared worker protects the new baseline until commit.
+pub(super) fn prepare_snapshot(
+    root: &Path,
+    path: &Path,
+    object: Object,
+    bytes: Option<Vec<u8>>,
+) -> Result<PreparedSnapshot> {
+    use std::io::Write;
+    ensure!(
+        object.deleted == bytes.is_none(),
+        "Invalid downloaded snapshot"
+    );
+    let content = baseline::snapshot_content(bytes.as_deref().unwrap_or_default(), object.deleted)?;
+    let transfer = bytes
+        .as_ref()
+        .filter(|_| object.kind != Kind::ColorStyle)
+        .and_then(|bytes| {
+            rovar_format::delta::Snapshot::from_bytes(bytes, rovar_api::MAX_METADATA_BYTES).ok()
+        });
+    let baseline = baseline::store(root, &object, &content, transfer)?;
+    let digest = digest(
+        bytes.as_deref().unwrap_or_default(),
+        &object.title,
+        object.deleted,
+    );
+    let file = if let Some(bytes) = bytes {
+        let parent = path
+            .parent()
+            .ok_or_else(|| anyhow::anyhow!("Missing cache directory"))?;
+        rovar_storage::fs::create_dir_all(parent)?;
+        let mut file = rovar_storage::tempfile::NamedTempFile::new_in(parent)?;
+        file.write_all(&bytes)?;
+        file.as_file().sync_all()?;
+        Some(file)
+    } else {
+        None
+    };
+    Ok(PreparedSnapshot {
+        object,
+        baseline,
+        digest,
+        file,
+    })
 }
 
 #[cfg(all(test, not(target_family = "wasm")))]
@@ -39,19 +93,21 @@ impl Remote {
         &mut self,
         path: PathBuf,
         connection: String,
-        object: Object,
-        bytes: Option<&[u8]>,
+        prepared: PreparedSnapshot,
     ) -> Result<()> {
         self.recover_incoming()?;
-        let content = baseline::snapshot_content(bytes.unwrap_or_default(), object.deleted)?;
-        let baseline =
-            self.store_snapshot_baseline(&object, &content, bytes.unwrap_or_default())?;
+        let PreparedSnapshot {
+            object,
+            baseline,
+            digest,
+            file,
+        } = prepared;
         let incoming = Incoming {
             previous: self.catalog.links.get(&path).cloned(),
             path,
             next: Link {
                 connection,
-                digest: digest(bytes.unwrap_or_default(), &object.title, object.deleted),
+                digest,
                 object,
                 baseline: Some(baseline),
                 dirty: false,
@@ -63,7 +119,7 @@ impl Remote {
         };
         self.install_incoming(
             incoming,
-            bytes.map_or(Installation::Delete, Installation::Replace),
+            file.map_or(Installation::Delete, Installation::Prepared),
         )
     }
 
@@ -137,6 +193,10 @@ impl Remote {
         write_atomic(&journal, &serde_json::to_vec(&incoming)?)?;
         match installation {
             Installation::Replace(bytes) => write_atomic(&incoming.path, bytes)?,
+            Installation::Prepared(file) => {
+                file.persist(&incoming.path)?;
+                rovar_format::sync_parent(&incoming.path)?;
+            }
             Installation::Delete if rovar_storage::exists(&incoming.path) => {
                 rovar_storage::fs::remove_file(&incoming.path)?;
             }
@@ -259,6 +319,72 @@ impl Remote {
 #[cfg(all(test, not(target_family = "wasm")))]
 mod tests {
     use super::*;
+
+    #[gpui::test]
+    fn prepared_downloads_do_not_replace_local_edits_or_bypass_the_journal(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("document.rovar");
+        write_atomic(&path, b"original").unwrap();
+        let remote = cx.update(|cx| Remote::shared(root.path(), cx));
+        remote.update(cx, |r, cx| {
+            let connection = r
+                .connect(
+                    "https://example.test".into(),
+                    crate::remote::tests::identity(),
+                    "token".into(),
+                    cx,
+                )
+                .unwrap();
+            r.track(
+                path.clone(),
+                connection.clone(),
+                "Design".into(),
+                Kind::Document,
+                cx,
+            );
+            let mut object = r.link(&path).unwrap().object.clone();
+            object.revision = 1;
+            let prepared =
+                prepare_snapshot(&r.root, &path, object.clone(), Some(b"downloaded".to_vec()))
+                    .unwrap();
+            let staged = prepared.file.as_ref().unwrap().path().to_owned();
+            assert_eq!(rovar_storage::fs::read(&path).unwrap(), b"original");
+            assert!(!rovar_storage::exists(root.path().join("incoming.json")));
+            write_atomic(&path, b"later local edit").unwrap();
+            // A stale or cancelled download can be dropped without publishing it.
+            drop(prepared);
+            assert!(!rovar_storage::exists(staged));
+            assert_eq!(rovar_storage::fs::read(&path).unwrap(), b"later local edit");
+
+            let prepared =
+                prepare_snapshot(&r.root, &path, object.clone(), Some(b"downloaded".to_vec()))
+                    .unwrap();
+            // Publication must fail before replacing the file if its recovery
+            // record cannot be committed, and the temporary file must be retired.
+            let staged = prepared.file.as_ref().unwrap().path().to_owned();
+            let journal = root.path().join("incoming.json");
+            rovar_storage::fs::create_dir_all(&journal).unwrap();
+            assert!(
+                r.install_snapshot(path.clone(), connection.clone(), prepared)
+                    .is_err()
+            );
+            assert!(!rovar_storage::exists(staged));
+            assert_eq!(rovar_storage::fs::read(&path).unwrap(), b"later local edit");
+            assert_eq!(r.link(&path).unwrap().object.revision, 0);
+            rovar_storage::fs::remove_dir(&journal).unwrap();
+
+            let prepared =
+                prepare_snapshot(&r.root, &path, object, Some(b"downloaded".to_vec())).unwrap();
+            r.install_snapshot(path.clone(), connection, prepared)
+                .unwrap();
+            assert_eq!(rovar_storage::fs::read(&path).unwrap(), b"downloaded");
+            assert_eq!(r.link(&path).unwrap().object.revision, 1);
+            assert!(!r.link(&path).unwrap().dirty);
+            assert!(!rovar_storage::exists(journal));
+        });
+    }
     use gpui::TestAppContext;
 
     #[gpui::test]
@@ -287,7 +413,9 @@ mod tests {
             );
             let mut object = r.link(&path).unwrap().object.clone();
             object.revision = 1;
-            r.install_snapshot(path.clone(), connection, object.clone(), Some(b"base"))
+            let prepared =
+                prepare_snapshot(&r.root, &path, object.clone(), Some(b"base".to_vec())).unwrap();
+            r.install_snapshot(path.clone(), connection, prepared)
                 .unwrap();
             write_atomic(&path, b"local").unwrap();
             let previous = r.catalog.links.get_mut(&path).unwrap();
@@ -378,13 +506,15 @@ mod tests {
             );
             let mut object = r.link(&path).unwrap().object.clone();
             object.revision = 1;
-            r.install_snapshot(
-                path.clone(),
-                connection,
+            let prepared = prepare_snapshot(
+                &r.root,
+                &path,
                 object.clone(),
-                Some(b"version one"),
+                Some(b"version one".to_vec()),
             )
             .unwrap();
+            r.install_snapshot(path.clone(), connection, prepared)
+                .unwrap();
             let previous = r.link(&path).unwrap().clone();
             object.revision = 2;
             let mut next = previous.clone();

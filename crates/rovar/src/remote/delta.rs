@@ -24,7 +24,7 @@ pub(super) async fn receive(
                 .map(|snapshot| (base.object.revision, snapshot))
         });
     let route = format!("spaces/{space}/objects/{}/transfer", expected.id);
-    let mut snapshot = if let Some((revision, base)) = base {
+    let snapshot = if let Some((revision, base)) = base {
         let (base, hash) = executor
             .spawn(async move {
                 let hash = base.hash()?;
@@ -53,12 +53,14 @@ pub(super) async fn receive(
                         "Delta exceeds the size limit"
                     );
                     let patch = serde_json::from_slice(&bytes)?;
-                    base.apply(&patch, rovar_api::MAX_METADATA_BYTES)?
-                        .to_bytes(rovar_api::MAX_METADATA_BYTES)
+                    let bytes = base
+                        .apply(&patch, rovar_api::MAX_METADATA_BYTES)?
+                        .to_bytes(rovar_api::MAX_METADATA_BYTES)?;
+                    Ok::<_, anyhow::Error>(STANDARD.encode(bytes))
                 })
                 .await;
             match rebuilt {
-                Ok(bytes) => snapshot.content = STANDARD.encode(bytes),
+                Ok(content) => snapshot.content = content,
                 // No cache writes occur before validation. A single full fetch
                 // also repairs a bad patch without hiding a bad full response.
                 Err(_) => snapshot = client.json("GET", &route, None).await?,
@@ -69,10 +71,9 @@ pub(super) async fn receive(
         client.json("GET", &route, None).await?
     };
     validate(&snapshot.object, expected)?;
-    let bytes = media::hydrate(client, space, &snapshot, local, downloads).await?;
-    // Do not retain the encoded payload alongside the hydrated container.
-    snapshot.content.clear();
-    Ok((snapshot.object, bytes))
+    let object = snapshot.object.clone();
+    let bytes = media::hydrate(client, space, snapshot, local, downloads, executor).await?;
+    Ok((object, bytes))
 }
 
 fn validate(actual: &Object, expected: &Object) -> Result<()> {

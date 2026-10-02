@@ -147,8 +147,10 @@ fn pending_snapshots_always_detach_media_before_upload(cx: &mut TestAppContext) 
     remote.read_with(cx, |r, _| assert!(!r.link(&path).unwrap().dirty));
 }
 
-#[test]
-fn media_is_uploaded_once_reused_on_retry_and_verified_when_downloaded() {
+#[gpui::test]
+fn media_is_uploaded_once_reused_on_retry_and_verified_when_downloaded(cx: &mut TestAppContext) {
+    let executor = cx.executor().clone();
+    executor.allow_parking();
     let root = tempfile::tempdir().unwrap();
     let path = root.path().join("design.rovar");
     let bytes = vec![73; 256 * 1024 + 7];
@@ -187,7 +189,7 @@ fn media_is_uploaded_once_reused_on_retry_and_verified_when_downloaded() {
         ],
         requests.clone(),
     );
-    tokio::runtime::Runtime::new().unwrap().block_on(async {
+    cx.foreground_executor().clone().block_test(async {
         let client = Client::new(&url).unwrap();
         let input = Save {
             kind: Kind::Document,
@@ -216,25 +218,26 @@ fn media_is_uploaded_once_reused_on_retry_and_verified_when_downloaded() {
             serde_json::to_value(&transfer).unwrap(),
             "Retry fingerprints must be deterministic even after the media upload succeeded"
         );
-        let snapshot = Snapshot {
+        let snapshot = || Snapshot {
             object: Object {
                 id: uuid::Uuid::new_v4().to_string(),
                 kind: Kind::Document,
-                title: input.title,
+                title: input.title.clone(),
                 revision: 1,
                 created: 1,
                 modified: 1,
                 deleted: false,
             },
-            content: transfer.content,
-            media: transfer.media,
+            content: transfer.content.clone(),
+            media: transfer.media.clone(),
         };
         let reused = super::super::media::hydrate(
             &client,
             "personal",
-            &snapshot,
+            snapshot(),
             &path,
             &root.path().join("downloads"),
+            &executor,
         )
         .await
         .unwrap();
@@ -256,9 +259,10 @@ fn media_is_uploaded_once_reused_on_retry_and_verified_when_downloaded() {
         let downloaded = super::super::media::hydrate(
             &client,
             "personal",
-            &snapshot,
+            snapshot(),
             &missing,
             &root.path().join("downloads"),
+            &executor,
         )
         .await
         .unwrap();
@@ -271,9 +275,10 @@ fn media_is_uploaded_once_reused_on_retry_and_verified_when_downloaded() {
             super::super::media::hydrate(
                 &client,
                 "personal",
-                &snapshot,
+                snapshot(),
                 &missing,
-                &root.path().join("corrupt")
+                &root.path().join("corrupt"),
+                &executor,
             )
             .await
             .unwrap_err()

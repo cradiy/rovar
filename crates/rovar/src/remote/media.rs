@@ -109,10 +109,60 @@ impl Upload {
 pub(super) async fn hydrate(
     client: &Client,
     space: &str,
-    snapshot: &Snapshot,
+    snapshot: Snapshot,
     local: &Path,
     downloads: &Path,
+    executor: &gpui::BackgroundExecutor,
 ) -> Result<Vec<u8>> {
+    let local = local.to_owned();
+    let prepared = executor
+        .spawn(async move { prepare_hydration(snapshot, &local) })
+        .await?;
+    let (output, mut writer, missing) = match prepared {
+        Hydration::Pending {
+            output,
+            writer,
+            missing,
+        } => (output, writer, missing),
+        Hydration::Complete(bytes) => return Ok(bytes),
+    };
+    for item in missing {
+        let file = client
+            .download_media(
+                &format!("spaces/{space}/media/{}", item.hash),
+                &item,
+                downloads,
+            )
+            .await?;
+        writer = executor
+            .spawn(async move {
+                let hash: [u8; 32] = hex::decode(&item.hash)?
+                    .try_into()
+                    .map_err(|_| anyhow::anyhow!("Invalid media hash"))?;
+                writer.put(&format!("media/{}", item.hash), "media", file, Some(hash))?;
+                Ok::<_, anyhow::Error>(writer)
+            })
+            .await?;
+    }
+    executor
+        .spawn(async move {
+            writer.commit()?;
+            drop(writer);
+            Ok(rovar_storage::fs::read(output.path())?)
+        })
+        .await
+}
+
+enum Hydration {
+    Complete(Vec<u8>),
+    Pending {
+        writer: rovar_format::Writer,
+        output: rovar_storage::tempfile::NamedTempFile,
+        missing: Vec<Media>,
+    },
+}
+
+fn prepare_hydration(snapshot: Snapshot, local: &Path) -> Result<Hydration> {
     let bytes = STANDARD.decode(&snapshot.content)?;
     ensure!(
         bytes.len() <= rovar_api::MAX_METADATA_BYTES,
@@ -120,13 +170,14 @@ pub(super) async fn hydrate(
     );
     validate_manifest(&snapshot.media, bytes.len())?;
     if snapshot.media.is_empty() {
-        return Ok(bytes);
+        return Ok(Hydration::Complete(bytes));
     }
     let output = rovar_storage::tempfile::NamedTempFile::new()?;
     rovar_storage::fs::write(output.path(), bytes)?;
     let mut writer = rovar_format::Writer::open(output.path())?;
     let previous = rovar_format::Reader::open(local).ok();
-    for item in &snapshot.media {
+    let mut missing = Vec::new();
+    for item in snapshot.media {
         let key = format!("media/{}", item.hash);
         let cached = previous.as_ref().and_then(|reader| {
             let block = reader.entry(&key)?;
@@ -140,21 +191,13 @@ pub(super) async fn hydrate(
             writer.put(&key, "media", block.reader(), Some(block.info.hash))?;
             continue;
         }
-        let file = client
-            .download_media(
-                &format!("spaces/{space}/media/{}", item.hash),
-                item,
-                downloads,
-            )
-            .await?;
-        let hash: [u8; 32] = hex::decode(&item.hash)?
-            .try_into()
-            .map_err(|_| anyhow::anyhow!("Invalid media hash"))?;
-        writer.put(&key, "media", file, Some(hash))?;
+        missing.push(item);
     }
-    writer.commit()?;
-    drop(writer);
-    Ok(rovar_storage::fs::read(output.path())?)
+    Ok(Hydration::Pending {
+        output,
+        writer,
+        missing,
+    })
 }
 
 fn validate_manifest(media: &[Media], metadata_length: usize) -> Result<()> {

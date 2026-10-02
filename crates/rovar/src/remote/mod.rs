@@ -939,8 +939,8 @@ impl Remote {
                 // failing objects exhausts one refresh's attempt budget.
                 pending.sort_by_key(|object| directory.attempts(&object.id));
                 for object in pending {
-                    // Bound a refresh's resident snapshots, including the first
-                    // scan of a workspace with many large documents.
+                    // Bound each refresh's transfer and staging work, including
+                    // the first scan of a workspace with many large documents.
                     if downloaded >= 16 * 1024 * 1024 || attempted >= 16 {
                         break;
                     }
@@ -983,11 +983,7 @@ impl Remote {
                                     .join("colors")
                                     .join(format!("{}.json", object.id)),
                             });
-                    if object.deleted {
-                        updates.push((path, object, None));
-                        continue;
-                    }
-                    let base = if let Some((_, link)) = existing {
+                    let base = if let Some((_, link)) = existing.filter(|_| !object.deleted) {
                         let root = root.clone();
                         let link = link.clone();
                         executor
@@ -996,20 +992,37 @@ impl Remote {
                     } else {
                         None
                     };
-                    let result = delta::receive(
-                        &client,
-                        &space,
-                        &object,
-                        base,
-                        &path,
-                        &root.join("downloads"),
-                        &executor,
-                    )
-                    .await;
-                    match result {
+                    let result = if object.deleted {
+                        Ok((object.clone(), None))
+                    } else {
+                        delta::receive(
+                            &client,
+                            &space,
+                            &object,
+                            base,
+                            &path,
+                            &root.join("downloads"),
+                            &executor,
+                        )
+                        .await
+                        .map(|(object, bytes)| (object, Some(bytes)))
+                    };
+                    let result = match result {
                         Ok((object, bytes)) => {
-                            downloaded += bytes.len();
-                            updates.push((path, object, Some(bytes)));
+                            downloaded += bytes.as_ref().map_or(0, Vec::len);
+                            let root = root.clone();
+                            let path = path.clone();
+                            executor
+                                .spawn(async move {
+                                    cache::prepare_snapshot(&root, &path, object, bytes)
+                                })
+                                .await
+                        }
+                        Err(error) => Err(error),
+                    };
+                    match result {
+                        Ok(prepared) => {
+                            updates.push((path, prepared));
                         }
                         // Authentication failures invalidate the entire batch;
                         // object failures must not discard unrelated successes.
@@ -1044,7 +1057,7 @@ impl Remote {
                 }
                 match result {
                     Ok((updates, directory)) => {
-                        let paths = updates.iter().map(|(path, _, _)| path.clone()).collect();
+                        let paths = updates.iter().map(|(path, _)| path.clone()).collect();
                         this.reconcile_baselines(paths, cx, move |this, cx| {
                             if this
                                 .connection(&connection)
@@ -1068,19 +1081,17 @@ impl Remote {
                                 return;
                             }
                             let currently_open = crate::app::Studio::protected_document_paths(cx);
-                            for (path, object, bytes) in updates {
+                            for (path, prepared) in updates {
                                 if currently_open.contains(&path)
                                     || this.catalog.links.get(&path).is_some_and(|link| link.dirty)
                                 {
                                     continue;
                                 }
+                                let object = prepared.object.clone();
                                 let id = object.id.clone();
-                                if let Err(error) = this.install_snapshot(
-                                    path,
-                                    connection.clone(),
-                                    object.clone(),
-                                    bytes.as_deref(),
-                                ) {
+                                if let Err(error) =
+                                    this.install_snapshot(path, connection.clone(), prepared)
+                                {
                                     this.catalog
                                         .directories
                                         .get_mut(&connection)
