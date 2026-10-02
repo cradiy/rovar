@@ -48,12 +48,12 @@ pub(super) async fn receive(
                 .spawn(async move {
                     let bytes = STANDARD.decode(content)?;
                     ensure!(
-                        bytes.len() <= rovar_api::MAX_CONTENT_BYTES,
+                        bytes.len() <= rovar_api::MAX_DELTA_BYTES,
                         "Delta exceeds the size limit"
                     );
                     let patch = serde_json::from_slice(&bytes)?;
-                    base.apply(&patch, rovar_api::MAX_CONTENT_BYTES)?
-                        .to_bytes(rovar_api::MAX_CONTENT_BYTES)
+                    base.apply(&patch, rovar_api::MAX_METADATA_BYTES)?
+                        .to_bytes(rovar_api::MAX_METADATA_BYTES)
                 })
                 .await;
             match rebuilt {
@@ -95,11 +95,12 @@ pub(super) fn prepare(
     let base = base?;
     let bytes = STANDARD.decode(&input.content).ok()?;
     let next =
-        rovar_format::delta::Snapshot::from_bytes(&bytes, rovar_api::MAX_CONTENT_BYTES).ok()?;
+        rovar_format::delta::Snapshot::from_bytes(&bytes, rovar_api::MAX_METADATA_BYTES).ok()?;
     let delta = serde_json::to_vec(&base.difference(&next).ok()?).ok()?;
-    let full_size = next.to_bytes(rovar_api::MAX_CONTENT_BYTES).ok()?.len();
+    let full_size = next.to_bytes(rovar_api::MAX_METADATA_BYTES).ok()?.len();
     // Small/new documents and large binary changes may be cheaper as snapshots.
-    (delta.len().checked_add(256)? < full_size).then(|| STANDARD.encode(delta))
+    (delta.len() <= rovar_api::MAX_DELTA_BYTES && delta.len().checked_add(256)? < full_size)
+        .then(|| STANDARD.encode(delta))
 }
 
 pub(super) async fn send(
@@ -135,11 +136,7 @@ pub(super) async fn send(
     // timeout/unknown outcome must replay the identical patch and request ID.
     let mut input = pending.input.clone();
     input.request_id = uuid::Uuid::new_v4().to_string();
-    let fallback = PendingSave {
-        input,
-        media_transfer: pending.media_transfer,
-        delta: None,
-    };
+    let fallback = PendingSave { input, delta: None };
     write_atomic(path, &serde_json::to_vec(&fallback)?)?;
     transfer.content = full;
     transfer.request_id = fallback.input.request_id;

@@ -85,10 +85,6 @@ struct Directory {
 struct PendingSave {
     #[serde(flatten)]
     input: Save,
-    /// Freeze the transfer mode with the request ID. An older unacknowledged
-    /// full-snapshot request must replay its original representation.
-    #[serde(default)]
-    media_transfer: bool,
     /// Freeze the exact patch before the first request; retries never re-diff
     /// against a cache that may have been edited or refreshed in the meantime.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -651,7 +647,7 @@ impl Remote {
                         rovar_storage::fs::read(&path)?
                     };
                     ensure!(
-                        bytes.len() <= rovar_api::MAX_CONTENT_BYTES,
+                        bytes.len() <= rovar_api::MAX_DOCUMENT_BYTES,
                         "Document exceeds the server's 128 MiB limit"
                     );
                     let input = Save {
@@ -669,7 +665,6 @@ impl Remote {
                             let pending = PendingSave {
                                 delta: delta::prepare(transfer_base.as_ref(), &input),
                                 input,
-                                media_transfer: true,
                             };
                             write_atomic(&record, &serde_json::to_vec(&pending)?)?;
                             Ok::<_, anyhow::Error>(pending)
@@ -682,11 +677,7 @@ impl Remote {
                     &input.title,
                     input.deleted,
                 );
-                let transfer = if pending.media_transfer {
-                    media::prepare(&client, &space, input).await?
-                } else {
-                    input.clone()
-                };
+                let transfer = media::prepare(&client, &space, input).await?;
                 let object = delta::send(
                     &client,
                     &space,
@@ -702,7 +693,7 @@ impl Remote {
                     .then(|| {
                         rovar_format::delta::Snapshot::from_bytes(
                             &STANDARD.decode(&input.content).ok()?,
-                            rovar_api::MAX_CONTENT_BYTES,
+                            rovar_api::MAX_METADATA_BYTES,
                         )
                         .ok()
                     })

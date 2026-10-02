@@ -207,7 +207,7 @@ pub(super) fn assemble(
     )?;
     let bytes = rovar_storage::fs::read(output.path())?;
     ensure!(
-        bytes.len() <= rovar_api::MAX_CONTENT_BYTES,
+        bytes.len() <= rovar_api::MAX_DOCUMENT_BYTES,
         "Merged document exceeds the server's 128 MiB limit"
     );
     Ok(bytes)

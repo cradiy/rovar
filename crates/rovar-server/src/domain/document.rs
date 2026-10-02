@@ -1,7 +1,5 @@
 use super::error::{Error, Result};
 
-pub const MAX_CONTENT_BYTES: usize = 128 * 1024 * 1024;
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DocumentKind {
     Document,
@@ -34,18 +32,29 @@ pub struct SaveDocument {
 
 impl SaveDocument {
     pub fn validate(&self) -> Result<()> {
+        self.validate_payload(false)
+    }
+
+    pub fn validate_payload(&self, delta: bool) -> Result<()> {
+        let limit = if delta {
+            rovar_api::MAX_DELTA_BYTES
+        } else {
+            rovar_api::MAX_METADATA_BYTES
+        };
         if uuid::Uuid::parse_str(&self.id).is_err()
             || uuid::Uuid::parse_str(&self.request_id).is_err()
             || self.title.trim().is_empty()
             || self.title.len() > 512
             || self.base_revision < 0
             || self.base_revision == i64::MAX
-            || self.content.len() > MAX_CONTENT_BYTES
+            || self.content.len() > limit
             || (!self.deleted && self.content.is_empty())
         {
             return Err(Error::Invalid("Invalid document metadata or size".into()));
         }
-        validate_media(&self.media, self.content.len())?;
+        // Patch bytes are not part of the resulting document's total. The
+        // reconstructed metadata is validated again before publishing it.
+        validate_media(&self.media, if delta { 0 } else { self.content.len() })?;
         if self.deleted && !self.media.is_empty() {
             return Err(Error::Invalid(
                 "Deleted documents cannot reference media".into(),
@@ -91,13 +100,14 @@ pub fn validate_media(media: &[Media], content_length: usize) -> Result<()> {
     for item in media {
         if !valid_hash(&item.hash)
             || !seen.insert(&item.hash)
-            || item.length > MAX_CONTENT_BYTES as u64
+            || item.length > rovar_api::MAX_MEDIA_BYTES as u64
         {
             return Err(Error::Invalid("Invalid media reference".into()));
         }
         total = total.saturating_add(item.length);
     }
-    if media.len() > 4096 || total > MAX_CONTENT_BYTES as u64 {
+    if media.len() > rovar_api::MAX_MEDIA_REFERENCES || total > rovar_api::MAX_DOCUMENT_BYTES as u64
+    {
         return Err(Error::Invalid("Document exceeds the size limit".into()));
     }
     Ok(())

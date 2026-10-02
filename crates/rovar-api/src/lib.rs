@@ -5,7 +5,16 @@ use serde::{Deserialize, Serialize};
 pub use spaces::*;
 
 pub const VERSION: u32 = 3;
-pub const MAX_CONTENT_BYTES: usize = 128 * 1024 * 1024;
+// Independent resource budgets, not limits of the .rovar file format. Keep
+// these conservative while snapshots and encrypted blobs still use buffers.
+pub const MAX_METADATA_BYTES: usize = 128 * 1024 * 1024;
+pub const MAX_DELTA_BYTES: usize = 128 * 1024 * 1024;
+pub const MAX_MEDIA_BYTES: usize = 128 * 1024 * 1024;
+pub const MAX_DOCUMENT_BYTES: usize = 128 * 1024 * 1024;
+pub const MAX_MEDIA_REFERENCES: usize = 4096;
+/// Base64 payload plus bounded JSON metadata and media references.
+pub const MAX_DOCUMENT_REQUEST_BYTES: usize = MAX_METADATA_BYTES.div_ceil(3) * 4 + 512 * 1024;
+pub const MAX_DELTA_REQUEST_BYTES: usize = MAX_DELTA_BYTES.div_ceil(3) * 4 + 512 * 1024;
 
 #[derive(Serialize, Deserialize)]
 pub struct Credentials {
@@ -104,11 +113,6 @@ pub struct Transfer {
 pub struct Media {
     pub hash: String,
     pub length: u64,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct MediaContent {
-    pub content: String,
 }
 
 /// Latest object states after a workspace-local, transactionally committed cursor.

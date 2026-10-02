@@ -246,7 +246,6 @@ mod tests {
                     media: vec![],
                     deleted: false,
                 },
-                media_transfer: true,
             };
             let pending = r.pending_path(&previous);
             let request_bytes = serde_json::to_vec(&request).unwrap();

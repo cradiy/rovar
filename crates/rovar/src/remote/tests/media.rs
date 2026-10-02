@@ -1,9 +1,7 @@
 use super::*;
 
 #[gpui::test]
-fn unacknowledged_full_snapshot_requests_keep_their_original_wire_representation(
-    cx: &mut TestAppContext,
-) {
+fn pending_snapshots_always_detach_media_before_upload(cx: &mut TestAppContext) {
     let root = tempfile::tempdir().unwrap();
     let path = root.path().join("design.rovar");
     let bytes = b"existing media";
@@ -27,6 +25,7 @@ fn unacknowledged_full_snapshot_requests_keep_their_original_wire_representation
     };
     let (url, saves, thread) = server(vec![
         (200, serde_json::to_value(identity()).unwrap()),
+        (200, serde_json::json!([])),
         (200, serde_json::to_value(&object).unwrap()),
     ]);
     let remote = cx.update(|cx| Remote::shared(root.path(), cx));
@@ -42,17 +41,19 @@ fn unacknowledged_full_snapshot_requests_keep_their_original_wire_representation
         let link = r.catalog.links.get_mut(&path).unwrap();
         link.object.id = object.id;
         let pending = r.pending_path(r.link(&path).unwrap());
-        // The persisted format before detached-media support had no transfer flag.
         write_atomic(
             &pending,
-            &serde_json::to_vec(&Save {
-                kind: Kind::Document,
-                title: "Design".into(),
-                base_revision: 0,
-                request_id: uuid::Uuid::new_v4().to_string(),
-                content: original.clone(),
-                media: vec![],
-                deleted: false,
+            &serde_json::to_vec(&PendingSave {
+                delta: None,
+                input: Save {
+                    kind: Kind::Document,
+                    title: "Design".into(),
+                    base_revision: 0,
+                    request_id: uuid::Uuid::new_v4().to_string(),
+                    content: original.clone(),
+                    media: vec![],
+                    deleted: false,
+                },
             })
             .unwrap(),
         )
@@ -62,8 +63,11 @@ fn unacknowledged_full_snapshot_requests_keep_their_original_wire_representation
     thread.join().unwrap();
     let saves = saves.lock().unwrap();
     assert_eq!(saves.len(), 1);
-    assert_eq!(saves[0]["content"], original);
-    assert_eq!(saves[0]["media"], serde_json::json!([]));
+    assert_ne!(saves[0]["content"], original);
+    assert_eq!(
+        saves[0]["media"],
+        serde_json::json!([{ "hash": hash, "length": bytes.len() }])
+    );
     remote.read_with(cx, |r, _| assert!(!r.link(&path).unwrap().dirty));
 }
 
@@ -71,7 +75,7 @@ fn unacknowledged_full_snapshot_requests_keep_their_original_wire_representation
 fn media_is_uploaded_once_reused_on_retry_and_verified_when_downloaded() {
     let root = tempfile::tempdir().unwrap();
     let path = root.path().join("design.rovar");
-    let bytes = vec![73; 64 * 1024];
+    let bytes = vec![73; 256 * 1024 + 7];
     let hash = hex::encode(Sha256::digest(&bytes));
     let mut writer = rovar_format::Writer::create(&path).unwrap();
     writer
@@ -84,16 +88,13 @@ fn media_is_uploaded_once_reused_on_retry_and_verified_when_downloaded() {
     drop(writer);
     let original = std::fs::read(&path).unwrap();
     let requests = Arc::new(Mutex::new(Vec::new()));
-    let (url, uploads, thread) = server_with_requests(
+    let (url, uploads, thread) = server_with_bodies(
         vec![
-            (200, serde_json::json!([hash])),
-            (200, serde_json::Value::Null),
-            (200, serde_json::json!([])),
-            (200, serde_json::json!({"content": STANDARD.encode(&bytes)})),
-            (
-                200,
-                serde_json::json!({"content": STANDARD.encode(b"corrupt response")}),
-            ),
+            (200, serde_json::to_vec(&serde_json::json!([hash])).unwrap()),
+            (200, b"null".to_vec()),
+            (200, b"[]".to_vec()),
+            (200, bytes.clone()),
+            (200, b"corrupt response".to_vec()),
         ],
         requests.clone(),
     );
@@ -175,5 +176,9 @@ fn media_is_uploaded_once_reused_on_retry_and_verified_when_downloaded() {
     });
     thread.join().unwrap();
     assert_eq!(uploads.lock().unwrap().len(), 1);
+    assert_eq!(
+        uploads.lock().unwrap()[0],
+        serde_json::to_value(&bytes).unwrap()
+    );
     assert_eq!(std::fs::read(&path).unwrap(), original);
 }

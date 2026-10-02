@@ -313,19 +313,34 @@ async fn isolated_accounts_atomic_versions_retries_and_encrypted_restart() {
     );
     assert!(matches!(
         app.documents
-            .upload_media(&a.identity.user_id, a_space, &hash, b"wrong bytes".to_vec())
+            .upload_media(
+                &a.identity.user_id,
+                a_space,
+                &hash,
+                futures_util::stream::iter([Ok(b"wrong bytes".to_vec())])
+            )
             .await,
         Err(Error::Invalid(_))
     ));
     app.documents
-        .upload_media(&a.identity.user_id, a_space, &hash, media_bytes.clone())
+        .upload_media(
+            &a.identity.user_id,
+            a_space,
+            &hash,
+            futures_util::stream::iter([Ok(media_bytes.clone())]),
+        )
         .await
         .unwrap();
     let blob_count = std::fs::read_dir(root.path().join("blobs"))
         .unwrap()
         .count();
     app.documents
-        .upload_media(&a.identity.user_id, a_space, &hash, media_bytes.clone())
+        .upload_media(
+            &a.identity.user_id,
+            a_space,
+            &hash,
+            futures_util::stream::iter([Ok(media_bytes.clone())]),
+        )
         .await
         .unwrap();
     assert_eq!(

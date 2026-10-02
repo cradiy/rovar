@@ -120,6 +120,23 @@ fn server_with_requests(
     Arc<Mutex<Vec<serde_json::Value>>>,
     std::thread::JoinHandle<()>,
 ) {
+    server_with_bodies(
+        responses
+            .into_iter()
+            .map(|(status, body)| (status, serde_json::to_vec(&body).unwrap()))
+            .collect(),
+        requests,
+    )
+}
+
+fn server_with_bodies(
+    responses: Vec<(u16, Vec<u8>)>,
+    requests: Arc<Mutex<Vec<String>>>,
+) -> (
+    String,
+    Arc<Mutex<Vec<serde_json::Value>>>,
+    std::thread::JoinHandle<()>,
+) {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
     let url = format!("http://{}", listener.local_addr().unwrap());
@@ -176,12 +193,23 @@ fn server_with_requests(
                     .to_owned(),
             );
             if request.starts_with(b"PUT ") {
+                let headers = String::from_utf8_lossy(&request[..header_end]).to_ascii_lowercase();
+                let bytes = &request[header_end..header_end + length];
                 observed.lock().unwrap().push(
-                    serde_json::from_slice(&request[header_end..header_end + length]).unwrap(),
+                    if headers.contains("content-type: application/octet-stream") {
+                        serde_json::to_value(bytes).unwrap()
+                    } else {
+                        serde_json::from_slice(bytes).unwrap()
+                    },
                 );
             }
-            let body = body.to_string();
-            write!(socket, "HTTP/1.1 {status} Response\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
+            write!(
+                socket,
+                "HTTP/1.1 {status} Response\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            )
+            .unwrap();
+            socket.write_all(&body).unwrap();
         }
     });
     (url, saves, thread)

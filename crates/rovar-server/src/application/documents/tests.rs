@@ -1,4 +1,3 @@
-use super::*;
 use crate::application::{
     documents::DocumentService,
     ports::{ContentStorage, DocumentWrite, Documents, Preparation},
@@ -6,7 +5,9 @@ use crate::application::{
 use crate::domain::document::{
     Changes, Document, DocumentKind, Media, SaveDocument, StoredVersion,
 };
+use crate::domain::error::{Error, Result};
 use async_trait::async_trait;
+use rovar_api::MAX_METADATA_BYTES;
 use std::{collections::BTreeMap, sync::Arc};
 use tokio::sync::{Mutex, OwnedMutexGuard};
 
@@ -16,6 +17,7 @@ struct State {
     requests: BTreeMap<String, (Vec<u8>, i64)>,
     base_reads: usize,
     versions: BTreeMap<i64, String>,
+    media: BTreeMap<String, (String, u64)>,
 }
 struct Repository(Arc<Mutex<State>>);
 struct Write {
@@ -115,22 +117,22 @@ impl Documents for Repository {
     ) -> Result<BTreeMap<String, u64>> {
         unreachable!()
     }
-    async fn media(
-        &self,
-        _actor: &str,
-        _space: &str,
-        _hash: &str,
-    ) -> Result<Option<(String, u64)>> {
-        unreachable!()
+    async fn media(&self, actor: &str, space: &str, hash: &str) -> Result<Option<(String, u64)>> {
+        if actor != "user" || space != "space" {
+            return Err(Error::Forbidden);
+        }
+        Ok(self.0.lock().await.media.get(hash).cloned())
     }
-    async fn store_media(
-        &self,
-        _actor: &str,
-        _space: &str,
-        _media: &Media,
-        _blob: &str,
-    ) -> Result<()> {
-        unreachable!()
+    async fn store_media(&self, actor: &str, space: &str, media: &Media, blob: &str) -> Result<()> {
+        if actor != "user" || space != "space" {
+            return Err(Error::Forbidden);
+        }
+        self.0
+            .lock()
+            .await
+            .media
+            .insert(media.hash.clone(), (blob.into(), media.length));
+        Ok(())
     }
 }
 
@@ -204,6 +206,7 @@ fn service() -> (DocumentService, Arc<Mutex<State>>, String) {
         requests: BTreeMap::new(),
         base_reads: 0,
         versions: BTreeMap::new(),
+        media: BTreeMap::new(),
     }));
     let service = DocumentService::new(
         Arc::new(Repository(state.clone())),
@@ -213,12 +216,72 @@ fn service() -> (DocumentService, Arc<Mutex<State>>, String) {
 }
 
 #[tokio::test]
+async fn streamed_media_is_authorized_verified_and_deduplicated_before_publishing() {
+    use futures_util::stream;
+    use sha2::{Digest, Sha256};
+    let (service, state, _) = service();
+    let hash = format!("{:x}", Sha256::digest(b"abcdef"));
+    let unread = || {
+        stream::poll_fn(|_| -> std::task::Poll<Option<std::io::Result<Vec<u8>>>> {
+            panic!("Unauthorized or already stored media must not read the upload body")
+        })
+    };
+    assert!(matches!(
+        service
+            .upload_media("other", "space", &hash, unread())
+            .await,
+        Err(Error::Forbidden)
+    ));
+    assert!(matches!(
+        service.upload_media("user", "other", &hash, unread()).await,
+        Err(Error::Forbidden)
+    ));
+    for chunks in [
+        vec![Ok(b"abc".to_vec()), Ok(b"xyz".to_vec())],
+        vec![
+            Ok(b"abc".to_vec()),
+            Err(std::io::ErrorKind::UnexpectedEof.into()),
+        ],
+    ] {
+        assert!(matches!(
+            service
+                .upload_media("user", "space", &hash, stream::iter(chunks))
+                .await,
+            Err(Error::Invalid(_))
+        ));
+        assert!(state.lock().await.media.is_empty());
+    }
+    service
+        .upload_media(
+            "user",
+            "space",
+            &hash,
+            stream::iter([Ok(b"abc"), Ok(b"def")]),
+        )
+        .await
+        .unwrap();
+    let stored = state.lock().await.media.clone();
+    assert_eq!(
+        service
+            .download_media("user", "space", &hash)
+            .await
+            .unwrap(),
+        b"abcdef"
+    );
+    service
+        .upload_media("user", "space", &hash, unread())
+        .await
+        .unwrap();
+    assert_eq!(state.lock().await.media, stored);
+}
+
+#[tokio::test]
 async fn delta_commit_replays_before_reading_the_base_and_rejections_do_not_publish() {
     let (service, state, id) = service();
     let base = container(0);
     let next = container(10);
-    let before = rovar_format::delta::Snapshot::from_bytes(&base, MAX_CONTENT_BYTES).unwrap();
-    let after = rovar_format::delta::Snapshot::from_bytes(&next, MAX_CONTENT_BYTES).unwrap();
+    let before = rovar_format::delta::Snapshot::from_bytes(&base, MAX_METADATA_BYTES).unwrap();
+    let after = rovar_format::delta::Snapshot::from_bytes(&next, MAX_METADATA_BYTES).unwrap();
     service
         .save(
             "user",
@@ -249,7 +312,7 @@ async fn delta_commit_replays_before_reading_the_base_and_rejections_do_not_publ
     );
     let saved = service.transfer("user", "space", &id).await.unwrap();
     assert_eq!(
-        rovar_format::delta::Snapshot::from_bytes(&saved.content, MAX_CONTENT_BYTES)
+        rovar_format::delta::Snapshot::from_bytes(&saved.content, MAX_METADATA_BYTES)
             .unwrap()
             .hash()
             .unwrap(),
@@ -323,8 +386,8 @@ async fn downloads_use_confirmed_history_and_fall_back_without_changing_versions
     let (service, state, id) = service();
     let base = container(0);
     let next = container(10);
-    let before = rovar_format::delta::Snapshot::from_bytes(&base, MAX_CONTENT_BYTES).unwrap();
-    let after = rovar_format::delta::Snapshot::from_bytes(&next, MAX_CONTENT_BYTES).unwrap();
+    let before = rovar_format::delta::Snapshot::from_bytes(&base, MAX_METADATA_BYTES).unwrap();
+    let after = rovar_format::delta::Snapshot::from_bytes(&next, MAX_METADATA_BYTES).unwrap();
     for (revision, bytes) in [(0, &base), (1, &next)] {
         service
             .save(
@@ -345,7 +408,7 @@ async fn downloads_use_confirmed_history_and_fall_back_without_changing_versions
     let patch = serde_json::from_slice(&response.snapshot.content).unwrap();
     assert_eq!(
         before
-            .apply(&patch, MAX_CONTENT_BYTES)
+            .apply(&patch, MAX_METADATA_BYTES)
             .unwrap()
             .hash()
             .unwrap(),
@@ -433,7 +496,7 @@ async fn legacy_inline_media_remains_in_full_downloads() {
             .await
             .unwrap();
     }
-    let hash = rovar_format::delta::Snapshot::from_bytes(&base, MAX_CONTENT_BYTES)
+    let hash = rovar_format::delta::Snapshot::from_bytes(&base, MAX_METADATA_BYTES)
         .unwrap()
         .hash()
         .unwrap();

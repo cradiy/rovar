@@ -1,5 +1,7 @@
 use anyhow::{Result, ensure};
+use futures_util::StreamExt;
 use serde::de::DeserializeOwned;
+mod media;
 
 #[derive(Debug)]
 pub(crate) struct HttpError {
@@ -97,33 +99,22 @@ impl Client {
         let client = self.clone();
         let method = method.to_owned();
         let path = path.to_owned();
-        #[cfg(not(target_family = "wasm"))]
-        let bytes = {
-            static RUNTIME: std::sync::OnceLock<tokio::runtime::Runtime> =
-                std::sync::OnceLock::new();
-            let runtime = RUNTIME.get_or_init(|| {
-                tokio::runtime::Builder::new_multi_thread()
-                    .worker_threads(2)
-                    .enable_all()
-                    .build()
-                    .unwrap()
-            });
-            let (sender, receiver) = futures_channel::oneshot::channel();
-            runtime.spawn(async move {
-                let _ = sender.send(client.request(method, path, body).await);
-            });
-            receiver.await??
-        };
-        #[cfg(target_family = "wasm")]
-        let bytes = client.request(method, path, body).await?;
+        let bytes = execute(async move {
+            let mut request = client.request(&method, &path)?;
+            if let Some(body) = body {
+                request = request.json(&body);
+            }
+            let response = successful(request.send().await?).await?;
+            bounded_body(
+                response,
+                rovar_api::MAX_DOCUMENT_REQUEST_BYTES.max(rovar_api::MAX_DELTA_REQUEST_BYTES),
+            )
+            .await
+        })
+        .await?;
         Ok(serde_json::from_slice(&bytes)?)
     }
-    async fn request(
-        self,
-        method: String,
-        path: String,
-        body: Option<serde_json::Value>,
-    ) -> Result<Vec<u8>> {
+    fn request(&self, method: &str, path: &str) -> Result<reqwest::RequestBuilder> {
         let builder = reqwest::Client::builder();
         #[cfg(not(target_family = "wasm"))]
         let builder = builder
@@ -141,17 +132,62 @@ impl Client {
         {
             request = request.fetch_credentials_same_origin();
         }
-        if let Some(body) = body {
-            request = request.json(&body);
-        }
-        let response = request.send().await?;
-        let status = response.status();
-        let bytes = response.bytes().await?.to_vec();
-        if !status.is_success() {
-            return Err(HttpError::from_response(status, &bytes).into());
-        }
-        Ok(bytes)
+        Ok(request)
     }
+}
+
+async fn successful(response: reqwest::Response) -> Result<reqwest::Response> {
+    let status = response.status();
+    if status.is_success() {
+        return Ok(response);
+    }
+    // Preserve authentication/conflict status even for oversized proxy errors.
+    let bytes = bounded_body(response, 64 * 1024).await.unwrap_or_default();
+    Err(HttpError::from_response(status, &bytes).into())
+}
+
+async fn bounded_body(response: reqwest::Response, maximum: usize) -> Result<Vec<u8>> {
+    ensure!(
+        response
+            .content_length()
+            .is_none_or(|n| n <= maximum as u64),
+        "Response exceeds the size limit"
+    );
+    let mut stream = response.bytes_stream();
+    let mut bytes = Vec::new();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk?;
+        ensure!(
+            chunk.len() <= maximum.saturating_sub(bytes.len()),
+            "Response exceeds the size limit"
+        );
+        bytes.extend_from_slice(&chunk);
+    }
+    Ok(bytes)
+}
+
+#[cfg(not(target_family = "wasm"))]
+async fn execute<T: Send + 'static>(
+    future: impl std::future::Future<Output = Result<T>> + Send + 'static,
+) -> Result<T> {
+    static RUNTIME: std::sync::OnceLock<tokio::runtime::Runtime> = std::sync::OnceLock::new();
+    let runtime = RUNTIME.get_or_init(|| {
+        tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_all()
+            .build()
+            .unwrap()
+    });
+    let (sender, receiver) = futures_channel::oneshot::channel();
+    runtime.spawn(async move {
+        let _ = sender.send(future.await);
+    });
+    receiver.await?
+}
+
+#[cfg(target_family = "wasm")]
+async fn execute<T>(future: impl std::future::Future<Output = Result<T>>) -> Result<T> {
+    future.await
 }
 
 #[cfg(all(test, not(target_family = "wasm")))]

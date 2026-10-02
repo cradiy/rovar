@@ -8,6 +8,8 @@ use std::sync::Arc;
 use tokio::sync::Semaphore;
 mod delta;
 mod media;
+#[cfg(test)]
+mod tests;
 
 pub struct DocumentService {
     documents: Arc<dyn Documents>,
@@ -81,7 +83,7 @@ impl DocumentService {
         mut command: SaveDocument,
         delta: bool,
     ) -> Result<Document> {
-        command.validate()?;
+        command.validate_payload(delta)?;
         if delta
             && (command.deleted
                 || command.base_revision == 0

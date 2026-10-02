@@ -1,5 +1,5 @@
 use super::*;
-use rovar_api::{Media, MediaContent};
+use rovar_api::Media;
 
 /// The retry record remains the complete immutable local snapshot. Splitting it
 /// deterministically on every attempt preserves the idempotency fingerprint.
@@ -36,6 +36,25 @@ pub(super) async fn prepare(client: &Client, space: &str, input: &Save) -> Resul
         );
     }
     transfer.media = media.iter().map(|(_, item)| item.clone()).collect();
+    let reduced = rovar_storage::tempfile::NamedTempFile::new()?;
+    let mut writer = rovar_format::Writer::create(reduced.path())?;
+    for (key, block) in reader.entries().filter(|(_, block)| block.kind != "media") {
+        writer.put(
+            key,
+            &block.kind,
+            reader.block(key)?.reader(),
+            Some(block.hash),
+        )?;
+    }
+    writer.commit()?;
+    drop(writer);
+    let bytes = rovar_storage::fs::read(reduced.path())?;
+    ensure!(
+        bytes.len() <= rovar_api::MAX_METADATA_BYTES,
+        "Document metadata exceeds the size limit"
+    );
+    validate_manifest(&transfer.media, bytes.len())?;
+    transfer.content = STANDARD.encode(bytes);
     let missing: Vec<String> = client
         .json(
             "POST",
@@ -49,33 +68,13 @@ pub(super) async fn prepare(client: &Client, space: &str, input: &Save) -> Resul
         "Server requested unknown media"
     );
     for hash in missing {
-        let bytes = reader.read(
-            &format!("media/{hash}"),
-            rovar_api::MAX_CONTENT_BYTES as u64,
-        )?;
-        let _: () = client
-            .json(
-                "PUT",
+        client
+            .upload_media(
                 &format!("spaces/{space}/media/{hash}"),
-                Some(serde_json::to_value(MediaContent {
-                    content: STANDARD.encode(bytes),
-                })?),
+                reader.block(&format!("media/{hash}"))?,
             )
             .await?;
     }
-    let reduced = rovar_storage::tempfile::NamedTempFile::new()?;
-    let mut writer = rovar_format::Writer::create(reduced.path())?;
-    for (key, block) in reader.entries().filter(|(_, block)| block.kind != "media") {
-        writer.put(
-            key,
-            &block.kind,
-            reader.block(key)?.reader(),
-            Some(block.hash),
-        )?;
-    }
-    writer.commit()?;
-    drop(writer);
-    transfer.content = STANDARD.encode(rovar_storage::fs::read(reduced.path())?);
     Ok(transfer)
 }
 
@@ -87,31 +86,13 @@ pub(super) async fn hydrate(
 ) -> Result<Vec<u8>> {
     let bytes = STANDARD.decode(&snapshot.content)?;
     ensure!(
-        bytes.len() <= rovar_api::MAX_CONTENT_BYTES,
+        bytes.len() <= rovar_api::MAX_METADATA_BYTES,
         "Document exceeds the server's size limit"
     );
+    validate_manifest(&snapshot.media, bytes.len())?;
     if snapshot.media.is_empty() {
         return Ok(bytes);
     }
-    ensure!(snapshot.media.len() <= 4096, "Too many media references");
-    let mut seen = BTreeSet::new();
-    let mut total = bytes.len() as u64;
-    for item in &snapshot.media {
-        ensure!(
-            item.hash.len() == 64
-                && item
-                    .hash
-                    .bytes()
-                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
-                && seen.insert(&item.hash),
-            "Invalid media reference"
-        );
-        total = total.saturating_add(item.length);
-    }
-    ensure!(
-        total <= rovar_api::MAX_CONTENT_BYTES as u64,
-        "Document exceeds the server's size limit"
-    );
     let output = rovar_storage::tempfile::NamedTempFile::new()?;
     rovar_storage::fs::write(output.path(), bytes)?;
     let mut writer = rovar_format::Writer::open(output.path())?;
@@ -121,24 +102,56 @@ pub(super) async fn hydrate(
         let cached = previous.as_ref().and_then(|reader| {
             let block = reader.entry(&key)?;
             (block.length == item.length && hex::encode(block.hash) == item.hash)
-                .then(|| reader.read(&key, item.length).ok())
+                .then(|| reader.block(&key).ok())
                 .flatten()
         });
-        let bytes = if let Some(bytes) = cached {
-            bytes
-        } else {
-            let content: MediaContent = client
-                .json("GET", &format!("spaces/{space}/media/{}", item.hash), None)
-                .await?;
-            STANDARD.decode(content.content)?
-        };
-        ensure!(
-            bytes.len() as u64 == item.length && hex::encode(Sha256::digest(&bytes)) == item.hash,
-            "Media checksum mismatch"
-        );
-        writer.put_bytes(&key, "media", &bytes)?;
+        if let Some(block) = cached
+            && block.copy_verified(&mut std::io::sink()).is_ok()
+        {
+            writer.put(&key, "media", block.reader(), Some(block.info.hash))?;
+            continue;
+        }
+        let file = client
+            .download_media(&format!("spaces/{space}/media/{}", item.hash), item)
+            .await?;
+        let hash: [u8; 32] = hex::decode(&item.hash)?
+            .try_into()
+            .map_err(|_| anyhow::anyhow!("Invalid media hash"))?;
+        writer.put(
+            &key,
+            "media",
+            rovar_storage::fs::File::open(file.path())?,
+            Some(hash),
+        )?;
     }
     writer.commit()?;
     drop(writer);
     Ok(rovar_storage::fs::read(output.path())?)
+}
+
+fn validate_manifest(media: &[Media], metadata_length: usize) -> Result<()> {
+    ensure!(
+        media.len() <= rovar_api::MAX_MEDIA_REFERENCES,
+        "Too many media references"
+    );
+    let mut seen = BTreeSet::new();
+    let mut total = metadata_length as u64;
+    for item in media {
+        ensure!(
+            item.hash.len() == 64
+                && item
+                    .hash
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+                && seen.insert(&item.hash)
+                && item.length <= rovar_api::MAX_MEDIA_BYTES as u64,
+            "Invalid media reference"
+        );
+        total = total.saturating_add(item.length);
+    }
+    ensure!(
+        total <= rovar_api::MAX_DOCUMENT_BYTES as u64,
+        "Document exceeds the server's size limit"
+    );
+    Ok(())
 }

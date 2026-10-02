@@ -139,7 +139,11 @@ pub async fn save_delta(req: &mut Request, depot: &mut Depot, res: &mut Response
 }
 
 async fn save_request(req: &mut Request, depot: &mut Depot, res: &mut Response, delta: bool) {
-    req.set_secure_max_size(rovar_api::MAX_CONTENT_BYTES * 4 / 3 + 512 * 1024);
+    req.set_secure_max_size(if delta {
+        rovar_api::MAX_DELTA_REQUEST_BYTES
+    } else {
+        rovar_api::MAX_DOCUMENT_REQUEST_BYTES
+    });
     let input = match req.parse_json().await {
         Ok(value) => value,
         Err(_) => {

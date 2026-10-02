@@ -1,7 +1,8 @@
 use crate::domain::{
-    document::{DocumentKind, DocumentSnapshot, DocumentTransfer, MAX_CONTENT_BYTES},
+    document::{DocumentKind, DocumentSnapshot, DocumentTransfer},
     error::{Error, Result},
 };
+use rovar_api::MAX_METADATA_BYTES;
 
 impl super::DocumentService {
     pub async fn download(
@@ -78,31 +79,30 @@ fn download_delta(base: &[u8], current: &[u8], hash: [u8; 32]) -> anyhow::Result
     {
         return Ok(None);
     }
-    let base = rovar_format::delta::Snapshot::from_bytes(base, MAX_CONTENT_BYTES)?;
+    let base = rovar_format::delta::Snapshot::from_bytes(base, MAX_METADATA_BYTES)?;
     if base.hash()? != hash {
         return Ok(None);
     }
-    let next = rovar_format::delta::Snapshot::read(&reader, MAX_CONTENT_BYTES)?;
+    let next = rovar_format::delta::Snapshot::read(&reader, MAX_METADATA_BYTES)?;
     let bytes = serde_json::to_vec(&base.difference(&next)?)?;
-    Ok((bytes.len().saturating_add(256) < current.len()).then_some(bytes))
+    Ok((bytes.len() <= rovar_api::MAX_DELTA_BYTES
+        && bytes.len().saturating_add(256) < current.len())
+    .then_some(bytes))
 }
 
 pub(super) async fn expand(base: Vec<u8>, delta: Vec<u8>) -> Result<Vec<u8>> {
     tokio::task::spawn_blocking(move || {
         let delta: rovar_format::delta::Delta = serde_json::from_slice(&delta)
             .map_err(|_| Error::Invalid("Invalid metadata delta".into()))?;
-        let base = rovar_format::delta::Snapshot::from_bytes(&base, MAX_CONTENT_BYTES)
+        let base = rovar_format::delta::Snapshot::from_bytes(&base, MAX_METADATA_BYTES)
             .map_err(|_| Error::DeltaBase)?;
         if base.hash()? != delta.base {
             return Err(Error::DeltaBase);
         }
-        base.apply(&delta, MAX_CONTENT_BYTES)
-            .and_then(|snapshot| snapshot.to_bytes(MAX_CONTENT_BYTES))
+        base.apply(&delta, MAX_METADATA_BYTES)
+            .and_then(|snapshot| snapshot.to_bytes(MAX_METADATA_BYTES))
             .map_err(|_| Error::Invalid("Invalid metadata delta or result".into()))
     })
     .await
     .map_err(anyhow::Error::from)?
 }
-
-#[cfg(test)]
-mod tests;

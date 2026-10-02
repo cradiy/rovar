@@ -72,8 +72,9 @@ fn delta_retry_keeps_the_exact_request_and_later_edits_use_the_acknowledged_base
     };
     write(&document);
     let base_bytes = std::fs::read(&path).unwrap();
-    let base = rovar_format::delta::Snapshot::from_bytes(&base_bytes, rovar_api::MAX_CONTENT_BYTES)
-        .unwrap();
+    let base =
+        rovar_format::delta::Snapshot::from_bytes(&base_bytes, rovar_api::MAX_METADATA_BYTES)
+            .unwrap();
     let original = object(1);
     let second = Object {
         revision: 2,
@@ -141,7 +142,7 @@ fn delta_retry_keeps_the_exact_request_and_later_edits_use_the_acknowledged_base
     let after_first = base
         .apply(
             &serde_json::from_slice(&first).unwrap(),
-            rovar_api::MAX_CONTENT_BYTES,
+            rovar_api::MAX_METADATA_BYTES,
         )
         .unwrap();
     let second = STANDARD
@@ -150,12 +151,12 @@ fn delta_retry_keeps_the_exact_request_and_later_edits_use_the_acknowledged_base
     let after_second = after_first
         .apply(
             &serde_json::from_slice(&second).unwrap(),
-            rovar_api::MAX_CONTENT_BYTES,
+            rovar_api::MAX_METADATA_BYTES,
         )
         .unwrap();
     let expected = rovar_format::delta::Snapshot::from_bytes(
         &std::fs::read(&path).unwrap(),
-        rovar_api::MAX_CONTENT_BYTES,
+        rovar_api::MAX_METADATA_BYTES,
     )
     .unwrap();
     assert_eq!(after_second.hash().unwrap(), expected.hash().unwrap());
@@ -279,8 +280,9 @@ fn downloaded_deltas_advance_the_baseline_and_repair_a_missing_cache(cx: &mut Te
     )
     .unwrap();
     let base_bytes = std::fs::read(&path).unwrap();
-    let base = rovar_format::delta::Snapshot::from_bytes(&base_bytes, rovar_api::MAX_CONTENT_BYTES)
-        .unwrap();
+    let base =
+        rovar_format::delta::Snapshot::from_bytes(&base_bytes, rovar_api::MAX_METADATA_BYTES)
+            .unwrap();
     document.pages[0].shapes[0].rect.x = 250.;
     let next_path = root.path().join("next.rovar");
     crate::document::save_as(
@@ -292,7 +294,7 @@ fn downloaded_deltas_advance_the_baseline_and_repair_a_missing_cache(cx: &mut Te
     .unwrap();
     let next = rovar_format::delta::Snapshot::from_bytes(
         &std::fs::read(next_path).unwrap(),
-        rovar_api::MAX_CONTENT_BYTES,
+        rovar_api::MAX_METADATA_BYTES,
     )
     .unwrap();
     let original = object(1);
@@ -387,8 +389,9 @@ fn damaged_download_delta_fetches_full_content_before_touching_the_local_cache(
     )
     .unwrap();
     let base_bytes = std::fs::read(&path).unwrap();
-    let base = rovar_format::delta::Snapshot::from_bytes(&base_bytes, rovar_api::MAX_CONTENT_BYTES)
-        .unwrap();
+    let base =
+        rovar_format::delta::Snapshot::from_bytes(&base_bytes, rovar_api::MAX_METADATA_BYTES)
+            .unwrap();
     document.pages[0].shapes[0].rect.y = 400.;
     let next_path = root.path().join("next.rovar");
     crate::document::save_as(
@@ -399,8 +402,9 @@ fn damaged_download_delta_fetches_full_content_before_touching_the_local_cache(
     )
     .unwrap();
     let next_bytes = std::fs::read(next_path).unwrap();
-    let next = rovar_format::delta::Snapshot::from_bytes(&next_bytes, rovar_api::MAX_CONTENT_BYTES)
-        .unwrap();
+    let next =
+        rovar_format::delta::Snapshot::from_bytes(&next_bytes, rovar_api::MAX_METADATA_BYTES)
+            .unwrap();
     let mut patch: serde_json::Value =
         serde_json::to_value(base.difference(&next).unwrap()).unwrap();
     patch["result"][0] = ((patch["result"][0].as_u64().unwrap() + 1) % 256).into();
@@ -513,7 +517,7 @@ fn download_reconstruction_ignores_local_edits_and_fetches_only_missing_media(
     .unwrap();
     let base = rovar_format::delta::Snapshot::from_bytes(
         &std::fs::read(&path).unwrap(),
-        rovar_api::MAX_CONTENT_BYTES,
+        rovar_api::MAX_METADATA_BYTES,
     )
     .unwrap();
     let mut next_document = base_document.clone();
@@ -534,7 +538,7 @@ fn download_reconstruction_ignores_local_edits_and_fetches_only_missing_media(
     .unwrap();
     let next = rovar_format::delta::Snapshot::from_bytes(
         &std::fs::read(target).unwrap(),
-        rovar_api::MAX_CONTENT_BYTES,
+        rovar_api::MAX_METADATA_BYTES,
     )
     .unwrap();
     let original = object(1);
@@ -543,18 +547,16 @@ fn download_reconstruction_ignores_local_edits_and_fetches_only_missing_media(
         ..original.clone()
     };
     let requests = Arc::new(Mutex::new(Vec::new()));
-    let (url, _, thread) = server_with_requests(
+    let response = download_response(
+        updated.clone(),
+        &serde_json::to_vec(&base.difference(&next).unwrap()).unwrap(),
+        true,
+        media.clone(),
+    );
+    let (url, _, thread) = server_with_bodies(
         vec![
-            download_response(
-                updated.clone(),
-                &serde_json::to_vec(&base.difference(&next).unwrap()).unwrap(),
-                true,
-                media.clone(),
-            ),
-            (
-                200,
-                serde_json::json!({"content":STANDARD.encode(&image_bytes[1])}),
-            ),
+            (response.0, serde_json::to_vec(&response.1).unwrap()),
+            (200, image_bytes[1].clone()),
         ],
         requests.clone(),
     );

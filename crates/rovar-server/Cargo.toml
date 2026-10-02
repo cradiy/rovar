@@ -13,6 +13,7 @@ rovar-api = { path = "../rovar-api" }
 rovar-format = { path = "../rovar-format" }
 anyhow = "1"
 async-trait = "0.1"
+futures-util = "0.3"
 salvo = "0.95"
 sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "tls-rustls-ring", "postgres", "migrate", "macros"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "fs", "sync", "time"] }

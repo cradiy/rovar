@@ -3,6 +3,7 @@ use crate::domain::{
     document::{Media, valid_hash, validate_media},
     error::Error,
 };
+use futures_util::{Stream, StreamExt};
 
 impl DocumentService {
     pub async fn missing_media(
@@ -30,27 +31,30 @@ impl DocumentService {
         Ok(missing)
     }
 
-    pub async fn upload_media(
+    pub async fn upload_media<S, B>(
         &self,
         actor: &str,
         space: &str,
         hash: &str,
-        bytes: Vec<u8>,
-    ) -> Result<()> {
-        if !valid_hash(hash)
-            || bytes.len() > rovar_api::MAX_CONTENT_BYTES
-            || format!("{:x}", Sha256::digest(&bytes)) != hash
-        {
-            return Err(Error::Invalid("Invalid media checksum or size".into()));
+        body: S,
+    ) -> Result<()>
+    where
+        S: Stream<Item = std::io::Result<B>>,
+        B: AsRef<[u8]>,
+    {
+        if !valid_hash(hash) {
+            return Err(Error::Invalid("Invalid media hash".into()));
+        }
+        // Authorize before reading the body or allocating its buffer.
+        if self.documents.media(actor, space, hash).await?.is_some() {
+            return Ok(());
         }
         let _permit = self
             .transfers
             .acquire()
             .await
             .map_err(anyhow::Error::from)?;
-        if self.documents.media(actor, space, hash).await?.is_some() {
-            return Ok(());
-        }
+        let bytes = collect_media(body, hash, rovar_api::MAX_MEDIA_BYTES).await?;
         let item = Media {
             hash: hash.into(),
             length: bytes.len() as u64,
@@ -120,6 +124,31 @@ impl DocumentService {
     }
 }
 
+// The encrypted blob store still requires a contiguous buffer. Bound it before
+// extending it; callers acquire a transfer permit before polling any body data.
+async fn collect_media<S, B>(body: S, hash: &str, maximum: usize) -> Result<Vec<u8>>
+where
+    S: Stream<Item = std::io::Result<B>>,
+    B: AsRef<[u8]>,
+{
+    let mut bytes = Vec::new();
+    let mut digest = Sha256::new();
+    futures_util::pin_mut!(body);
+    while let Some(chunk) = body.next().await {
+        let chunk = chunk.map_err(|_| Error::Invalid("Incomplete media upload".into()))?;
+        let chunk = chunk.as_ref();
+        if chunk.len() > maximum.saturating_sub(bytes.len()) {
+            return Err(Error::Invalid("Media exceeds the size limit".into()));
+        }
+        digest.update(chunk);
+        bytes.extend_from_slice(chunk);
+    }
+    if format!("{:x}", digest.finalize()) != hash {
+        return Err(Error::Invalid("Invalid media checksum".into()));
+    }
+    Ok(bytes)
+}
+
 pub(super) async fn validate_container(bytes: Vec<u8>) -> Result<()> {
     tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
         let file = tempfile::NamedTempFile::new()?;
@@ -136,4 +165,39 @@ pub(super) async fn validate_container(bytes: Vec<u8>) -> Result<()> {
     .await
     .map_err(anyhow::Error::from)?
     .map_err(|_| Error::Invalid("Invalid document container".into()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use futures_util::stream;
+
+    #[tokio::test]
+    async fn media_size_is_bounded_across_chunks_before_checksum_validation() {
+        let hash = format!("{:x}", Sha256::digest(b"abcdef"));
+        let chunks = || stream::iter([Ok(b"abc"), Ok(b"def")]);
+        assert_eq!(collect_media(chunks(), &hash, 6).await.unwrap(), b"abcdef");
+        assert!(
+            collect_media(chunks(), &hash, 5)
+                .await
+                .unwrap_err()
+                .to_string()
+                .contains("size limit")
+        );
+        assert!(
+            collect_media(stream::iter([Ok(b"abc")]), &hash, 6)
+                .await
+                .unwrap_err()
+                .to_string()
+                .contains("checksum")
+        );
+        let interrupted = stream::iter([Ok(b"abc"), Err(std::io::ErrorKind::UnexpectedEof.into())]);
+        assert!(
+            collect_media(interrupted, &hash, 6)
+                .await
+                .unwrap_err()
+                .to_string()
+                .contains("Incomplete")
+        );
+    }
 }

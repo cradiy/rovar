@@ -108,7 +108,7 @@ impl Remote {
     ) -> Result<String> {
         let transfer = (!object.deleted && object.kind != Kind::ColorStyle)
             .then(|| {
-                rovar_format::delta::Snapshot::from_bytes(bytes, rovar_api::MAX_CONTENT_BYTES).ok()
+                rovar_format::delta::Snapshot::from_bytes(bytes, rovar_api::MAX_METADATA_BYTES).ok()
             })
             .flatten();
         self.store_transfer_baseline(object, content, transfer)
