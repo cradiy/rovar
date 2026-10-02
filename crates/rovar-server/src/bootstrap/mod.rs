@@ -12,8 +12,9 @@ use std::sync::Arc;
 
 /// The only place where application ports are wired to concrete adapters.
 pub async fn build(config: &config::Config) -> anyhow::Result<Application> {
-    let storage = ContentStore::open(&config.storage.directory)?;
+    let storage = Arc::new(ContentStore::open(&config.storage.directory)?);
     let (pool, server_id) = postgres::connect(&config.database.url).await?;
+    storage.start_cleanup();
     let spaces = Arc::new(postgres::spaces::SpaceRepository::new(pool.clone()));
     let policy = crate::domain::space::RegistrationPolicy {
         personal: config.registration.personal,
@@ -33,7 +34,7 @@ pub async fn build(config: &config::Config) -> anyhow::Result<Application> {
         )),
         documents: Arc::new(DocumentService::new(
             Arc::new(DocumentRepository::new(pool)),
-            Arc::new(storage),
+            storage,
         )),
         server_id,
     })

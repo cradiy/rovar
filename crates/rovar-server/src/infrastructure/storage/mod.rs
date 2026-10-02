@@ -1,3 +1,4 @@
+mod cleanup;
 mod crypto;
 mod media;
 mod upload;
@@ -15,6 +16,22 @@ pub struct ContentStore {
 }
 
 impl ContentStore {
+    pub fn start_cleanup(self: &std::sync::Arc<Self>) {
+        let weak = std::sync::Arc::downgrade(self);
+        tokio::spawn(async move {
+            while let Some(store) = weak.upgrade() {
+                let result = tokio::task::spawn_blocking(move || {
+                    cleanup::sweep(&store.uploads, std::time::SystemTime::now())
+                })
+                .await;
+                match result {
+                    Ok(Ok(())) => {}
+                    result => eprintln!("Upload cache cleanup failed: {result:?}"),
+                }
+                tokio::time::sleep(cleanup::INTERVAL).await;
+            }
+        });
+    }
     #[cfg(test)]
     pub async fn create_media(
         &self,

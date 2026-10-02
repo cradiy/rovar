@@ -8,6 +8,7 @@ use std::{
 };
 
 const CHECKPOINT_BYTES: u64 = 1024 * 1024;
+mod cleanup;
 
 #[cfg(all(test, not(target_family = "wasm")))]
 mod tests;
@@ -16,6 +17,7 @@ mod tests;
 struct Checkpoint {
     offset: u64,
     checksum: String,
+    updated: u64,
 }
 
 struct Cache {
@@ -39,6 +41,7 @@ impl Cache {
         identity.update(item.length.to_le_bytes());
         let id = hex::encode(identity.finalize());
         fs::create_dir_all(root)?;
+        let namespace = cleanup::namespace(root)?;
         let checkpoint = root.join(format!("{id}.json"));
         let mut options = fs::OpenOptions::new();
         options.read(true).write(true).create(true).truncate(false);
@@ -49,6 +52,7 @@ impl Cache {
         }
         let mut file = options.open(root.join(format!("{id}.part")))?;
         file.try_lock()?;
+        drop(namespace);
         let restored = (|| -> Result<(u64, Sha256)> {
             let mut bytes = Vec::new();
             fs::File::open(&checkpoint)?
@@ -92,13 +96,26 @@ impl Cache {
 
     fn save(&mut self) -> Result<()> {
         self.file.sync_all()?;
-        super::super::write_atomic(
-            &self.checkpoint,
-            &serde_json::to_vec(&Checkpoint {
-                offset: self.offset,
-                checksum: hex::encode(self.hash.clone().finalize()),
-            })?,
-        )?;
+        // A fixed staging name belongs to this locked entry, so crash leftovers
+        // can be collected together with its data and checkpoint.
+        let pending = self.checkpoint.with_extension("tmp");
+        let mut options = fs::OpenOptions::new();
+        options.write(true).create(true).truncate(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let mut file = options.open(&pending)?;
+        file.write_all(&serde_json::to_vec(&Checkpoint {
+            offset: self.offset,
+            checksum: hex::encode(self.hash.clone().finalize()),
+            updated: cleanup::now(),
+        })?)?;
+        file.sync_all()?;
+        drop(file);
+        fs::rename(pending, &self.checkpoint)?;
+        rovar_format::sync_parent(&self.checkpoint)?;
         self.saved = self.offset;
         self.confirmed = true;
         Ok(())
@@ -119,11 +136,17 @@ impl Cache {
         }
         self.save()?;
         self.file.seek(SeekFrom::Start(0))?;
+        if let Err(error) = Client::cleanup_downloads(self.checkpoint.parent().unwrap()) {
+            eprintln!("Download cache cleanup failed: {error}");
+        }
         Ok(self.file)
     }
 }
 
 impl Client {
+    pub fn cleanup_downloads(root: &Path) -> Result<()> {
+        cleanup::sweep(root, cleanup::now(), 512 * 1024 * 1024)
+    }
     /// Returns a locked, verified file positioned at its start. Incomplete files
     /// and integrity checkpoints stay in the app cache across retries/restarts.
     pub async fn download_media(

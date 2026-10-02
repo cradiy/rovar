@@ -98,6 +98,7 @@ pub(crate) struct Remote {
     pub error: Option<String>,
     libraries_changed: BTreeSet<String>,
     retry_at: web_time::Instant,
+    cleanup_at: Option<web_time::Instant>,
     reconnect_at: BTreeMap<String, web_time::Instant>,
     refresh_at: BTreeMap<String, web_time::Instant>,
     auth_generation: u64,
@@ -167,6 +168,7 @@ impl Remote {
             error,
             libraries_changed: BTreeSet::new(),
             retry_at: web_time::Instant::now(),
+            cleanup_at: None,
             reconnect_at: BTreeMap::new(),
             refresh_at: BTreeMap::new(),
             auth_generation: 0,
@@ -521,6 +523,20 @@ impl Remote {
 
     /// A single shared worker owns uploads across all application windows.
     pub fn sync(&mut self, cx: &mut Context<Self>) {
+        if self
+            .cleanup_at
+            .is_none_or(|last| last.elapsed().as_secs() >= 3600)
+        {
+            self.cleanup_at = Some(web_time::Instant::now());
+            let downloads = self.root.join("downloads");
+            cx.background_executor()
+                .spawn(async move {
+                    if let Err(error) = Client::cleanup_downloads(&downloads) {
+                        eprintln!("Download cache cleanup failed: {error}");
+                    }
+                })
+                .detach();
+        }
         if self.busy {
             return;
         }

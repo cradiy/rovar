@@ -39,6 +39,9 @@ impl Upload {
         validate_media(std::slice::from_ref(&expected), 0)?;
         let identity = format!("{context}/{}", expected.length);
         let id = format!("{:x}", Sha256::digest(identity.as_bytes()));
+        // Serialize opening and unlinking lock files, so a collector cannot
+        // replace an inode that an uploader is about to lock.
+        let namespace = super::cleanup::namespace(&root).map_err(anyhow::Error::from)?;
         let lock = OpenOptions::new()
             .read(true)
             .write(true)
@@ -50,6 +53,9 @@ impl Upload {
             std::fs::TryLockError::WouldBlock => Error::RateLimited,
             std::fs::TryLockError::Error(error) => Error::Internal(error.into()),
         })?;
+        lock.set_modified(std::time::SystemTime::now())
+            .map_err(anyhow::Error::from)?;
+        drop(namespace);
         let directory = root.join(id);
         std::fs::create_dir_all(&directory).map_err(anyhow::Error::from)?;
         // An acknowledged part is an atomically installed, fsynced file. Partial
