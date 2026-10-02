@@ -21,6 +21,7 @@ impl super::DocumentService {
             .acquire()
             .await
             .map_err(anyhow::Error::from)?;
+        let _lease = self.storage.lease().await?;
         let current = self.documents.current(actor, space, id).await?;
         let context = format!("{space}/{id}/{}", current.document.revision);
         let bytes = self.storage.read(&current.blob, context).await?;

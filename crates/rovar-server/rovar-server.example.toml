@@ -8,6 +8,11 @@ url = "postgresql://rovar:password@127.0.0.1/rovar"
 [storage]
 directory = "./data"
 
+[storage.retention]
+history_days = 30
+history_versions = 100
+orphan_days = 7
+
 [registration]
 personal = false
 teams = false

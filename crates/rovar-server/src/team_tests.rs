@@ -20,6 +20,7 @@ async fn registration_invitation_membership_and_space_isolation() {
         },
         storage: Storage {
             directory: root.path().into(),
+            retention: Default::default(),
         },
         registration: Registration {
             personal: false,

@@ -97,6 +97,9 @@ pub trait DocumentWrite: Send {
 
 #[async_trait]
 pub trait ContentStorage: Send + Sync {
+    /// Keep referenced content alive across database lookups, publication and
+    /// streaming. The collector requires exclusive access to the same store.
+    async fn lease(&self) -> Result<Box<dyn Send + Sync>>;
     async fn write(&self, bytes: Vec<u8>, context: String) -> Result<String>;
     async fn read(&self, blob: &str, context: String) -> Result<Vec<u8>>;
     async fn media_upload(

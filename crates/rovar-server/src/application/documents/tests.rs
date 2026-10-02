@@ -43,6 +43,9 @@ impl Default for Storage {
 
 #[async_trait]
 impl ContentStorage for Storage {
+    async fn lease(&self) -> Result<Box<dyn Send + Sync>> {
+        self.media.lease().await
+    }
     async fn media_upload(
         &self,
         context: String,
@@ -252,7 +255,14 @@ fn service() -> (DocumentService, Arc<Mutex<State>>, String) {
 async fn streamed_media_is_authorized_verified_and_deduplicated_before_publishing() {
     use futures_util::stream;
     use sha2::{Digest, Sha256};
-    let (service, state, id) = service();
+    let (mut service, state, id) = service();
+    let storage = Arc::new(Storage::default());
+    service.storage = storage.clone();
+    let collection = std::fs::File::options()
+        .read(true)
+        .write(true)
+        .open(storage._root.path().join(".content.lock"))
+        .unwrap();
     let hash = format!("{:x}", Sha256::digest(b"abcdef"));
     let item = Media {
         hash: hash.clone(),
@@ -343,11 +353,19 @@ async fn streamed_media_is_authorized_verified_and_deduplicated_before_publishin
         .download_media("user", "space", &hash)
         .await
         .unwrap();
+    assert!(matches!(
+        collection.try_lock(),
+        Err(std::fs::TryLockError::WouldBlock)
+    ));
     let mut bytes = Vec::new();
     while let Some(chunk) = download.body.next().await {
         bytes.extend_from_slice(&chunk.unwrap());
     }
     assert_eq!(bytes, b"abcdef");
+    collection
+        .try_lock()
+        .expect("A completed body releases its content lease");
+    collection.unlock().unwrap();
     let first = service
         .download_media("user", "space", &hash)
         .await
@@ -382,6 +400,10 @@ async fn streamed_media_is_authorized_verified_and_deduplicated_before_publishin
     .unwrap()
     .unwrap();
     drop((second, third));
+    collection
+        .try_lock()
+        .expect("Dropped responses release their content leases");
+    collection.unlock().unwrap();
     let snapshot = crate::domain::document::DocumentSnapshot {
         document: state.lock().await.document.clone(),
         content: container(0),

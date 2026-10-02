@@ -33,6 +33,7 @@ async fn isolated_accounts_atomic_versions_retries_and_encrypted_restart() {
         },
         storage: bootstrap::config::Storage {
             directory: root.path().into(),
+            retention: Default::default(),
         },
         registration: bootstrap::config::Registration::default(),
     };

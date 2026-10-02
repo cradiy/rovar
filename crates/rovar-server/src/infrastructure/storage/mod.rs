@@ -1,6 +1,7 @@
 mod cleanup;
 mod crypto;
 mod media;
+pub(crate) mod retention;
 mod upload;
 
 use crate::{application::ports::ContentStorage, domain::error};
@@ -13,6 +14,7 @@ pub struct ContentStore {
     directory: PathBuf,
     uploads: PathBuf,
     key: StorageKey,
+    activity: PathBuf,
 }
 
 impl ContentStore {
@@ -47,16 +49,31 @@ impl ContentStore {
         std::fs::create_dir_all(&directory)?;
         let uploads = root.join("uploads");
         std::fs::create_dir_all(&uploads)?;
+        let activity = root.join(".content.lock");
+        retention::open_lock(&activity)?;
         Ok(Self {
             directory,
             uploads,
             key,
+            activity,
         })
     }
 }
 
 #[async_trait]
 impl ContentStorage for ContentStore {
+    async fn lease(&self) -> error::Result<Box<dyn Send + Sync>> {
+        let activity = self.activity.clone();
+        Ok(
+            tokio::task::spawn_blocking(move || -> Result<Box<dyn Send + Sync>> {
+                let lock = retention::open_lock(&activity)?;
+                lock.lock_shared()?;
+                Ok(Box::new(lock))
+            })
+            .await
+            .map_err(anyhow::Error::from)??,
+        )
+    }
     async fn media_upload(
         &self,
         context: String,

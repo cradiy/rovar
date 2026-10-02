@@ -14,6 +14,7 @@ impl DocumentService {
         media: &[Media],
     ) -> Result<Vec<String>> {
         validate_media(media, 0)?;
+        let _lease = self.storage.lease().await?;
         // One authorized batch query, including empty probes.
         let hashes: Vec<_> = media.iter().map(|item| item.hash.clone()).collect();
         let lengths = self.documents.media_lengths(actor, space, &hashes).await?;
@@ -47,6 +48,7 @@ impl DocumentService {
             .acquire_owned()
             .await
             .map_err(anyhow::Error::from)?;
+        let lease = self.storage.lease().await?;
         let (blob, length) = self
             .documents
             .media(actor, space, hash)
@@ -67,9 +69,11 @@ impl DocumentService {
         Ok(MediaDownload {
             length,
             body: Box::pin(futures_util::stream::unfold(
-                (body, permit),
-                |(mut body, permit)| async move {
-                    body.next().await.map(|chunk| (chunk, (body, permit)))
+                (body, permit, lease),
+                |(mut body, permit, lease)| async move {
+                    body.next()
+                        .await
+                        .map(|chunk| (chunk, (body, permit, lease)))
                 },
             )),
         })

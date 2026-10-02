@@ -17,6 +17,7 @@ async fn password_changes_and_session_revocation_are_isolated_and_atomic() {
         },
         storage: Storage {
             directory: root.path().into(),
+            retention: Default::default(),
         },
         registration: Registration::default(),
     };

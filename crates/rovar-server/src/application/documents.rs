@@ -46,6 +46,7 @@ impl DocumentService {
     }
 
     pub async fn read(&self, actor: &str, space: &str, id: &str) -> Result<DocumentSnapshot> {
+        let _lease = self.storage.lease().await?;
         let snapshot = self.transfer(actor, space, id).await?;
         self.expand_media(actor, space, snapshot).await
     }
@@ -56,6 +57,7 @@ impl DocumentService {
             .acquire()
             .await
             .map_err(anyhow::Error::from)?;
+        let _lease = self.storage.lease().await?;
         let version = self.documents.current(actor, space, id).await?;
         let context = format!("{space}/{id}/{}", version.document.revision);
         let bytes = self.storage.read(&version.blob, context).await?;
@@ -111,6 +113,7 @@ impl DocumentService {
             hash.update(fingerprint);
             fingerprint = hash.finalize().to_vec();
         }
+        let _lease = self.storage.lease().await?;
         match self
             .documents
             .prepare(actor, space, &command, fingerprint)

@@ -8,6 +8,7 @@ use futures_util::{Stream, StreamExt};
 impl DocumentService {
     async fn uploaded(&self, actor: &str, space: &str, item: &Media) -> Result<bool> {
         validate_media(std::slice::from_ref(item), 0)?;
+        let _lease = self.storage.lease().await?;
         match self.documents.media(actor, space, &item.hash).await? {
             Some((_, length)) if length != item.length => Err(Error::Invalid(
                 "Media length does not match its hash".into(),
@@ -108,6 +109,7 @@ impl DocumentService {
         space: &str,
         item: Media,
     ) -> Result<rovar_api::MediaUpload> {
+        let _lease = self.storage.lease().await?;
         if self.uploaded(actor, space, &item).await? {
             return Ok(complete(item.length));
         }

@@ -34,19 +34,24 @@ impl Documents for DocumentRepository {
     ) -> Result<std::collections::BTreeMap<String, u64>> {
         let mut tx = self.0.begin().await?;
         super::spaces::require(&mut tx, actor, space, false).await?;
-        media_lengths(&mut tx, space, hashes).await
+        let lengths = media_lengths(&mut tx, space, hashes).await?;
+        tx.commit().await?;
+        Ok(lengths)
     }
     async fn media(&self, actor: &str, space: &str, hash: &str) -> Result<Option<(String, u64)>> {
         let mut tx = self.0.begin().await?;
         super::spaces::require(&mut tx, actor, space, false).await?;
-        Ok(
-            sqlx::query("SELECT blob,length FROM media WHERE space_id=$1 AND hash=$2")
-                .bind(space)
-                .bind(hash)
-                .fetch_optional(&mut *tx)
-                .await?
-                .map(|row| (row.get("blob"), row.get::<i64, _>("length") as u64)),
+        let media = sqlx::query(
+            "UPDATE media SET last_used=$3 WHERE space_id=$1 AND hash=$2 RETURNING blob,length",
         )
+        .bind(space)
+        .bind(hash)
+        .bind(now())
+        .fetch_optional(&mut *tx)
+        .await?
+        .map(|row| (row.get("blob"), row.get::<i64, _>("length") as u64));
+        tx.commit().await?;
+        Ok(media)
     }
 
     async fn store_media(
@@ -57,9 +62,10 @@ impl Documents for DocumentRepository {
         blob: &str,
     ) -> Result<()> {
         let mut tx = self.0.begin().await?;
+        super::retention::protect_publication(&mut tx).await?;
         super::spaces::require(&mut tx, actor, space, false).await?;
-        sqlx::query("INSERT INTO media(space_id,hash,length,blob) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING")
-            .bind(space).bind(&media.hash).bind(media.length as i64).bind(blob).execute(&mut *tx).await?;
+        sqlx::query("INSERT INTO media(space_id,hash,length,blob,last_used) VALUES($1,$2,$3,$4,$5) ON CONFLICT(space_id,hash) DO UPDATE SET last_used=EXCLUDED.last_used")
+            .bind(space).bind(&media.hash).bind(media.length as i64).bind(blob).bind(now()).execute(&mut *tx).await?;
         tx.commit().await?;
         Ok(())
     }
@@ -147,7 +153,7 @@ impl Documents for DocumentRepository {
     ) -> Result<Option<String>> {
         let mut tx = self.0.begin().await?;
         super::spaces::require(&mut tx, actor, space, false).await?;
-        Ok(sqlx::query_scalar("SELECT r.blob FROM revisions r JOIN objects o ON o.space_id=r.space_id AND o.id=r.object_id WHERE r.space_id=$1 AND r.object_id=$2 AND r.revision=$3 AND NOT o.deleted")
+        Ok(sqlx::query_scalar("SELECT r.blob FROM revisions r JOIN objects o ON o.space_id=r.space_id AND o.id=r.object_id WHERE r.space_id=$1 AND r.object_id=$2 AND r.revision=$3 AND NOT o.deleted AND r.blob IS NOT NULL")
             .bind(space).bind(id).bind(revision).fetch_optional(&mut *tx).await?)
     }
 
@@ -160,6 +166,7 @@ impl Documents for DocumentRepository {
     ) -> Result<Preparation> {
         let id = &input.id;
         let mut tx = self.0.begin().await?;
+        super::retention::protect_publication(&mut tx).await?;
         super::spaces::require(&mut tx, actor, space_id, false).await?;
         sqlx::query("INSERT INTO objects(space_id,id,kind,title,created,modified) VALUES($1,$2,$3,$4,$5,$5) ON CONFLICT DO NOTHING")
             .bind(space_id).bind(id).bind(match input.kind {
@@ -276,14 +283,18 @@ async fn media_lengths(
     if hashes.is_empty() {
         return Ok(Default::default());
     }
-    Ok(
-        sqlx::query("SELECT hash,length FROM media WHERE space_id=$1 AND hash=ANY($2)")
-            .bind(space)
-            .bind(hashes)
-            .fetch_all(&mut **tx)
-            .await?
-            .into_iter()
-            .map(|row| (row.get("hash"), row.get::<i64, _>("length") as u64))
-            .collect(),
+    Ok(sqlx::query(
+        "WITH selected AS MATERIALIZED (
+            SELECT hash FROM media WHERE space_id=$1 AND hash=ANY($2) ORDER BY hash FOR UPDATE
+        ) UPDATE media m SET last_used=$3 FROM selected s
+          WHERE m.space_id=$1 AND m.hash=s.hash RETURNING m.hash,m.length",
     )
+    .bind(space)
+    .bind(hashes)
+    .bind(now())
+    .fetch_all(&mut **tx)
+    .await?
+    .into_iter()
+    .map(|row| (row.get("hash"), row.get::<i64, _>("length") as u64))
+    .collect())
 }
