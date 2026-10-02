@@ -19,7 +19,38 @@ pub(crate) struct Transfer {
     hand: bool,
 }
 
+pub(crate) struct SyncView {
+    views: PageViews,
+    selection: std::collections::BTreeSet<usize>,
+    pub focused: bool,
+}
+
 impl Workspace {
+    pub(crate) fn sync_view(&self, window: &Window, cx: &gpui::App) -> SyncView {
+        SyncView {
+            views: self.page_views(),
+            selection: self.selection_ids(),
+            focused: self.focus.contains_focused(window, cx),
+        }
+    }
+
+    pub(crate) fn restore_sync_view(
+        &mut self,
+        state: SyncView,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let page_exists = self
+            .pages
+            .entries
+            .iter()
+            .any(|page| page.page.id == state.views.active);
+        self.restore_page_views(state.views, window, cx);
+        if page_exists {
+            self.set_selection(state.selection, cx);
+        }
+    }
+
     pub(crate) fn can_transfer(&self) -> bool {
         !self.assets.inserting && !self.export.busy && !self.media.busy()
     }
@@ -352,6 +383,12 @@ impl Workspace {
                 .texts
                 .iter()
                 .all(|text| !text.editor.read(cx).is_composing())
+    }
+    pub(crate) fn sync_ready(&self, cx: &gpui::App) -> bool {
+        self.save_ready(cx)
+            && self.can_transfer()
+            && self.image_crop.is_none()
+            && self.bezier_draft.is_none()
     }
     pub(crate) fn view_state(&self) -> [f32; 3] {
         [self.view.pan.x, self.view.pan.y, self.view.zoom]

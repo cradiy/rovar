@@ -385,6 +385,7 @@ server-no-accounts = No accounts added
 server-account-hint = Sign in or create an account on this server.
 server-add-account = Add account
 server-workspaces = Workspaces
+server-document-deleted = This document was deleted on the server. Export a copy to keep it.
 server-sign-in = Sign in
 server-welcome = Welcome back
 server-welcome-subtitle = Sign in to your workspace.

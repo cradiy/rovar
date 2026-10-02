@@ -49,9 +49,14 @@ impl Remote {
         resolved.conflict = false;
         resolved.error = None;
         resolved.dirty = true;
+        // Choosing the local version rebases it onto the reviewed revision.
+        resolved.baseline = None;
+        resolved.digest.clear();
         if let Some(bytes) = server_bytes {
             resolved.object = reviewed.clone();
             resolved.digest = digest(bytes, &reviewed.title, false);
+            resolved.baseline =
+                Some(self.store_baseline(reviewed, &baseline::snapshot_content(bytes, false)?)?);
             resolved.dirty = false;
         }
         self.catalog.links.insert(path.into(), resolved);

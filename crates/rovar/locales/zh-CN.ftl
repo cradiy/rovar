@@ -370,6 +370,7 @@ server-no-accounts = 尚未添加账号
 server-account-hint = 登录或在此服务器创建账号。
 server-add-account = 添加账号
 server-workspaces = 工作空间
+server-document-deleted = 此文档已在服务器删除。如需保留，请导出副本。
 server-sign-in = 登录
 server-welcome = 欢迎回来
 server-welcome-subtitle = 登录以进入工作区。

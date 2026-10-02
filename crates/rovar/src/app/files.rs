@@ -230,9 +230,6 @@ impl Studio {
     }
 
     pub(super) fn open_path(&mut self, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
-        if self.remote.read(cx).busy && self.remote.read(cx).link(&path).is_some() {
-            return;
-        }
         let path = rovar_storage::fs::canonicalize(&path).unwrap_or(path);
         self.restore_recent(&path, cx);
         for other in cx
@@ -296,6 +293,8 @@ impl Studio {
             saved_revision: None,
             needs_upgrade: false,
             loading: false,
+            checking_remote: false,
+            remote_baseline: None,
             saving: false,
             close_after_save: false,
             exporting: false,
@@ -314,14 +313,80 @@ impl Studio {
             return;
         }
         tab.loading = true;
+        tab.checking_remote = true;
         tab.error = None;
         let path = tab.file.path.clone();
+        let check_remote = self.remote.read(cx).link(&path).is_some_and(|link| {
+            !link.dirty
+                && !link.conflict
+                && (link.baseline.is_none() || link.baseline != tab.remote_baseline)
+        });
         let internal = is_internal(&self.directory, &path);
         let import_source = if internal { None } else { self.source.clone() };
         let documents = self.directory.join("documents");
         let previews = self.directory.join("previews");
         let text_system = cx.text_system().clone();
         cx.spawn_in(window, async move |this, cx| {
+            // The loading tab is not editable while its cached revision is checked.
+            // Queue behind an existing transfer instead of dropping the open action.
+            let deadline = web_time::Instant::now() + Duration::from_secs(2);
+            loop {
+                let waiting = this
+                    .update_in(cx, |this, _, cx| this.remote.read(cx).busy)
+                    .unwrap_or(false);
+                if !check_remote || !waiting || web_time::Instant::now() >= deadline {
+                    break;
+                }
+                cx.background_executor()
+                    .timer(Duration::from_millis(50))
+                    .await;
+            }
+            let refreshed = this
+                .update_in(cx, |this, _, cx| {
+                    if !check_remote || this.remote.read(cx).busy {
+                        return false;
+                    }
+                    let connection = this
+                        .remote
+                        .read(cx)
+                        .link(&path)
+                        .and_then(|link| this.remote.read(cx).connection(&link.connection))
+                        .filter(|c| c.authenticated)
+                        .map(|c| c.id.clone());
+                    if connection.is_some() {
+                        this.refresh_open_document(path.clone(), cx);
+                        true
+                    } else {
+                        false
+                    }
+                })
+                .unwrap_or(false);
+            if refreshed {
+                loop {
+                    let waiting = this
+                        .update_in(cx, |this, _, cx| this.remote.read(cx).busy)
+                        .unwrap_or(false);
+                    if !waiting || web_time::Instant::now() >= deadline {
+                        break;
+                    }
+                    cx.background_executor()
+                        .timer(Duration::from_millis(50))
+                        .await;
+                }
+            }
+            if this
+                .update_in(cx, |this, _, _| {
+                    let Some(tab) = this.tabs.iter_mut().find(|tab| tab.token == token) else {
+                        return false;
+                    };
+                    tab.checking_remote = false;
+                    true
+                })
+                .ok()
+                != Some(true)
+            {
+                return;
+            }
             let loaded = cx
                 .background_executor()
                 .spawn(async move {
@@ -346,10 +411,17 @@ impl Studio {
                     .map(|link| link.connection.clone())
                     .or(import_source.clone());
                 let library = this.source_library(source, cx);
+                let remote_baseline = this
+                    .tabs
+                    .iter()
+                    .find(|tab| tab.token == token)
+                    .and_then(|tab| this.remote.read(cx).link(&tab.file.path))
+                    .and_then(|link| link.baseline.clone());
                 let Some(tab) = this.tabs.iter_mut().find(|tab| tab.token == token) else {
                     return;
                 };
                 tab.loading = false;
+                tab.remote_baseline = remote_baseline;
                 let result = loaded.and_then(|(loaded, preview, path)| {
                     tab.needs_upgrade = loaded.needs_upgrade;
                     tab.file.path = path;

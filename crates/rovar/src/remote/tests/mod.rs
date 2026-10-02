@@ -1,4 +1,5 @@
 use super::*;
+mod baseline;
 mod colors;
 use gpui::TestAppContext;
 
@@ -48,7 +49,7 @@ use std::{
     time::Duration,
 };
 
-fn identity() -> Identity {
+pub(crate) fn identity() -> Identity {
     Identity {
         server_id: "server".into(),
         user_id: "user".into(),
@@ -67,7 +68,37 @@ fn identity() -> Identity {
     }
 }
 
-fn server(
+pub(crate) fn confirmed_document(
+    remote: &Entity<Remote>,
+    url: String,
+    path: PathBuf,
+    object: Object,
+    cx: &mut gpui::App,
+) -> String {
+    remote.update(cx, |r, cx| {
+        let id = r.connect(url, identity(), "token".into(), cx).unwrap();
+        r.track(
+            path.clone(),
+            id.clone(),
+            object.title.clone(),
+            Kind::Document,
+            cx,
+        );
+        let bytes = rovar_storage::fs::read(&path).unwrap();
+        let key = r
+            .store_baseline(&object, &super::baseline::content(&path, false).unwrap())
+            .unwrap();
+        let link = r.catalog.links.get_mut(&path).unwrap();
+        link.digest = digest(&bytes, &object.title, false);
+        link.baseline = Some(key);
+        link.object = object;
+        link.dirty = false;
+        r.persist();
+        id
+    })
+}
+
+pub(crate) fn server(
     responses: Vec<(u16, serde_json::Value)>,
 ) -> (
     String,
@@ -134,7 +165,7 @@ fn server(
     (url, saves, thread)
 }
 
-fn sync(remote: &Entity<Remote>, cx: &mut TestAppContext) {
+pub(crate) fn sync(remote: &Entity<Remote>, cx: &mut TestAppContext) {
     // This test uses real loopback I/O on the transport's Tokio runtime.
     cx.executor().allow_parking();
     remote.update(cx, |r, cx| {
@@ -144,7 +175,7 @@ fn sync(remote: &Entity<Remote>, cx: &mut TestAppContext) {
     wait_sync(remote, cx);
 }
 
-fn wait_sync(remote: &Entity<Remote>, cx: &mut TestAppContext) {
+pub(crate) fn wait_sync(remote: &Entity<Remote>, cx: &mut TestAppContext) {
     let start = std::time::Instant::now();
     loop {
         cx.run_until_parked();

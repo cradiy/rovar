@@ -1,7 +1,9 @@
+mod baseline;
+mod cache;
 mod colors;
 mod conflict;
 #[cfg(all(test, not(target_family = "wasm")))]
-mod tests;
+pub(crate) mod tests;
 mod transport;
 pub(crate) use transport::{Client, HttpError};
 
@@ -52,6 +54,8 @@ pub(crate) struct Link {
     pub object: Object,
     pub dirty: bool,
     pub digest: String,
+    #[serde(default)]
+    pub baseline: Option<String>,
     pub conflict: bool,
     #[serde(skip)]
     pub error: Option<String>,
@@ -103,6 +107,7 @@ pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
     temp.write_all(bytes)?;
     temp.as_file().sync_all()?;
     temp.persist(path)?;
+    rovar_format::sync_parent(path)?;
     Ok(())
 }
 
@@ -137,6 +142,11 @@ impl Remote {
             auth_generation: 0,
         });
         cx.set_global(SharedRemote(remote.clone()));
+        remote.update(cx, |remote, _| {
+            if let Err(error) = remote.recover_incoming() {
+                remote.error = Some(error.to_string());
+            }
+        });
         remote
     }
     pub fn connections(&self) -> &[Connection] {
@@ -427,6 +437,7 @@ impl Remote {
             },
             dirty: true,
             digest: String::new(),
+            baseline: None,
             conflict: false,
             error: None,
         });
@@ -446,6 +457,9 @@ impl Remote {
             }
             link.object.deleted = deleted;
             link.dirty = true;
+            if let Err(error) = self.reconcile_baseline(path) {
+                self.error = Some(error.to_string());
+            }
             self.persist();
             cx.notify();
         }
@@ -464,8 +478,24 @@ impl Remote {
         if self.busy {
             return;
         }
+        if let Err(error) = self.recover_incoming() {
+            self.error = Some(error.to_string());
+            return;
+        }
         if self.reconnect(cx) {
             return;
+        }
+        let paths: Vec<_> = self
+            .catalog
+            .links
+            .iter()
+            .filter(|(_, link)| link.dirty || link.baseline.is_none())
+            .map(|(path, _)| path.clone())
+            .collect();
+        for path in paths {
+            if let Err(error) = self.reconcile_baseline(&path) {
+                self.error = Some(error.to_string());
+            }
         }
         if self.retry_at.elapsed().as_secs() >= 30 {
             self.retry_at = web_time::Instant::now();
@@ -479,7 +509,10 @@ impl Remote {
             }
         }
         let next = self.catalog.links.iter().find_map(|(path, link)| {
-            if !link.dirty || link.conflict || link.error.is_some() {
+            if (!link.dirty && !rovar_storage::exists(self.pending_path(link)))
+                || link.conflict
+                || link.error.is_some()
+            {
                 return None;
             }
             if !link.object.deleted && !rovar_storage::exists(path) {
@@ -523,7 +556,7 @@ impl Remote {
                 // until that update ends before collecting open document paths.
                 let remote = cx.entity().downgrade();
                 cx.defer(move |cx| {
-                    let open = crate::app::Studio::open_document_paths(cx);
+                    let open = crate::app::Studio::protected_document_paths(cx);
                     let _ = remote.update(cx, |this, cx| {
                         if this
                             .connection(&connection)
@@ -583,7 +616,9 @@ impl Remote {
                         Some(serde_json::to_value(&input)?),
                     )
                     .await?;
-                Ok::<_, anyhow::Error>((object, sent_digest))
+                let content =
+                    baseline::snapshot_content(&STANDARD.decode(&input.content)?, input.deleted)?;
+                Ok::<_, anyhow::Error>((object, sent_digest, content))
             }
             .await;
             let _ = this.update(cx, |this, cx| {
@@ -607,20 +642,21 @@ impl Remote {
                 {
                     this.sign_out(&link.connection, cx);
                 }
+                let result = result.and_then(|(object, digest, content)| {
+                    let baseline = this.store_baseline(&object, &content)?;
+                    Ok((object, digest, baseline, content))
+                });
                 if let Some(current) = this.catalog.links.get_mut(&path) {
                     match result {
-                        Ok((object, sent_digest)) => {
-                            let current_bytes = if current.object.deleted {
-                                Ok(Vec::new())
-                            } else {
-                                rovar_storage::fs::read(&path)
-                            };
-                            current.dirty = current_bytes
+                        Ok((object, sent_digest, baseline, sent_content)) => {
+                            current.dirty = baseline::content(&path, current.object.deleted)
                                 .map(|bytes| {
-                                    digest(&bytes, &current.object.title, current.object.deleted)
-                                        != sent_digest
+                                    bytes != sent_content
+                                        || current.object.title != object.title
+                                        || current.object.deleted != object.deleted
                                 })
                                 .unwrap_or(true);
+                            current.baseline = Some(baseline);
                             current.object.revision = object.revision;
                             current.object.created = object.created;
                             current.object.modified = object.modified;
@@ -689,7 +725,53 @@ impl Remote {
     }
 
     pub fn refresh(&mut self, connection: String, open: BTreeSet<PathBuf>, cx: &mut Context<Self>) {
+        self.refresh_selected(connection, open, None, cx);
+    }
+
+    pub(crate) fn refresh_document(
+        &mut self,
+        path: PathBuf,
+        open: BTreeSet<PathBuf>,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(link) = self.catalog.links.get(&path) else {
+            return;
+        };
+        self.refresh_selected(
+            link.connection.clone(),
+            open,
+            Some(link.object.id.clone()),
+            cx,
+        );
+    }
+
+    fn refresh_selected(
+        &mut self,
+        connection: String,
+        open: BTreeSet<PathBuf>,
+        selected: Option<String>,
+        cx: &mut Context<Self>,
+    ) {
         if self.busy {
+            return;
+        }
+        if let Err(error) = self.recover_incoming() {
+            self.error = Some(error.to_string());
+            return;
+        }
+        let paths: Vec<_> = self
+            .catalog
+            .links
+            .iter()
+            .filter(|(_, link)| link.connection == connection)
+            .map(|(path, _)| path.clone())
+            .collect();
+        for path in paths {
+            if let Err(error) = self.reconcile_baseline(&path) {
+                self.error = Some(error.to_string());
+            }
+        }
+        if !self.persist() {
             return;
         }
         let Some(server) = self.connection(&connection) else {
@@ -720,6 +802,9 @@ impl Remote {
                     .await?;
                 let mut updates = Vec::new();
                 for object in objects {
+                    if selected.as_ref().is_some_and(|id| id != &object.id) {
+                        continue;
+                    }
                     let existing = known
                         .iter()
                         .find(|(_, l)| l.connection == connection && l.object.id == object.id);
@@ -784,45 +869,27 @@ impl Remote {
                 }
                 match result {
                     Ok(updates) => {
-                        let currently_open = crate::app::Studio::open_document_paths(cx);
+                        let currently_open = crate::app::Studio::protected_document_paths(cx);
                         for (path, object, bytes) in updates {
                             // An editor may have saved while the request was in flight.
+                            if let Err(error) = this.reconcile_baseline(&path) {
+                                this.error = Some(error.to_string());
+                                continue;
+                            }
                             if currently_open.contains(&path)
                                 || this.catalog.links.get(&path).is_some_and(|link| link.dirty)
                             {
                                 continue;
                             }
-                            if object.kind == Kind::ColorStyle
-                                && let Err(error) =
-                                    this.apply_color(&connection, &object, bytes.as_deref())
-                            {
-                                this.error = Some(error.to_string());
-                                continue;
-                            }
-                            let hash = if let Some(bytes) = bytes {
-                                if let Err(error) = write_atomic(&path, &bytes) {
-                                    this.error = Some(error.to_string());
-                                    continue;
-                                }
-                                digest(&bytes, &object.title, false)
-                            } else {
-                                let _ = rovar_storage::fs::remove_file(&path);
-                                String::new()
-                            };
-                            if matches!(object.kind, Kind::Component | Kind::ColorStyle) {
-                                this.libraries_changed.insert(connection.clone());
-                            }
-                            this.catalog.links.insert(
+                            if let Err(error) = this.install_snapshot(
                                 path,
-                                Link {
-                                    connection: connection.clone(),
-                                    object,
-                                    dirty: false,
-                                    digest: hash,
-                                    conflict: false,
-                                    error: None,
-                                },
-                            );
+                                connection.clone(),
+                                object,
+                                bytes.as_deref(),
+                            ) {
+                                this.error = Some(error.to_string());
+                                break;
+                            }
                         }
                         this.persist();
                     }
@@ -885,6 +952,7 @@ impl Remote {
                         },
                         dirty: true,
                         digest: String::new(),
+                        baseline: None,
                         conflict: false,
                         error: None,
                     },

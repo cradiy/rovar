@@ -60,6 +60,7 @@ impl Remote {
                         },
                         dirty: true,
                         digest: String::new(),
+                        baseline: None,
                         conflict: false,
                         error: None,
                     },

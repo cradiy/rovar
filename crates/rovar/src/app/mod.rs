@@ -21,6 +21,7 @@ mod spaces;
 mod startup;
 #[cfg(test)]
 mod storage_tests;
+mod sync;
 mod tabs;
 #[cfg(test)]
 mod tests;
@@ -79,6 +80,8 @@ pub(crate) struct Tab {
     saved_revision: Option<u64>,
     needs_upgrade: bool,
     loading: bool,
+    checking_remote: bool,
+    remote_baseline: Option<String>,
     saving: bool,
     close_after_save: bool,
     exporting: bool,
@@ -139,8 +142,9 @@ impl Studio {
         window.set_window_title("Rovar");
         let directory = rovar_storage::fs::canonicalize(&directory).unwrap_or(directory);
         let remote = crate::remote::Remote::shared(&directory, cx);
-        let remote_subscription = cx.observe(&remote, |this, _, cx| {
+        let remote_subscription = cx.observe_in(&remote, window, |this, _, window, cx| {
             this.update_remote_catalog(cx);
+            this.reload_synced_tabs(window, cx);
         });
         let library = crate::document::library::Library::open(&directory, cx);
         let library_subscription = cx.observe_in(&library, window, |this, _, window, cx| {
@@ -253,6 +257,8 @@ impl Studio {
                     saved_revision: None,
                     needs_upgrade: false,
                     loading: false,
+                    checking_remote: false,
+                    remote_baseline: None,
                     saving: false,
                     close_after_save: false,
                     exporting: false,
@@ -350,15 +356,6 @@ impl Studio {
     fn select_tab(&mut self, token: Option<usize>, window: &mut Window, cx: &mut Context<Self>) {
         self.server_info
             .update(cx, |state, cx| state.close(window, cx));
-        if self.remote.read(cx).busy
-            && self.tabs.iter().any(|tab| {
-                Some(tab.token) == token
-                    && tab.editor.is_none()
-                    && self.remote.read(cx).link(&tab.file.path).is_some()
-            })
-        {
-            return;
-        }
         self.dismiss_tab_preview(cx);
         if self.active == token {
             if let Some(token) = token {
@@ -429,6 +426,8 @@ impl Studio {
             saved_revision: None,
             needs_upgrade: false,
             loading: false,
+            checking_remote: false,
+            remote_baseline: None,
             saving: false,
             close_after_save: false,
             exporting: false,

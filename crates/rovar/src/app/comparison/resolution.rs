@@ -132,6 +132,11 @@ impl Studio {
             // Reload from the permanent file, so lazy media does not reference
             // the temporary comparison snapshot and stale undo history is gone.
             let tab = self.tabs.iter_mut().find(|t| t.token == token).unwrap();
+            tab.remote_baseline = self
+                .remote
+                .read(cx)
+                .link(&tab.file.path)
+                .and_then(|link| link.baseline.clone());
             tab.editor = None;
             tab._subscription = None;
             tab.saved_revision = None;
