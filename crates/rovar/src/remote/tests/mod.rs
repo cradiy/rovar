@@ -326,6 +326,7 @@ fn failed_upload_survives_restart_and_replays_before_newer_edits(cx: &mut TestAp
         reconnect_at: BTreeMap::new(),
         refresh_at: BTreeMap::new(),
         auth_generation: 0,
+        local_changes: BTreeMap::new(),
     });
     restarted.update(cx, |r, cx| r.restore_credentials(&id, "token".into(), cx));
     sync(&restarted, cx);

@@ -1,5 +1,61 @@
 use super::*;
 
+fn reconcile(remote: &Entity<Remote>, path: &Path, cx: &mut TestAppContext) {
+    remote.update(cx, |r, cx| {
+        r.reconcile_baselines(vec![path.to_owned()], cx, |_, _| {});
+    });
+    wait_sync(remote, cx);
+}
+
+#[gpui::test]
+fn edits_during_a_scan_keep_rejected_requests_until_a_fresh_scan(cx: &mut TestAppContext) {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("document.rovar");
+    write_atomic(&path, b"confirmed").unwrap();
+    let remote = cx.update(|cx| Remote::shared(root.path(), cx));
+    cx.update(|cx| {
+        confirmed_document(
+            &remote,
+            "https://example.test".into(),
+            path.clone(),
+            Object {
+                id: uuid::Uuid::new_v4().to_string(),
+                kind: Kind::Document,
+                title: "Design".into(),
+                revision: 1,
+                created: 1,
+                modified: 1,
+                deleted: false,
+            },
+            cx,
+        );
+    });
+    let pending = remote.update(cx, |r, cx| {
+        let link = r.catalog.links.get_mut(&path).unwrap();
+        link.conflict = true;
+        let pending = r.pending_path(&r.catalog.links[&path]);
+        write_atomic(&pending, b"rejected request").unwrap();
+        r.reconcile_baselines(vec![path.clone()], cx, |_, _| {});
+        // Even when catalog fields return to their original values, this scan
+        // must not retire the request on behalf of a later edit/undo.
+        r.changed(&path, Some("Renamed".into()), false, cx);
+        r.changed(&path, Some("Design".into()), false, cx);
+        pending
+    });
+    wait_sync(&remote, cx);
+    remote.update(cx, |r, _| {
+        assert!(r.link(&path).unwrap().dirty);
+        assert!(r.link(&path).unwrap().conflict);
+        assert!(rovar_storage::exists(&pending));
+    });
+    reconcile(&remote, &path, cx);
+    remote.update(cx, |r, _| {
+        assert!(!r.link(&path).unwrap().dirty);
+        assert!(!r.link(&path).unwrap().conflict);
+        assert!(!rovar_storage::exists(&pending));
+    });
+}
+
 #[gpui::test]
 fn upgrading_confirmed_legacy_node_ids_is_clean_but_replacing_a_node_is_not(
     cx: &mut TestAppContext,
@@ -58,6 +114,9 @@ fn upgrading_confirmed_legacy_node_ids_is_clean_but_replacing_a_node_is_not(
             .unwrap();
         r.catalog.links.get_mut(&path).unwrap().baseline = Some(baseline);
         r.changed(&path, None, false, cx);
+    });
+    reconcile(&remote, &path, cx);
+    remote.update(cx, |r, _| {
         assert!(
             !r.link(&path).unwrap().dirty,
             "Adding deterministic identities must not create a local edit"
@@ -76,6 +135,9 @@ fn upgrading_confirmed_legacy_node_ids_is_clean_but_replacing_a_node_is_not(
     .unwrap();
     remote.update(cx, |r, cx| {
         r.changed(&path, None, false, cx);
+    });
+    reconcile(&remote, &path, cx);
+    remote.update(cx, |r, _| {
         assert!(
             r.link(&path).unwrap().dirty,
             "Replacing a node remains an edit even when its appearance and handle match"
@@ -108,7 +170,9 @@ fn confirmed_content_ignores_container_rewrites_and_undo_clears_pending_changes(
         link.object.revision = 1;
         link.digest = digest(&std::fs::read(&path).unwrap(), "Design", false);
         link.dirty = false;
-        r.reconcile_baseline(&path).unwrap();
+    });
+    reconcile(&remote, &path, cx);
+    remote.update(cx, |r, _| {
         assert!(r.link(&path).unwrap().baseline.is_some());
         r.persist();
     });
@@ -120,10 +184,16 @@ fn confirmed_content_ignores_container_rewrites_and_undo_clears_pending_changes(
     drop(writer);
     remote.update(cx, |r, cx| {
         r.changed(&path, None, false, cx);
+    });
+    reconcile(&remote, &path, cx);
+    remote.update(cx, |r, cx| {
         assert!(!r.link(&path).unwrap().dirty);
         r.changed(&path, Some("Renamed".into()), false, cx);
         assert!(r.link(&path).unwrap().dirty);
         r.changed(&path, Some("Design".into()), false, cx);
+    });
+    reconcile(&remote, &path, cx);
+    remote.update(cx, |r, _| {
         assert!(!r.link(&path).unwrap().dirty);
     });
     let mut changed = document.clone();
@@ -149,6 +219,9 @@ fn confirmed_content_ignores_container_rewrites_and_undo_clears_pending_changes(
     });
     remote.update(cx, |r, cx| {
         r.changed(&path, None, false, cx);
+    });
+    reconcile(&remote, &path, cx);
+    remote.update(cx, |r, _| {
         assert!(!r.link(&path).unwrap().dirty);
         let mut catalog: Catalog =
             serde_json::from_slice(&std::fs::read(root.path().join("servers.json")).unwrap())
@@ -158,7 +231,9 @@ fn confirmed_content_ignores_container_rewrites_and_undo_clears_pending_changes(
         assert!(!link.dirty);
         // Unknown upload outcomes must still be acknowledged after an undo.
         write_atomic(&r.pending_path(&link), b"pending").unwrap();
-        r.reconcile_baseline(&path).unwrap();
+    });
+    reconcile(&remote, &path, cx);
+    remote.update(cx, |r, _| {
         assert!(r.link(&path).unwrap().dirty);
     });
 }

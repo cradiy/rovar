@@ -100,6 +100,7 @@ pub(crate) struct Remote {
     refresh_at: BTreeMap<String, web_time::Instant>,
     auth_generation: u64,
     merge_pending: BTreeSet<PathBuf>,
+    local_changes: BTreeMap<PathBuf, u64>,
 }
 struct SharedRemote(Entity<Remote>);
 impl Global for SharedRemote {}
@@ -185,6 +186,7 @@ impl Remote {
             refresh_at: BTreeMap::new(),
             auth_generation: 0,
             merge_pending,
+            local_changes: BTreeMap::new(),
         });
         cx.set_global(SharedRemote(remote.clone()));
         remote.update(cx, |remote, _| {
@@ -502,9 +504,7 @@ impl Remote {
             }
             link.object.deleted = deleted;
             link.dirty = true;
-            if let Err(error) = self.reconcile_baseline(path) {
-                self.error = Some(error.to_string());
-            }
+            *self.local_changes.entry(path.to_owned()).or_default() += 1;
             if self
                 .catalog
                 .links
@@ -570,11 +570,10 @@ impl Remote {
             .filter(|(_, link)| link.dirty || link.baseline.is_none())
             .map(|(path, _)| path.clone())
             .collect();
-        for path in paths {
-            if let Err(error) = self.reconcile_baseline(&path) {
-                self.error = Some(error.to_string());
-            }
-        }
+        self.reconcile_baselines(paths, cx, Self::sync_ready);
+    }
+
+    fn sync_ready(&mut self, cx: &mut Context<Self>) {
         if self.retry_at.elapsed().as_secs() >= 30 {
             self.retry_at = web_time::Instant::now();
             for link in self
@@ -717,15 +716,10 @@ impl Remote {
                             object,
                             digest: sent_digest,
                             baseline,
-                            content: sent_content,
                         }) => {
-                            current.dirty = baseline::content(&path, current.object.deleted)
-                                .map(|bytes| {
-                                    bytes != sent_content
-                                        || current.object.title != object.title
-                                        || current.object.deleted != object.deleted
-                                })
-                                .unwrap_or(true);
+                            // Compare the latest local file against this confirmed
+                            // baseline in the background after persisting the receipt.
+                            current.dirty = true;
                             current.baseline = Some(baseline);
                             current.object.revision = object.revision;
                             current.object.created = object.created;
@@ -766,6 +760,8 @@ impl Remote {
                             this.try_merge(&protected, cx);
                         });
                     });
+                } else {
+                    this.reconcile_baselines(vec![path], cx, |_, _| {});
                 }
                 cx.notify();
             });
@@ -848,15 +844,23 @@ impl Remote {
             .filter(|(_, link)| link.connection == connection)
             .map(|(path, _)| path.clone())
             .collect();
-        for path in paths {
-            if let Err(error) = self.reconcile_baseline(&path) {
-                self.error = Some(error.to_string());
-            }
-        }
+        self.reconcile_baselines(paths, cx, move |this, cx| {
+            this.refresh_ready(connection, open, selected, cx);
+        });
+    }
+
+    fn refresh_ready(
+        &mut self,
+        connection: String,
+        open: BTreeSet<PathBuf>,
+        selected: Option<String>,
+        cx: &mut Context<Self>,
+    ) {
         if !self.persist() {
             return;
         }
-        let Some(server) = self.connection(&connection) else {
+        // The user may have signed out while the preflight scan was running.
+        let Some(server) = self.connection(&connection).filter(|c| c.authenticated) else {
             return;
         };
         let client = server.client();
@@ -1040,68 +1044,68 @@ impl Remote {
                 }
                 match result {
                     Ok((updates, directory)) => {
-                        let previous = this
-                            .catalog
-                            .directories
-                            .insert(connection.clone(), directory);
-                        if !this.persist() {
-                            if let Some(previous) = previous {
-                                this.catalog
-                                    .directories
-                                    .insert(connection.clone(), previous);
-                            } else {
-                                this.catalog.directories.remove(&connection);
-                            }
-                            cx.notify();
-                            return;
-                        }
-                        let currently_open = crate::app::Studio::protected_document_paths(cx);
-                        for (path, object, bytes) in updates {
-                            // An editor may have saved while the request was in flight.
-                            if let Err(error) = this.reconcile_baseline(&path) {
-                                this.catalog
-                                    .directories
-                                    .get_mut(&connection)
-                                    .unwrap()
-                                    .fail(&object, &error);
-                                continue;
-                            }
-                            if currently_open.contains(&path)
-                                || this.catalog.links.get(&path).is_some_and(|link| link.dirty)
+                        let paths = updates.iter().map(|(path, _, _)| path.clone()).collect();
+                        this.reconcile_baselines(paths, cx, move |this, cx| {
+                            if this
+                                .connection(&connection)
+                                .is_none_or(|c| c.generation != generation)
                             {
-                                continue;
+                                return;
                             }
-                            let id = object.id.clone();
-                            if let Err(error) = this.install_snapshot(
-                                path,
-                                connection.clone(),
-                                object.clone(),
-                                bytes.as_deref(),
-                            ) {
+                            let previous = this
+                                .catalog
+                                .directories
+                                .insert(connection.clone(), directory);
+                            if !this.persist() {
+                                if let Some(previous) = previous {
+                                    this.catalog
+                                        .directories
+                                        .insert(connection.clone(), previous);
+                                } else {
+                                    this.catalog.directories.remove(&connection);
+                                }
+                                cx.notify();
+                                return;
+                            }
+                            let currently_open = crate::app::Studio::protected_document_paths(cx);
+                            for (path, object, bytes) in updates {
+                                if currently_open.contains(&path)
+                                    || this.catalog.links.get(&path).is_some_and(|link| link.dirty)
+                                {
+                                    continue;
+                                }
+                                let id = object.id.clone();
+                                if let Err(error) = this.install_snapshot(
+                                    path,
+                                    connection.clone(),
+                                    object.clone(),
+                                    bytes.as_deref(),
+                                ) {
+                                    this.catalog
+                                        .directories
+                                        .get_mut(&connection)
+                                        .unwrap()
+                                        .fail(&object, &error);
+                                    // Only continue if the shared recovery journal
+                                    // can be resolved safely. A global persistence
+                                    // failure must not be hidden as an object retry.
+                                    if let Err(error) = this.recover_incoming() {
+                                        this.error = Some(error.to_string());
+                                        break;
+                                    }
+                                    continue;
+                                }
                                 this.catalog
                                     .directories
                                     .get_mut(&connection)
                                     .unwrap()
-                                    .fail(&object, &error);
-                                // Only continue if the shared recovery journal
-                                // can be resolved safely. A global persistence
-                                // failure must not be hidden as an object retry.
-                                if let Err(error) = this.recover_incoming() {
-                                    this.error = Some(error.to_string());
-                                    break;
-                                }
-                                continue;
+                                    .complete(&id);
                             }
-                            this.catalog
-                                .directories
-                                .get_mut(&connection)
-                                .unwrap()
-                                .complete(&id);
-                        }
-                        if this.error.is_none() {
-                            this.error = this.catalog.directories[&connection].error();
-                        }
-                        this.persist();
+                            if this.error.is_none() {
+                                this.error = this.catalog.directories[&connection].error();
+                            }
+                            this.persist();
+                        });
                     }
                     Err(error) => {
                         if error
@@ -1136,6 +1140,7 @@ impl Remote {
         let paths: BTreeSet<_> = entries.iter().map(|entry| entry.path.clone()).collect();
         let mut changed = false;
         for entry in entries.iter().filter(|entry| entry.error.is_none()) {
+            *self.local_changes.entry(entry.path.clone()).or_default() += 1;
             let Ok(bytes) = rovar_storage::fs::read(&entry.path) else {
                 continue;
             };
@@ -1178,6 +1183,7 @@ impl Remote {
             {
                 link.object.deleted = true;
                 link.dirty = true;
+                *self.local_changes.entry(path.clone()).or_default() += 1;
                 changed = true;
             }
         }

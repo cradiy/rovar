@@ -420,7 +420,10 @@ mod tests {
             write_atomic(&journal, &record).unwrap();
             write_atomic(&path, b"new local edits").unwrap();
             r.recover_incoming().unwrap();
-            r.reconcile_baseline(&path).unwrap();
+            r.reconcile_baselines(vec![path.clone()], cx, |_, _| {});
+        });
+        crate::remote::tests::wait_sync(&remote, cx);
+        remote.update(cx, |r, _| {
             assert!(r.link(&path).unwrap().dirty);
             assert_eq!(r.link(&path).unwrap().object.revision, 1);
             assert_eq!(rovar_storage::fs::read(&path).unwrap(), b"new local edits");

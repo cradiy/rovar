@@ -53,7 +53,6 @@ pub(super) struct Confirmed {
     pub object: Object,
     pub digest: String,
     pub baseline: String,
-    pub content: Vec<u8>,
 }
 
 /// The immutable submitted snapshot supplies the baseline, never the current
@@ -73,7 +72,6 @@ pub(super) fn confirm(root: &Path, object: Object, pending: PendingSave) -> Resu
         object,
         digest,
         baseline,
-        content,
     })
 }
 
@@ -126,7 +124,6 @@ mod tests {
         acknowledged.title = "Design".into();
         acknowledged.revision = 1;
         let confirmed = confirm(root.path(), acknowledged, retry.pending).unwrap();
-        assert_eq!(confirmed.content, b"submitted");
         assert_eq!(confirmed.digest, digest(b"submitted", "Design", false));
         link.baseline = Some(confirmed.baseline);
         assert_eq!(

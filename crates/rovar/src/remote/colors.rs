@@ -33,6 +33,7 @@ impl Remote {
             let hash = digest(&bytes, &style.name, false);
             if rovar_storage::fs::read(&path).ok().as_deref() != Some(bytes.as_slice()) {
                 write_atomic(&path, &bytes)?;
+                *self.local_changes.entry(path.clone()).or_default() += 1;
             }
             if let Some(link) = self.catalog.links.get_mut(&path) {
                 if (link.digest != hash && !link.dirty)
@@ -76,6 +77,7 @@ impl Remote {
             {
                 link.object.deleted = true;
                 link.dirty = true;
+                *self.local_changes.entry(path.clone()).or_default() += 1;
                 changed = true;
             }
         }
