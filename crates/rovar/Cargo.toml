@@ -7,12 +7,12 @@ license = "MIT"
 description = "A canvas-first desktop design editor"
 
 [dependencies]
-gpui = { git = "https://github.com/cradiy/gpui-fusion.git", rev = "c88f497d51ab17186a8d9fd75b07fbe2d512d325" }
-gpui_effects = { git = "https://github.com/cradiy/gpui-fusion.git", rev = "c88f497d51ab17186a8d9fd75b07fbe2d512d325" }
-gpui_media = { git = "https://github.com/cradiy/gpui-fusion.git", rev = "c88f497d51ab17186a8d9fd75b07fbe2d512d325", default-features = false, features = [
+gpui = { git = "https://github.com/cradiy/gpui-fusion.git", rev = "c93f205d2f691762f4b73ee8b969306d53728972" }
+gpui_effects = { git = "https://github.com/cradiy/gpui-fusion.git", rev = "c93f205d2f691762f4b73ee8b969306d53728972" }
+gpui_media = { git = "https://github.com/cradiy/gpui-fusion.git", rev = "c93f205d2f691762f4b73ee8b969306d53728972", default-features = false, features = [
   "video",
 ] }
-gpui_media_backend = { git = "https://github.com/cradiy/gpui-fusion.git", rev = "c88f497d51ab17186a8d9fd75b07fbe2d512d325" }
+gpui_media_backend = { git = "https://github.com/cradiy/gpui-fusion.git", rev = "c93f205d2f691762f4b73ee8b969306d53728972" }
 image = { version = "0.25", default-features = false, features = [
   "png",
   "jpeg",
@@ -47,7 +47,7 @@ dirs = "7"
 rovar-storage = { path = "../rovar-storage" }
 web-time = "1"
 time = { version = "0.3", features = ["formatting"] }
-uic = { git = "https://github.com/cradiy/gpui-fusion.git", rev = "c88f497d51ab17186a8d9fd75b07fbe2d512d325" }
+uic = { git = "https://github.com/cradiy/gpui-fusion.git", rev = "c93f205d2f691762f4b73ee8b969306d53728972" }
 unicode-segmentation = "1.12"
 unicode-linebreak = "0.1"
 
@@ -55,14 +55,14 @@ unicode-linebreak = "0.1"
 resvg = "0.48"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 tokio = { version = "1", features = ["rt-multi-thread", "time", "net"] }
-gpui_platform = { git = "https://github.com/cradiy/gpui-fusion.git", rev = "c88f497d51ab17186a8d9fd75b07fbe2d512d325", features = ["font-kit", "wayland", "x11"] }
+gpui_platform = { git = "https://github.com/cradiy/gpui-fusion.git", rev = "c93f205d2f691762f4b73ee8b969306d53728972", features = ["font-kit", "wayland", "x11"] }
 font-kit = { git = "https://github.com/cradiy/font-kit", rev = "94b0f28166665e8fd2f53ff6d268a14955c82269", package = "zed-font-kit", version = "0.14.1-zed" }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 sys-locale = { version = "0.3", features = ["js"] }
 reqwest = { version = "0.12", default-features = false, features = ["json"] }
 uuid = { version = "1", features = ["js"] }
-gpui_web = { git = "https://github.com/cradiy/gpui-fusion.git", rev = "c88f497d51ab17186a8d9fd75b07fbe2d512d325", default-features = false }
+gpui_web = { git = "https://github.com/cradiy/gpui-fusion.git", rev = "c93f205d2f691762f4b73ee8b969306d53728972", default-features = false }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 js-sys = "0.3"
@@ -77,6 +77,6 @@ version = "3"
 embed-resource = "3"
 
 [dev-dependencies]
-gpui = { git = "https://github.com/cradiy/gpui-fusion.git", rev = "c88f497d51ab17186a8d9fd75b07fbe2d512d325", features = [
+gpui = { git = "https://github.com/cradiy/gpui-fusion.git", rev = "c93f205d2f691762f4b73ee8b969306d53728972", features = [
   "test-support",
 ] }

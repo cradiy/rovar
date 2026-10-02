@@ -8,7 +8,7 @@ const METADATA_LIMIT: u64 = 64 * 1024 * 1024;
 #[serde(deny_unknown_fields)]
 struct Manifest {
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    colors: crate::color_styles::Palette,
+    colors: crate::scene::color_styles::Palette,
     schema: u32,
     id: String,
     #[serde(default, skip_serializing, rename = "cover")]
@@ -137,7 +137,7 @@ pub(crate) fn read_document(reader: &Reader) -> Result<Document> {
                 ensure!(index.id == id, "Page index differs from document");
                 pages.push(read_page(reader, &format!("page/{id}/"), index)?);
             }
-            let mut components = crate::components::Definitions::new();
+            let mut components = crate::scene::components::Definitions::new();
             for id in info.components {
                 ensure!(uuid::Uuid::parse_str(&id).is_ok(), "Invalid component ID");
                 let definition = serde_json::from_slice(

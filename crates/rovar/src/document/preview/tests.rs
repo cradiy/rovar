@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
-    artboard::Artboard,
-    text::{StyleChange, VerticalAlign},
+    scene::artboard::Artboard,
+    scene::text::{StyleChange, VerticalAlign},
 };
 
 fn rect(x: f32, y: f32, width: f32, height: f32) -> Rect {

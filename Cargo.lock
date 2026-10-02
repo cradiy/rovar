@@ -1112,7 +1112,7 @@ dependencies = [
 [[package]]
 name = "collections"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c88f497d51ab17186a8d9fd75b07fbe2d512d325#c88f497d51ab17186a8d9fd75b07fbe2d512d325"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c93f205d2f691762f4b73ee8b969306d53728972#c93f205d2f691762f4b73ee8b969306d53728972"
 dependencies = [
  "gpui_util",
  "indexmap",
@@ -1574,7 +1574,7 @@ dependencies = [
 [[package]]
 name = "derive_refineable"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c88f497d51ab17186a8d9fd75b07fbe2d512d325#c88f497d51ab17186a8d9fd75b07fbe2d512d325"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c93f205d2f691762f4b73ee8b969306d53728972#c93f205d2f691762f4b73ee8b969306d53728972"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2513,7 +2513,7 @@ dependencies = [
 [[package]]
 name = "gpui"
 version = "0.2.2"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c88f497d51ab17186a8d9fd75b07fbe2d512d325#c88f497d51ab17186a8d9fd75b07fbe2d512d325"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c93f205d2f691762f4b73ee8b969306d53728972#c93f205d2f691762f4b73ee8b969306d53728972"
 dependencies = [
  "accesskit",
  "anyhow",
@@ -2626,7 +2626,7 @@ dependencies = [
 [[package]]
 name = "gpui_effects"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c88f497d51ab17186a8d9fd75b07fbe2d512d325#c88f497d51ab17186a8d9fd75b07fbe2d512d325"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c93f205d2f691762f4b73ee8b969306d53728972#c93f205d2f691762f4b73ee8b969306d53728972"
 dependencies = [
  "accesskit",
  "anyhow",
@@ -2640,7 +2640,7 @@ dependencies = [
 [[package]]
 name = "gpui_linux"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c88f497d51ab17186a8d9fd75b07fbe2d512d325#c88f497d51ab17186a8d9fd75b07fbe2d512d325"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c93f205d2f691762f4b73ee8b969306d53728972#c93f205d2f691762f4b73ee8b969306d53728972"
 dependencies = [
  "accesskit",
  "accesskit_unix",
@@ -2692,7 +2692,7 @@ dependencies = [
 [[package]]
 name = "gpui_macos"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c88f497d51ab17186a8d9fd75b07fbe2d512d325#c88f497d51ab17186a8d9fd75b07fbe2d512d325"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c93f205d2f691762f4b73ee8b969306d53728972#c93f205d2f691762f4b73ee8b969306d53728972"
 dependencies = [
  "accesskit",
  "accesskit_macos",
@@ -2739,7 +2739,7 @@ dependencies = [
 [[package]]
 name = "gpui_macros"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c88f497d51ab17186a8d9fd75b07fbe2d512d325#c88f497d51ab17186a8d9fd75b07fbe2d512d325"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c93f205d2f691762f4b73ee8b969306d53728972#c93f205d2f691762f4b73ee8b969306d53728972"
 dependencies = [
  "heck",
  "proc-macro2",
@@ -2750,7 +2750,7 @@ dependencies = [
 [[package]]
 name = "gpui_media"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c88f497d51ab17186a8d9fd75b07fbe2d512d325#c88f497d51ab17186a8d9fd75b07fbe2d512d325"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c93f205d2f691762f4b73ee8b969306d53728972#c93f205d2f691762f4b73ee8b969306d53728972"
 dependencies = [
  "async-channel",
  "gpui",
@@ -2766,7 +2766,7 @@ dependencies = [
 [[package]]
 name = "gpui_media_backend"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c88f497d51ab17186a8d9fd75b07fbe2d512d325#c88f497d51ab17186a8d9fd75b07fbe2d512d325"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c93f205d2f691762f4b73ee8b969306d53728972#c93f205d2f691762f4b73ee8b969306d53728972"
 dependencies = [
  "core-foundation 0.10.0",
  "core-video",
@@ -2789,7 +2789,7 @@ dependencies = [
 [[package]]
 name = "gpui_media_core"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c88f497d51ab17186a8d9fd75b07fbe2d512d325#c88f497d51ab17186a8d9fd75b07fbe2d512d325"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c93f205d2f691762f4b73ee8b969306d53728972#c93f205d2f691762f4b73ee8b969306d53728972"
 dependencies = [
  "async-channel",
  "core-video",
@@ -2802,7 +2802,7 @@ dependencies = [
 [[package]]
 name = "gpui_platform"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c88f497d51ab17186a8d9fd75b07fbe2d512d325#c88f497d51ab17186a8d9fd75b07fbe2d512d325"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c93f205d2f691762f4b73ee8b969306d53728972#c93f205d2f691762f4b73ee8b969306d53728972"
 dependencies = [
  "console_error_panic_hook",
  "gpui",
@@ -2815,7 +2815,7 @@ dependencies = [
 [[package]]
 name = "gpui_render"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c88f497d51ab17186a8d9fd75b07fbe2d512d325#c88f497d51ab17186a8d9fd75b07fbe2d512d325"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c93f205d2f691762f4b73ee8b969306d53728972#c93f205d2f691762f4b73ee8b969306d53728972"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -2825,7 +2825,7 @@ dependencies = [
 [[package]]
 name = "gpui_shared_string"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c88f497d51ab17186a8d9fd75b07fbe2d512d325#c88f497d51ab17186a8d9fd75b07fbe2d512d325"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c93f205d2f691762f4b73ee8b969306d53728972#c93f205d2f691762f4b73ee8b969306d53728972"
 dependencies = [
  "schemars",
  "serde",
@@ -2835,7 +2835,7 @@ dependencies = [
 [[package]]
 name = "gpui_util"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c88f497d51ab17186a8d9fd75b07fbe2d512d325#c88f497d51ab17186a8d9fd75b07fbe2d512d325"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c93f205d2f691762f4b73ee8b969306d53728972#c93f205d2f691762f4b73ee8b969306d53728972"
 dependencies = [
  "anyhow",
  "async-channel",
@@ -2849,7 +2849,7 @@ dependencies = [
 [[package]]
 name = "gpui_wayland_source"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c88f497d51ab17186a8d9fd75b07fbe2d512d325#c88f497d51ab17186a8d9fd75b07fbe2d512d325"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c93f205d2f691762f4b73ee8b969306d53728972#c93f205d2f691762f4b73ee8b969306d53728972"
 dependencies = [
  "calloop",
  "wayland-client",
@@ -2858,7 +2858,7 @@ dependencies = [
 [[package]]
 name = "gpui_web"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c88f497d51ab17186a8d9fd75b07fbe2d512d325#c88f497d51ab17186a8d9fd75b07fbe2d512d325"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c93f205d2f691762f4b73ee8b969306d53728972#c93f205d2f691762f4b73ee8b969306d53728972"
 dependencies = [
  "anyhow",
  "futures",
@@ -2882,7 +2882,7 @@ dependencies = [
 [[package]]
 name = "gpui_wgpu"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c88f497d51ab17186a8d9fd75b07fbe2d512d325#c88f497d51ab17186a8d9fd75b07fbe2d512d325"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c93f205d2f691762f4b73ee8b969306d53728972#c93f205d2f691762f4b73ee8b969306d53728972"
 dependencies = [
  "anyhow",
  "ash",
@@ -2922,7 +2922,7 @@ dependencies = [
 [[package]]
 name = "gpui_windows"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c88f497d51ab17186a8d9fd75b07fbe2d512d325#c88f497d51ab17186a8d9fd75b07fbe2d512d325"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c93f205d2f691762f4b73ee8b969306d53728972#c93f205d2f691762f4b73ee8b969306d53728972"
 dependencies = [
  "accesskit",
  "accesskit_windows",
@@ -3336,7 +3336,7 @@ dependencies = [
 [[package]]
 name = "http_client"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c88f497d51ab17186a8d9fd75b07fbe2d512d325#c88f497d51ab17186a8d9fd75b07fbe2d512d325"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c93f205d2f691762f4b73ee8b969306d53728972#c93f205d2f691762f4b73ee8b969306d53728972"
 dependencies = [
  "anyhow",
  "bytes",
@@ -5784,7 +5784,7 @@ dependencies = [
 [[package]]
 name = "refineable"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c88f497d51ab17186a8d9fd75b07fbe2d512d325#c88f497d51ab17186a8d9fd75b07fbe2d512d325"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c93f205d2f691762f4b73ee8b969306d53728972#c93f205d2f691762f4b73ee8b969306d53728972"
 dependencies = [
  "derive_refineable",
 ]
@@ -6415,7 +6415,7 @@ dependencies = [
 [[package]]
 name = "scheduler"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c88f497d51ab17186a8d9fd75b07fbe2d512d325#c88f497d51ab17186a8d9fd75b07fbe2d512d325"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c93f205d2f691762f4b73ee8b969306d53728972#c93f205d2f691762f4b73ee8b969306d53728972"
 dependencies = [
  "async-task",
  "backtrace",
@@ -7144,7 +7144,7 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 [[package]]
 name = "sum_tree"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c88f497d51ab17186a8d9fd75b07fbe2d512d325#c88f497d51ab17186a8d9fd75b07fbe2d512d325"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c93f205d2f691762f4b73ee8b969306d53728972#c93f205d2f691762f4b73ee8b969306d53728972"
 dependencies = [
  "heapless",
  "log",
@@ -7811,7 +7811,7 @@ dependencies = [
 [[package]]
 name = "uic"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c88f497d51ab17186a8d9fd75b07fbe2d512d325#c88f497d51ab17186a8d9fd75b07fbe2d512d325"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c93f205d2f691762f4b73ee8b969306d53728972#c93f205d2f691762f4b73ee8b969306d53728972"
 dependencies = [
  "anyhow",
  "chrono",
@@ -7827,7 +7827,7 @@ dependencies = [
 [[package]]
 name = "uic-macros"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c88f497d51ab17186a8d9fd75b07fbe2d512d325#c88f497d51ab17186a8d9fd75b07fbe2d512d325"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c93f205d2f691762f4b73ee8b969306d53728972#c93f205d2f691762f4b73ee8b969306d53728972"
 dependencies = [
  "heck",
  "proc-macro2",
@@ -8032,7 +8032,7 @@ checksum = "b6c140620e7ffbb22c2dee59cafe6084a59b5ffc27a8859a5f0d494b5d52b6be"
 [[package]]
 name = "util_macros"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c88f497d51ab17186a8d9fd75b07fbe2d512d325#c88f497d51ab17186a8d9fd75b07fbe2d512d325"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=c93f205d2f691762f4b73ee8b969306d53728972#c93f205d2f691762f4b73ee8b969306d53728972"
 dependencies = [
  "quote",
  "syn 2.0.119",

@@ -1,5 +1,5 @@
 use super::*;
-use crate::{artboard::FillMode, shape::ShapeKind};
+use crate::{scene::artboard::FillMode, scene::shape::ShapeKind};
 
 #[gpui::test]
 fn single_page_files_upgrade_on_save_and_keep_their_identity(cx: &mut gpui::TestAppContext) {
@@ -305,7 +305,7 @@ fn embedded_assets_survive_source_removal_and_deduplicate(cx: &mut gpui::TestApp
 #[gpui::test]
 fn rich_text_paths_groups_and_external_edit_conflicts_round_trip(cx: &mut gpui::TestAppContext) {
     let text_system = cx.update(|cx| cx.text_system().clone());
-    use crate::text::{
+    use crate::scene::text::{
         TextStyle,
         styles::{StyleRun, StyledText},
     };
@@ -342,7 +342,7 @@ fn rich_text_paths_groups_and_external_edit_conflicts_round_trip(cx: &mut gpui::
     });
     document.pages[0].hierarchy.groups.insert(
         3,
-        crate::layer::LayerGroup {
+        crate::scene::layer::LayerGroup {
             name: "Group".into(),
             board: None,
             layer: Default::default(),
@@ -352,8 +352,8 @@ fn rich_text_paths_groups_and_external_edit_conflicts_round_trip(cx: &mut gpui::
     document.pages[0].hierarchy.order = vec![3, 2, 1];
     document.pages[0].next_id = 4;
     let nodes = [
-        crate::bezier::Node::corner(gpui::point(12.3, 45.6)),
-        crate::bezier::Node::corner(gpui::point(120., 94.)),
+        crate::scene::bezier::Node::corner(gpui::point(12.3, 45.6)),
+        crate::scene::bezier::Node::corner(gpui::point(120., 94.)),
     ];
     document.pages[0].shapes[0].kind = ShapeKind::Bezier;
     document.pages[0].shapes[0].set_bezier(&nodes, false);
@@ -387,10 +387,10 @@ fn component_baselines_allow_consecutive_saves_with_fractional_geometry(
     document.pages[0].shapes[0].rect.y = 339.17;
     document.pages[0].shapes[0].color = gpui::rgb(0xd9d9d9);
     let id = uuid::Uuid::new_v4().to_string();
-    let template = crate::components::extract(&document.pages[0], 1).unwrap();
+    let template = crate::scene::components::extract(&document.pages[0], 1).unwrap();
     document.pages[0].hierarchy.components.insert(
         1,
-        crate::components::Binding {
+        crate::scene::components::Binding {
             component: id.clone(),
             master: true,
             nodes: [(1, 1)].into(),
@@ -399,7 +399,7 @@ fn component_baselines_allow_consecutive_saves_with_fractional_geometry(
     );
     document.components.insert(
         id,
-        crate::components::Definition {
+        crate::scene::components::Definition {
             name: "Card".into(),
             source: None,
             root: 1,

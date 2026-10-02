@@ -1,6 +1,13 @@
 use gpui::{App, ImageSource, PathPromptOptions, Task};
 use std::path::{Path, PathBuf};
 
+pub(crate) fn now() -> u64 {
+    web_time::SystemTime::now()
+        .duration_since(web_time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
 type Dialog<T> = Task<anyhow::Result<anyhow::Result<Option<T>>>>;
 
 pub fn render_font_family(family: &gpui::SharedString) -> gpui::SharedString {

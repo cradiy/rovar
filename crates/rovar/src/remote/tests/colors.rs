@@ -1,14 +1,14 @@
 use super::*;
 use crate::{
-    color_styles::ColorStyle,
-    component_library::{Library, colors},
+    document::library::{Library, colors},
+    scene::color_styles::ColorStyle,
 };
 
 fn style(name: &str, color: u32) -> ColorStyle {
     ColorStyle {
         name: name.into(),
         color: gpui::rgb(color),
-        gradient: Some(crate::artboard::LinearGradient::default()),
+        gradient: Some(crate::scene::artboard::LinearGradient::default()),
     }
 }
 

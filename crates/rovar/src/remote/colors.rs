@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
-    color_styles::{ColorStyle, Palette},
-    component_library::colors,
+    document::library::colors,
+    scene::color_styles::{ColorStyle, Palette},
 };
 
 impl Remote {
@@ -54,8 +54,8 @@ impl Remote {
                             kind: Kind::ColorStyle,
                             title: style.name.clone(),
                             revision: 0,
-                            created: crate::studio::now(),
-                            modified: crate::studio::now(),
+                            created: crate::platform::now(),
+                            modified: crate::platform::now(),
                             deleted: false,
                         },
                         dirty: true,
