@@ -1,5 +1,6 @@
 mod baseline;
 mod cache;
+mod cleanup;
 mod colors;
 mod conflict;
 mod delta;
@@ -93,6 +94,7 @@ pub(crate) struct Remote {
     libraries_changed: BTreeSet<String>,
     retry_at: web_time::Instant,
     cleanup_at: Option<web_time::Instant>,
+    baseline_cleanup: cleanup::Cleanup,
     reconnect_at: BTreeMap<String, web_time::Instant>,
     refresh_at: BTreeMap<String, web_time::Instant>,
     auth_generation: u64,
@@ -177,6 +179,7 @@ impl Remote {
             libraries_changed: BTreeSet::new(),
             retry_at: web_time::Instant::now(),
             cleanup_at: None,
+            baseline_cleanup: cleanup::Cleanup::default(),
             reconnect_at: BTreeMap::new(),
             refresh_at: BTreeMap::new(),
             auth_generation: 0,
@@ -551,6 +554,7 @@ impl Remote {
         if self.busy {
             return;
         }
+        self.cleanup_baselines(cx);
         if let Err(error) = self.recover_incoming() {
             self.error = Some(error.to_string());
             return;

@@ -20,6 +20,18 @@ enum Installation<'a> {
 #[cfg(all(test, not(target_family = "wasm")))]
 mod resolution_tests;
 
+pub(super) fn protect_baselines(root: &Path, protected: &mut BTreeSet<String>) -> Result<()> {
+    let bytes = match rovar_storage::fs::read(root.join("incoming.json")) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error.into()),
+    };
+    let incoming: Incoming = serde_json::from_slice(&bytes)?;
+    protected.extend(incoming.previous.and_then(|link| link.baseline));
+    protected.extend(incoming.next.baseline);
+    Ok(())
+}
+
 impl Remote {
     /// Write the baseline and recovery record before replacing the cache. A
     /// restart can then distinguish downloaded content from a new local edit.
