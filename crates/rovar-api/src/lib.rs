@@ -4,7 +4,7 @@ pub use account::*;
 use serde::{Deserialize, Serialize};
 pub use spaces::*;
 
-pub const VERSION: u32 = 4;
+pub const VERSION: u32 = 3;
 pub const MAX_CONTENT_BYTES: usize = 128 * 1024 * 1024;
 
 #[derive(Serialize, Deserialize)]
@@ -72,6 +72,32 @@ pub struct Snapshot {
     pub content: String,
     #[serde(default)]
     pub media: Vec<Media>,
+}
+
+/// POST /objects/{id}/transfer advertises an immutable confirmed metadata base.
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DownloadBase {
+    pub revision: i64,
+    pub hash: [u8; 32],
+}
+
+#[derive(Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TransferEncoding {
+    #[default]
+    Full,
+    Delta,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Transfer {
+    #[serde(flatten)]
+    pub snapshot: Snapshot,
+    /// Full responses share the GET snapshot representation. Delta content is
+    /// a base64-encoded rovar-format Delta with base and result checksums.
+    #[serde(default)]
+    pub encoding: TransferEncoding,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

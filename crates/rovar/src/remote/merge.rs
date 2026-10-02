@@ -57,6 +57,7 @@ impl Remote {
             self.busy = true;
             let executor = cx.background_executor().clone();
             let text_system = cx.text_system().clone();
+            let base_title = baseline.object.title.clone();
             cx.spawn(async move |this, cx| {
                 let result = async {
                     let actual: Identity = client.json("GET", "session", None).await?;
@@ -65,35 +66,29 @@ impl Remote {
                             && actual.user_id == identity.user_id,
                         HttpError::account_changed()
                     );
-                    let snapshot: Snapshot = client
-                        .json(
-                            "GET",
-                            &format!("spaces/{space}/objects/{}/transfer", link.object.id),
-                            None,
-                        )
-                        .await?;
+                    let (object, bytes) = delta::receive(
+                        &client,
+                        &space,
+                        &link.object,
+                        Some(baseline),
+                        &path,
+                        &executor,
+                    )
+                    .await?;
                     ensure!(
-                        snapshot.object.id == link.object.id
-                            && snapshot.object.kind == link.object.kind
-                            && snapshot.object.revision > link.object.revision
-                            && !snapshot.object.deleted,
+                        object.revision > link.object.revision,
                         "Document cannot be merged"
                     );
-                    let bytes = media::hydrate(&client, &space, &snapshot, &path).await?;
                     let local = rovar_storage::fs::read(&path)?;
                     let fingerprint = Sha256::digest(&local);
-                    let title = merge_title(
-                        &baseline.object.title,
-                        &link.object.title,
-                        &snapshot.object.title,
-                    )?;
+                    let title = merge_title(&base_title, &link.object.title, &object.title)?;
                     let (bytes, merged) = executor
                         .spawn(async move {
                             let merged = assemble(&base, &local, &bytes, &text_system)?;
                             Ok::<_, anyhow::Error>((bytes, merged))
                         })
                         .await?;
-                    Ok::<_, anyhow::Error>((snapshot.object, bytes, merged, fingerprint, title))
+                    Ok::<_, anyhow::Error>((object, bytes, merged, fingerprint, title))
                 }
                 .await;
                 cx.update(|cx| {

@@ -65,7 +65,8 @@ fn routes(config: &Config, app: Application) -> Router {
                         )
                         .push(
                             Router::with_path("spaces/{space}/objects/{id}/transfer")
-                                .get(documents::transfer),
+                                .get(documents::transfer)
+                                .post(documents::download),
                         )
                         .push(Router::with_path("spaces/{space}/changes").get(documents::changes))
                         .push(

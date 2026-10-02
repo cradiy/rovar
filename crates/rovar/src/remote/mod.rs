@@ -890,6 +890,7 @@ impl Remote {
             .cloned()
             .unwrap_or_default();
         let root = self.root.clone();
+        let executor = cx.background_executor().clone();
         self.refresh_at
             .insert(connection.clone(), web_time::Instant::now());
         self.busy = true;
@@ -992,16 +993,19 @@ impl Remote {
                         updates.push((path, object, None));
                         continue;
                     }
-                    let snapshot: Snapshot = client
-                        .json(
-                            "GET",
-                            &format!("spaces/{space}/objects/{}/transfer", object.id),
-                            None,
-                        )
-                        .await?;
-                    let bytes = media::hydrate(&client, &space, &snapshot, &path).await?;
+                    let base = if let Some((_, link)) = existing {
+                        let root = root.clone();
+                        let link = link.clone();
+                        executor
+                            .spawn(async move { baseline::read(&root, &link).ok().flatten() })
+                            .await
+                    } else {
+                        None
+                    };
+                    let (object, bytes) =
+                        delta::receive(&client, &space, &object, base, &path, &executor).await?;
                     downloaded += bytes.len();
-                    updates.push((path, snapshot.object, Some(bytes)));
+                    updates.push((path, object, Some(bytes)));
                 }
                 Ok::<_, anyhow::Error>((updates, directory))
             }

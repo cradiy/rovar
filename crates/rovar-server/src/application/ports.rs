@@ -65,6 +65,13 @@ pub trait Documents: Send + Sync {
     async fn metadata(&self, actor: &str, space: &str, id: &str) -> Result<Document>;
     async fn list(&self, actor: &str, space: &str) -> Result<Vec<Document>>;
     async fn current(&self, actor: &str, space: &str, id: &str) -> Result<StoredVersion>;
+    async fn version_blob(
+        &self,
+        actor: &str,
+        space: &str,
+        id: &str,
+        revision: i64,
+    ) -> Result<Option<String>>;
     async fn prepare(
         &self,
         actor: &str,

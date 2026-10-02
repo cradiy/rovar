@@ -61,6 +61,11 @@ pub struct DocumentSnapshot {
     pub media: Vec<Media>,
 }
 
+pub struct DocumentTransfer {
+    pub snapshot: DocumentSnapshot,
+    pub delta: bool,
+}
+
 pub struct StoredVersion {
     pub document: Document,
     pub blob: String,

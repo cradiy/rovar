@@ -138,6 +138,19 @@ impl Documents for DocumentRepository {
         })
     }
 
+    async fn version_blob(
+        &self,
+        actor: &str,
+        space: &str,
+        id: &str,
+        revision: i64,
+    ) -> Result<Option<String>> {
+        let mut tx = self.0.begin().await?;
+        super::spaces::require(&mut tx, actor, space, false).await?;
+        Ok(sqlx::query_scalar("SELECT r.blob FROM revisions r JOIN objects o ON o.space_id=r.space_id AND o.id=r.object_id WHERE r.space_id=$1 AND r.object_id=$2 AND r.revision=$3 AND NOT o.deleted")
+            .bind(space).bind(id).bind(revision).fetch_optional(&mut *tx).await?)
+    }
+
     async fn prepare(
         &self,
         actor: &str,

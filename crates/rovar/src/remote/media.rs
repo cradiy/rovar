@@ -86,6 +86,10 @@ pub(super) async fn hydrate(
     local: &Path,
 ) -> Result<Vec<u8>> {
     let bytes = STANDARD.decode(&snapshot.content)?;
+    ensure!(
+        bytes.len() <= rovar_api::MAX_CONTENT_BYTES,
+        "Document exceeds the server's size limit"
+    );
     if snapshot.media.is_empty() {
         return Ok(bytes);
     }

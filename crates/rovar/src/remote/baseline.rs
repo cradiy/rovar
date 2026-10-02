@@ -9,6 +9,24 @@ pub(super) struct Baseline {
     pub transfer: Option<rovar_format::delta::Snapshot>,
 }
 
+pub(super) fn read(root: &Path, link: &Link) -> Result<Option<Baseline>> {
+    let Some(key) = &link.baseline else {
+        return Ok(None);
+    };
+    ensure!(
+        key.len() == 64 && key.bytes().all(|c| c.is_ascii_hexdigit()),
+        "Invalid baseline key"
+    );
+    let bytes = rovar_storage::fs::read(root.join("baselines").join(key))?;
+    ensure!(
+        hex::encode(Sha256::digest(&bytes)) == *key,
+        "Damaged sync baseline"
+    );
+    let mut baseline: Baseline = serde_json::from_slice(&bytes)?;
+    baseline.content = STANDARD.encode(baseline_content(&STANDARD.decode(&baseline.content)?)?);
+    Ok(Some(baseline))
+}
+
 pub(super) fn content(path: &Path, deleted: bool) -> Result<Vec<u8>> {
     if deleted {
         return Ok(Vec::new());
@@ -113,21 +131,7 @@ impl Remote {
     }
 
     pub(super) fn read_baseline(&self, link: &Link) -> Result<Option<Baseline>> {
-        let Some(key) = &link.baseline else {
-            return Ok(None);
-        };
-        ensure!(
-            key.len() == 64 && key.bytes().all(|c| c.is_ascii_hexdigit()),
-            "Invalid baseline key"
-        );
-        let bytes = rovar_storage::fs::read(self.root.join("baselines").join(key))?;
-        ensure!(
-            hex::encode(Sha256::digest(&bytes)) == *key,
-            "Damaged sync baseline"
-        );
-        let mut baseline: Baseline = serde_json::from_slice(&bytes)?;
-        baseline.content = STANDARD.encode(baseline_content(&STANDARD.decode(&baseline.content)?)?);
-        Ok(Some(baseline))
+        read(&self.root, link)
     }
 
     /// Upgrade only caches whose bytes match a previously acknowledged upload/download.

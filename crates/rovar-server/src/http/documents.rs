@@ -93,6 +93,42 @@ pub async fn transfer(req: &mut Request, depot: &mut Depot, res: &mut Response) 
 }
 
 #[handler]
+pub async fn download(req: &mut Request, depot: &mut Depot, res: &mut Response) {
+    req.set_secure_max_size(4096);
+    let input: rovar_api::DownloadBase = match req.parse_json().await {
+        Ok(value) => value,
+        Err(_) => {
+            response::failure(res, Error::Invalid("Invalid download baseline".into()));
+            return;
+        }
+    };
+    let space = req.param::<String>("space").unwrap_or_default();
+    let id = req.param::<String>("id").unwrap_or_default();
+    let app = depot.get_typed::<Application>().unwrap();
+    let user = depot.get_typed::<Authenticated>().unwrap();
+    response::render(
+        res,
+        app.documents
+            .download(
+                &user.identity.user_id,
+                &space,
+                &id,
+                input.revision,
+                input.hash,
+            )
+            .await
+            .map(|value| rovar_api::Transfer {
+                snapshot: super::mapping::snapshot(value.snapshot),
+                encoding: if value.delta {
+                    rovar_api::TransferEncoding::Delta
+                } else {
+                    rovar_api::TransferEncoding::Full
+                },
+            }),
+    );
+}
+
+#[handler]
 pub async fn save(req: &mut Request, depot: &mut Depot, res: &mut Response) {
     save_request(req, depot, res, false).await;
 }

@@ -1,5 +1,90 @@
 use super::*;
 
+/// Reconstruct against the immutable confirmed baseline, never the editable
+/// local file. The latter is used only to reuse verified media by content hash.
+pub(super) async fn receive(
+    client: &Client,
+    space: &str,
+    expected: &Object,
+    baseline: Option<baseline::Baseline>,
+    local: &Path,
+    executor: &gpui::BackgroundExecutor,
+) -> Result<(Object, Vec<u8>)> {
+    let base = baseline
+        .filter(|base| {
+            base.object.id == expected.id
+                && base.object.kind == expected.kind
+                && !base.object.deleted
+                && base.object.revision > 0
+                && base.object.revision <= expected.revision
+        })
+        .and_then(|base| {
+            base.transfer
+                .map(|snapshot| (base.object.revision, snapshot))
+        });
+    let route = format!("spaces/{space}/objects/{}/transfer", expected.id);
+    let mut snapshot = if let Some((revision, base)) = base {
+        let (base, hash) = executor
+            .spawn(async move {
+                let hash = base.hash()?;
+                Ok::<_, anyhow::Error>((base, hash))
+            })
+            .await?;
+        let response: rovar_api::Transfer = client
+            .json(
+                "POST",
+                &route,
+                Some(serde_json::to_value(rovar_api::DownloadBase {
+                    revision,
+                    hash,
+                })?),
+            )
+            .await?;
+        validate(&response.snapshot.object, expected)?;
+        let mut snapshot = response.snapshot;
+        if matches!(response.encoding, rovar_api::TransferEncoding::Delta) {
+            let content = snapshot.content;
+            let rebuilt = executor
+                .spawn(async move {
+                    let bytes = STANDARD.decode(content)?;
+                    ensure!(
+                        bytes.len() <= rovar_api::MAX_CONTENT_BYTES,
+                        "Delta exceeds the size limit"
+                    );
+                    let patch = serde_json::from_slice(&bytes)?;
+                    base.apply(&patch, rovar_api::MAX_CONTENT_BYTES)?
+                        .to_bytes(rovar_api::MAX_CONTENT_BYTES)
+                })
+                .await;
+            match rebuilt {
+                Ok(bytes) => snapshot.content = STANDARD.encode(bytes),
+                // No cache writes occur before validation. A single full fetch
+                // also repairs a bad patch without hiding a bad full response.
+                Err(_) => snapshot = client.json("GET", &route, None).await?,
+            }
+        }
+        snapshot
+    } else {
+        client.json("GET", &route, None).await?
+    };
+    validate(&snapshot.object, expected)?;
+    let bytes = media::hydrate(client, space, &snapshot, local).await?;
+    // Do not retain the encoded payload alongside the hydrated container.
+    snapshot.content.clear();
+    Ok((snapshot.object, bytes))
+}
+
+fn validate(actual: &Object, expected: &Object) -> Result<()> {
+    ensure!(
+        actual.id == expected.id
+            && actual.kind == expected.kind
+            && actual.revision >= expected.revision
+            && !actual.deleted,
+        "Downloaded document identity or revision changed"
+    );
+    Ok(())
+}
+
 pub(super) fn prepare(
     base: Option<&rovar_format::delta::Snapshot>,
     input: &Save,

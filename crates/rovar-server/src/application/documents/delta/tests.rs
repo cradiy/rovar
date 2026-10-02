@@ -15,6 +15,7 @@ struct State {
     blob: String,
     requests: BTreeMap<String, (Vec<u8>, i64)>,
     base_reads: usize,
+    versions: BTreeMap<i64, String>,
 }
 struct Repository(Arc<Mutex<State>>);
 struct Write {
@@ -34,7 +35,9 @@ impl ContentStorage for Storage {
     }
     async fn read(&self, blob: &str, context: String) -> Result<Vec<u8>> {
         let blobs = self.0.lock().await;
-        let (bytes, expected) = &blobs[blob];
+        let (bytes, expected) = blobs
+            .get(blob)
+            .ok_or_else(|| anyhow::anyhow!("Missing stored blob"))?;
         assert_eq!(
             &context, expected,
             "Storage context must include the exact base revision"
@@ -65,13 +68,35 @@ impl Documents for Repository {
         }
         Ok(Preparation::Write(Box::new(Write { state, fingerprint })))
     }
-    async fn current(&self, _actor: &str, _space: &str, _id: &str) -> Result<StoredVersion> {
+    async fn current(&self, actor: &str, space: &str, id: &str) -> Result<StoredVersion> {
         let state = self.0.lock().await;
+        if actor != "user" || space != "space" {
+            return Err(Error::Forbidden);
+        }
+        if id != state.document.id {
+            return Err(Error::NotFound);
+        }
         Ok(StoredVersion {
             document: state.document.clone(),
             blob: state.blob.clone(),
             media: vec![],
         })
+    }
+    async fn version_blob(
+        &self,
+        actor: &str,
+        space: &str,
+        id: &str,
+        revision: i64,
+    ) -> Result<Option<String>> {
+        let state = self.0.lock().await;
+        if actor != "user" || space != "space" {
+            return Err(Error::Forbidden);
+        }
+        if id != state.document.id {
+            return Err(Error::NotFound);
+        }
+        Ok(state.versions.get(&revision).cloned())
     }
     async fn metadata(&self, _actor: &str, _space: &str, _id: &str) -> Result<Document> {
         unreachable!()
@@ -123,6 +148,7 @@ impl DocumentWrite for Write {
         self.state.document.revision = revision;
         self.state.document.title = command.title.clone();
         self.state.blob = blob.into();
+        self.state.versions.insert(revision, blob.into());
         let fingerprint = self.fingerprint.clone();
         self.state
             .requests
@@ -162,8 +188,7 @@ fn command(id: &str, revision: i64, request: &str, content: &[u8]) -> SaveDocume
     }
 }
 
-#[tokio::test]
-async fn delta_commit_replays_before_reading_the_base_and_rejections_do_not_publish() {
+fn service() -> (DocumentService, Arc<Mutex<State>>, String) {
     let id = uuid::Uuid::new_v4().to_string();
     let state = Arc::new(Mutex::new(State {
         document: Document {
@@ -178,11 +203,18 @@ async fn delta_commit_replays_before_reading_the_base_and_rejections_do_not_publ
         blob: String::new(),
         requests: BTreeMap::new(),
         base_reads: 0,
+        versions: BTreeMap::new(),
     }));
     let service = DocumentService::new(
         Arc::new(Repository(state.clone())),
         Arc::new(Storage::default()),
     );
+    (service, state, id)
+}
+
+#[tokio::test]
+async fn delta_commit_replays_before_reading_the_base_and_rejections_do_not_publish() {
+    let (service, state, id) = service();
     let base = container(0);
     let next = container(10);
     let before = rovar_format::delta::Snapshot::from_bytes(&base, MAX_CONTENT_BYTES).unwrap();
@@ -284,4 +316,131 @@ async fn delta_commit_replays_before_reading_the_base_and_rejections_do_not_publ
             .revision,
         3
     );
+}
+
+#[tokio::test]
+async fn downloads_use_confirmed_history_and_fall_back_without_changing_versions() {
+    let (service, state, id) = service();
+    let base = container(0);
+    let next = container(10);
+    let before = rovar_format::delta::Snapshot::from_bytes(&base, MAX_CONTENT_BYTES).unwrap();
+    let after = rovar_format::delta::Snapshot::from_bytes(&next, MAX_CONTENT_BYTES).unwrap();
+    for (revision, bytes) in [(0, &base), (1, &next)] {
+        service
+            .save(
+                "user",
+                "space",
+                command(&id, revision, &uuid::Uuid::new_v4().to_string(), bytes),
+            )
+            .await
+            .unwrap();
+    }
+    let response = service
+        .download("user", "space", &id, 1, before.hash().unwrap())
+        .await
+        .unwrap();
+    assert!(response.delta);
+    assert_eq!(response.snapshot.document.revision, 2);
+    assert!(response.snapshot.content.len() * 4 < next.len());
+    let patch = serde_json::from_slice(&response.snapshot.content).unwrap();
+    assert_eq!(
+        before
+            .apply(&patch, MAX_CONTENT_BYTES)
+            .unwrap()
+            .hash()
+            .unwrap(),
+        after.hash().unwrap()
+    );
+    let same = service
+        .download("user", "space", &id, 2, after.hash().unwrap())
+        .await
+        .unwrap();
+    assert!(
+        same.delta,
+        "A missing local cache can be rebuilt from an unchanged confirmed base"
+    );
+    for (revision, hash) in [(1, [0; 32]), (3, after.hash().unwrap())] {
+        let full = service
+            .download("user", "space", &id, revision, hash)
+            .await
+            .unwrap();
+        assert!(!full.delta);
+        assert_eq!(full.snapshot.content, next);
+    }
+    let old = state.lock().await.versions.remove(&1).unwrap();
+    assert!(
+        !service
+            .download("user", "space", &id, 1, before.hash().unwrap())
+            .await
+            .unwrap()
+            .delta
+    );
+    state
+        .lock()
+        .await
+        .versions
+        .insert(1, "unavailable history blob".into());
+    assert!(
+        !service
+            .download("user", "space", &id, 1, before.hash().unwrap())
+            .await
+            .unwrap()
+            .delta
+    );
+    state.lock().await.versions.insert(1, old);
+    assert!(matches!(
+        service
+            .download("another-user", "space", &id, 1, before.hash().unwrap())
+            .await,
+        Err(Error::Forbidden)
+    ));
+    assert!(matches!(
+        service
+            .download("user", "another-space", &id, 1, before.hash().unwrap())
+            .await,
+        Err(Error::Forbidden)
+    ));
+    assert!(matches!(
+        service
+            .download("user", "space", "another-object", 1, before.hash().unwrap())
+            .await,
+        Err(Error::NotFound)
+    ));
+    assert_eq!(state.lock().await.document.revision, 2);
+    assert_eq!(state.lock().await.requests.len(), 2);
+}
+
+#[tokio::test]
+async fn legacy_inline_media_remains_in_full_downloads() {
+    let (service, _, id) = service();
+    let base = container(0);
+    let file = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(file.path(), container(20)).unwrap();
+    let mut writer = rovar_format::Writer::open(file.path()).unwrap();
+    writer
+        .put_bytes("media/legacy", "media", b"original inline asset")
+        .unwrap();
+    writer.commit().unwrap();
+    drop(writer);
+    let next = std::fs::read(file.path()).unwrap();
+    for (revision, bytes) in [(0, &base), (1, &next)] {
+        service
+            .save(
+                "user",
+                "space",
+                command(&id, revision, &uuid::Uuid::new_v4().to_string(), bytes),
+            )
+            .await
+            .unwrap();
+    }
+    let hash = rovar_format::delta::Snapshot::from_bytes(&base, MAX_CONTENT_BYTES)
+        .unwrap()
+        .hash()
+        .unwrap();
+    let response = service
+        .download("user", "space", &id, 1, hash)
+        .await
+        .unwrap();
+    assert!(!response.delta);
+    assert_eq!(response.snapshot.content, next);
 }
