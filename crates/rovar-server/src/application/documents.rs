@@ -6,6 +6,7 @@ use crate::domain::{
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use tokio::sync::Semaphore;
+mod media;
 
 pub struct DocumentService {
     documents: Arc<dyn Documents>,
@@ -14,6 +15,18 @@ pub struct DocumentService {
 }
 
 impl DocumentService {
+    pub async fn changes(
+        &self,
+        actor: &str,
+        space: &str,
+        after: i64,
+    ) -> Result<crate::domain::document::Changes> {
+        self.documents.changes(actor, space, after).await
+    }
+
+    pub async fn metadata(&self, actor: &str, space: &str, id: &str) -> Result<Document> {
+        self.documents.metadata(actor, space, id).await
+    }
     pub fn new(documents: Arc<dyn Documents>, storage: Arc<dyn ContentStorage>) -> Self {
         Self {
             documents,
@@ -27,6 +40,11 @@ impl DocumentService {
     }
 
     pub async fn read(&self, actor: &str, space: &str, id: &str) -> Result<DocumentSnapshot> {
+        let snapshot = self.transfer(actor, space, id).await?;
+        self.expand_media(actor, space, snapshot).await
+    }
+
+    pub async fn transfer(&self, actor: &str, space: &str, id: &str) -> Result<DocumentSnapshot> {
         let _permit = self
             .transfers
             .acquire()
@@ -38,6 +56,7 @@ impl DocumentService {
         Ok(DocumentSnapshot {
             document: version.document,
             content: bytes,
+            media: version.media,
         })
     }
 
@@ -53,6 +72,9 @@ impl DocumentService {
             .acquire()
             .await
             .map_err(anyhow::Error::from)?;
+        if !command.media.is_empty() {
+            media::validate_container(command.content.clone()).await?;
+        }
         let fingerprint = fingerprint(&command);
         match self
             .documents
@@ -77,9 +99,20 @@ impl DocumentService {
 fn fingerprint(command: &SaveDocument) -> Vec<u8> {
     let mut hash = Sha256::new();
     hash.update(command.base_revision.to_le_bytes());
-    hash.update([command.kind as u8, u8::from(command.deleted)]);
+    // Keep existing full-snapshot retry fingerprints stable; detached media has
+    // a distinct domain and explicit lengths to avoid ambiguous concatenation.
+    let kind = command.kind as u8 | if command.media.is_empty() { 0 } else { 0x80 };
+    hash.update([kind, u8::from(command.deleted)]);
     hash.update((command.title.len() as u64).to_le_bytes());
     hash.update(command.title.as_bytes());
+    if !command.media.is_empty() {
+        hash.update((command.content.len() as u64).to_le_bytes());
+        hash.update((command.media.len() as u64).to_le_bytes());
+    }
     hash.update(&command.content);
+    for item in &command.media {
+        hash.update(item.hash.as_bytes());
+        hash.update(item.length.to_le_bytes());
+    }
     hash.finalize().to_vec()
 }

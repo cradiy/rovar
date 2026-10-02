@@ -49,17 +49,22 @@ fn opening_a_clean_cache_fetches_new_revision_and_open_clean_editors_follow_upda
         });
         object.revision = revision;
         responses.push((200, session.clone()));
-        let mut listing = vec![object.clone()];
-        if revision == 2 {
-            let mut unrelated = object.clone();
-            unrelated.id = uuid::Uuid::new_v4().to_string();
-            listing.insert(0, unrelated);
-        }
-        responses.push((200, serde_json::to_value(listing).unwrap()));
+        let listing = if revision == 2 {
+            serde_json::to_value(&object).unwrap()
+        } else {
+            serde_json::to_value(rovar_api::Changes {
+                objects: vec![object.clone()],
+                cursor: revision,
+                has_more: false,
+            })
+            .unwrap()
+        };
+        responses.push((200, listing));
         if revision != 4 {
             responses.push((
                 200,
                 serde_json::to_value(rovar_api::Snapshot {
+                    media: Vec::new(),
                     object: object.clone(),
                     content: STANDARD.encode(std::fs::read(snapshot).unwrap()),
                 })

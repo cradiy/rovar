@@ -121,11 +121,20 @@ fn polling_downloads_colors_and_deletions_without_crossing_spaces(cx: &mut TestA
             value.is_none(),
         );
         responses.push((200, session.clone()));
-        responses.push((200, serde_json::to_value(vec![object.clone()]).unwrap()));
+        responses.push((
+            200,
+            serde_json::to_value(rovar_api::Changes {
+                objects: vec![object.clone()],
+                cursor: revision,
+                has_more: false,
+            })
+            .unwrap(),
+        ));
         if let Some(value) = value {
             responses.push((
                 200,
                 serde_json::to_value(Snapshot {
+                    media: Vec::new(),
                     object,
                     content: STANDARD.encode(serde_json::to_vec(value).unwrap()),
                 })

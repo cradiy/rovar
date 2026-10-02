@@ -10,6 +10,7 @@ embedded-web = ["dep:rust-embed", "dep:mime_guess"]
 
 [dependencies]
 rovar-api = { path = "../rovar-api" }
+rovar-format = { path = "../rovar-format" }
 anyhow = "1"
 async-trait = "0.1"
 salvo = "0.95"
@@ -24,8 +25,6 @@ base64 = "0.22"
 sha2 = "0.10"
 uuid = { version = "1", features = ["v4"] }
 url = "2"
+tempfile = "3"
 rust-embed = { version = "8", optional = true, features = ["debug-embed"] }
 mime_guess = { version = "2", optional = true }
-
-[dev-dependencies]
-tempfile = "3"

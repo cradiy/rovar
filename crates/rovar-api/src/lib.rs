@@ -4,7 +4,7 @@ pub use account::*;
 use serde::{Deserialize, Serialize};
 pub use spaces::*;
 
-pub const VERSION: u32 = 2;
+pub const VERSION: u32 = 3;
 pub const MAX_CONTENT_BYTES: usize = 128 * 1024 * 1024;
 
 #[derive(Serialize, Deserialize)]
@@ -50,14 +50,17 @@ pub struct Object {
     pub deleted: bool,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Save {
     pub kind: Kind,
     pub title: String,
     pub base_revision: i64,
     pub request_id: String,
-    /// Base64-encoded complete .rovar snapshot, including its media and preview.
+    /// Base64-encoded document container or color-style JSON. When `media` is
+    /// nonempty, its blocks are omitted from this container and referenced below.
     pub content: String,
+    #[serde(default)]
+    pub media: Vec<Media>,
     pub deleted: bool,
 }
 
@@ -65,6 +68,28 @@ pub struct Save {
 pub struct Snapshot {
     pub object: Object,
     pub content: String,
+    #[serde(default)]
+    pub media: Vec<Media>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Media {
+    pub hash: String,
+    pub length: u64,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct MediaContent {
+    pub content: String,
+}
+
+/// Latest object states after a workspace-local, transactionally committed cursor.
+/// Deleted objects remain in the feed. A cursor of zero starts a full scan.
+#[derive(Serialize, Deserialize)]
+pub struct Changes {
+    pub objects: Vec<Object>,
+    pub cursor: i64,
+    pub has_more: bool,
 }
 
 #[derive(Serialize, Deserialize)]

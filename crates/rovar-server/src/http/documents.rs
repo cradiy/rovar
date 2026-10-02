@@ -3,6 +3,47 @@ use crate::{application::Application, domain::error::Error};
 use salvo::prelude::*;
 
 #[handler]
+pub async fn changes(req: &mut Request, depot: &mut Depot, res: &mut Response) {
+    let space = req.param::<String>("space").unwrap_or_default();
+    let Some(after) = req.query::<i64>("after") else {
+        response::failure(res, Error::Invalid("Missing or invalid sync cursor".into()));
+        return;
+    };
+    let app = depot.get_typed::<Application>().unwrap();
+    let user = depot.get_typed::<Authenticated>().unwrap();
+    response::render(
+        res,
+        app.documents
+            .changes(&user.identity.user_id, &space, after)
+            .await
+            .map(|page| rovar_api::Changes {
+                objects: page
+                    .documents
+                    .into_iter()
+                    .map(super::mapping::document)
+                    .collect(),
+                cursor: page.cursor,
+                has_more: page.has_more,
+            }),
+    );
+}
+
+#[handler]
+pub async fn metadata(req: &mut Request, depot: &mut Depot, res: &mut Response) {
+    let space = req.param::<String>("space").unwrap_or_default();
+    let id = req.param::<String>("id").unwrap_or_default();
+    let app = depot.get_typed::<Application>().unwrap();
+    let user = depot.get_typed::<Authenticated>().unwrap();
+    response::render(
+        res,
+        app.documents
+            .metadata(&user.identity.user_id, &space, &id)
+            .await
+            .map(super::mapping::document),
+    );
+}
+
+#[handler]
 pub async fn list(req: &mut Request, depot: &mut Depot, res: &mut Response) {
     let space = req.param::<String>("space").unwrap_or_default();
     let app = depot.get_typed::<Application>().unwrap();
@@ -37,8 +78,23 @@ pub async fn read(req: &mut Request, depot: &mut Depot, res: &mut Response) {
 }
 
 #[handler]
+pub async fn transfer(req: &mut Request, depot: &mut Depot, res: &mut Response) {
+    let space = req.param::<String>("space").unwrap_or_default();
+    let id = req.param::<String>("id").unwrap_or_default();
+    let app = depot.get_typed::<Application>().unwrap();
+    let user = depot.get_typed::<Authenticated>().unwrap();
+    response::render(
+        res,
+        app.documents
+            .transfer(&user.identity.user_id, &space, &id)
+            .await
+            .map(super::mapping::snapshot),
+    );
+}
+
+#[handler]
 pub async fn save(req: &mut Request, depot: &mut Depot, res: &mut Response) {
-    req.set_secure_max_size(rovar_api::MAX_CONTENT_BYTES * 4 / 3 + 8192);
+    req.set_secure_max_size(rovar_api::MAX_CONTENT_BYTES * 4 / 3 + 512 * 1024);
     let input = match req.parse_json().await {
         Ok(value) => value,
         Err(_) => {

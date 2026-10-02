@@ -1,6 +1,8 @@
 use super::*;
 mod baseline;
 mod colors;
+mod directory;
+mod media;
 use gpui::TestAppContext;
 
 #[gpui::test]
@@ -105,6 +107,17 @@ pub(crate) fn server(
     Arc<Mutex<Vec<serde_json::Value>>>,
     std::thread::JoinHandle<()>,
 ) {
+    server_with_requests(responses, Arc::new(Mutex::new(Vec::new())))
+}
+
+fn server_with_requests(
+    responses: Vec<(u16, serde_json::Value)>,
+    requests: Arc<Mutex<Vec<String>>>,
+) -> (
+    String,
+    Arc<Mutex<Vec<serde_json::Value>>>,
+    std::thread::JoinHandle<()>,
+) {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
     let url = format!("http://{}", listener.local_addr().unwrap());
@@ -153,6 +166,13 @@ pub(crate) fn server(
                 assert!(n > 0);
                 request.extend_from_slice(&buf[..n]);
             }
+            requests.lock().unwrap().push(
+                String::from_utf8_lossy(&request[..header_end])
+                    .lines()
+                    .next()
+                    .unwrap()
+                    .to_owned(),
+            );
             if request.starts_with(b"PUT ") {
                 observed.lock().unwrap().push(
                     serde_json::from_slice(&request[header_end..header_end + length]).unwrap(),

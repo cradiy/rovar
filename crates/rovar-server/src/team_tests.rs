@@ -157,6 +157,7 @@ async fn registration_invitation_membership_and_space_isolation() {
     // Identical document IDs in different spaces never alias, including components.
     let id = uuid::Uuid::new_v4().to_string();
     let command = |content: &[u8], kind| SaveDocument {
+        media: Vec::new(),
         id: id.clone(),
         kind,
         title: "Shared".into(),

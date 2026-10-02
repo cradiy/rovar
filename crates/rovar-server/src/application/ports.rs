@@ -42,6 +42,27 @@ pub trait Passwords: Send + Sync {
 
 #[async_trait]
 pub trait Documents: Send + Sync {
+    async fn media_lengths(
+        &self,
+        actor: &str,
+        space: &str,
+        hashes: &[String],
+    ) -> Result<std::collections::BTreeMap<String, u64>>;
+    async fn media(&self, actor: &str, space: &str, hash: &str) -> Result<Option<(String, u64)>>;
+    async fn store_media(
+        &self,
+        actor: &str,
+        space: &str,
+        media: &crate::domain::document::Media,
+        blob: &str,
+    ) -> Result<()>;
+    async fn changes(
+        &self,
+        actor: &str,
+        space: &str,
+        after: i64,
+    ) -> Result<crate::domain::document::Changes>;
+    async fn metadata(&self, actor: &str, space: &str, id: &str) -> Result<Document>;
     async fn list(&self, actor: &str, space: &str) -> Result<Vec<Document>>;
     async fn current(&self, actor: &str, space: &str, id: &str) -> Result<StoredVersion>;
     async fn prepare(

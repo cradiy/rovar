@@ -2,6 +2,7 @@ mod baseline;
 mod cache;
 mod colors;
 mod conflict;
+mod media;
 #[cfg(all(test, not(target_family = "wasm")))]
 pub(crate) mod tests;
 mod transport;
@@ -66,6 +67,26 @@ struct Catalog {
     servers: BTreeMap<String, String>,
     connections: Vec<Connection>,
     links: BTreeMap<PathBuf, Link>,
+    #[serde(default)]
+    directories: BTreeMap<String, Directory>,
+}
+
+#[derive(Clone, Default, Serialize, Deserialize)]
+struct Directory {
+    cursor: i64,
+    /// Remote versions deferred for active editors or local writes. Advancing
+    /// the directory cursor must never forget these versions.
+    pending: BTreeMap<String, Object>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct PendingSave {
+    #[serde(flatten)]
+    input: Save,
+    /// Freeze the transfer mode with the request ID. An older unacknowledged
+    /// full-snapshot request must replay its original representation.
+    #[serde(default)]
+    media_transfer: bool,
 }
 
 pub(crate) struct Remote {
@@ -581,7 +602,7 @@ impl Remote {
                 if actual.server_id != identity.server_id || actual.user_id != identity.user_id {
                     return Err(HttpError::account_changed().into());
                 }
-                let input: Save = if rovar_storage::exists(&pending_path) {
+                let pending: PendingSave = if rovar_storage::exists(&pending_path) {
                     serde_json::from_slice(&rovar_storage::fs::read(&pending_path)?)?
                 } else {
                     let bytes = if link.object.deleted {
@@ -599,21 +620,32 @@ impl Remote {
                         base_revision: link.object.revision,
                         request_id: uuid::Uuid::new_v4().to_string(),
                         content: STANDARD.encode(&bytes),
+                        media: Vec::new(),
                         deleted: link.object.deleted,
                     };
-                    write_atomic(&pending_path, &serde_json::to_vec(&input)?)?;
-                    input
+                    let pending = PendingSave {
+                        input,
+                        media_transfer: true,
+                    };
+                    write_atomic(&pending_path, &serde_json::to_vec(&pending)?)?;
+                    pending
                 };
+                let input = &pending.input;
                 let sent_digest = digest(
                     &STANDARD.decode(&input.content)?,
                     &input.title,
                     input.deleted,
                 );
+                let transfer = if pending.media_transfer {
+                    media::prepare(&client, &space, input).await?
+                } else {
+                    input.clone()
+                };
                 let object: Object = client
                     .json(
                         "PUT",
                         &format!("spaces/{space}/objects/{}", link.object.id),
-                        Some(serde_json::to_value(&input)?),
+                        Some(serde_json::to_value(&transfer)?),
                     )
                     .await?;
                 let content =
@@ -782,6 +814,12 @@ impl Remote {
         let identity = server.identity.clone();
         let space = server.space.id.clone();
         let known = self.catalog.links.clone();
+        let mut directory = self
+            .catalog
+            .directories
+            .get(&connection)
+            .cloned()
+            .unwrap_or_default();
         let root = self.root.clone();
         self.refresh_at
             .insert(connection.clone(), web_time::Instant::now());
@@ -797,24 +835,71 @@ impl Remote {
                     return Err(HttpError::account_changed().into());
                 }
                 observed_identity = Some(remote_identity);
-                let objects: Vec<Object> = client
-                    .json("GET", &format!("spaces/{space}/objects"), None)
-                    .await?;
+                if let Some(id) = &selected {
+                    let object: Object = client
+                        .json(
+                            "GET",
+                            &format!("spaces/{space}/objects/{id}/metadata"),
+                            None,
+                        )
+                        .await?;
+                    directory.pending.insert(object.id.clone(), object);
+                } else {
+                    // One bounded page per refresh keeps large workspaces from
+                    // monopolizing the sync worker. Deferred objects survive restart.
+                    let page: rovar_api::Changes = client
+                        .json(
+                            "GET",
+                            &format!("spaces/{space}/changes?after={}", directory.cursor),
+                            None,
+                        )
+                        .await?;
+                    ensure!(
+                        page.cursor >= directory.cursor,
+                        "Server sync cursor moved backwards"
+                    );
+                    directory.cursor = page.cursor;
+                    for object in page.objects {
+                        directory.pending.insert(object.id.clone(), object);
+                    }
+                }
+                // Missing local caches must still be repaired when the remote
+                // directory itself has not changed.
+                for (path, link) in &known {
+                    if link.connection == connection
+                        && !link.object.deleted
+                        && !rovar_storage::exists(path)
+                    {
+                        directory
+                            .pending
+                            .entry(link.object.id.clone())
+                            .or_insert_with(|| link.object.clone());
+                    }
+                }
                 let mut updates = Vec::new();
-                for object in objects {
+                let mut downloaded = 0usize;
+                for object in directory.pending.values().cloned().collect::<Vec<_>>() {
+                    // Bound a refresh's resident snapshots, including the first
+                    // scan of a workspace with many large documents.
+                    if downloaded >= 16 * 1024 * 1024 || updates.len() >= 16 {
+                        break;
+                    }
                     if selected.as_ref().is_some_and(|id| id != &object.id) {
                         continue;
                     }
                     let existing = known
                         .iter()
                         .find(|(_, l)| l.connection == connection && l.object.id == object.id);
-                    if let Some((path, link)) = existing
-                        && (link.dirty
-                            || open.contains(path)
-                            || (link.object.revision == object.revision
-                                && (link.object.deleted || rovar_storage::exists(path))))
-                    {
-                        continue;
+                    if let Some((path, link)) = existing {
+                        if link.object.revision >= object.revision
+                            && (link.object.deleted || rovar_storage::exists(path))
+                        {
+                            directory.pending.remove(&object.id);
+                            continue;
+                        }
+                        if link.dirty || open.contains(path) {
+                            continue;
+                        }
                     }
                     let path =
                         existing
@@ -841,14 +926,15 @@ impl Remote {
                     let snapshot: Snapshot = client
                         .json(
                             "GET",
-                            &format!("spaces/{space}/objects/{}", object.id),
+                            &format!("spaces/{space}/objects/{}/transfer", object.id),
                             None,
                         )
                         .await?;
-                    let bytes = STANDARD.decode(snapshot.content)?;
+                    let bytes = media::hydrate(&client, &space, &snapshot, &path).await?;
+                    downloaded += bytes.len();
                     updates.push((path, snapshot.object, Some(bytes)));
                 }
-                Ok::<_, anyhow::Error>(updates)
+                Ok::<_, anyhow::Error>((updates, directory))
             }
             .await;
             let _ = this.update(cx, |this, cx| {
@@ -868,7 +954,22 @@ impl Remote {
                     let _ = this.connect(client.url.clone(), identity, client.token.clone(), cx);
                 }
                 match result {
-                    Ok(updates) => {
+                    Ok((updates, directory)) => {
+                        let previous = this
+                            .catalog
+                            .directories
+                            .insert(connection.clone(), directory);
+                        if !this.persist() {
+                            if let Some(previous) = previous {
+                                this.catalog
+                                    .directories
+                                    .insert(connection.clone(), previous);
+                            } else {
+                                this.catalog.directories.remove(&connection);
+                            }
+                            cx.notify();
+                            return;
+                        }
                         let currently_open = crate::app::Studio::protected_document_paths(cx);
                         for (path, object, bytes) in updates {
                             // An editor may have saved while the request was in flight.
@@ -881,6 +982,7 @@ impl Remote {
                             {
                                 continue;
                             }
+                            let id = object.id.clone();
                             if let Err(error) = this.install_snapshot(
                                 path,
                                 connection.clone(),
@@ -890,6 +992,12 @@ impl Remote {
                                 this.error = Some(error.to_string());
                                 break;
                             }
+                            this.catalog
+                                .directories
+                                .get_mut(&connection)
+                                .unwrap()
+                                .pending
+                                .remove(&id);
                         }
                         this.persist();
                     }

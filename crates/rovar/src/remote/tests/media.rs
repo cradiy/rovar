@@ -1,0 +1,179 @@
+use super::*;
+
+#[gpui::test]
+fn unacknowledged_full_snapshot_requests_keep_their_original_wire_representation(
+    cx: &mut TestAppContext,
+) {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("design.rovar");
+    let bytes = b"existing media";
+    let hash = hex::encode(Sha256::digest(bytes));
+    let mut writer = rovar_format::Writer::create(&path).unwrap();
+    writer.put_bytes("document", "json", b"{}").unwrap();
+    writer
+        .put_bytes(&format!("media/{hash}"), "media", bytes)
+        .unwrap();
+    writer.commit().unwrap();
+    drop(writer);
+    let original = STANDARD.encode(std::fs::read(&path).unwrap());
+    let object = Object {
+        id: uuid::Uuid::new_v4().to_string(),
+        kind: Kind::Document,
+        title: "Design".into(),
+        revision: 1,
+        created: 1,
+        modified: 1,
+        deleted: false,
+    };
+    let (url, saves, thread) = server(vec![
+        (200, serde_json::to_value(identity()).unwrap()),
+        (200, serde_json::to_value(&object).unwrap()),
+    ]);
+    let remote = cx.update(|cx| Remote::shared(root.path(), cx));
+    remote.update(cx, |r, cx| {
+        let connection = r.connect(url, identity(), "token".into(), cx).unwrap();
+        r.track(
+            path.clone(),
+            connection,
+            object.title.clone(),
+            Kind::Document,
+            cx,
+        );
+        let link = r.catalog.links.get_mut(&path).unwrap();
+        link.object.id = object.id;
+        let pending = r.pending_path(r.link(&path).unwrap());
+        // The persisted format before detached-media support had no transfer flag.
+        write_atomic(
+            &pending,
+            &serde_json::to_vec(&Save {
+                kind: Kind::Document,
+                title: "Design".into(),
+                base_revision: 0,
+                request_id: uuid::Uuid::new_v4().to_string(),
+                content: original.clone(),
+                media: vec![],
+                deleted: false,
+            })
+            .unwrap(),
+        )
+        .unwrap();
+    });
+    sync(&remote, cx);
+    thread.join().unwrap();
+    let saves = saves.lock().unwrap();
+    assert_eq!(saves.len(), 1);
+    assert_eq!(saves[0]["content"], original);
+    assert_eq!(saves[0]["media"], serde_json::json!([]));
+    remote.read_with(cx, |r, _| assert!(!r.link(&path).unwrap().dirty));
+}
+
+#[test]
+fn media_is_uploaded_once_reused_on_retry_and_verified_when_downloaded() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("design.rovar");
+    let bytes = vec![73; 64 * 1024];
+    let hash = hex::encode(Sha256::digest(&bytes));
+    let mut writer = rovar_format::Writer::create(&path).unwrap();
+    writer
+        .put_bytes("document", "json", br#"{"name":"Design"}"#)
+        .unwrap();
+    writer
+        .put_bytes(&format!("media/{hash}"), "media", &bytes)
+        .unwrap();
+    writer.commit().unwrap();
+    drop(writer);
+    let original = std::fs::read(&path).unwrap();
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let (url, uploads, thread) = server_with_requests(
+        vec![
+            (200, serde_json::json!([hash])),
+            (200, serde_json::Value::Null),
+            (200, serde_json::json!([])),
+            (200, serde_json::json!({"content": STANDARD.encode(&bytes)})),
+            (
+                200,
+                serde_json::json!({"content": STANDARD.encode(b"corrupt response")}),
+            ),
+        ],
+        requests.clone(),
+    );
+    tokio::runtime::Runtime::new().unwrap().block_on(async {
+        let client = Client::new(&url).unwrap();
+        let input = Save {
+            kind: Kind::Document,
+            title: "Design".into(),
+            base_revision: 0,
+            request_id: uuid::Uuid::new_v4().to_string(),
+            content: STANDARD.encode(&original),
+            media: vec![],
+            deleted: false,
+        };
+        let transfer = super::super::media::prepare(&client, "personal", &input)
+            .await
+            .unwrap();
+        assert_eq!(transfer.media.len(), 1);
+        assert_eq!(transfer.media[0].hash, hash);
+        assert!(STANDARD.decode(&transfer.content).unwrap().len() < original.len() / 8);
+        let retry = super::super::media::prepare(&client, "personal", &input)
+            .await
+            .unwrap();
+        assert_eq!(
+            serde_json::to_value(&retry).unwrap(),
+            serde_json::to_value(&transfer).unwrap(),
+            "Retry fingerprints must be deterministic even after the media upload succeeded"
+        );
+        let snapshot = Snapshot {
+            object: Object {
+                id: uuid::Uuid::new_v4().to_string(),
+                kind: Kind::Document,
+                title: input.title,
+                revision: 1,
+                created: 1,
+                modified: 1,
+                deleted: false,
+            },
+            content: transfer.content,
+            media: transfer.media,
+        };
+        let reused = super::super::media::hydrate(&client, "personal", &snapshot, &path)
+            .await
+            .unwrap();
+        let output = root.path().join("download.rovar");
+        std::fs::write(&output, reused).unwrap();
+        let reader = rovar_format::Reader::open(&output).unwrap();
+        assert_eq!(
+            reader
+                .read(&format!("media/{hash}"), bytes.len() as u64)
+                .unwrap(),
+            bytes
+        );
+        assert_eq!(
+            requests.lock().unwrap().len(),
+            3,
+            "Local media should not be downloaded again"
+        );
+        let missing = root.path().join("missing.rovar");
+        let downloaded = super::super::media::hydrate(&client, "personal", &snapshot, &missing)
+            .await
+            .unwrap();
+        std::fs::write(&output, downloaded).unwrap();
+        rovar_format::Reader::open(&output)
+            .unwrap()
+            .verify()
+            .unwrap();
+        assert!(
+            super::super::media::hydrate(&client, "personal", &snapshot, &missing)
+                .await
+                .unwrap_err()
+                .to_string()
+                .contains("checksum")
+        );
+        assert!(
+            !missing.exists(),
+            "Failed hydration must never replace the local file"
+        );
+    });
+    thread.join().unwrap();
+    assert_eq!(uploads.lock().unwrap().len(), 1);
+    assert_eq!(std::fs::read(&path).unwrap(), original);
+}
