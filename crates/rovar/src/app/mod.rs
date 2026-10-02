@@ -111,6 +111,7 @@ pub(crate) struct Studio {
     tab_scroll: gpui::ScrollHandle,
     strip: tabs::TabStrip,
     search: Entity<TextInput>,
+    search_query: String,
     rename_input: Entity<TextInput>,
     renaming: Option<PathBuf>,
     deleting_document: Option<PathBuf>,
@@ -167,7 +168,8 @@ impl Studio {
             .retain(|path| files::is_internal(&directory, path));
         let search = cx.new(|cx| TextInput::new(cx).placeholder(t("home-search")));
         let search_subscription = cx.subscribe(&search, |this, _, event: &InputEvent, cx| {
-            if matches!(event, InputEvent::Change(_)) {
+            if let InputEvent::Change(value) = event {
+                this.search_query = value.to_lowercase();
                 this.set_home_page(0, cx);
             }
         });
@@ -313,6 +315,7 @@ impl Studio {
             tab_scroll: gpui::ScrollHandle::new(),
             strip: Default::default(),
             search,
+            search_query: String::new(),
             rename_input,
             renaming: None,
             deleting_document: None,

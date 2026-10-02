@@ -24,6 +24,95 @@ fn right(visual: &mut VisualTestContext, selector: &'static str) {
 }
 
 #[gpui::test]
+fn home_search_preserves_results_and_page_until_ime_commits(cx: &mut TestAppContext) {
+    use gpui::EntityInputHandler;
+
+    cx.update(uic::init);
+    let directory = tempfile::tempdir().unwrap();
+    let handle = cx.open_window(size(px(1280.), px(800.)), |window, cx| {
+        Studio::new(directory.path().into(), window, cx)
+    });
+    for _ in 0..7 {
+        handle
+            .update(cx, |studio, window, cx| studio.new_document(window, cx))
+            .unwrap();
+        cx.run_until_parked();
+    }
+    handle
+        .update(cx, |studio, _, _| {
+            for (index, file) in studio.session.borrow_mut().recent.iter_mut().enumerate() {
+                file.title = format!("你好 {index}");
+            }
+        })
+        .unwrap();
+    let mut visual = VisualTestContext::from_window(handle.into(), cx);
+    click(&mut visual, "home-tab");
+    click(&mut visual, "home-page-2");
+
+    // A parent repaint while composing must keep both the results and current page.
+    for preedit in ["n", "ni", "", "ni"] {
+        handle
+            .update(&mut visual.cx, |studio, window, cx| {
+                studio.search.update(cx, |input, cx| {
+                    input.replace_and_mark_text_in_range(None, preedit, None, window, cx);
+                });
+                cx.notify();
+            })
+            .unwrap();
+        draw(&mut visual);
+        handle
+            .update(&mut visual.cx, |studio, _, cx| {
+                assert_eq!(studio.search.read(cx).value().as_ref(), preedit);
+                assert_eq!(studio.home_page, 1);
+            })
+            .unwrap();
+        assert!(visual.debug_bounds("recent-file-0").is_some());
+        assert!(visual.debug_bounds("home-page-2").is_some());
+    }
+
+    handle
+        .update(&mut visual.cx, |studio, window, cx| {
+            studio.search.update(cx, |input, cx| {
+                input.replace_text_in_range(None, "你好 0", window, cx);
+            });
+        })
+        .unwrap();
+    draw(&mut visual);
+    handle
+        .update(&mut visual.cx, |studio, _, _| {
+            assert_eq!(studio.home_page, 0)
+        })
+        .unwrap();
+    assert!(visual.debug_bounds("recent-file-0").is_some());
+    assert!(visual.debug_bounds("recent-file-1").is_none());
+    assert!(visual.debug_bounds("home-page-2").is_none());
+
+    // Starting and cancelling another composition preserves the committed filter.
+    for preedit in ["hao", ""] {
+        handle
+            .update(&mut visual.cx, |studio, window, cx| {
+                studio.search.update(cx, |input, cx| {
+                    input.replace_and_mark_text_in_range(None, preedit, None, window, cx);
+                });
+                cx.notify();
+            })
+            .unwrap();
+        draw(&mut visual);
+        assert!(visual.debug_bounds("recent-file-0").is_some());
+        assert!(visual.debug_bounds("recent-file-1").is_none());
+    }
+
+    handle
+        .update(&mut visual.cx, |studio, _, cx| {
+            studio.search.update(cx, |input, cx| input.clear(cx));
+        })
+        .unwrap();
+    draw(&mut visual);
+    assert!(visual.debug_bounds("recent-file-5").is_some());
+    assert!(visual.debug_bounds("home-page-2").is_some());
+}
+
+#[gpui::test]
 fn home_pagination_resets_filters_and_clamps_after_last_page_deletion(cx: &mut TestAppContext) {
     cx.update(uic::init);
     let directory = tempfile::tempdir().unwrap();

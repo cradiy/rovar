@@ -13,7 +13,8 @@ impl Studio {
         window: &Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement + use<> {
-        let search = self.search.read(cx).value().to_lowercase();
+        // value() includes IME preedit; only committed Change events update the query.
+        let search = self.search_query.as_str();
         let session = self.session.borrow();
         let mut files: Vec<_> = session
             .recent
@@ -21,7 +22,7 @@ impl Studio {
             .filter(|file| {
                 self.source_matches(&file.path, cx)
                     && (self.all_files || !session.removed_recent.contains(&file.path))
-                    && file.title.to_lowercase().contains(&search)
+                    && file.title.to_lowercase().contains(search)
             })
             .cloned()
             .collect();

@@ -285,6 +285,18 @@ impl TextLayout {
             size(px(1.), row.height),
         )
     }
+    fn painted_caret_bounds(&self, index: usize) -> Bounds<Pixels> {
+        let mut caret = self.caret_bounds(index);
+        // Keep the caret clear of the selection border without moving glyphs or
+        // changing the logical positions used for navigation and IME placement.
+        caret.size.width = px(2.).min(self.bounds.size.width);
+        let inset = px(2.).min((self.bounds.size.width - caret.size.width) / 2.);
+        caret.origin.x = caret.origin.x.clamp(
+            self.bounds.left() + inset,
+            self.bounds.right() - inset - caret.size.width,
+        );
+        caret
+    }
     pub fn index(&self, position: Point<Pixels>) -> usize {
         let position = position - self.bounds.origin;
         let row = &self.rows[self
@@ -388,7 +400,7 @@ impl TextLayout {
             }
         }
         if focused && selection.is_empty() {
-            window.paint_quad(fill(self.caret_bounds(cursor), rgb(0x8560d9)));
+            window.paint_quad(fill(self.painted_caret_bounds(cursor), rgb(0x8560d9)));
         }
     }
 }
@@ -455,6 +467,51 @@ mod tests {
     use super::TextLayout;
     use crate::scene::text::{StyleChange, StyledText, VerticalAlign};
     use gpui::{Bounds, Empty, TestAppContext, point, px, size};
+
+    #[gpui::test]
+    fn caret_stays_inside_selection_edges_without_changing_text_layout(cx: &mut TestAppContext) {
+        let window = cx.open_window(size(px(500.), px(400.)), |_, _| Empty);
+        window
+            .update(cx, |_, window, _| {
+                for zoom in [0.25, 1., 4.] {
+                    for content in ["", "你好\n\na", "你好你好你好你好"] {
+                        let mut styles = StyledText::default();
+                        styles.replace(0..0, content.len());
+                        for alignment in [gpui::TextAlign::Left, gpui::TextAlign::Right] {
+                            styles.apply(0..content.len(), &StyleChange::Align(alignment), true);
+                            let bounds = Bounds::new(
+                                point(px(40.5), px(30.25)),
+                                size(px(80. * zoom), px(400. * zoom)),
+                            );
+                            let layout = TextLayout::new(content, &styles, zoom, bounds, window);
+                            for row in layout.rows.iter() {
+                                for index in [row.range.start, row.range.end] {
+                                    let logical = layout.caret_bounds(index);
+                                    let painted = layout.painted_caret_bounds(index);
+                                    assert!(painted.left() > bounds.left() + px(1.));
+                                    assert!(painted.right() < bounds.right() - px(1.));
+                                    assert_eq!(painted.size.width, px(2.));
+                                    assert_eq!(painted.top(), logical.top());
+                                    assert_eq!(painted.size.height, logical.size.height);
+                                }
+                            }
+                            let first = layout.caret_bounds(0);
+                            if alignment == gpui::TextAlign::Left {
+                                assert_eq!(first.left(), bounds.left());
+                            }
+                            assert_eq!(layout.index(first.origin), 0);
+                        }
+                    }
+                }
+                // A very narrow box still clips the caret to its own width.
+                let bounds = Bounds::new(point(px(40.), px(30.)), size(px(1.), px(100.)));
+                let layout = TextLayout::new("", &StyledText::default(), 1., bounds, window);
+                let caret = layout.painted_caret_bounds(0);
+                assert_eq!(caret.left(), bounds.left());
+                assert_eq!(caret.right(), bounds.right());
+            })
+            .unwrap();
+    }
 
     #[gpui::test]
     fn mixed_size_vertical_alignment_preserves_wrapping_hit_testing_and_zoom(
