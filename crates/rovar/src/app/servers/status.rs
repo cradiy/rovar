@@ -32,15 +32,17 @@ impl Studio {
         let link = remote.link(&tab.file.path)?;
         let connection = remote.connection(&link.connection)?;
         let name = remote.server_name(&connection.url).to_owned();
+        let failed = link.error.is_some() || remote.download_failed(link);
+        let pending = link.dirty || remote.download_pending(link);
         let (status, mark, color) = if !connection.authenticated {
             ("server-session-expired", LucideIcons::LogOut, 0xd5b777)
         } else if link.conflict {
             ("server-conflict-title", LucideIcons::CircleAlert, 0xd5b777)
-        } else if link.error.is_some() {
+        } else if failed {
             ("server-sync-paused", LucideIcons::CircleAlert, 0xd5b777)
-        } else if tab.saving || (link.dirty && remote.busy) {
+        } else if tab.saving || (pending && remote.busy) {
             ("server-syncing", LucideIcons::RefreshCw, ACCENT)
-        } else if link.dirty || tab.saved_revision != Some(editor.read(cx).document_revision()) {
+        } else if pending || tab.saved_revision != Some(editor.read(cx).document_revision()) {
             ("server-pending", LucideIcons::Clock, 0xd5b777)
         } else {
             ("server-synced", LucideIcons::Check, 0x98c6ad)
@@ -149,7 +151,7 @@ impl Studio {
                             .text_size(px(12.))
                             .text_color(rgb(color))
                             .child(t(status))
-                            .when(link.conflict || link.error.is_some(), |el| {
+                            .when(link.conflict || failed, |el| {
                                 el.child(
                                     div()
                                         .text_size(px(11.))
@@ -175,7 +177,7 @@ impl Studio {
                     && !link.conflict
                     && !remote.busy
                     && !tab.saving
-                    && (link.dirty || link.error.is_some()),
+                    && (pending || failed),
                 |el| {
                     el.child(status_action("sync-retry", t("server-retry-now")).on_click(
                         cx.listener(|this, _, _, cx| {

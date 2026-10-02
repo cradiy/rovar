@@ -147,12 +147,18 @@ async fn isolated_accounts_atomic_versions_retries_and_encrypted_restart() {
         app.documents.save(
             &a.identity.user_id,
             a_space,
-            command(&id, 1, &r1, b"first edit")
+            SaveDocument {
+                title: "Renamed by another client".into(),
+                ..command(&id, 1, &r1, b"first edit")
+            }
         ),
         app.documents.save(
             &a.identity.user_id,
             a_space,
-            command(&id, 1, &r2, b"second edit")
+            SaveDocument {
+                title: "Renamed by another client".into(),
+                ..command(&id, 1, &r2, b"second edit")
+            }
         )
     );
     assert_eq!(usize::from(first.is_ok()) + usize::from(second.is_ok()), 1);
@@ -173,6 +179,47 @@ async fn isolated_accounts_atomic_versions_retries_and_encrypted_restart() {
         "A rejected competing write must not publish a change"
     );
     assert_eq!(second_page.documents[0].revision, 2);
+    // The first client lost its acknowledgement, while another client has
+    // already advanced the head. Replay must return the original receipt.
+    let historical = app
+        .documents
+        .save(
+            &a.identity.user_id,
+            a_space,
+            command(&id, 0, &request, original),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        (
+            historical.revision,
+            historical.title,
+            historical.modified,
+            historical.deleted
+        ),
+        (
+            saved.revision,
+            saved.title.clone(),
+            saved.modified,
+            saved.deleted
+        )
+    );
+    assert_eq!(
+        app.documents
+            .read(&a.identity.user_id, a_space, &id)
+            .await
+            .unwrap()
+            .content,
+        current.content
+    );
+    assert!(
+        app.documents
+            .changes(&a.identity.user_id, a_space, second_page.cursor)
+            .await
+            .unwrap()
+            .documents
+            .is_empty()
+    );
     let reopened = bootstrap::build(&config).await.unwrap();
     assert_eq!(
         reopened
@@ -213,6 +260,35 @@ async fn isolated_accounts_atomic_versions_retries_and_encrypted_restart() {
     assert_eq!(deleted_page.cursor, 3);
     assert_eq!(deleted_page.documents.len(), 1);
     assert!(deleted_page.documents[0].deleted);
+    let historical = app
+        .documents
+        .save(
+            &a.identity.user_id,
+            a_space,
+            command(&id, 0, &request, original),
+        )
+        .await
+        .unwrap();
+    assert_eq!(historical.revision, 1);
+    assert!(!historical.deleted);
+    assert!(matches!(
+        app.documents
+            .save(
+                &a.identity.user_id,
+                a_space,
+                command(&id, 0, &request, b"changed retry"),
+            )
+            .await,
+        Err(Error::Conflict)
+    ));
+    assert!(
+        app.documents
+            .changes(&a.identity.user_id, a_space, 3)
+            .await
+            .unwrap()
+            .documents
+            .is_empty()
+    );
     assert!(
         app.documents
             .metadata(&a.identity.user_id, a_space, &id)

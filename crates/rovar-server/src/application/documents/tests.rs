@@ -14,7 +14,7 @@ use tokio::sync::{Mutex, OwnedMutexGuard};
 struct State {
     document: Document,
     blob: String,
-    requests: BTreeMap<String, (Vec<u8>, i64)>,
+    requests: BTreeMap<String, (Vec<u8>, Document)>,
     base_reads: usize,
     versions: BTreeMap<i64, String>,
     media: BTreeMap<String, (String, u64)>,
@@ -88,9 +88,9 @@ impl Documents for Repository {
         fingerprint: Vec<u8>,
     ) -> Result<Preparation> {
         let state = self.0.clone().lock_owned().await;
-        if let Some((previous, revision)) = state.requests.get(&input.request_id) {
-            return if *previous == fingerprint && *revision == state.document.revision {
-                Ok(Preparation::AlreadyCommitted(state.document.clone()))
+        if let Some((previous, receipt)) = state.requests.get(&input.request_id) {
+            return if *previous == fingerprint {
+                Ok(Preparation::AlreadyCommitted(receipt.clone()))
             } else {
                 Err(Error::Conflict)
             };
@@ -179,12 +179,15 @@ impl DocumentWrite for Write {
         let revision = self.revision();
         self.state.document.revision = revision;
         self.state.document.title = command.title.clone();
+        self.state.document.deleted = command.deleted;
+        self.state.document.modified = revision as u64;
         self.state.blob = blob.into();
         self.state.versions.insert(revision, blob.into());
         let fingerprint = self.fingerprint.clone();
+        let receipt = self.state.document.clone();
         self.state
             .requests
-            .insert(command.request_id.clone(), (fingerprint, revision));
+            .insert(command.request_id.clone(), (fingerprint, receipt));
         Ok(self.state.document.clone())
     }
 }
@@ -507,6 +510,48 @@ async fn delta_commit_replays_before_reading_the_base_and_rejections_do_not_publ
             .unwrap()
             .revision,
         3
+    );
+}
+
+#[tokio::test]
+async fn historical_delta_receipt_does_not_reapply_against_a_newer_head() {
+    let (service, state, id) = service();
+    let before = container(0);
+    let after = container(10);
+    service
+        .save(
+            "user",
+            "space",
+            command(&id, 0, &uuid::Uuid::new_v4().to_string(), &before),
+        )
+        .await
+        .unwrap();
+    let base = rovar_format::delta::Snapshot::from_bytes(&before, MAX_METADATA_BYTES).unwrap();
+    let next = rovar_format::delta::Snapshot::from_bytes(&after, MAX_METADATA_BYTES).unwrap();
+    let patch = serde_json::to_vec(&base.difference(&next).unwrap()).unwrap();
+    let request = uuid::Uuid::new_v4().to_string();
+    let receipt = service
+        .save_delta("user", "space", command(&id, 1, &request, &patch))
+        .await
+        .unwrap();
+    let mut newer = command(&id, 2, &uuid::Uuid::new_v4().to_string(), &container(20));
+    newer.title = "Another client's title".into();
+    service.save("user", "space", newer).await.unwrap();
+    let historical = service
+        .save_delta("user", "space", command(&id, 1, &request, &patch))
+        .await
+        .unwrap();
+    assert_eq!(
+        (historical.revision, historical.title, historical.modified),
+        (receipt.revision, receipt.title, receipt.modified)
+    );
+    let state = state.lock().await;
+    assert_eq!(state.document.revision, 3);
+    assert_eq!(state.document.title, "Another client's title");
+    assert_eq!(state.requests.len(), 3);
+    assert_eq!(
+        state.base_reads, 1,
+        "Retry must not reapply a patch against the new head"
     );
 }
 

@@ -161,15 +161,6 @@ impl Documents for DocumentRepository {
         let id = &input.id;
         let mut tx = self.0.begin().await?;
         super::spaces::require(&mut tx, actor, space_id, false).await?;
-        let hashes: Vec<_> = input.media.iter().map(|media| media.hash.clone()).collect();
-        let lengths = media_lengths(&mut tx, space_id, &hashes).await?;
-        for media in &input.media {
-            if lengths.get(&media.hash) != Some(&media.length) {
-                return Err(Error::Invalid(
-                    "Upload referenced media before saving the document".into(),
-                ));
-            }
-        }
         sqlx::query("INSERT INTO objects(space_id,id,kind,title,created,modified) VALUES($1,$2,$3,$4,$5,$5) ON CONFLICT DO NOTHING")
             .bind(space_id).bind(id).bind(match input.kind {
                 DocumentKind::Document => "document",
@@ -183,14 +174,34 @@ impl Documents for DocumentRepository {
             .fetch_one(&mut *tx)
             .await?;
         let current = object(&row);
-        if let Some(previous) = sqlx::query("SELECT request_hash,revision FROM revisions WHERE space_id=$1 AND object_id=$2 AND request_id=$3")
+        if let Some(previous) = sqlx::query("SELECT request_hash,revision,modified FROM revisions WHERE space_id=$1 AND object_id=$2 AND request_id=$3")
             .bind(space_id).bind(id).bind(&input.request_id).fetch_optional(&mut *tx).await? {
-            if previous.get::<Vec<u8>,_>("request_hash") != fingerprint || previous.get::<i64,_>("revision") != current.revision { return Err(Error::Conflict); }
-            return Ok(Preparation::AlreadyCommitted(current));
+            if previous.get::<Vec<u8>,_>("request_hash") != fingerprint { return Err(Error::Conflict); }
+            // The fingerprint binds the original title, kind and deletion flag.
+            // Returning the current object here would falsely acknowledge newer
+            // content as the caller's upload, corrupting its confirmed baseline.
+            return Ok(Preparation::AlreadyCommitted(Document {
+                title: input.title.clone(),
+                revision: previous.get("revision"),
+                modified: previous.get::<i64, _>("modified") as u64,
+                deleted: input.deleted,
+                ..current
+            }));
         }
         if current.revision != input.base_revision || current.deleted || current.kind != input.kind
         {
             return Err(Error::Conflict);
+        }
+        // A known request needs no new media validation or blob write. Validate
+        // dependencies only when creating a new revision.
+        let hashes: Vec<_> = input.media.iter().map(|media| media.hash.clone()).collect();
+        let lengths = media_lengths(&mut tx, space_id, &hashes).await?;
+        for media in &input.media {
+            if lengths.get(&media.hash) != Some(&media.length) {
+                return Err(Error::Invalid(
+                    "Upload referenced media before saving the document".into(),
+                ));
+            }
         }
         Ok(Preparation::Write(Box::new(PreparedWrite {
             transaction: tx,
@@ -222,16 +233,18 @@ impl DocumentWrite for PreparedWrite {
     async fn commit(self: Box<Self>, input: &SaveDocument, blob: &str) -> Result<Document> {
         let mut this = *self;
         let revision = this.revision();
+        let modified = now();
         // Unlike a database sequence, this counter cannot publish out of commit
         // order: the row lock is held until the object transaction completes.
         let sequence: i64 = sqlx::query_scalar("INSERT INTO sync_cursors(space_id,sequence) VALUES($1,1) ON CONFLICT(space_id) DO UPDATE SET sequence=sync_cursors.sequence+1 RETURNING sequence")
             .bind(&this.space_id).fetch_one(&mut *this.transaction).await?;
-        sqlx::query("INSERT INTO revisions(space_id,object_id,revision,request_id,request_hash,blob,media) VALUES($1,$2,$3,$4,$5,$6,$7)")
+        sqlx::query("INSERT INTO revisions(space_id,object_id,revision,request_id,request_hash,blob,media,modified) VALUES($1,$2,$3,$4,$5,$6,$7,$8)")
             .bind(&this.space_id).bind(&this.current.id).bind(revision).bind(&input.request_id).bind(&this.fingerprint).bind(blob)
             .bind(serde_json::to_value(&input.media).map_err(anyhow::Error::from)?)
+            .bind(modified)
             .execute(&mut *this.transaction).await?;
         let row = sqlx::query("UPDATE objects SET title=$3,revision=$4,modified=$5,deleted=$6,change_sequence=$7 WHERE space_id=$1 AND id=$2 RETURNING *")
-            .bind(&this.space_id).bind(&this.current.id).bind(&input.title).bind(revision).bind(now()).bind(input.deleted).bind(sequence)
+            .bind(&this.space_id).bind(&this.current.id).bind(&input.title).bind(revision).bind(modified).bind(input.deleted).bind(sequence)
             .fetch_one(&mut *this.transaction).await?;
         this.transaction.commit().await?;
         Ok(object(&row))

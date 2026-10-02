@@ -3,6 +3,8 @@ mod cache;
 mod colors;
 mod conflict;
 mod delta;
+mod directory;
+use directory::Directory;
 mod media;
 mod merge;
 #[cfg(all(test, not(target_family = "wasm")))]
@@ -73,14 +75,6 @@ struct Catalog {
     directories: BTreeMap<String, Directory>,
 }
 
-#[derive(Clone, Default, Serialize, Deserialize)]
-struct Directory {
-    cursor: i64,
-    /// Remote versions deferred for active editors or local writes. Advancing
-    /// the directory cursor must never forget these versions.
-    pending: BTreeMap<String, Object>,
-}
-
 #[derive(Serialize, Deserialize)]
 struct PendingSave {
     #[serde(flatten)]
@@ -137,6 +131,20 @@ pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
 }
 
 impl Remote {
+    pub(crate) fn download_failed(&self, link: &Link) -> bool {
+        self.catalog
+            .directories
+            .get(&link.connection)
+            .is_some_and(|directory| directory.failed(&link.object.id))
+    }
+
+    pub(crate) fn download_pending(&self, link: &Link) -> bool {
+        self.catalog
+            .directories
+            .get(&link.connection)
+            .is_some_and(|directory| directory.pending.contains_key(&link.object.id))
+    }
+
     pub fn shared(root: &Path, cx: &mut App) -> Entity<Self> {
         if let Some(shared) = cx.try_global::<SharedRemote>() {
             return shared.0.clone();
@@ -507,6 +515,9 @@ impl Remote {
     }
     pub fn retry(&mut self, cx: &mut Context<Self>) {
         self.reconnect_at.clear();
+        for directory in self.catalog.directories.values_mut() {
+            directory.retry_now();
+        }
         self.merge_pending.extend(
             self.catalog
                 .links
@@ -920,7 +931,7 @@ impl Remote {
                             None,
                         )
                         .await?;
-                    directory.pending.insert(object.id.clone(), object);
+                    directory.queue(object);
                 } else {
                     // One bounded page per refresh keeps large workspaces from
                     // monopolizing the sync worker. Deferred objects survive restart.
@@ -937,7 +948,7 @@ impl Remote {
                     );
                     directory.cursor = page.cursor;
                     for object in page.objects {
-                        directory.pending.insert(object.id.clone(), object);
+                        directory.queue(object);
                     }
                 }
                 // Missing local caches must still be repaired when the remote
@@ -955,10 +966,15 @@ impl Remote {
                 }
                 let mut updates = Vec::new();
                 let mut downloaded = 0usize;
-                for object in directory.pending.values().cloned().collect::<Vec<_>>() {
+                let mut attempted = 0;
+                let mut pending = directory.pending.values().cloned().collect::<Vec<_>>();
+                // New work precedes retries, including when a large set of
+                // failing objects exhausts one refresh's attempt budget.
+                pending.sort_by_key(|object| directory.attempts(&object.id));
+                for object in pending {
                     // Bound a refresh's resident snapshots, including the first
                     // scan of a workspace with many large documents.
-                    if downloaded >= 16 * 1024 * 1024 || updates.len() >= 16 {
+                    if downloaded >= 16 * 1024 * 1024 || attempted >= 16 {
                         break;
                     }
                     if selected.as_ref().is_some_and(|id| id != &object.id) {
@@ -971,13 +987,17 @@ impl Remote {
                         if link.object.revision >= object.revision
                             && (link.object.deleted || rovar_storage::exists(path))
                         {
-                            directory.pending.remove(&object.id);
+                            directory.complete(&object.id);
                             continue;
                         }
                         if link.dirty || open.contains(path) {
                             continue;
                         }
                     }
+                    if selected.is_none() && !directory.ready(&object.id) {
+                        continue;
+                    }
+                    attempted += 1;
                     let path =
                         existing
                             .map(|(p, _)| p.clone())
@@ -1009,7 +1029,7 @@ impl Remote {
                     } else {
                         None
                     };
-                    let (object, bytes) = delta::receive(
+                    let result = delta::receive(
                         &client,
                         &space,
                         &object,
@@ -1018,9 +1038,23 @@ impl Remote {
                         &root.join("downloads"),
                         &executor,
                     )
-                    .await?;
-                    downloaded += bytes.len();
-                    updates.push((path, object, Some(bytes)));
+                    .await;
+                    match result {
+                        Ok((object, bytes)) => {
+                            downloaded += bytes.len();
+                            updates.push((path, object, Some(bytes)));
+                        }
+                        // Authentication failures invalidate the entire batch;
+                        // object failures must not discard unrelated successes.
+                        Err(error)
+                            if error
+                                .downcast_ref::<HttpError>()
+                                .is_some_and(|e| e.status == 401) =>
+                        {
+                            return Err(error);
+                        }
+                        Err(error) => directory.fail(&object, &error),
+                    }
                 }
                 Ok::<_, anyhow::Error>((updates, directory))
             }
@@ -1062,7 +1096,11 @@ impl Remote {
                         for (path, object, bytes) in updates {
                             // An editor may have saved while the request was in flight.
                             if let Err(error) = this.reconcile_baseline(&path) {
-                                this.error = Some(error.to_string());
+                                this.catalog
+                                    .directories
+                                    .get_mut(&connection)
+                                    .unwrap()
+                                    .fail(&object, &error);
                                 continue;
                             }
                             if currently_open.contains(&path)
@@ -1074,18 +1112,31 @@ impl Remote {
                             if let Err(error) = this.install_snapshot(
                                 path,
                                 connection.clone(),
-                                object,
+                                object.clone(),
                                 bytes.as_deref(),
                             ) {
-                                this.error = Some(error.to_string());
-                                break;
+                                this.catalog
+                                    .directories
+                                    .get_mut(&connection)
+                                    .unwrap()
+                                    .fail(&object, &error);
+                                // Only continue if the shared recovery journal
+                                // can be resolved safely. A global persistence
+                                // failure must not be hidden as an object retry.
+                                if let Err(error) = this.recover_incoming() {
+                                    this.error = Some(error.to_string());
+                                    break;
+                                }
+                                continue;
                             }
                             this.catalog
                                 .directories
                                 .get_mut(&connection)
                                 .unwrap()
-                                .pending
-                                .remove(&id);
+                                .complete(&id);
+                        }
+                        if this.error.is_none() {
+                            this.error = this.catalog.directories[&connection].error();
                         }
                         this.persist();
                     }
