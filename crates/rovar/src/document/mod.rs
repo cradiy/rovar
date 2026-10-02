@@ -23,7 +23,7 @@ mod tests;
 mod storage;
 pub(crate) use storage::{cache_preview, load, read_id, save, save_as};
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) struct Text {
     pub id: usize,
     pub board: Option<usize>,
@@ -33,14 +33,14 @@ pub(crate) struct Text {
     pub styles: StyledText,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) struct AssetUse {
     pub object: usize,
     pub fill: bool,
     pub hash: String,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) struct Page {
     pub id: String,
     pub name: String,

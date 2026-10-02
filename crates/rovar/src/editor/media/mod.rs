@@ -19,6 +19,9 @@ pub(super) struct VideoRuntime {
 
 impl Workspace {
     pub(super) fn load_visible_media(&mut self, window: &Window, cx: &mut Context<Self>) {
+        if self.media.decoding.len() >= 2 {
+            return;
+        }
         let bounds = self.bounds.get();
         let size = if f32::from(bounds.size.width) > 0. {
             bounds.size
@@ -43,14 +46,16 @@ impl Workspace {
         let candidates: Vec<_> = self
             .boards
             .iter()
-            .filter(|b| visible(b.id))
-            .filter_map(|b| b.image_fill.asset.clone())
-            .chain(self.shapes.iter().filter(|s| visible(s.id)).flat_map(|s| {
-                [s.media.clone(), s.image_fill.asset.clone()]
+            .filter_map(|b| b.image_fill.asset.as_ref().map(|asset| (b.id, asset)))
+            .chain(self.shapes.iter().flat_map(|s| {
+                [s.media.as_ref(), s.image_fill.asset.as_ref()]
                     .into_iter()
                     .flatten()
+                    .map(move |asset| (s.id, asset))
             }))
-            .filter(|asset| asset.is_pending())
+            .filter(|(_, asset)| asset.is_pending() && !self.media.decoding.contains(&asset.hash))
+            .filter(|(id, _)| visible(*id))
+            .map(|(_, asset)| asset.clone())
             .collect();
         for asset in candidates {
             if self.media.decoding.len() >= 2 {

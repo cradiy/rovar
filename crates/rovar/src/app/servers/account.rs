@@ -172,22 +172,17 @@ impl Studio {
             .flex()
             .flex_col()
             .gap(px(16.))
-            .child(view::field(
+            .child(self.password_field(
                 "account-current-password",
                 t("account-current-password"),
-                &panel.password,
+                0,
                 cx,
             ))
-            .child(view::field(
-                "account-new-password",
-                t("account-new-password"),
-                &panel.new_password,
-                cx,
-            ))
-            .child(view::field(
+            .child(self.password_field("account-new-password", t("account-new-password"), 1, cx))
+            .child(self.password_field(
                 "account-confirm-password",
                 t("account-confirm-password"),
-                &panel.confirm_password,
+                2,
                 cx,
             ))
             .child(

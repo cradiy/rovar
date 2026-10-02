@@ -13,6 +13,8 @@ mod tests;
 
 pub(super) struct State {
     pub revision: Option<u64>,
+    #[cfg(test)]
+    pub reflows: usize,
     target: Option<(String, usize)>,
     inputs: Vec<Entity<TextInput>>,
     _subscriptions: Vec<Subscription>,
@@ -42,6 +44,8 @@ impl State {
             .collect();
         Self {
             revision: None,
+            #[cfg(test)]
+            reflows: 0,
             target: None,
             inputs,
             _subscriptions: subscriptions,
@@ -185,6 +189,10 @@ impl Workspace {
         self.auto_layout.revision = Some(revision);
         if self.hierarchy.layouts.is_empty() && self.hierarchy.sizing.is_empty() {
             return;
+        }
+        #[cfg(test)]
+        {
+            self.auto_layout.reflows += 1;
         }
         let selected = self.layout_target();
         let before = selected.and_then(|id| self.world_rect(id));

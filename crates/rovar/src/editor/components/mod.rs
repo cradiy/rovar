@@ -94,17 +94,30 @@ impl Workspace {
         if self.components.definitions.is_empty() {
             return;
         }
-        let mut pages = self.component_pages(cx);
+        // Unbound pages cannot contribute masters or receive instance updates.
+        let mut pages: Vec<_> = self
+            .pages
+            .entries
+            .iter()
+            .filter_map(|state| {
+                if state.page.id == self.pages.active {
+                    (!self.hierarchy.components.is_empty()).then(|| self.snapshot_page(cx).0)
+                } else {
+                    (!state.page.hierarchy.components.is_empty()).then(|| state.page.clone())
+                }
+            })
+            .collect();
+        let before = pages
+            .iter()
+            .find(|page| page.id == self.pages.active)
+            .cloned();
         if let Err(error) = model::synchronize(&mut pages, &mut self.components.definitions) {
             self.assets.error = Some(error.to_string());
             return;
         }
         for page in pages {
-            if page.id == self.pages.active {
-                let before = self.snapshot_page(cx).0;
-                if serde_json::to_value(&before).ok() != serde_json::to_value(&page).ok() {
-                    self.apply_component_page(page.clone(), window, cx);
-                }
+            if page.id == self.pages.active && before.as_ref() != Some(&page) {
+                self.apply_component_page(page.clone(), window, cx);
             }
             if let Some(state) = self.pages.entries.iter_mut().find(|p| p.page.id == page.id) {
                 state.page = page;

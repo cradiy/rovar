@@ -4,6 +4,94 @@ use gpui::{TestAppContext, VisualTestContext, size};
 struct LoginPage(Entity<Studio>);
 
 #[gpui::test]
+fn password_visibility_preserves_value_selection_and_focus(cx: &mut TestAppContext) {
+    use gpui::EntityInputHandler;
+
+    cx.update(uic::init);
+    let root = tempfile::tempdir().unwrap();
+    let window = cx.open_window(size(px(900.), px(900.)), |window, cx| {
+        let mut studio = Studio::new(root.path().into(), window, cx);
+        studio.open_servers(None, window, cx);
+        let panel = studio.servers.as_mut().unwrap();
+        panel.view = View::Settings;
+        panel.mode = "password";
+        for input in [
+            &panel.password,
+            &panel.new_password,
+            &panel.confirm_password,
+        ] {
+            input.update(cx, |input, cx| input.set_value("secret", cx));
+        }
+        studio
+    });
+    let mut visual = VisualTestContext::from_window(window.into(), cx);
+    for (slot, id) in [
+        "account-current-password",
+        "account-new-password",
+        "account-confirm-password",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        visual.update(|window, cx| window.draw(cx).clear());
+        let bounds = visual.debug_bounds(id).unwrap();
+        visual.simulate_click(bounds.center(), Default::default());
+        visual.simulate_keystrokes("home right");
+        for visible in [true, false] {
+            visual.update(|window, cx| window.draw(cx).clear());
+            let toggle = visual
+                .debug_bounds(
+                    [
+                        "account-current-password-visibility",
+                        "account-new-password-visibility",
+                        "account-confirm-password-visibility",
+                    ][slot],
+                )
+                .unwrap();
+            visual.simulate_click(toggle.center(), Default::default());
+            window
+                .update(&mut visual.cx, |studio, window, cx| {
+                    let panel = studio.servers.as_ref().unwrap();
+                    let mut expected = [false; 3];
+                    expected[slot] = visible;
+                    assert_eq!(panel.password_visible, expected);
+                    [
+                        &panel.password,
+                        &panel.new_password,
+                        &panel.confirm_password,
+                    ][slot]
+                        .update(cx, |input, cx| {
+                            assert_eq!(input.value().as_ref(), "secret");
+                            assert!(input.focus_handle(cx).is_focused(window));
+                            assert_eq!(
+                                input.selected_text_range(false, window, cx).unwrap().range,
+                                1..1
+                            );
+                        });
+                })
+                .unwrap();
+        }
+        visual.simulate_input("X");
+        window
+            .update(&mut visual.cx, |studio, _, cx| {
+                let panel = studio.servers.as_ref().unwrap();
+                assert_eq!(
+                    [
+                        &panel.password,
+                        &panel.new_password,
+                        &panel.confirm_password
+                    ][slot]
+                        .read(cx)
+                        .value()
+                        .as_ref(),
+                    "sXecret"
+                );
+            })
+            .unwrap();
+    }
+}
+
+#[gpui::test]
 fn account_settings_validate_passwords_and_reauthentication_preserves_tabs(
     cx: &mut TestAppContext,
 ) {

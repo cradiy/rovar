@@ -96,18 +96,32 @@ impl Workspace {
     ) -> TextBox {
         let history = self.history.clone();
         let editor = cx.new(|cx| TextEditor::new(id, history, window, cx));
-        // Repaint the owning surface on input without copying text back into it.
-        let subscription = cx.observe_in(&editor, window, |this, editor, window, cx| {
-            this.auto_layout.revision = None;
+        let mut revision = editor.read(cx).content_revision();
+        let mut style_range = editor.read(cx).style_range();
+        let mut history_revision = self.history.borrow().revision();
+        let subscription = cx.observe_in(&editor, window, move |this, editor, window, cx| {
+            let current = editor.read(cx);
+            let content_changed = revision != current.content_revision();
+            let selection_changed = style_range != current.style_range();
+            revision = current.content_revision();
+            style_range = current.style_range();
+            let committed = history_revision != this.history.borrow().revision();
+            history_revision = this.history.borrow().revision();
+            if content_changed {
+                this.auto_layout.revision = None;
+            }
             // An IME commit may arrive during a chrome-only resize.
             this.scene.update(cx, |_, cx| cx.notify());
-            if this
-                .selected_text()
-                .is_some_and(|text| text.editor == editor)
+            if (content_changed || selection_changed)
+                && this
+                    .selected_text()
+                    .is_some_and(|text| text.editor == editor)
             {
                 this.sync_text_inspector(window, cx);
             }
-            cx.notify();
+            if content_changed || selection_changed || committed {
+                cx.notify();
+            }
         });
         TextBox {
             id,

@@ -29,6 +29,7 @@ pub(super) struct Panel {
     password: Entity<TextInput>,
     new_password: Entity<TextInput>,
     confirm_password: Entity<TextInput>,
+    password_visible: [bool; 3],
     account: Option<String>,
     sessions: Vec<rovar_api::AccountSession>,
     success: Option<String>,
@@ -323,6 +324,7 @@ impl Studio {
                     .password()
                     .placeholder(t("account-confirm-password"))
             }),
+            password_visible: [false; 3],
             account: None,
             sessions: Vec::new(),
             success: None,
@@ -486,6 +488,17 @@ impl Studio {
             return;
         }
         panel.view = view;
+        panel.password_visible = [false; 3];
+        for input in [
+            &panel.password,
+            &panel.new_password,
+            &panel.confirm_password,
+        ] {
+            input.update(cx, |input, cx| {
+                input.set_mode(uic::components::input::InputMode::Password);
+                cx.notify();
+            });
+        }
         panel.success = None;
         panel.resume = None;
         panel

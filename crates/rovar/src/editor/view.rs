@@ -11,7 +11,7 @@ impl Render for Workspace {
         self.sync_export_controls(window, cx);
         self.load_visible_media(window, cx);
         if self.preview_read_only() {
-            return self.preview_canvas(cx).into_any_element();
+            return self.preview_canvas(window, cx).into_any_element();
         }
         self.panels.window_width = f32::from(window.viewport_size().width);
         let drag_cursor = self.gesture_cursor();

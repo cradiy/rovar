@@ -20,6 +20,16 @@ pub(in crate::editor) struct GeometryKey {
 }
 
 impl GeometryKey {
+    pub fn outset(shape: &Shape, zoom: f32) -> f32 {
+        if shape.kind == ShapeKind::Arrow {
+            (shape.stroke.width * 4.).max(12.) * zoom + 6.
+        } else if shape.kind.is_path() || shape.kind.is_polygon() {
+            (shape.stroke.width * zoom / 2.).max(6.)
+        } else {
+            shape.stroke.outset() * zoom
+        }
+    }
+
     pub fn new(shape: &Shape, zoom: f32) -> Self {
         Self {
             kind: if shape.kind.is_polygon() {
@@ -35,13 +45,7 @@ impl GeometryKey {
             } else {
                 0.
             },
-            outset: if shape.kind == ShapeKind::Arrow {
-                (shape.stroke.width * 4.).max(12.) * zoom + 6.
-            } else if shape.kind.is_path() || shape.kind.is_polygon() {
-                (shape.stroke.width * zoom / 2.).max(6.)
-            } else {
-                shape.stroke.outset() * zoom
-            },
+            outset: Self::outset(shape, zoom),
             points: shape.points.clone(),
             nodes: if shape.kind.is_polygon() {
                 crate::scene::bezier::Nodes(std::rc::Rc::new(

@@ -1,5 +1,5 @@
 use super::*;
-use gpui::FontWeight;
+use gpui::{FontWeight, MouseButton};
 use uic::components::input::{Input, InputAppearance};
 
 const CARD: u32 = 0x24232e;
@@ -44,6 +44,16 @@ pub(super) fn field(
     input: &Entity<TextInput>,
     cx: &gpui::App,
 ) -> gpui::Div {
+    field_with_suffix(id, label, input, None, cx)
+}
+
+fn field_with_suffix(
+    id: &'static str,
+    label: &'static str,
+    input: &Entity<TextInput>,
+    suffix: Option<gpui::AnyElement>,
+    cx: &gpui::App,
+) -> gpui::Div {
     div()
         .flex()
         .flex_col()
@@ -58,6 +68,7 @@ pub(super) fn field(
         .child(
             div().debug_selector(move || id.into()).child(
                 Input::new(input)
+                    .when_some(suffix, |input, suffix| input.suffix(suffix))
                     .w_full()
                     .h(px(44.))
                     .font_family(crate::ui::font::family(cx))
@@ -78,6 +89,67 @@ pub(super) fn field(
 }
 
 impl Studio {
+    pub(super) fn password_field(
+        &self,
+        id: &'static str,
+        label: &'static str,
+        slot: usize,
+        cx: &Context<Self>,
+    ) -> gpui::Div {
+        let panel = self.servers.as_ref().unwrap();
+        let input = [
+            &panel.password,
+            &panel.new_password,
+            &panel.confirm_password,
+        ][slot];
+        let visible = panel.password_visible[slot];
+        let toggle = div()
+            .id(("password-visibility", slot))
+            .debug_selector(move || format!("{id}-visibility"))
+            .size(px(28.))
+            .flex_shrink_0()
+            .flex()
+            .items_center()
+            .justify_center()
+            .rounded(px(6.))
+            .cursor_pointer()
+            .hover(|s| s.bg(rgba(0xffffff0d)))
+            .child(
+                icon(
+                    if visible {
+                        LucideIcons::EyeOff
+                    } else {
+                        LucideIcons::Eye
+                    },
+                    17.,
+                )
+                .text_color(rgb(if visible { ACCENT } else { MUTED })),
+            )
+            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .on_click(cx.listener(move |this, _, _, cx| {
+                let Some(panel) = &mut this.servers else {
+                    return;
+                };
+                panel.password_visible[slot] = !panel.password_visible[slot];
+                let mode = if panel.password_visible[slot] {
+                    uic::components::input::InputMode::Text
+                } else {
+                    uic::components::input::InputMode::Password
+                };
+                [
+                    &panel.password,
+                    &panel.new_password,
+                    &panel.confirm_password,
+                ][slot]
+                    .update(cx, |input, cx| {
+                        input.set_mode(mode);
+                        cx.notify();
+                    });
+                cx.notify();
+            }));
+        field_with_suffix(id, label, input, Some(toggle.into_any_element()), cx)
+    }
+
     pub(in crate::app) fn server_dialog(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let panel = self.servers.as_ref().unwrap();
         let field = |id, label, input: &Entity<TextInput>| field(id, label, input, cx);
@@ -584,11 +656,7 @@ impl Studio {
                 },
             )
             .child(field("server-user", t("server-username"), &panel.username))
-            .child(field(
-                "server-password",
-                t("server-password"),
-                &panel.password,
-            ))
+            .child(self.password_field("server-password", t("server-password"), 0, cx))
             .when(panel.mode == "team", |el| {
                 el.child(field("server-team", t("space-team-name"), &panel.team_name))
             })
