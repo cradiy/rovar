@@ -1,6 +1,7 @@
 use super::*;
 mod baseline;
 mod colors;
+mod delta;
 mod directory;
 mod media;
 mod merge;

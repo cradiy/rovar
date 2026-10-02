@@ -55,8 +55,11 @@ impl Remote {
         if let Some(bytes) = server_bytes {
             resolved.object = reviewed.clone();
             resolved.digest = digest(bytes, &reviewed.title, false);
-            resolved.baseline =
-                Some(self.store_baseline(reviewed, &baseline::snapshot_content(bytes, false)?)?);
+            resolved.baseline = Some(self.store_snapshot_baseline(
+                reviewed,
+                &baseline::snapshot_content(bytes, false)?,
+                bytes,
+            )?);
             resolved.dirty = false;
         }
         self.catalog.links.insert(path.into(), resolved);

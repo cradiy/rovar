@@ -5,6 +5,8 @@ use super::*;
 pub(super) struct Baseline {
     pub object: Object,
     pub content: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transfer: Option<rovar_format::delta::Snapshot>,
 }
 
 pub(super) fn content(path: &Path, deleted: bool) -> Result<Vec<u8>> {
@@ -77,9 +79,33 @@ pub(super) fn snapshot_content(bytes: &[u8], deleted: bool) -> Result<Vec<u8>> {
 
 impl Remote {
     pub(super) fn store_baseline(&self, object: &Object, content: &[u8]) -> Result<String> {
+        self.store_transfer_baseline(object, content, None)
+    }
+
+    pub(super) fn store_snapshot_baseline(
+        &self,
+        object: &Object,
+        content: &[u8],
+        bytes: &[u8],
+    ) -> Result<String> {
+        let transfer = (!object.deleted && object.kind != Kind::ColorStyle)
+            .then(|| {
+                rovar_format::delta::Snapshot::from_bytes(bytes, rovar_api::MAX_CONTENT_BYTES).ok()
+            })
+            .flatten();
+        self.store_transfer_baseline(object, content, transfer)
+    }
+
+    pub(super) fn store_transfer_baseline(
+        &self,
+        object: &Object,
+        content: &[u8],
+        transfer: Option<rovar_format::delta::Snapshot>,
+    ) -> Result<String> {
         let bytes = serde_json::to_vec(&Baseline {
             object: object.clone(),
             content: STANDARD.encode(content),
+            transfer,
         })?;
         let key = hex::encode(Sha256::digest(&bytes));
         write_atomic(&self.root.join("baselines").join(&key), &bytes)?;
@@ -135,6 +161,7 @@ impl Remote {
             Baseline {
                 object: link.object.clone(),
                 content: STANDARD.encode(&current),
+                transfer: None,
             }
         };
         let dirty = current != STANDARD.decode(&baseline.content)?

@@ -60,6 +60,10 @@ fn routes(config: &Config, app: Application) -> Router {
                                 .put(media::upload),
                         )
                         .push(
+                            Router::with_path("spaces/{space}/objects/{id}/delta")
+                                .put(documents::save_delta),
+                        )
+                        .push(
                             Router::with_path("spaces/{space}/objects/{id}/transfer")
                                 .get(documents::transfer),
                         )

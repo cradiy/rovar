@@ -6,6 +6,7 @@ pub enum Error {
     AlreadyExists,
     NotFound,
     Conflict,
+    DeltaBase,
     RateLimited,
     Internal(anyhow::Error),
 }
@@ -19,6 +20,7 @@ impl std::fmt::Display for Error {
             Self::Forbidden => f.write_str("Access is not allowed"),
             Self::AlreadyExists => f.write_str("Username already exists"),
             Self::Conflict => f.write_str("The server has a newer version. Your local changes are retained; export them before reopening the server version."),
+            Self::DeltaBase => f.write_str("The delta baseline is unavailable; retry with a complete snapshot"),
             Self::RateLimited => f.write_str("Too many requests. Try again in a minute"),
             Self::Internal(_) => f.write_str("Server operation failed"),
         }

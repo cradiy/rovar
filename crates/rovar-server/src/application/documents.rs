@@ -6,6 +6,7 @@ use crate::domain::{
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use tokio::sync::Semaphore;
+mod delta;
 mod media;
 
 pub struct DocumentService {
@@ -60,29 +61,66 @@ impl DocumentService {
         })
     }
 
-    pub async fn save(
+    pub async fn save(&self, actor: &str, space: &str, command: SaveDocument) -> Result<Document> {
+        self.save_encoded(actor, space, command, false).await
+    }
+
+    pub async fn save_delta(
+        &self,
+        actor: &str,
+        space: &str,
+        command: SaveDocument,
+    ) -> Result<Document> {
+        self.save_encoded(actor, space, command, true).await
+    }
+
+    async fn save_encoded(
         &self,
         actor: &str,
         space: &str,
         mut command: SaveDocument,
+        delta: bool,
     ) -> Result<Document> {
         command.validate()?;
+        if delta
+            && (command.deleted
+                || command.base_revision == 0
+                || command.kind == crate::domain::document::DocumentKind::ColorStyle)
+        {
+            return Err(crate::domain::error::Error::Invalid(
+                "Delta requires a live document baseline".into(),
+            ));
+        }
         let _permit = self
             .transfers
             .acquire()
             .await
             .map_err(anyhow::Error::from)?;
-        if !command.media.is_empty() {
+        if !delta && !command.media.is_empty() {
             media::validate_container(command.content.clone()).await?;
         }
-        let fingerprint = fingerprint(&command);
+        let mut fingerprint = fingerprint(&command);
+        if delta {
+            let mut hash = Sha256::new();
+            hash.update(b"rovar/delta-request/v1");
+            hash.update(fingerprint);
+            fingerprint = hash.finalize().to_vec();
+        }
         match self
             .documents
             .prepare(actor, space, &command, fingerprint)
             .await?
         {
             Preparation::AlreadyCommitted(document) => Ok(document),
-            Preparation::Write(write) => {
+            Preparation::Write(mut write) => {
+                if delta {
+                    let blob = write.base_blob().await?;
+                    let context = format!("{space}/{}/{}", command.id, command.base_revision);
+                    let base = self.storage.read(&blob, context).await?;
+                    command.content =
+                        delta::expand(base, std::mem::take(&mut command.content)).await?;
+                    command.validate()?;
+                }
                 let context = format!("{space}/{}/{}", command.id, write.revision());
                 let blob = self
                     .storage

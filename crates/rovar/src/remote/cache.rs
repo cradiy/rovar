@@ -23,7 +23,8 @@ impl Remote {
     ) -> Result<()> {
         self.recover_incoming()?;
         let content = baseline::snapshot_content(bytes.unwrap_or_default(), object.deleted)?;
-        let baseline = self.store_baseline(&object, &content)?;
+        let baseline =
+            self.store_snapshot_baseline(&object, &content, bytes.unwrap_or_default())?;
         let incoming = Incoming {
             previous: self.catalog.links.get(&path).cloned(),
             path,
@@ -61,7 +62,7 @@ impl Remote {
         let confirmed = baseline::snapshot_content(server, false)?;
         let content = baseline::snapshot_content(merged, false)?;
         let mut next = previous.clone();
-        next.baseline = Some(self.store_baseline(&object, &confirmed)?);
+        next.baseline = Some(self.store_snapshot_baseline(&object, &confirmed, server)?);
         next.digest = digest(server, &object.title, false);
         next.dirty = content != confirmed || title != object.title;
         next.object = object;
@@ -235,6 +236,7 @@ mod tests {
             previous.conflict = true;
             let previous = previous.clone();
             let request = PendingSave {
+                delta: None,
                 input: Save {
                     kind: Kind::Document,
                     title: "Design".into(),

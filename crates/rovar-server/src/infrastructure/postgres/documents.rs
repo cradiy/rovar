@@ -194,6 +194,18 @@ impl DocumentWrite for PreparedWrite {
         self.current.revision + 1
     }
 
+    async fn base_blob(&mut self) -> Result<String> {
+        sqlx::query_scalar(
+            "SELECT blob FROM revisions WHERE space_id=$1 AND object_id=$2 AND revision=$3",
+        )
+        .bind(&self.space_id)
+        .bind(&self.current.id)
+        .bind(self.current.revision)
+        .fetch_optional(&mut *self.transaction)
+        .await?
+        .ok_or(Error::DeltaBase)
+    }
+
     async fn commit(self: Box<Self>, input: &SaveDocument, blob: &str) -> Result<Document> {
         let mut this = *self;
         let revision = this.revision();

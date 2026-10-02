@@ -4,7 +4,7 @@ pub use account::*;
 use serde::{Deserialize, Serialize};
 pub use spaces::*;
 
-pub const VERSION: u32 = 3;
+pub const VERSION: u32 = 4;
 pub const MAX_CONTENT_BYTES: usize = 128 * 1024 * 1024;
 
 #[derive(Serialize, Deserialize)]
@@ -58,6 +58,8 @@ pub struct Save {
     pub request_id: String,
     /// Base64-encoded document container or color-style JSON. When `media` is
     /// nonempty, its blocks are omitted from this container and referenced below.
+    /// On PUT /objects/{id}/delta this instead contains a base64-encoded
+    /// rovar-format metadata Delta; the other fields retain their meaning.
     pub content: String,
     #[serde(default)]
     pub media: Vec<Media>,

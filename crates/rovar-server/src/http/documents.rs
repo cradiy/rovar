@@ -94,6 +94,15 @@ pub async fn transfer(req: &mut Request, depot: &mut Depot, res: &mut Response) 
 
 #[handler]
 pub async fn save(req: &mut Request, depot: &mut Depot, res: &mut Response) {
+    save_request(req, depot, res, false).await;
+}
+
+#[handler]
+pub async fn save_delta(req: &mut Request, depot: &mut Depot, res: &mut Response) {
+    save_request(req, depot, res, true).await;
+}
+
+async fn save_request(req: &mut Request, depot: &mut Depot, res: &mut Response, delta: bool) {
     req.set_secure_max_size(rovar_api::MAX_CONTENT_BYTES * 4 / 3 + 512 * 1024);
     let input = match req.parse_json().await {
         Ok(value) => value,
@@ -107,13 +116,18 @@ pub async fn save(req: &mut Request, depot: &mut Depot, res: &mut Response) {
     let user = depot.get_typed::<Authenticated>().unwrap();
     let id = req.param::<String>("id").unwrap_or_default();
     match super::mapping::save(id, input) {
-        Ok(command) => response::render(
-            res,
-            app.documents
-                .save(&user.identity.user_id, &space, command)
-                .await
-                .map(super::mapping::document),
-        ),
+        Ok(command) => {
+            let result = if delta {
+                app.documents
+                    .save_delta(&user.identity.user_id, &space, command)
+                    .await
+            } else {
+                app.documents
+                    .save(&user.identity.user_id, &space, command)
+                    .await
+            };
+            response::render(res, result.map(super::mapping::document));
+        }
         Err(error) => response::failure(res, error),
     }
 }

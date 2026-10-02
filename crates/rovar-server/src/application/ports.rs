@@ -83,6 +83,8 @@ pub enum Preparation {
 #[async_trait]
 pub trait DocumentWrite: Send {
     fn revision(&self) -> i64;
+    /// The confirmed base blob, read under the same lock as the pending commit.
+    async fn base_blob(&mut self) -> Result<String>;
     async fn commit(self: Box<Self>, command: &SaveDocument, blob: &str) -> Result<Document>;
 }
 

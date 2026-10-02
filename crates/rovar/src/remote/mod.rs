@@ -2,6 +2,7 @@ mod baseline;
 mod cache;
 mod colors;
 mod conflict;
+mod delta;
 mod media;
 mod merge;
 #[cfg(all(test, not(target_family = "wasm")))]
@@ -88,6 +89,10 @@ struct PendingSave {
     /// full-snapshot request must replay its original representation.
     #[serde(default)]
     media_transfer: bool,
+    /// Freeze the exact patch before the first request; retries never re-diff
+    /// against a cache that may have been edited or refreshed in the meantime.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    delta: Option<String>,
 }
 
 pub(crate) struct Remote {
@@ -618,11 +623,19 @@ impl Remote {
             return;
         };
         self.busy = true;
+        let transfer_base = self.read_baseline(&link).ok().flatten().and_then(|base| {
+            (base.object.revision == link.object.revision
+                && base.object.id == link.object.id
+                && !base.object.deleted)
+                .then_some(base.transfer)
+                .flatten()
+        });
         let pending_path = self
             .root
             .join("pending")
             .join(&link.connection)
             .join(format!("{}.json", link.object.id));
+        let executor = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
             let result = async {
                 let actual: Identity = client.json("GET", "session", None).await?;
@@ -650,12 +663,18 @@ impl Remote {
                         media: Vec::new(),
                         deleted: link.object.deleted,
                     };
-                    let pending = PendingSave {
-                        input,
-                        media_transfer: true,
-                    };
-                    write_atomic(&pending_path, &serde_json::to_vec(&pending)?)?;
-                    pending
+                    let record = pending_path.clone();
+                    executor
+                        .spawn(async move {
+                            let pending = PendingSave {
+                                delta: delta::prepare(transfer_base.as_ref(), &input),
+                                input,
+                                media_transfer: true,
+                            };
+                            write_atomic(&record, &serde_json::to_vec(&pending)?)?;
+                            Ok::<_, anyhow::Error>(pending)
+                        })
+                        .await?
                 };
                 let input = &pending.input;
                 let sent_digest = digest(
@@ -668,16 +687,27 @@ impl Remote {
                 } else {
                     input.clone()
                 };
-                let object: Object = client
-                    .json(
-                        "PUT",
-                        &format!("spaces/{space}/objects/{}", link.object.id),
-                        Some(serde_json::to_value(&transfer)?),
-                    )
-                    .await?;
+                let object = delta::send(
+                    &client,
+                    &space,
+                    &link.object.id,
+                    &pending_path,
+                    &pending,
+                    transfer,
+                )
+                .await?;
                 let content =
                     baseline::snapshot_content(&STANDARD.decode(&input.content)?, input.deleted)?;
-                Ok::<_, anyhow::Error>((object, sent_digest, content))
+                let transfer = (!input.deleted && input.kind != Kind::ColorStyle)
+                    .then(|| {
+                        rovar_format::delta::Snapshot::from_bytes(
+                            &STANDARD.decode(&input.content).ok()?,
+                            rovar_api::MAX_CONTENT_BYTES,
+                        )
+                        .ok()
+                    })
+                    .flatten();
+                Ok::<_, anyhow::Error>((object, sent_digest, content, transfer))
             }
             .await;
             let _ = this.update(cx, |this, cx| {
@@ -701,8 +731,8 @@ impl Remote {
                 {
                     this.sign_out(&link.connection, cx);
                 }
-                let result = result.and_then(|(object, digest, content)| {
-                    let baseline = this.store_baseline(&object, &content)?;
+                let result = result.and_then(|(object, digest, content, transfer)| {
+                    let baseline = this.store_transfer_baseline(&object, &content, transfer)?;
                     Ok((object, digest, baseline, content))
                 });
                 if let Some(current) = this.catalog.links.get_mut(&path) {

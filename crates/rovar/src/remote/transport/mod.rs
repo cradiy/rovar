@@ -41,6 +41,10 @@ impl HttpError {
     pub fn is_conflict(&self) -> bool {
         self.status == 409 && self.code == "revision_conflict"
     }
+
+    pub fn is_delta_base_mismatch(&self) -> bool {
+        self.status == 409 && self.code == "delta_base_mismatch"
+    }
 }
 
 #[derive(Clone)]

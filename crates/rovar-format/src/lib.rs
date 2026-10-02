@@ -2,6 +2,7 @@
 //!
 //! A writer publishes immutable blocks by committing an index. Readers retain a
 //! snapshot and may stream individual blocks without loading the container.
+pub mod delta;
 mod layout;
 mod reader;
 mod version;
