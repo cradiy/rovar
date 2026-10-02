@@ -11,6 +11,7 @@ mod merge;
 #[cfg(all(test, not(target_family = "wasm")))]
 pub(crate) mod tests;
 mod transport;
+mod upload;
 pub(crate) use transport::{Client, HttpError};
 
 use anyhow::{Result, ensure};
@@ -650,86 +651,43 @@ impl Remote {
             return;
         };
         self.busy = true;
-        let transfer_base = self.read_baseline(&link).ok().flatten().and_then(|base| {
-            (base.object.revision == link.object.revision
-                && base.object.id == link.object.id
-                && !base.object.deleted)
-                .then_some(base.transfer)
-                .flatten()
-        });
         let pending_path = self
             .root
             .join("pending")
             .join(&link.connection)
             .join(format!("{}.json", link.object.id));
         let executor = cx.background_executor().clone();
+        let root = self.root.clone();
         cx.spawn(async move |this, cx| {
             let result = async {
                 let actual: Identity = client.json("GET", "session", None).await?;
                 if actual.server_id != identity.server_id || actual.user_id != identity.user_id {
                     return Err(HttpError::account_changed().into());
                 }
-                let pending: PendingSave = if rovar_storage::exists(&pending_path) {
-                    serde_json::from_slice(&rovar_storage::fs::read(&pending_path)?)?
-                } else {
-                    let bytes = if link.object.deleted {
-                        Vec::new()
-                    } else {
-                        rovar_storage::fs::read(&path)?
-                    };
-                    ensure!(
-                        bytes.len() <= rovar_api::MAX_DOCUMENT_BYTES,
-                        "Document exceeds the server's 128 MiB limit"
-                    );
-                    let input = Save {
-                        kind: link.object.kind.clone(),
-                        title: link.object.title.clone(),
-                        base_revision: link.object.revision,
-                        request_id: uuid::Uuid::new_v4().to_string(),
-                        content: STANDARD.encode(&bytes),
-                        media: Vec::new(),
-                        deleted: link.object.deleted,
-                    };
+                let prepared = {
+                    let root = root.clone();
+                    let path = path.clone();
+                    let link = link.clone();
                     let record = pending_path.clone();
                     executor
-                        .spawn(async move {
-                            let pending = PendingSave {
-                                delta: delta::prepare(transfer_base.as_ref(), &input),
-                                input,
-                            };
-                            write_atomic(&record, &serde_json::to_vec(&pending)?)?;
-                            Ok::<_, anyhow::Error>(pending)
-                        })
+                        .spawn(async move { upload::prepare(&root, &path, &link, &record) })
                         .await?
                 };
-                let input = &pending.input;
-                let sent_digest = digest(
-                    &STANDARD.decode(&input.content)?,
-                    &input.title,
-                    input.deleted,
-                );
-                let transfer = media::prepare(&client, &space, input).await?;
-                let object = delta::send(
+                let pending = prepared.pending;
+                let transfer = prepared.media.send(&client, &space).await?;
+                let (object, pending) = delta::send(
                     &client,
                     &space,
                     &link.object.id,
                     &pending_path,
-                    &pending,
+                    pending,
                     transfer,
+                    &executor,
                 )
                 .await?;
-                let content =
-                    baseline::snapshot_content(&STANDARD.decode(&input.content)?, input.deleted)?;
-                let transfer = (!input.deleted && input.kind != Kind::ColorStyle)
-                    .then(|| {
-                        rovar_format::delta::Snapshot::from_bytes(
-                            &STANDARD.decode(&input.content).ok()?,
-                            rovar_api::MAX_METADATA_BYTES,
-                        )
-                        .ok()
-                    })
-                    .flatten();
-                Ok::<_, anyhow::Error>((object, sent_digest, content, transfer))
+                executor
+                    .spawn(async move { upload::confirm(&root, object, pending) })
+                    .await
             }
             .await;
             let _ = this.update(cx, |this, cx| {
@@ -753,13 +711,14 @@ impl Remote {
                 {
                     this.sign_out(&link.connection, cx);
                 }
-                let result = result.and_then(|(object, digest, content, transfer)| {
-                    let baseline = this.store_transfer_baseline(&object, &content, transfer)?;
-                    Ok((object, digest, baseline, content))
-                });
                 if let Some(current) = this.catalog.links.get_mut(&path) {
                     match result {
-                        Ok((object, sent_digest, baseline, sent_content)) => {
+                        Ok(upload::Confirmed {
+                            object,
+                            digest: sent_digest,
+                            baseline,
+                            content: sent_content,
+                        }) => {
                             current.dirty = baseline::content(&path, current.object.deleted)
                                 .map(|bytes| {
                                     bytes != sent_content

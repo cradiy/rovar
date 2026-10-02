@@ -120,14 +120,7 @@ impl Remote {
         content: &[u8],
         transfer: Option<rovar_format::delta::Snapshot>,
     ) -> Result<String> {
-        let bytes = serde_json::to_vec(&Baseline {
-            object: object.clone(),
-            content: STANDARD.encode(content),
-            transfer,
-        })?;
-        let key = hex::encode(Sha256::digest(&bytes));
-        write_atomic(&self.root.join("baselines").join(&key), &bytes)?;
-        Ok(key)
+        store(&self.root, object, content, transfer)
     }
 
     pub(super) fn read_baseline(&self, link: &Link) -> Result<Option<Baseline>> {
@@ -193,4 +186,20 @@ impl Remote {
             .join(&link.connection)
             .join(format!("{}.json", link.object.id))
     }
+}
+
+pub(super) fn store(
+    root: &Path,
+    object: &Object,
+    content: &[u8],
+    transfer: Option<rovar_format::delta::Snapshot>,
+) -> Result<String> {
+    let bytes = serde_json::to_vec(&Baseline {
+        object: object.clone(),
+        content: STANDARD.encode(content),
+        transfer,
+    })?;
+    let key = hex::encode(Sha256::digest(&bytes));
+    write_atomic(&root.join("baselines").join(&key), &bytes)?;
+    Ok(key)
 }

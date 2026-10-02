@@ -3,15 +3,27 @@ use rovar_api::Media;
 
 /// The retry record remains the complete immutable local snapshot. Splitting it
 /// deterministically on every attempt preserves the idempotency fingerprint.
-pub(super) async fn prepare(client: &Client, space: &str, input: &Save) -> Result<Save> {
+pub(super) struct Upload {
+    transfer: Save,
+    // Keep the backing temporary file alive until every media block is sent.
+    source: Option<(rovar_format::Reader, rovar_storage::tempfile::NamedTempFile)>,
+}
+
+pub(super) fn prepare(input: &Save) -> Result<Upload> {
     let mut transfer = input.clone();
     if input.deleted || input.kind == Kind::ColorStyle {
-        return Ok(transfer);
+        return Ok(Upload {
+            transfer,
+            source: None,
+        });
     }
     let source = rovar_storage::tempfile::NamedTempFile::new()?;
     rovar_storage::fs::write(source.path(), STANDARD.decode(&input.content)?)?;
     let Ok(reader) = rovar_format::Reader::open(source.path()) else {
-        return Ok(transfer);
+        return Ok(Upload {
+            transfer,
+            source: None,
+        });
     };
     let media: Vec<_> = reader
         .entries()
@@ -27,7 +39,10 @@ pub(super) async fn prepare(client: &Client, space: &str, input: &Save) -> Resul
         })
         .collect();
     if media.is_empty() {
-        return Ok(transfer);
+        return Ok(Upload {
+            transfer,
+            source: None,
+        });
     }
     for (key, item) in &media {
         ensure!(
@@ -55,27 +70,40 @@ pub(super) async fn prepare(client: &Client, space: &str, input: &Save) -> Resul
     );
     validate_manifest(&transfer.media, bytes.len())?;
     transfer.content = STANDARD.encode(bytes);
-    let missing: Vec<String> = client
-        .json(
-            "POST",
-            &format!("spaces/{space}/media/missing"),
-            Some(serde_json::to_value(&transfer.media)?),
-        )
-        .await?;
-    let expected: BTreeSet<_> = transfer.media.iter().map(|m| m.hash.as_str()).collect();
-    ensure!(
-        missing.iter().all(|hash| expected.contains(hash.as_str())),
-        "Server requested unknown media"
-    );
-    for hash in missing {
-        client
-            .upload_media(
-                &format!("spaces/{space}/media/{hash}"),
-                reader.block(&format!("media/{hash}"))?,
+    Ok(Upload {
+        transfer,
+        source: Some((reader, source)),
+    })
+}
+
+impl Upload {
+    pub(super) async fn send(self, client: &Client, space: &str) -> Result<Save> {
+        let Self { transfer, source } = self;
+        let Some((reader, _source)) = source else {
+            return Ok(transfer);
+        };
+        let missing: Vec<String> = client
+            .json(
+                "POST",
+                &format!("spaces/{space}/media/missing"),
+                Some(serde_json::to_value(&transfer.media)?),
             )
             .await?;
+        let expected: BTreeSet<_> = transfer.media.iter().map(|m| m.hash.as_str()).collect();
+        ensure!(
+            missing.iter().all(|hash| expected.contains(hash.as_str())),
+            "Server requested unknown media"
+        );
+        for hash in missing {
+            client
+                .upload_media(
+                    &format!("spaces/{space}/media/{hash}"),
+                    reader.block(&format!("media/{hash}"))?,
+                )
+                .await?;
+        }
+        Ok(transfer)
     }
-    Ok(transfer)
 }
 
 pub(super) async fn hydrate(

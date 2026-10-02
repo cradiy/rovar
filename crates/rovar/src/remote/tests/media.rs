@@ -198,13 +198,17 @@ fn media_is_uploaded_once_reused_on_retry_and_verified_when_downloaded() {
             media: vec![],
             deleted: false,
         };
-        let transfer = super::super::media::prepare(&client, "personal", &input)
+        let transfer = super::super::media::prepare(&input)
+            .unwrap()
+            .send(&client, "personal")
             .await
             .unwrap();
         assert_eq!(transfer.media.len(), 1);
         assert_eq!(transfer.media[0].hash, hash);
         assert!(STANDARD.decode(&transfer.content).unwrap().len() < original.len() / 8);
-        let retry = super::super::media::prepare(&client, "personal", &input)
+        let retry = super::super::media::prepare(&input)
+            .unwrap()
+            .send(&client, "personal")
             .await
             .unwrap();
         assert_eq!(

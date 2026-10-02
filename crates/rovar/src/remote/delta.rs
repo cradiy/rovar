@@ -109,39 +109,49 @@ pub(super) async fn send(
     space: &str,
     id: &str,
     path: &Path,
-    pending: &PendingSave,
+    pending: PendingSave,
     mut transfer: Save,
-) -> Result<Object> {
+    executor: &gpui::BackgroundExecutor,
+) -> Result<(Object, PendingSave)> {
     let route = format!("spaces/{space}/objects/{id}");
-    let Some(delta) = &pending.delta else {
-        return client
-            .json("PUT", &route, Some(serde_json::to_value(&transfer)?))
-            .await;
+    let (pending, transfer, full, body) = executor
+        .spawn(async move {
+            let full = pending
+                .delta
+                .as_ref()
+                .map(|delta| std::mem::replace(&mut transfer.content, delta.clone()));
+            let body = serde_json::to_value(&transfer)?;
+            Ok::<_, anyhow::Error>((pending, transfer, full, body))
+        })
+        .await?;
+    let Some(full) = full else {
+        return Ok((client.json("PUT", &route, Some(body)).await?, pending));
     };
-    let full = std::mem::replace(&mut transfer.content, delta.clone());
     let result = client
-        .json(
-            "PUT",
-            &format!("{route}/delta"),
-            Some(serde_json::to_value(&transfer)?),
-        )
+        .json("PUT", &format!("{route}/delta"), Some(body))
         .await;
     if !result.as_ref().err().is_some_and(|error| {
         error
             .downcast_ref::<HttpError>()
             .is_some_and(HttpError::is_delta_base_mismatch)
     }) {
-        return result;
+        return Ok((result?, pending));
     }
     // Only a definite baseline rejection permits replacing the request. A
     // timeout/unknown outcome must replay the identical patch and request ID.
-    let mut input = pending.input.clone();
-    input.request_id = uuid::Uuid::new_v4().to_string();
-    let fallback = PendingSave { input, delta: None };
-    write_atomic(path, &serde_json::to_vec(&fallback)?)?;
-    transfer.content = full;
-    transfer.request_id = fallback.input.request_id;
-    client
-        .json("PUT", &route, Some(serde_json::to_value(&transfer)?))
-        .await
+    let path = path.to_owned();
+    let (fallback, body) = executor
+        .spawn(async move {
+            let mut input = pending.input;
+            input.request_id = uuid::Uuid::new_v4().to_string();
+            let fallback = PendingSave { input, delta: None };
+            write_atomic(&path, &serde_json::to_vec(&fallback)?)?;
+            let mut transfer = transfer;
+            transfer.content = full;
+            transfer.request_id = fallback.input.request_id.clone();
+            let body = serde_json::to_value(&transfer)?;
+            Ok::<_, anyhow::Error>((fallback, body))
+        })
+        .await?;
+    Ok((client.json("PUT", &route, Some(body)).await?, fallback))
 }
