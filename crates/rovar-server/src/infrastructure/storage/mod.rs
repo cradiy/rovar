@@ -1,4 +1,5 @@
 mod crypto;
+mod media;
 
 use crate::{application::ports::ContentStorage, domain::error};
 use anyhow::Result;
@@ -22,6 +23,36 @@ impl ContentStore {
 
 #[async_trait]
 impl ContentStorage for ContentStore {
+    async fn create_media(
+        &self,
+        context: String,
+    ) -> error::Result<Box<dyn crate::application::ports::MediaWriter>> {
+        Ok(Box::new(
+            media::Writer::create(&self.directory, &self.key, &context).await?,
+        ))
+    }
+
+    async fn read_media(
+        &self,
+        blob: &str,
+        context: String,
+        expected: crate::domain::document::Media,
+    ) -> error::Result<crate::application::ports::ContentStream> {
+        uuid::Uuid::parse_str(blob).map_err(anyhow::Error::from)?;
+        let reader =
+            media::Reader::open(&self.directory.join(blob), &self.key, &context, expected).await?;
+        Ok(Box::pin(futures_util::stream::try_unfold(
+            reader,
+            |mut reader| async move {
+                reader
+                    .next()
+                    .await
+                    .map(|bytes| bytes.map(|bytes| (bytes, reader)))
+                    .map_err(std::io::Error::other)
+            },
+        )))
+    }
+
     async fn write(&self, bytes: Vec<u8>, context: String) -> error::Result<String> {
         let key = self.key.clone();
         let directory = self.directory.clone();

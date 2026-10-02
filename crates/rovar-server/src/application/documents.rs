@@ -15,6 +15,7 @@ pub struct DocumentService {
     documents: Arc<dyn Documents>,
     storage: Arc<dyn ContentStorage>,
     transfers: Semaphore,
+    media_transfers: Arc<Semaphore>,
 }
 
 impl DocumentService {
@@ -35,6 +36,7 @@ impl DocumentService {
             documents,
             storage,
             transfers: Semaphore::new(2),
+            media_transfers: Arc::new(Semaphore::new(2)),
         }
     }
 

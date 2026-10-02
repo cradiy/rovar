@@ -1,6 +1,6 @@
 use crate::application::{
     documents::DocumentService,
-    ports::{ContentStorage, DocumentWrite, Documents, Preparation},
+    ports::{ContentStorage, ContentStream, DocumentWrite, Documents, MediaWriter, Preparation},
 };
 use crate::domain::document::{
     Changes, Document, DocumentKind, Media, SaveDocument, StoredVersion,
@@ -24,19 +24,33 @@ struct Write {
     state: OwnedMutexGuard<State>,
     fingerprint: Vec<u8>,
 }
-#[derive(Default)]
-struct Storage(Mutex<BTreeMap<String, (Vec<u8>, String)>>);
+struct Storage {
+    blobs: Mutex<BTreeMap<String, (Vec<u8>, String)>>,
+    media: crate::infrastructure::storage::ContentStore,
+    _root: tempfile::TempDir,
+}
+
+impl Default for Storage {
+    fn default() -> Self {
+        let root = tempfile::tempdir().unwrap();
+        Self {
+            blobs: Mutex::default(),
+            media: crate::infrastructure::storage::ContentStore::open(root.path()).unwrap(),
+            _root: root,
+        }
+    }
+}
 
 #[async_trait]
 impl ContentStorage for Storage {
     async fn write(&self, bytes: Vec<u8>, context: String) -> Result<String> {
-        let mut blobs = self.0.lock().await;
+        let mut blobs = self.blobs.lock().await;
         let id = blobs.len().to_string();
         blobs.insert(id.clone(), (bytes, context));
         Ok(id)
     }
     async fn read(&self, blob: &str, context: String) -> Result<Vec<u8>> {
-        let blobs = self.0.lock().await;
+        let blobs = self.blobs.lock().await;
         let (bytes, expected) = blobs
             .get(blob)
             .ok_or_else(|| anyhow::anyhow!("Missing stored blob"))?;
@@ -45,6 +59,19 @@ impl ContentStorage for Storage {
             "Storage context must include the exact base revision"
         );
         Ok(bytes.clone())
+    }
+
+    async fn create_media(&self, context: String) -> Result<Box<dyn MediaWriter>> {
+        self.media.create_media(context).await
+    }
+
+    async fn read_media(
+        &self,
+        blob: &str,
+        context: String,
+        expected: Media,
+    ) -> Result<ContentStream> {
+        self.media.read_media(blob, context, expected).await
     }
 }
 
@@ -219,7 +246,7 @@ fn service() -> (DocumentService, Arc<Mutex<State>>, String) {
 async fn streamed_media_is_authorized_verified_and_deduplicated_before_publishing() {
     use futures_util::stream;
     use sha2::{Digest, Sha256};
-    let (service, state, _) = service();
+    let (service, state, id) = service();
     let hash = format!("{:x}", Sha256::digest(b"abcdef"));
     let unread = || {
         stream::poll_fn(|_| -> std::task::Poll<Option<std::io::Result<Vec<u8>>>> {
@@ -261,13 +288,68 @@ async fn streamed_media_is_authorized_verified_and_deduplicated_before_publishin
         .await
         .unwrap();
     let stored = state.lock().await.media.clone();
-    assert_eq!(
-        service
-            .download_media("user", "space", &hash)
-            .await
-            .unwrap(),
-        b"abcdef"
+    use futures_util::StreamExt;
+    let mut download = service
+        .download_media("user", "space", &hash)
+        .await
+        .unwrap();
+    let mut bytes = Vec::new();
+    while let Some(chunk) = download.body.next().await {
+        bytes.extend_from_slice(&chunk.unwrap());
+    }
+    assert_eq!(bytes, b"abcdef");
+    let first = service
+        .download_media("user", "space", &hash)
+        .await
+        .unwrap();
+    let second = service
+        .download_media("user", "space", &hash)
+        .await
+        .unwrap();
+    let command = command(&id, 0, &uuid::Uuid::new_v4().to_string(), &container(0));
+    tokio::time::timeout(
+        std::time::Duration::from_secs(1),
+        service.save("user", "space", command),
+    )
+    .await
+    .expect("Media responses must not exhaust metadata transfer capacity")
+    .unwrap();
+    assert!(
+        tokio::time::timeout(
+            std::time::Duration::from_millis(20),
+            service.download_media("user", "space", &hash)
+        )
+        .await
+        .is_err(),
+        "Unconsumed responses must retain their transfer permits"
     );
+    drop(first);
+    let third = tokio::time::timeout(
+        std::time::Duration::from_secs(1),
+        service.download_media("user", "space", &hash),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    drop((second, third));
+    let snapshot = crate::domain::document::DocumentSnapshot {
+        document: state.lock().await.document.clone(),
+        content: container(0),
+        media: vec![Media {
+            hash: hash.clone(),
+            length: 6,
+        }],
+    };
+    let expanded = service
+        .expand_media("user", "space", snapshot)
+        .await
+        .unwrap();
+    assert!(expanded.media.is_empty());
+    let file = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(file.path(), expanded.content).unwrap();
+    let reader = rovar_format::Reader::open(file.path()).unwrap();
+    reader.verify().unwrap();
+    assert_eq!(reader.read(&format!("media/{hash}"), 6).unwrap(), b"abcdef");
     service
         .upload_media("user", "space", &hash, unread())
         .await

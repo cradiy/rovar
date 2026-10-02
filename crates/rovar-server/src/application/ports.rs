@@ -99,6 +99,28 @@ pub trait DocumentWrite: Send {
 pub trait ContentStorage: Send + Sync {
     async fn write(&self, bytes: Vec<u8>, context: String) -> Result<String>;
     async fn read(&self, blob: &str, context: String) -> Result<Vec<u8>>;
+    async fn create_media(&self, context: String) -> Result<Box<dyn MediaWriter>>;
+    async fn read_media(
+        &self,
+        blob: &str,
+        context: String,
+        expected: crate::domain::document::Media,
+    ) -> Result<ContentStream>;
+}
+
+/// Dropping an unfinished writer must discard its unpublished encrypted data.
+#[async_trait]
+pub trait MediaWriter: Send {
+    async fn write(&mut self, bytes: &[u8]) -> Result<()>;
+    async fn finish(self: Box<Self>) -> Result<String>;
+}
+
+pub type ContentStream =
+    std::pin::Pin<Box<dyn futures_util::Stream<Item = std::io::Result<Vec<u8>>> + Send>>;
+
+pub struct MediaDownload {
+    pub length: u64,
+    pub body: ContentStream,
 }
 #[async_trait]
 pub trait Spaces: Send + Sync {

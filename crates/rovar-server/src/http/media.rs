@@ -69,16 +69,14 @@ pub async fn read(req: &mut Request, depot: &mut Depot, res: &mut Response) {
         .download_media(&user.identity.user_id, &space, &hash)
         .await
     {
-        Ok(bytes) => {
+        Ok(download) => {
             res.headers_mut()
                 .insert("content-type", "application/octet-stream".parse().unwrap());
             res.headers_mut()
-                .insert("content-length", bytes.len().into());
+                .insert("content-length", download.length.into());
             res.headers_mut()
                 .insert("cache-control", "private, no-store".parse().unwrap());
-            if let Err(error) = res.write_body(bytes) {
-                response::failure(res, Error::Internal(error.into()));
-            }
+            res.stream(download.body);
         }
         Err(error) => response::failure(res, error),
     }

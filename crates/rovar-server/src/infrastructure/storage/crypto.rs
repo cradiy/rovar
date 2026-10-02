@@ -6,6 +6,7 @@ use anyhow::{Context, Result, ensure};
 use std::{io::Write, path::Path};
 
 const MAGIC: &[u8; 8] = b"ROVENC01";
+pub(super) mod stream;
 
 #[derive(Clone)]
 pub struct StorageKey([u8; 32]);
