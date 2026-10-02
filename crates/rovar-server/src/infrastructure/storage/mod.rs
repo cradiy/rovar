@@ -1,5 +1,6 @@
 mod crypto;
 mod media;
+mod upload;
 
 use crate::{application::ports::ContentStorage, domain::error};
 use anyhow::Result;
@@ -9,21 +10,13 @@ use std::path::{Path, PathBuf};
 
 pub struct ContentStore {
     directory: PathBuf,
+    uploads: PathBuf,
     key: StorageKey,
 }
 
 impl ContentStore {
-    pub fn open(root: &Path) -> Result<Self> {
-        let key = StorageKey::load(root)?;
-        let directory = root.join("blobs");
-        std::fs::create_dir_all(&directory)?;
-        Ok(Self { directory, key })
-    }
-}
-
-#[async_trait]
-impl ContentStorage for ContentStore {
-    async fn create_media(
+    #[cfg(test)]
+    pub async fn create_media(
         &self,
         context: String,
     ) -> error::Result<Box<dyn crate::application::ports::MediaWriter>> {
@@ -31,7 +24,38 @@ impl ContentStorage for ContentStore {
             media::Writer::create(&self.directory, &self.key, &context).await?,
         ))
     }
+    pub fn open(root: &Path) -> Result<Self> {
+        let key = StorageKey::load(root)?;
+        let directory = root.join("blobs");
+        std::fs::create_dir_all(&directory)?;
+        let uploads = root.join("uploads");
+        std::fs::create_dir_all(&uploads)?;
+        Ok(Self {
+            directory,
+            uploads,
+            key,
+        })
+    }
+}
 
+#[async_trait]
+impl ContentStorage for ContentStore {
+    async fn media_upload(
+        &self,
+        context: String,
+        expected: crate::domain::document::Media,
+    ) -> error::Result<Box<dyn crate::application::ports::MediaUpload>> {
+        let root = self.uploads.clone();
+        let blobs = self.directory.clone();
+        let key = self.key.clone();
+        Ok(Box::new(
+            tokio::task::spawn_blocking(move || {
+                upload::Upload::open(root, blobs, key, context, expected)
+            })
+            .await
+            .map_err(anyhow::Error::from)??,
+        ))
+    }
     async fn read_media(
         &self,
         blob: &str,

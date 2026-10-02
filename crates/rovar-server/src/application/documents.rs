@@ -10,6 +10,7 @@ mod delta;
 mod media;
 #[cfg(test)]
 mod tests;
+mod upload;
 
 pub struct DocumentService {
     documents: Arc<dyn Documents>,

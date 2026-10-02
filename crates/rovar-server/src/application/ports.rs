@@ -99,13 +99,27 @@ pub trait DocumentWrite: Send {
 pub trait ContentStorage: Send + Sync {
     async fn write(&self, bytes: Vec<u8>, context: String) -> Result<String>;
     async fn read(&self, blob: &str, context: String) -> Result<Vec<u8>>;
-    async fn create_media(&self, context: String) -> Result<Box<dyn MediaWriter>>;
+    async fn media_upload(
+        &self,
+        context: String,
+        expected: crate::domain::document::Media,
+    ) -> Result<Box<dyn MediaUpload>>;
     async fn read_media(
         &self,
         blob: &str,
         context: String,
         expected: crate::domain::document::Media,
     ) -> Result<ContentStream>;
+}
+
+/// Exclusive access to durable encrypted upload parts. Dropping the handle
+/// releases its lock while retaining acknowledged progress for later requests.
+#[async_trait]
+pub trait MediaUpload: Send {
+    fn offset(&self) -> u64;
+    async fn append(&mut self, offset: u64, bytes: Vec<u8>) -> Result<()>;
+    async fn finish(&mut self) -> Result<String>;
+    async fn discard(&mut self) -> Result<()>;
 }
 
 /// Dropping an unfinished writer must discard its unpublished encrypted data.

@@ -197,7 +197,7 @@ fn server_with_bodies(
                 let bytes = &request[header_end..header_end + length];
                 observed.lock().unwrap().push(
                     if headers.contains("content-type: application/octet-stream") {
-                        serde_json::to_value(bytes).unwrap()
+                        serde_json::json!({ "length": bytes.len(), "hash": hex::encode(Sha256::digest(bytes)) })
                     } else {
                         serde_json::from_slice(bytes).unwrap()
                     },

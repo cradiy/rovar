@@ -18,6 +18,7 @@ pub fn failure(res: &mut Response, error: Error) {
         Error::NotFound => (StatusCode::NOT_FOUND, "not_found"),
         Error::Conflict => (StatusCode::CONFLICT, "revision_conflict"),
         Error::DeltaBase => (StatusCode::CONFLICT, "delta_base_mismatch"),
+        Error::MediaOffset => (StatusCode::CONFLICT, "media_offset_mismatch"),
         Error::RateLimited => (StatusCode::TOO_MANY_REQUESTS, "rate_limited"),
         Error::Internal(source) => {
             eprintln!("Server operation failed: {source:#}");

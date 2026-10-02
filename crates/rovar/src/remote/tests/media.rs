@@ -1,5 +1,81 @@
 use super::*;
 
+#[test]
+fn media_upload_retries_resume_after_lost_chunk_and_completion_acknowledgements() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("media.rovar");
+    let split = rovar_api::MEDIA_UPLOAD_CHUNK_BYTES;
+    let bytes = vec![83; split + 17];
+    let mut writer = rovar_format::Writer::create(&path).unwrap();
+    writer.put_bytes("media", "media", &bytes).unwrap();
+    writer.commit().unwrap();
+    drop(writer);
+    let block = rovar_format::Reader::open(&path)
+        .unwrap()
+        .block("media")
+        .unwrap();
+    let progress = |offset, complete| {
+        serde_json::to_vec(&rovar_api::MediaUpload { offset, complete }).unwrap()
+    };
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let (url, uploads, thread) = server_with_bodies(
+        vec![
+            (200, progress(0, false)),
+            (503, b"{}".to_vec()), // The first part persisted, but its acknowledgement was lost.
+            (200, progress(split as u64, false)),
+            (200, progress(bytes.len() as u64, false)),
+            (503, b"{}".to_vec()), // Completion committed, but its acknowledgement was lost.
+            (200, progress(bytes.len() as u64, true)),
+            (200, progress(3, false)), // A malformed server offset must not skip local bytes.
+        ],
+        requests.clone(),
+    );
+    tokio::runtime::Runtime::new().unwrap().block_on(async {
+        for _ in 0..2 {
+            let client = Client::new(&url).unwrap();
+            let error = client
+                .upload_media("spaces/space/media/hash", block.clone())
+                .await
+                .unwrap_err();
+            assert_eq!(error.downcast_ref::<HttpError>().unwrap().status, 503);
+        }
+        let client = Client::new(&url).unwrap();
+        client
+            .upload_media("spaces/space/media/hash", block.clone())
+            .await
+            .unwrap();
+        assert!(
+            client
+                .upload_media("spaces/space/media/hash", block)
+                .await
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid media upload progress")
+        );
+    });
+    thread.join().unwrap();
+    let uploads = uploads.lock().unwrap();
+    assert_eq!(uploads.len(), 2);
+    assert_eq!(
+        uploads[0],
+        serde_json::json!({ "length": split, "hash": hex::encode(Sha256::digest(&bytes[..split])) })
+    );
+    assert_eq!(
+        uploads[1],
+        serde_json::json!({ "length": 17, "hash": hex::encode(Sha256::digest(&bytes[split..])) })
+    );
+    let requests = requests.lock().unwrap();
+    assert!(requests[1].contains("&offset=0 "));
+    assert!(requests[3].contains(&format!("&offset={split} ")));
+    assert_eq!(
+        requests
+            .iter()
+            .filter(|request| request.starts_with("POST "))
+            .count(),
+        1
+    );
+}
+
 #[gpui::test]
 fn pending_snapshots_always_detach_media_before_upload(cx: &mut TestAppContext) {
     let root = tempfile::tempdir().unwrap();
@@ -91,7 +167,20 @@ fn media_is_uploaded_once_reused_on_retry_and_verified_when_downloaded() {
     let (url, uploads, thread) = server_with_bodies(
         vec![
             (200, serde_json::to_vec(&serde_json::json!([hash])).unwrap()),
-            (200, b"null".to_vec()),
+            (
+                200,
+                serde_json::to_vec(&serde_json::json!({"offset":0,"complete":false})).unwrap(),
+            ),
+            (
+                200,
+                serde_json::to_vec(&serde_json::json!({"offset":bytes.len(),"complete":false}))
+                    .unwrap(),
+            ),
+            (
+                200,
+                serde_json::to_vec(&serde_json::json!({"offset":bytes.len(),"complete":true}))
+                    .unwrap(),
+            ),
             (200, b"[]".to_vec()),
             (200, bytes.clone()),
             (200, b"corrupt response".to_vec()),
@@ -150,7 +239,7 @@ fn media_is_uploaded_once_reused_on_retry_and_verified_when_downloaded() {
         );
         assert_eq!(
             requests.lock().unwrap().len(),
-            3,
+            5,
             "Local media should not be downloaded again"
         );
         let missing = root.path().join("missing.rovar");
@@ -178,7 +267,7 @@ fn media_is_uploaded_once_reused_on_retry_and_verified_when_downloaded() {
     assert_eq!(uploads.lock().unwrap().len(), 1);
     assert_eq!(
         uploads.lock().unwrap()[0],
-        serde_json::to_value(&bytes).unwrap()
+        serde_json::json!({"length": bytes.len(), "hash": hash})
     );
     assert_eq!(std::fs::read(&path).unwrap(), original);
 }

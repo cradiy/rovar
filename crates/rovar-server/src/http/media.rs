@@ -30,12 +30,19 @@ pub async fn missing(req: &mut Request, depot: &mut Depot, res: &mut Response) {
 
 #[handler]
 pub async fn upload(req: &mut Request, depot: &mut Depot, res: &mut Response) {
+    let Some(item) = upload_item(req, res) else {
+        return;
+    };
+    let Some(offset) = req.query::<u64>("offset") else {
+        response::failure(res, Error::Invalid("Missing upload offset".into()));
+        return;
+    };
     if req
         .headers()
         .get("content-length")
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.parse::<u64>().ok())
-        .is_some_and(|length| length > rovar_api::MAX_MEDIA_BYTES as u64)
+        .is_some_and(|length| length > rovar_api::MEDIA_UPLOAD_CHUNK_BYTES as u64)
     {
         response::failure(res, Error::Invalid("Media exceeds the size limit".into()));
         return;
@@ -43,7 +50,6 @@ pub async fn upload(req: &mut Request, depot: &mut Depot, res: &mut Response) {
     let app = depot.get_typed::<Application>().unwrap();
     let user = depot.get_typed::<Authenticated>().unwrap();
     let space = req.param::<String>("space").unwrap_or_default();
-    let hash = req.param::<String>("hash").unwrap_or_default();
     let body = req.take_body().filter_map(|frame| {
         futures_util::future::ready(match frame {
             Ok(frame) => frame.into_data().ok().map(Ok),
@@ -53,7 +59,52 @@ pub async fn upload(req: &mut Request, depot: &mut Depot, res: &mut Response) {
     response::render(
         res,
         app.documents
-            .upload_media(&user.identity.user_id, &space, &hash, body)
+            .upload_media_chunk(&user.identity.user_id, &space, item, offset, body)
+            .await,
+    );
+}
+
+fn upload_item(req: &Request, res: &mut Response) -> Option<crate::domain::document::Media> {
+    res.headers_mut()
+        .insert("cache-control", "private, no-store".parse().unwrap());
+    let Some(length) = req.query::<u64>("length") else {
+        response::failure(res, Error::Invalid("Missing media length".into()));
+        return None;
+    };
+    Some(crate::domain::document::Media {
+        hash: req.param::<String>("hash").unwrap_or_default(),
+        length,
+    })
+}
+
+#[handler]
+pub async fn upload_status(req: &mut Request, depot: &mut Depot, res: &mut Response) {
+    let Some(item) = upload_item(req, res) else {
+        return;
+    };
+    let app = depot.get_typed::<Application>().unwrap();
+    let user = depot.get_typed::<Authenticated>().unwrap();
+    let space = req.param::<String>("space").unwrap_or_default();
+    response::render(
+        res,
+        app.documents
+            .media_upload_status(&user.identity.user_id, &space, item)
+            .await,
+    );
+}
+
+#[handler]
+pub async fn finish_upload(req: &mut Request, depot: &mut Depot, res: &mut Response) {
+    let Some(item) = upload_item(req, res) else {
+        return;
+    };
+    let app = depot.get_typed::<Application>().unwrap();
+    let user = depot.get_typed::<Authenticated>().unwrap();
+    let space = req.param::<String>("space").unwrap_or_default();
+    response::render(
+        res,
+        app.documents
+            .finish_media_upload(&user.identity.user_id, &space, item)
             .await,
     );
 }

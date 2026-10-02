@@ -1,6 +1,6 @@
 use crate::application::{
     documents::DocumentService,
-    ports::{ContentStorage, ContentStream, DocumentWrite, Documents, MediaWriter, Preparation},
+    ports::{ContentStorage, ContentStream, DocumentWrite, Documents, Preparation},
 };
 use crate::domain::document::{
     Changes, Document, DocumentKind, Media, SaveDocument, StoredVersion,
@@ -43,6 +43,13 @@ impl Default for Storage {
 
 #[async_trait]
 impl ContentStorage for Storage {
+    async fn media_upload(
+        &self,
+        context: String,
+        expected: Media,
+    ) -> Result<Box<dyn crate::application::ports::MediaUpload>> {
+        self.media.media_upload(context, expected).await
+    }
     async fn write(&self, bytes: Vec<u8>, context: String) -> Result<String> {
         let mut blobs = self.blobs.lock().await;
         let id = blobs.len().to_string();
@@ -59,10 +66,6 @@ impl ContentStorage for Storage {
             "Storage context must include the exact base revision"
         );
         Ok(bytes.clone())
-    }
-
-    async fn create_media(&self, context: String) -> Result<Box<dyn MediaWriter>> {
-        self.media.create_media(context).await
     }
 
     async fn read_media(
@@ -248,6 +251,10 @@ async fn streamed_media_is_authorized_verified_and_deduplicated_before_publishin
     use sha2::{Digest, Sha256};
     let (service, state, id) = service();
     let hash = format!("{:x}", Sha256::digest(b"abcdef"));
+    let item = Media {
+        hash: hash.clone(),
+        length: 6,
+    };
     let unread = || {
         stream::poll_fn(|_| -> std::task::Poll<Option<std::io::Result<Vec<u8>>>> {
             panic!("Unauthorized or already stored media must not read the upload body")
@@ -255,16 +262,19 @@ async fn streamed_media_is_authorized_verified_and_deduplicated_before_publishin
     };
     assert!(matches!(
         service
-            .upload_media("other", "space", &hash, unread())
+            .upload_media_chunk("other", "space", item.clone(), 0, unread())
             .await,
         Err(Error::Forbidden)
     ));
     assert!(matches!(
-        service.upload_media("user", "other", &hash, unread()).await,
+        service
+            .upload_media_chunk("user", "other", item.clone(), 0, unread())
+            .await,
         Err(Error::Forbidden)
     ));
     for chunks in [
-        vec![Ok(b"abc".to_vec()), Ok(b"xyz".to_vec())],
+        vec![Ok(b"abc".to_vec()), Ok(b"toolong".to_vec())],
+        vec![Ok(b"abc".to_vec())],
         vec![
             Ok(b"abc".to_vec()),
             Err(std::io::ErrorKind::UnexpectedEof.into()),
@@ -272,21 +282,58 @@ async fn streamed_media_is_authorized_verified_and_deduplicated_before_publishin
     ] {
         assert!(matches!(
             service
-                .upload_media("user", "space", &hash, stream::iter(chunks))
+                .upload_media_chunk("user", "space", item.clone(), 0, stream::iter(chunks))
                 .await,
             Err(Error::Invalid(_))
         ));
         assert!(state.lock().await.media.is_empty());
     }
     service
-        .upload_media(
+        .upload_media_chunk(
             "user",
             "space",
-            &hash,
+            item.clone(),
+            0,
+            stream::iter([Ok(b"abcxyz")]),
+        )
+        .await
+        .unwrap();
+    assert!(state.lock().await.media.is_empty());
+    assert!(matches!(
+        service
+            .finish_media_upload("user", "space", item.clone())
+            .await,
+        Err(Error::Invalid(_))
+    ));
+    assert_eq!(
+        service
+            .media_upload_status("user", "space", item.clone())
+            .await
+            .unwrap()
+            .offset,
+        0
+    );
+    service
+        .upload_media_chunk(
+            "user",
+            "space",
+            item.clone(),
+            0,
             stream::iter([Ok(b"abc"), Ok(b"def")]),
         )
         .await
         .unwrap();
+    assert!(
+        state.lock().await.media.is_empty(),
+        "Unfinished media cannot be referenced by a document"
+    );
+    assert!(
+        service
+            .finish_media_upload("user", "space", item.clone())
+            .await
+            .unwrap()
+            .complete
+    );
     let stored = state.lock().await.media.clone();
     use futures_util::StreamExt;
     let mut download = service
@@ -351,7 +398,7 @@ async fn streamed_media_is_authorized_verified_and_deduplicated_before_publishin
     reader.verify().unwrap();
     assert_eq!(reader.read(&format!("media/{hash}"), 6).unwrap(), b"abcdef");
     service
-        .upload_media("user", "space", &hash, unread())
+        .upload_media_chunk("user", "space", item.clone(), 0, unread())
         .await
         .unwrap();
     assert_eq!(state.lock().await.media, stored);

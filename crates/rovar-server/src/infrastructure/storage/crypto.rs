@@ -18,7 +18,7 @@ impl StorageKey {
         if !path.exists() {
             // Missing keys must never silently replace keys for existing content.
             ensure!(
-                !root.join("blobs").exists(),
+                !root.join("blobs").exists() && !root.join("uploads").exists(),
                 "master.key is missing; restore it from backup"
             );
             let mut key = [0; 32];

@@ -55,10 +55,12 @@ fn routes(config: &Config, app: Application) -> Router {
                             Router::with_path("spaces/{space}/media/missing").post(media::missing),
                         )
                         .push(
-                            Router::with_path("spaces/{space}/media/{hash}")
-                                .get(media::read)
-                                .put(media::upload),
+                            Router::with_path("spaces/{space}/media/{hash}/upload")
+                                .get(media::upload_status)
+                                .put(media::upload)
+                                .post(media::finish_upload),
                         )
+                        .push(Router::with_path("spaces/{space}/media/{hash}").get(media::read))
                         .push(
                             Router::with_path("spaces/{space}/objects/{id}/delta")
                                 .put(documents::save_delta),

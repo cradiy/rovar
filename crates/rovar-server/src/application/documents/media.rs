@@ -1,10 +1,10 @@
 use super::*;
-use crate::application::ports::{MediaDownload, MediaWriter};
+use crate::application::ports::MediaDownload;
 use crate::domain::{
     document::{Media, valid_hash, validate_media},
     error::Error,
 };
-use futures_util::{Stream, StreamExt};
+use futures_util::StreamExt;
 
 impl DocumentService {
     pub async fn missing_media(
@@ -30,42 +30,6 @@ impl DocumentService {
             }
         }
         Ok(missing)
-    }
-
-    pub async fn upload_media<S, B>(
-        &self,
-        actor: &str,
-        space: &str,
-        hash: &str,
-        body: S,
-    ) -> Result<()>
-    where
-        S: Stream<Item = std::io::Result<B>>,
-        B: AsRef<[u8]>,
-    {
-        if !valid_hash(hash) {
-            return Err(Error::Invalid("Invalid media hash".into()));
-        }
-        // Authorize before reading the body or allocating its buffer.
-        if self.documents.media(actor, space, hash).await?.is_some() {
-            return Ok(());
-        }
-        let _permit = self
-            .media_transfers
-            .acquire()
-            .await
-            .map_err(anyhow::Error::from)?;
-        let mut writer = self
-            .storage
-            .create_media(format!("{space}/media/{hash}"))
-            .await?;
-        let length = write_media(body, hash, rovar_api::MAX_MEDIA_BYTES, writer.as_mut()).await?;
-        let item = Media {
-            hash: hash.into(),
-            length,
-        };
-        let blob = writer.finish().await?;
-        self.documents.store_media(actor, space, &item, &blob).await
     }
 
     pub async fn download_media(
@@ -155,35 +119,6 @@ impl DocumentService {
     }
 }
 
-async fn write_media<S, B>(
-    body: S,
-    hash: &str,
-    maximum: usize,
-    writer: &mut dyn MediaWriter,
-) -> Result<u64>
-where
-    S: Stream<Item = std::io::Result<B>>,
-    B: AsRef<[u8]>,
-{
-    let mut length = 0u64;
-    let mut digest = Sha256::new();
-    futures_util::pin_mut!(body);
-    while let Some(chunk) = body.next().await {
-        let chunk = chunk.map_err(|_| Error::Invalid("Incomplete media upload".into()))?;
-        let chunk = chunk.as_ref();
-        if chunk.len() as u64 > (maximum as u64).saturating_sub(length) {
-            return Err(Error::Invalid("Media exceeds the size limit".into()));
-        }
-        digest.update(chunk);
-        writer.write(chunk).await?;
-        length += chunk.len() as u64;
-    }
-    if format!("{:x}", digest.finalize()) != hash {
-        return Err(Error::Invalid("Invalid media checksum".into()));
-    }
-    Ok(length)
-}
-
 pub(super) async fn validate_container(bytes: Vec<u8>) -> Result<()> {
     tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
         let file = tempfile::NamedTempFile::new()?;
@@ -200,61 +135,4 @@ pub(super) async fn validate_container(bytes: Vec<u8>) -> Result<()> {
     .await
     .map_err(anyhow::Error::from)?
     .map_err(|_| Error::Invalid("Invalid document container".into()))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use futures_util::stream;
-
-    #[tokio::test]
-    async fn media_size_is_bounded_across_chunks_before_checksum_validation() {
-        use crate::{application::ports::ContentStorage, infrastructure::storage::ContentStore};
-        let root = tempfile::tempdir().unwrap();
-        let storage = ContentStore::open(root.path()).unwrap();
-        let hash = format!("{:x}", Sha256::digest(b"abcdef"));
-        let chunks = || stream::iter([Ok(b"abc"), Ok(b"def")]);
-        let mut writer = storage.create_media("test".into()).await.unwrap();
-        assert_eq!(
-            write_media(chunks(), &hash, 6, writer.as_mut())
-                .await
-                .unwrap(),
-            6
-        );
-        drop(writer);
-        let mut writer = storage.create_media("test".into()).await.unwrap();
-        assert!(
-            write_media(chunks(), &hash, 5, writer.as_mut())
-                .await
-                .unwrap_err()
-                .to_string()
-                .contains("size limit")
-        );
-        drop(writer);
-        let mut writer = storage.create_media("test".into()).await.unwrap();
-        assert!(
-            write_media(stream::iter([Ok(b"abc")]), &hash, 6, writer.as_mut())
-                .await
-                .unwrap_err()
-                .to_string()
-                .contains("checksum")
-        );
-        drop(writer);
-        let mut writer = storage.create_media("test".into()).await.unwrap();
-        let interrupted = stream::iter([Ok(b"abc"), Err(std::io::ErrorKind::UnexpectedEof.into())]);
-        assert!(
-            write_media(interrupted, &hash, 6, writer.as_mut())
-                .await
-                .unwrap_err()
-                .to_string()
-                .contains("Incomplete")
-        );
-        drop(writer);
-        assert_eq!(
-            std::fs::read_dir(root.path().join("blobs"))
-                .unwrap()
-                .count(),
-            0
-        );
-    }
 }

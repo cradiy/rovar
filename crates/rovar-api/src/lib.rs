@@ -12,6 +12,8 @@ pub const MAX_DELTA_BYTES: usize = 128 * 1024 * 1024;
 pub const MAX_MEDIA_BYTES: usize = 128 * 1024 * 1024;
 pub const MAX_DOCUMENT_BYTES: usize = 128 * 1024 * 1024;
 pub const MAX_MEDIA_REFERENCES: usize = 4096;
+/// Durable upload units; HTTP requests and browser upload buffers stay bounded.
+pub const MEDIA_UPLOAD_CHUNK_BYTES: usize = 4 * 1024 * 1024;
 /// Base64 payload plus bounded JSON metadata and media references.
 pub const MAX_DOCUMENT_REQUEST_BYTES: usize = MAX_METADATA_BYTES.div_ceil(3) * 4 + 512 * 1024;
 pub const MAX_DELTA_REQUEST_BYTES: usize = MAX_DELTA_BYTES.div_ceil(3) * 4 + 512 * 1024;
@@ -113,6 +115,12 @@ pub struct Transfer {
 pub struct Media {
     pub hash: String,
     pub length: u64,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct MediaUpload {
+    pub offset: u64,
+    pub complete: bool,
 }
 
 /// Latest object states after a workspace-local, transactionally committed cursor.

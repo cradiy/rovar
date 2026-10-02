@@ -14,36 +14,63 @@ impl Client {
         let path = path.to_owned();
         execute(async move {
             let length = block.info.length;
-            #[cfg(not(target_family = "wasm"))]
-            let body = {
-                let stream =
-                    futures_util::stream::try_unfold(block.reader(), |mut reader| async move {
-                        tokio::task::spawn_blocking(move || -> Result<_> {
-                            use std::io::Read;
-                            let mut bytes = vec![0; 64 * 1024];
-                            let n = reader.read(&mut bytes)?;
-                            bytes.truncate(n);
-                            Ok((n != 0).then_some((bytes, reader)))
-                        })
-                        .await?
-                    });
-                reqwest::Body::wrap_stream(stream)
-            };
-            // Fetch upload streaming is not portable across browsers. Keep the
-            // bounded binary body here; downloads stream on both platforms.
-            #[cfg(target_family = "wasm")]
-            let body = {
-                let mut bytes = Vec::new();
-                block.copy_verified(&mut bytes)?;
-                reqwest::Body::from(bytes)
-            };
-            let request = client
-                .request("PUT", &path)?
-                .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
-                .header(reqwest::header::CONTENT_LENGTH, length)
-                .body(body);
-            let response = successful(request.send().await?).await?;
-            bounded_body(response, 64 * 1024).await?;
+            let route = format!("{path}/upload?length={length}");
+            let mut progress: rovar_api::MediaUpload = client.json("GET", &route, None).await?;
+            validate_progress(&progress, length)?;
+            let mut resyncs = 0;
+            while progress.offset < length {
+                let offset = progress.offset;
+                let count =
+                    (length - offset).min(rovar_api::MEDIA_UPLOAD_CHUNK_BYTES as u64) as usize;
+                let source = block.clone();
+                let read = move || -> Result<Vec<u8>> {
+                    use std::io::{Read, Seek, SeekFrom};
+                    let mut reader = source.reader();
+                    reader.seek(SeekFrom::Start(offset))?;
+                    let mut bytes = vec![0; count];
+                    reader.read_exact(&mut bytes)?;
+                    Ok(bytes)
+                };
+                #[cfg(not(target_family = "wasm"))]
+                let bytes = tokio::task::spawn_blocking(read).await??;
+                #[cfg(target_family = "wasm")]
+                let bytes = read()?;
+                let response = client
+                    .request("PUT", &format!("{route}&offset={offset}"))?
+                    .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
+                    .body(bytes)
+                    .send()
+                    .await?;
+                let response = match successful(response).await {
+                    Ok(response) => response,
+                    Err(error)
+                        if resyncs < 2
+                            && error.downcast_ref::<HttpError>().is_some_and(|error| {
+                                error.status == 409 && error.code == "media_offset_mismatch"
+                            }) =>
+                    {
+                        progress = client.json("GET", &route, None).await?;
+                        validate_progress(&progress, length)?;
+                        resyncs += 1;
+                        continue;
+                    }
+                    Err(error) => return Err(error),
+                };
+                progress = serde_json::from_slice(&bounded_body(response, 64 * 1024).await?)?;
+                validate_progress(&progress, length)?;
+                ensure!(
+                    progress.offset > offset,
+                    "Server did not acknowledge media upload progress"
+                );
+            }
+            if !progress.complete {
+                let completed: rovar_api::MediaUpload = client.json("POST", &route, None).await?;
+                validate_progress(&completed, length)?;
+                ensure!(
+                    completed.complete,
+                    "Server did not complete the media upload"
+                );
+            }
             Ok(())
         })
         .await
@@ -91,4 +118,17 @@ impl Client {
         })
         .await
     }
+}
+
+fn validate_progress(progress: &rovar_api::MediaUpload, length: u64) -> Result<()> {
+    ensure!(
+        progress.offset <= length
+            && (progress.offset == length
+                || progress
+                    .offset
+                    .is_multiple_of(rovar_api::MEDIA_UPLOAD_CHUNK_BYTES as u64))
+            && (!progress.complete || progress.offset == length),
+        "Invalid media upload progress"
+    );
+    Ok(())
 }
