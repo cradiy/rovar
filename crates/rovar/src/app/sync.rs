@@ -32,7 +32,7 @@ impl Studio {
             let Some(link) = self.remote.read(cx).link(&tab.file.path).cloned() else {
                 continue;
             };
-            if link.dirty || link.conflict || link.baseline == tab.remote_baseline {
+            if link.conflict || link.baseline == tab.remote_baseline {
                 continue;
             }
             if link.object.deleted {

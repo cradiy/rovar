@@ -21,6 +21,7 @@ pub(crate) use preview::render as render_preview;
 mod tests;
 
 pub(crate) mod identity;
+pub(crate) mod merge;
 mod storage;
 pub(crate) use storage::{cache_preview, load, read_id, save, save_as};
 

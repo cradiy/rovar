@@ -5,6 +5,10 @@ struct Incoming {
     path: PathBuf,
     previous: Option<Link>,
     next: Link,
+    #[serde(default)]
+    installed_content: Option<String>,
+    #[serde(default)]
+    rejected_request: Option<String>,
 }
 
 impl Remote {
@@ -32,7 +36,49 @@ impl Remote {
                 conflict: false,
                 error: None,
             },
+            installed_content: None,
+            rejected_request: None,
         };
+        self.install_incoming(incoming, bytes)
+    }
+
+    pub(super) fn install_merge(
+        &mut self,
+        path: PathBuf,
+        object: Object,
+        title: String,
+        server: &[u8],
+        merged: &[u8],
+        rejected_request: String,
+    ) -> Result<()> {
+        self.recover_incoming()?;
+        let previous = self
+            .catalog
+            .links
+            .get(&path)
+            .cloned()
+            .ok_or_else(|| anyhow::anyhow!("Missing sync link"))?;
+        let confirmed = baseline::snapshot_content(server, false)?;
+        let content = baseline::snapshot_content(merged, false)?;
+        let mut next = previous.clone();
+        next.baseline = Some(self.store_baseline(&object, &confirmed)?);
+        next.digest = digest(server, &object.title, false);
+        next.dirty = content != confirmed || title != object.title;
+        next.object = object;
+        next.object.title = title;
+        next.conflict = false;
+        next.error = None;
+        let incoming = Incoming {
+            path,
+            previous: Some(previous),
+            next,
+            installed_content: Some(hex::encode(Sha256::digest(&content))),
+            rejected_request: Some(rejected_request),
+        };
+        self.install_incoming(incoming, Some(merged))
+    }
+
+    fn install_incoming(&mut self, incoming: Incoming, bytes: Option<&[u8]>) -> Result<()> {
         let journal = self.root.join("incoming.json");
         write_atomic(&journal, &serde_json::to_vec(&incoming)?)?;
         if let Some(bytes) = bytes {
@@ -71,12 +117,27 @@ impl Remote {
             }
             anyhow::bail!("Could not persist downloaded revision");
         }
+        self.retire_rejected_request(incoming)?;
         if matches!(
             incoming.next.object.kind,
             Kind::Component | Kind::ColorStyle
         ) {
             self.libraries_changed
                 .insert(incoming.next.connection.clone());
+        }
+        Ok(())
+    }
+
+    fn retire_rejected_request(&self, incoming: &Incoming) -> Result<()> {
+        if let Some(request) = &incoming.rejected_request {
+            let pending = self.pending_path(&incoming.next);
+            if rovar_storage::exists(&pending) {
+                let saved: PendingSave =
+                    serde_json::from_slice(&rovar_storage::fs::read(&pending)?)?;
+                if saved.input.request_id == *request {
+                    rovar_storage::fs::remove_file(pending)?;
+                }
+            }
         }
         Ok(())
     }
@@ -96,22 +157,35 @@ impl Remote {
                     && current.object.title == previous.object.title
                     && current.object.deleted == previous.object.deleted
                     && current.baseline == previous.baseline
-                    && !current.dirty
+                    && current.dirty == previous.dirty
+                    && current.conflict == previous.conflict
             }
             (None, None) => true,
             _ => false,
         };
-        let already_applied =
-            current.is_some_and(|link| link.baseline == incoming.next.baseline && !link.dirty);
-        if unchanged || already_applied {
+        let already_applied = current.is_some_and(|link| {
+            link.baseline == incoming.next.baseline
+                && link.object.revision == incoming.next.object.revision
+                && link.object.id == incoming.next.object.id
+                && link.connection == incoming.next.connection
+        });
+        if already_applied {
+            // The catalog committed before a crash, but retiring the rejected
+            // request may not have. Do not reset any subsequent local edits.
+            self.retire_rejected_request(&incoming)?;
+        } else if unchanged {
             let baseline = self
                 .read_baseline(&incoming.next)?
                 .ok_or_else(|| anyhow::anyhow!("Missing incoming baseline"))?;
             let installed = if incoming.next.object.deleted {
                 !rovar_storage::exists(&incoming.path)
             } else {
-                baseline::content(&incoming.path, false)
-                    .is_ok_and(|content| STANDARD.encode(content) == baseline.content)
+                baseline::content(&incoming.path, false).is_ok_and(|content| {
+                    match &incoming.installed_content {
+                        Some(hash) => hex::encode(Sha256::digest(&content)) == *hash,
+                        None => STANDARD.encode(content) == baseline.content,
+                    }
+                })
             };
             if installed {
                 self.finish_incoming(&incoming)?;
@@ -126,6 +200,97 @@ impl Remote {
 mod tests {
     use super::*;
     use gpui::TestAppContext;
+
+    #[gpui::test]
+    fn merged_cache_recovery_advances_only_the_server_baseline_and_retires_the_rejected_request(
+        cx: &mut TestAppContext,
+    ) {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("design.rovar");
+        write_atomic(&path, b"base").unwrap();
+        let remote = cx.update(|cx| Remote::shared(root.path(), cx));
+        remote.update(cx, |r, cx| {
+            let connection = r
+                .connect(
+                    "https://example.test".into(),
+                    super::super::tests::identity(),
+                    "token".into(),
+                    cx,
+                )
+                .unwrap();
+            r.track(
+                path.clone(),
+                connection.clone(),
+                "Design".into(),
+                Kind::Document,
+                cx,
+            );
+            let mut object = r.link(&path).unwrap().object.clone();
+            object.revision = 1;
+            r.install_snapshot(path.clone(), connection, object.clone(), Some(b"base"))
+                .unwrap();
+            write_atomic(&path, b"local").unwrap();
+            let previous = r.catalog.links.get_mut(&path).unwrap();
+            previous.dirty = true;
+            previous.conflict = true;
+            let previous = previous.clone();
+            let request = PendingSave {
+                input: Save {
+                    kind: Kind::Document,
+                    title: "Design".into(),
+                    base_revision: 1,
+                    request_id: uuid::Uuid::new_v4().to_string(),
+                    content: STANDARD.encode(b"local"),
+                    media: vec![],
+                    deleted: false,
+                },
+                media_transfer: true,
+            };
+            let pending = r.pending_path(&previous);
+            let request_bytes = serde_json::to_vec(&request).unwrap();
+            write_atomic(&pending, &request_bytes).unwrap();
+            object.revision = 2;
+            let mut next = previous.clone();
+            next.object = object.clone();
+            next.baseline = Some(r.store_baseline(&object, b"server").unwrap());
+            next.conflict = false;
+            let incoming = Incoming {
+                path: path.clone(),
+                previous: Some(previous),
+                next: next.clone(),
+                installed_content: Some(hex::encode(Sha256::digest(b"merged"))),
+                rejected_request: Some(request.input.request_id),
+            };
+            let journal = root.path().join("incoming.json");
+            let record = serde_json::to_vec(&incoming).unwrap();
+            // Crash before the new cache is installed must leave the old request.
+            write_atomic(&journal, &record).unwrap();
+            r.recover_incoming().unwrap();
+            assert_eq!(r.link(&path).unwrap().object.revision, 1);
+            assert!(rovar_storage::exists(&pending));
+            // Crash after writing the merged cache, before committing its revision.
+            write_atomic(&journal, &record).unwrap();
+            write_atomic(&path, b"merged").unwrap();
+            r.recover_incoming().unwrap();
+            assert_eq!(r.link(&path).unwrap().object.revision, 2);
+            assert!(r.link(&path).unwrap().dirty);
+            assert!(!r.link(&path).unwrap().conflict);
+            assert_eq!(
+                r.read_baseline(&next).unwrap().unwrap().content,
+                STANDARD.encode(b"server")
+            );
+            assert!(!rovar_storage::exists(&pending));
+            // Crash after catalog commit, then a new edit before recovery.
+            write_atomic(&journal, &record).unwrap();
+            write_atomic(&pending, &request_bytes).unwrap();
+            write_atomic(&path, b"later edit").unwrap();
+            r.catalog.links.get_mut(&path).unwrap().object.title = "Later title".into();
+            r.recover_incoming().unwrap();
+            assert!(!rovar_storage::exists(&pending));
+            assert_eq!(r.link(&path).unwrap().object.title, "Later title");
+            assert_eq!(rovar_storage::fs::read(&path).unwrap(), b"later edit");
+        });
+    }
 
     #[gpui::test]
     fn interrupted_cache_install_recovers_the_revision_without_overwriting_new_edits(
@@ -170,6 +335,8 @@ mod tests {
                 path: path.clone(),
                 previous: Some(previous.clone()),
                 next,
+                installed_content: None,
+                rejected_request: None,
             };
             let journal = root.path().join("incoming.json");
             let record = serde_json::to_vec(&incoming).unwrap();

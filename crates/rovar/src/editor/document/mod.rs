@@ -21,7 +21,7 @@ pub(crate) struct Transfer {
 
 pub(crate) struct SyncView {
     views: PageViews,
-    selection: std::collections::BTreeSet<usize>,
+    selection: std::collections::BTreeSet<uuid::Uuid>,
     pub focused: bool,
 }
 
@@ -29,7 +29,15 @@ impl Workspace {
     pub(crate) fn sync_view(&self, window: &Window, cx: &gpui::App) -> SyncView {
         SyncView {
             views: self.page_views(),
-            selection: self.selection_ids(),
+            selection: {
+                let selected = self.selection_ids();
+                self.snapshot_page(cx)
+                    .0
+                    .node_ids()
+                    .into_iter()
+                    .filter_map(|(id, uid)| selected.contains(&id).then_some(uid))
+                    .collect()
+            },
             focused: self.focus.contains_focused(window, cx),
         }
     }
@@ -47,7 +55,14 @@ impl Workspace {
             .any(|page| page.page.id == state.views.active);
         self.restore_page_views(state.views, window, cx);
         if page_exists {
-            self.set_selection(state.selection, cx);
+            let selection = self
+                .snapshot_page(cx)
+                .0
+                .node_ids()
+                .into_iter()
+                .filter_map(|(id, uid)| state.selection.contains(&uid).then_some(id))
+                .collect();
+            self.set_selection(selection, cx);
         }
     }
 

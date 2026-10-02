@@ -3,6 +3,7 @@ mod baseline;
 mod colors;
 mod directory;
 mod media;
+mod merge;
 use gpui::TestAppContext;
 
 #[gpui::test]
@@ -283,6 +284,7 @@ fn failed_upload_survives_restart_and_replays_before_newer_edits(cx: &mut TestAp
     });
     // Recreate the worker from disk: auth is not persisted, pending request is.
     let restarted = cx.new(|_| Remote {
+        merge_pending: BTreeSet::new(),
         root: root.path().into(),
         catalog: serde_json::from_slice(&std::fs::read(root.path().join("servers.json")).unwrap())
             .unwrap(),

@@ -3,6 +3,7 @@ mod cache;
 mod colors;
 mod conflict;
 mod media;
+mod merge;
 #[cfg(all(test, not(target_family = "wasm")))]
 pub(crate) mod tests;
 mod transport;
@@ -99,6 +100,7 @@ pub(crate) struct Remote {
     reconnect_at: BTreeMap<String, web_time::Instant>,
     refresh_at: BTreeMap<String, web_time::Instant>,
     auth_generation: u64,
+    merge_pending: BTreeSet<PathBuf>,
 }
 struct SharedRemote(Entity<Remote>);
 impl Global for SharedRemote {}
@@ -151,6 +153,12 @@ impl Remote {
             }
             Err(error) => (Catalog::default(), Some(error.to_string())),
         };
+        let merge_pending = catalog
+            .links
+            .iter()
+            .filter(|(_, link)| link.conflict)
+            .map(|(path, _)| path.clone())
+            .collect();
         let remote = cx.new(|_| Self {
             root: root.into(),
             catalog,
@@ -161,6 +169,7 @@ impl Remote {
             reconnect_at: BTreeMap::new(),
             refresh_at: BTreeMap::new(),
             auth_generation: 0,
+            merge_pending,
         });
         cx.set_global(SharedRemote(remote.clone()));
         remote.update(cx, |remote, _| {
@@ -481,12 +490,27 @@ impl Remote {
             if let Err(error) = self.reconcile_baseline(path) {
                 self.error = Some(error.to_string());
             }
+            if self
+                .catalog
+                .links
+                .get(path)
+                .is_some_and(|link| link.conflict)
+            {
+                self.merge_pending.insert(path.to_path_buf());
+            }
             self.persist();
             cx.notify();
         }
     }
     pub fn retry(&mut self, cx: &mut Context<Self>) {
         self.reconnect_at.clear();
+        self.merge_pending.extend(
+            self.catalog
+                .links
+                .iter()
+                .filter(|(_, link)| link.conflict)
+                .map(|(path, _)| path.clone()),
+        );
         for link in self.catalog.links.values_mut() {
             link.error = None;
         }
@@ -579,6 +603,9 @@ impl Remote {
                 cx.defer(move |cx| {
                     let open = crate::app::Studio::protected_document_paths(cx);
                     let _ = remote.update(cx, |this, cx| {
+                        if this.try_merge(&open, cx) {
+                            return;
+                        }
                         if this
                             .connection(&connection)
                             .is_some_and(|c| c.authenticated)
@@ -716,6 +743,18 @@ impl Remote {
                     && let Err(error) = this.preserve_color_conflict(&path, cx)
                 {
                     this.error = Some(error.to_string());
+                }
+                if this.catalog.links.get(&path).is_some_and(|link| {
+                    link.conflict && !link.object.deleted && link.object.kind == Kind::Document
+                }) {
+                    this.merge_pending.insert(path.clone());
+                    let remote = cx.entity().downgrade();
+                    cx.defer(move |cx| {
+                        let protected = crate::app::Studio::protected_document_paths(cx);
+                        let _ = remote.update(cx, |this, cx| {
+                            this.try_merge(&protected, cx);
+                        });
+                    });
                 }
                 cx.notify();
             });
