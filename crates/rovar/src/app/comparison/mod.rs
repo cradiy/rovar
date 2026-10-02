@@ -206,7 +206,7 @@ impl Studio {
                 anyhow::ensure!(
                     identity.server_id == connection.identity.server_id
                         && identity.user_id == connection.identity.user_id,
-                    "Server account changed"
+                    crate::i18n::t("comparison-account-changed")
                 );
                 let snapshot: rovar_api::Snapshot = client
                     .json(
@@ -248,7 +248,7 @@ impl Studio {
                             .is_some_and(
                                 |c| c.generation == connection.generation && c.authenticated
                             ),
-                        "Server account changed"
+                        crate::i18n::t("comparison-account-changed")
                     );
                     let (version, pages) = version(loaded, window, cx)?;
                     Ok((version, pages, object, file))

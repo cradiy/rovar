@@ -115,6 +115,7 @@ pub(crate) struct Studio {
     rename_input: Entity<TextInput>,
     renaming: Option<PathBuf>,
     deleting_document: Option<PathBuf>,
+    server_action: Option<servers::PendingAction>,
     open_errors: std::collections::VecDeque<open_error::OpenError>,
     _rename_subscriptions: Vec<Subscription>,
     all_files: bool,
@@ -319,6 +320,7 @@ impl Studio {
             rename_input,
             renaming: None,
             deleting_document: None,
+            server_action: None,
             open_errors: Default::default(),
             _rename_subscriptions: rename_subscriptions,
             all_files: false,
@@ -512,6 +514,14 @@ impl Render for Studio {
                     window.prevent_default();
                     return;
                 }
+                if this.server_action.is_some() {
+                    if event.keystroke.key == "escape" {
+                        this.finish_server_action(false, window, cx);
+                    }
+                    cx.stop_propagation();
+                    window.prevent_default();
+                    return;
+                }
                 if this.deleting_document.is_some() {
                     if event.keystroke.key == "escape" {
                         this.finish_document_delete(false, window, cx);
@@ -692,6 +702,9 @@ impl Render for Studio {
             })
             .when(self.deleting_document.is_some(), |el| {
                 el.child(self.document_delete_dialog(cx))
+            })
+            .when(self.server_action.is_some(), |el| {
+                el.child(self.server_action_dialog(cx))
             })
             .when(!self.open_errors.is_empty(), |el| {
                 el.child(self.open_error_dialog(cx))

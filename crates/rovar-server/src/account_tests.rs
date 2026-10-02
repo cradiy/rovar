@@ -27,18 +27,43 @@ async fn password_changes_and_session_revocation_are_isolated_and_atomic() {
     app.auth.create_user(&outsider, "outside123").await.unwrap();
     let a = app
         .auth
-        .login(name.clone(), "before123".into())
+        .login(
+            name.clone(),
+            "before123".into(),
+            crate::domain::identity::SessionDevice {
+                system: "Linux".into(),
+                name: "Design workstation".into(),
+                client: "Rovar Desktop".into(),
+            },
+        )
         .await
         .unwrap();
     let b = app
         .auth
-        .login(name.clone(), "before123".into())
+        .login(name.clone(), "before123".into(), Default::default())
         .await
         .unwrap();
-    let other = app.auth.login(outsider, "outside123".into()).await.unwrap();
+    let other = app
+        .auth
+        .login(outsider, "outside123".into(), Default::default())
+        .await
+        .unwrap();
     let sessions = app.auth.sessions(&a.token).await.unwrap();
     assert_eq!(sessions.len(), 2);
     assert_eq!(sessions.iter().filter(|s| s.current).count(), 1);
+    let current = sessions.iter().find(|s| s.current).unwrap();
+    assert_eq!(current.device.system, "Linux");
+    assert_eq!(current.device.name, "Design workstation");
+    assert_eq!(current.device.client, "Rovar Desktop");
+    assert!(
+        sessions
+            .iter()
+            .find(|s| !s.current)
+            .unwrap()
+            .device
+            .name
+            .is_empty()
+    );
     let b_id = &sessions.iter().find(|s| !s.current).unwrap().id;
     assert!(matches!(
         app.auth.revoke_sessions(&other.token, Some(b_id)).await,
@@ -72,10 +97,16 @@ async fn password_changes_and_session_revocation_are_isolated_and_atomic() {
     ));
     assert!(app.auth.authenticate(&other.token).await.is_ok());
     assert!(matches!(
-        app.auth.login(name.clone(), "before123".into()).await,
+        app.auth
+            .login(name.clone(), "before123".into(), Default::default())
+            .await,
         Err(Error::Unauthorized)
     ));
-    let new = app.auth.login(name, "一二三四五六".into()).await.unwrap();
+    let new = app
+        .auth
+        .login(name, "一二三四五六".into(), Default::default())
+        .await
+        .unwrap();
     let sessions = app.auth.sessions(&a.token).await.unwrap();
     let new_id = &sessions.iter().find(|s| !s.current).unwrap().id;
     app.auth
@@ -98,7 +129,8 @@ async fn password_changes_and_session_revocation_are_isolated_and_atomic() {
             &a.identity.user_id,
             b"stale-token",
             i64::MAX,
-            "stale-password-hash"
+            "stale-password-hash",
+            &Default::default(),
         )
         .await,
         Err(Error::Unauthorized)

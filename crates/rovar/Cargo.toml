@@ -1,8 +1,8 @@
 [package]
 name = "rovar"
-version = "0.1.0"
+version.workspace = true
 edition = "2024"
-authors = ["cradiy <cradiy.rs@gmail.com>"]
+authors.workspace = true
 license = "MIT"
 description = "A canvas-first desktop design editor"
 
@@ -52,6 +52,7 @@ unicode-segmentation = "1.12"
 unicode-linebreak = "0.1"
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
+whoami = "2.1.3"
 resvg = "0.48"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 tokio = { version = "1", features = ["rt-multi-thread", "time", "net"] }

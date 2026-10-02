@@ -11,6 +11,8 @@ pub const MAX_CONTENT_BYTES: usize = 128 * 1024 * 1024;
 pub struct Credentials {
     pub username: String,
     pub password: String,
+    #[serde(default)]
+    pub device: SessionDevice,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

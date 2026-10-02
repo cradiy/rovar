@@ -324,6 +324,13 @@ fn accepting_server_reloads_the_document_and_clears_conflict(cx: &mut TestAppCon
                 failed: false,
                 _snapshot: Some(SnapshotFile(snapshot.clone())),
             });
+            // A periodic refresh must not invalidate the reviewed snapshot.
+            studio.remote.update(cx, |remote, cx| {
+                let connection = remote.connection("connection").unwrap().clone();
+                remote
+                    .connect(connection.url, connection.identity, connection.token, cx)
+                    .unwrap();
+            });
             cx.notify();
         })
         .unwrap();

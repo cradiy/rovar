@@ -1,6 +1,47 @@
 use super::*;
 mod colors;
 use gpui::TestAppContext;
+
+#[gpui::test]
+fn metadata_refresh_preserves_session_generation_but_auth_changes_invalidate_it(
+    cx: &mut TestAppContext,
+) {
+    let root = tempfile::tempdir().unwrap();
+    let remote = cx.update(|cx| Remote::shared(root.path(), cx));
+    remote.update(cx, |remote, cx| {
+        let url = "https://example.test".to_owned();
+        let id = remote
+            .connect(url.clone(), identity(), "token".into(), cx)
+            .unwrap();
+        let first = remote.connection(&id).unwrap().generation;
+        let mut refreshed = identity();
+        refreshed.spaces[0].name = "Renamed workspace".into();
+        remote
+            .connect(url.clone(), refreshed.clone(), "token".into(), cx)
+            .unwrap();
+        assert_eq!(remote.connection(&id).unwrap().generation, first);
+        assert_eq!(
+            remote.connection(&id).unwrap().space.name,
+            "Renamed workspace"
+        );
+        refreshed.spaces[0].role = "viewer".into();
+        remote
+            .connect(url.clone(), refreshed, "token".into(), cx)
+            .unwrap();
+        assert_ne!(remote.connection(&id).unwrap().generation, first);
+        let changed = remote.connection(&id).unwrap().generation;
+        remote
+            .connect(url.clone(), identity(), "new-token".into(), cx)
+            .unwrap();
+        assert_ne!(remote.connection(&id).unwrap().generation, changed);
+        let changed = remote.connection(&id).unwrap().generation;
+        remote.sign_out(&id, cx);
+        remote
+            .connect(url, identity(), "new-token".into(), cx)
+            .unwrap();
+        assert_ne!(remote.connection(&id).unwrap().generation, changed);
+    });
+}
 use std::{
     io::{Read, Write},
     sync::{Arc, Mutex},

@@ -3,6 +3,8 @@ use crate::remote::Client;
 use gpui::{Focusable, SharedString, rgba};
 mod account;
 mod authentication;
+mod confirmation;
+pub(super) use confirmation::PendingAction;
 #[cfg(any(target_family = "wasm", test))]
 mod login;
 mod status;
@@ -30,7 +32,9 @@ pub(super) struct Panel {
     new_password: Entity<TextInput>,
     confirm_password: Entity<TextInput>,
     password_visible: [bool; 3],
+    adding_server: bool,
     account: Option<String>,
+    expanded_account: Option<String>,
     sessions: Vec<rovar_api::AccountSession>,
     success: Option<String>,
     resume: Option<String>,
@@ -325,7 +329,9 @@ impl Studio {
                     .placeholder(t("account-confirm-password"))
             }),
             password_visible: [false; 3],
+            adding_server: false,
             account: None,
+            expanded_account: None,
             sessions: Vec::new(),
             success: None,
             resume: None,
@@ -389,7 +395,11 @@ impl Studio {
                 },
             ));
         }
-        panel.name.focus_handle(cx).focus(window, cx);
+        if self.remote.read(cx).servers().is_empty() {
+            panel.name.focus_handle(cx).focus(window, cx);
+        } else {
+            self.focus.focus(window, cx);
+        }
         self.servers = Some(panel);
         if let Some(url) = selected {
             self.select_server(url, window, cx);
@@ -488,6 +498,7 @@ impl Studio {
             return;
         }
         panel.view = view;
+        panel.adding_server = false;
         panel.password_visible = [false; 3];
         for input in [
             &panel.password,
@@ -522,7 +533,11 @@ impl Studio {
             View::Servers => {
                 panel.selected = None;
                 panel.registration = None;
-                panel.name.focus_handle(cx).focus(window, cx);
+                if self.remote.read(cx).servers().is_empty() {
+                    panel.name.focus_handle(cx).focus(window, cx);
+                } else {
+                    self.focus.focus(window, cx);
+                }
             }
             View::Rename => panel.name.focus_handle(cx).focus(window, cx),
             View::Login => panel.username.focus_handle(cx).focus(window, cx),
@@ -614,6 +629,7 @@ pub(super) fn button(
     id: impl Into<gpui::ElementId>,
     label: impl Into<SharedString>,
 ) -> gpui::Stateful<gpui::Div> {
+    let label = label.into();
     div()
         .id(id)
         .px(px(10.))
@@ -624,5 +640,12 @@ pub(super) fn button(
         .gap(px(8.))
         .cursor_pointer()
         .hover(|s| s.bg(rgba(0xb4a2ee22)))
-        .child(label.into())
+        .when(label.is_empty(), |el| {
+            el.size(px(30.))
+                .p_0()
+                .gap_0()
+                .flex_shrink_0()
+                .justify_center()
+        })
+        .when(!label.is_empty(), |el| el.child(label))
 }

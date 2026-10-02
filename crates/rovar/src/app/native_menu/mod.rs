@@ -141,6 +141,7 @@ impl Studio {
         let available = !self.closing
             && self.open_errors.is_empty()
             && self.deleting_document.is_none()
+            && self.server_action.is_none()
             && self.renaming.is_none()
             && self.preferences.is_none();
         let editing = available && self.active_editor().is_some();

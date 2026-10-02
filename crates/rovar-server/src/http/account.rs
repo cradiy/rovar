@@ -37,6 +37,11 @@ pub async fn sessions(depot: &mut Depot, res: &mut Response) {
                     created_at: s.created_at,
                     expires_at: s.expires_at,
                     current: s.current,
+                    device: rovar_api::SessionDevice {
+                        system: s.device.system,
+                        name: s.device.name,
+                        client: s.device.client,
+                    },
                 })
                 .collect::<Vec<_>>()
         }),

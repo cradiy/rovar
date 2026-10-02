@@ -106,7 +106,7 @@ impl Studio {
                 .read(cx)
                 .connection(&panel.connection)
                 .is_some_and(|c| c.authenticated && c.generation == panel.generation),
-            "Server account changed; reopen the comparison"
+            crate::i18n::t("comparison-account-changed")
         );
         let server = panel.server_visible;
         let bytes = if server {

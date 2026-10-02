@@ -15,6 +15,7 @@ pub trait Accounts: Send + Sync {
         hash: &[u8],
         expires_at: i64,
         password_hash: &str,
+        device: &crate::domain::identity::SessionDevice,
     ) -> Result<()>;
     async fn session_user(&self, hash: &[u8], now: i64) -> Result<Option<(String, String)>>;
     async fn delete_session(&self, hash: &[u8]) -> Result<()>;

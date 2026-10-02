@@ -1,5 +1,7 @@
 use gpui::{App, ImageSource, PathPromptOptions, Task};
 use std::path::{Path, PathBuf};
+mod device;
+pub(crate) use device::session_device;
 
 pub(crate) fn now() -> u64 {
     web_time::SystemTime::now()

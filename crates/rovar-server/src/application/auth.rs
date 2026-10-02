@@ -1,7 +1,7 @@
 use super::ports::{Accounts, Passwords, Spaces};
 use crate::domain::{
     error::{Error, Result, now},
-    identity::{Identity, Session},
+    identity::{Identity, Session, SessionDevice},
 };
 use sha2::{Digest, Sha256};
 use std::{collections::HashMap, sync::Arc};
@@ -46,7 +46,9 @@ impl AuthService {
         username: &str,
         password: &str,
         team: Option<&str>,
+        device: SessionDevice,
     ) -> Result<Session> {
+        device.validate()?;
         if if team.is_some() {
             !self.registration.teams
         } else {
@@ -56,7 +58,8 @@ impl AuthService {
         }
         let team = team.map(crate::domain::space::name).transpose()?;
         self.create_account(username, password, team).await?;
-        self.login(username.trim().into(), password.into()).await
+        self.login(username.trim().into(), password.into(), device)
+            .await
     }
 
     async fn create_account(
@@ -80,7 +83,13 @@ impl AuthService {
             .await
     }
 
-    pub async fn login(&self, username: String, password: String) -> Result<Session> {
+    pub async fn login(
+        &self,
+        username: String,
+        password: String,
+        device: SessionDevice,
+    ) -> Result<Session> {
+        device.validate()?;
         if username.len() > 80 || password.len() > 1024 {
             return Err(Error::Unauthorized);
         }
@@ -119,6 +128,7 @@ impl AuthService {
                 &token_hash(&token),
                 now() + SESSION_SECONDS,
                 &user.password_hash,
+                &device,
             )
             .await?;
         Ok(Session {

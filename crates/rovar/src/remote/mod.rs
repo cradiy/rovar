@@ -225,6 +225,21 @@ impl Remote {
             "Unsupported server API version"
         );
         let mut first = None;
+        // Refreshing workspace metadata must not invalidate in-flight work for
+        // the same authenticated session. Logout, new tokens and role changes do.
+        let sessions: BTreeMap<_, _> = self
+            .catalog
+            .connections
+            .iter()
+            .filter(|c| {
+                c.authenticated
+                    && c.url == url
+                    && c.token == token
+                    && c.identity.server_id == identity.server_id
+                    && c.identity.user_id == identity.user_id
+            })
+            .map(|c| (c.space.id.clone(), (c.space.role.clone(), c.generation)))
+            .collect();
         self.auth_generation += 1;
         for connection in &mut self.catalog.connections {
             if connection.url == url && connection.identity.user_id == identity.user_id {
@@ -253,7 +268,10 @@ impl Remote {
                 space: space.clone(),
                 token: token.clone(),
                 authenticated: true,
-                generation: self.auth_generation,
+                generation: sessions
+                    .get(&space.id)
+                    .filter(|(role, _)| role == &space.role)
+                    .map_or(self.auth_generation, |(_, generation)| *generation),
             });
             self.refresh_at
                 .entry(id.clone())

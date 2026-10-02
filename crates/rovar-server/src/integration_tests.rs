@@ -48,17 +48,19 @@ async fn isolated_accounts_atomic_versions_retries_and_encrypted_restart() {
         .await
         .unwrap();
     assert!(matches!(
-        app.auth.login(user_a.clone(), "wrong".into()).await,
+        app.auth
+            .login(user_a.clone(), "wrong".into(), Default::default())
+            .await,
         Err(Error::Unauthorized)
     ));
     let a = app
         .auth
-        .login(user_a, "integration-password-a".into())
+        .login(user_a, "integration-password-a".into(), Default::default())
         .await
         .unwrap();
     let b = app
         .auth
-        .login(user_b, "integration-password-b".into())
+        .login(user_b, "integration-password-b".into(), Default::default())
         .await
         .unwrap();
     let a_space = &a.identity.spaces[0].id;

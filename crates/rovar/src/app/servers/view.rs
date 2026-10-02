@@ -287,7 +287,8 @@ impl Studio {
                                                         div()
                                                             .text_size(px(12.))
                                                             .text_color(rgb(MUTED))
-                                                            .child(t("server-manage-accounts")),
+                                                            .truncate()
+                                                            .child(url.clone()),
                                                     ),
                                             )
                                             .when(active, |el| {
@@ -297,7 +298,11 @@ impl Studio {
                                                 )
                                             })
                                             .child(
+                                                div().flex().items_center().gap(px(2.))
+                                                .pl(px(8.)).border_l_1().border_color(rgb(BORDER))
+                                                .child(
                                                 button(("rename-server", index), "")
+                                                    .debug_selector(move || format!("rename-server-{index}"))
                                                     .size(px(30.))
                                                     .p_0()
                                                     .justify_center()
@@ -318,16 +323,20 @@ impl Studio {
                                             )
                                             .child(
                                                 button(("remove-server", index), "")
+                                                    .debug_selector(move || format!("remove-server-{index}"))
                                                     .child(
-                                                        icon(LucideIcons::X, 15.)
+                                                        icon(LucideIcons::Trash2, 15.)
                                                             .text_color(rgb(MUTED)),
                                                     )
                                                     .on_click(cx.listener(
-                                                        move |this, _, _, cx| {
+                                                        move |this, _, window, cx| {
                                                             cx.stop_propagation();
-                                                            this.remove_server(remove.clone(), cx);
+                                                            this.server_action = Some(super::PendingAction::Remove(remove.clone()));
+                                                            this.focus.focus(window, cx);
+                                                            cx.notify();
                                                         },
                                                     )),
+                                                ),
                                             )
                                             .child(
                                                 icon(LucideIcons::ChevronRight, 16.)
@@ -340,7 +349,22 @@ impl Studio {
                                 )),
                         )
                     })
-                    .child(
+                    .when(!remote.servers().is_empty() && !panel.adding_server, |el| {
+                        el.child(button("server-add", "")
+                            .debug_selector(|| "server-add".into())
+                            .w_full().h(px(38.)).gap(px(8.)).justify_center().border_1().border_color(rgb(BORDER))
+                            .child(icon(LucideIcons::Plus, 16.).text_color(rgb(ACCENT)))
+                            .child(t("server-add"))
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                if let Some(panel) = &mut this.servers {
+                                    panel.adding_server = true;
+                                    panel.error = None;
+                                    panel.name.focus_handle(cx).focus(window, cx);
+                                    cx.notify();
+                                }
+                            })))
+                    })
+                    .when(remote.servers().is_empty() || panel.adding_server, |el| { el.child(
                         div()
                             .flex()
                             .flex_col()
@@ -364,7 +388,7 @@ impl Studio {
                                     |this, _, window, cx| this.server_address_submit(window, cx),
                                 )),
                             ),
-                    )
+                    ) })
                     .child(
                         div()
                             .flex()
@@ -435,7 +459,18 @@ impl Studio {
                                 let settings = id.clone();
                                 let username = account.identity.username.clone();
                                 let authenticated = account.authenticated;
-                                div()
+                                let expanded = authenticated
+                                    && panel.expanded_account.as_ref() == Some(&id);
+                                let spaces = self.remote.read(cx).connections().iter()
+                                    .filter(|connection| {
+                                        connection.authenticated
+                                            && connection.url == account.url
+                                            && connection.identity.server_id == account.identity.server_id
+                                            && connection.identity.user_id == account.identity.user_id
+                                    })
+                                    .cloned()
+                                    .collect::<Vec<_>>();
+                                let header = div()
                                     .flex()
                                     .items_center()
                                     .gap(px(8.))
@@ -480,14 +515,14 @@ impl Studio {
                                                                 MUTED
                                                             }))
                                                             .child(t(if authenticated {
-                                                                "server-open-workspace"
+                                                                "server-workspaces"
                                                             } else {
                                                                 "server-sign-in"
                                                             })),
                                                     ),
                                             )
                                             .child(
-                                                icon(LucideIcons::ChevronRight, 16.)
+                                                icon(if expanded { LucideIcons::ChevronDown } else { LucideIcons::ChevronRight }, 16.)
                                                     .text_color(rgb(MUTED)),
                                             )
                                             .on_click(cx.listener(move |this, _, window, cx| {
@@ -495,12 +530,10 @@ impl Studio {
                                                     return;
                                                 }
                                                 if authenticated {
-                                                    this.servers = None;
-                                                    this.select_source(
-                                                        Some(id.clone()),
-                                                        window,
-                                                        cx,
-                                                    );
+                                                    if let Some(panel) = &mut this.servers {
+                                                        panel.expanded_account = if expanded { None } else { Some(id.clone()) };
+                                                    }
+                                                    cx.notify();
                                                 } else {
                                                     this.server_view(View::Login, window, cx);
                                                     if let Some(panel) = &this.servers {
@@ -543,6 +576,45 @@ impl Studio {
                                                         )
                                                     },
                                                 )),
+                                        )
+                                    });
+                                div()
+                                    .flex()
+                                    .flex_col()
+                                    .flex_shrink_0()
+                                    .rounded(px(11.))
+                                    .bg(rgb(CARD))
+                                    .child(header)
+                                    .when(expanded, |el| {
+                                        el.child(
+                                            div()
+                                                .px(px(8.))
+                                                .pb(px(8.))
+                                                .flex()
+                                                .flex_col()
+                                                .gap(px(4.))
+                                                .children(spaces.into_iter().enumerate().map(|(space_index, connection)| {
+                                                    let selected = self.source.as_ref() == Some(&connection.id);
+                                                    div()
+                                                        .id(SharedString::from(format!("account-workspace-{}", connection.id)))
+                                                        .debug_selector(move || format!("account-workspace-{index}-{space_index}"))
+                                                        .min_h(px(36.))
+                                                        .px(px(12.))
+                                                        .rounded(px(7.))
+                                                        .flex()
+                                                        .items_center()
+                                                        .gap(px(10.))
+                                                        .cursor_pointer()
+                                                        .hover(|s| s.bg(rgb(0x302b3d)))
+                                                        .child(icon(if connection.space.kind == "team" { LucideIcons::Users } else { LucideIcons::House }, 16.).text_color(rgb(MUTED)))
+                                                        .child(div().flex_1().min_w_0().truncate().child(connection.space_label()))
+                                                        .when(selected, |el| el.child(icon(LucideIcons::Check, 14.).text_color(rgb(ACCENT))))
+                                                        .on_click(cx.listener(move |this, _, window, cx| {
+                                                            if this.signing_out { return; }
+                                                            this.servers = None;
+                                                            this.select_source(Some(connection.id.clone()), window, cx);
+                                                        }))
+                                                })),
                                         )
                                     })
                             })),

@@ -58,7 +58,11 @@ pub async fn login(req: &mut Request, depot: &mut Depot, res: &mut Response) {
     let app = depot.get_typed::<Application>().unwrap();
     let result = app
         .auth
-        .login(credentials.username, credentials.password)
+        .login(
+            credentials.username,
+            credentials.password,
+            device(credentials.device),
+        )
         .await;
     finish_login(depot, res, result);
 }
@@ -125,7 +129,20 @@ pub async fn register(req: &mut Request, depot: &mut Depot, res: &mut Response) 
         .get_typed::<Application>()
         .unwrap()
         .auth
-        .register(&input.username, &input.password, input.team_name.as_deref())
+        .register(
+            &input.username,
+            &input.password,
+            input.team_name.as_deref(),
+            device(input.device),
+        )
         .await;
     finish_login(depot, res, result);
+}
+
+fn device(input: rovar_api::SessionDevice) -> crate::domain::identity::SessionDevice {
+    crate::domain::identity::SessionDevice {
+        system: input.system.trim().into(),
+        name: input.name.trim().into(),
+        client: input.client.trim().into(),
+    }
 }
