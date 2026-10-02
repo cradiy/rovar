@@ -121,14 +121,141 @@ pub async fn read(req: &mut Request, depot: &mut Depot, res: &mut Response) {
         .await
     {
         Ok(download) => {
+            let etag = format!("\"{hash}\"");
+            let range = req.headers().get("range");
+            let range = if req
+                .headers()
+                .get("if-range")
+                .is_none_or(|value| value.to_str().ok() == Some(etag.as_str()))
+            {
+                range.map(|value| {
+                    value
+                        .to_str()
+                        .ok()
+                        .and_then(|value| byte_range(value, download.length))
+                })
+            } else {
+                None
+            };
+            let (start, length) = match range {
+                None => (0, download.length),
+                Some(Some((start, end))) => {
+                    res.status_code(StatusCode::PARTIAL_CONTENT);
+                    res.headers_mut().insert(
+                        "content-range",
+                        format!("bytes {start}-{end}/{}", download.length)
+                            .parse()
+                            .unwrap(),
+                    );
+                    (start, end - start + 1)
+                }
+                Some(None) => {
+                    res.status_code(StatusCode::RANGE_NOT_SATISFIABLE);
+                    res.headers_mut().insert(
+                        "content-range",
+                        format!("bytes */{}", download.length).parse().unwrap(),
+                    );
+                    return;
+                }
+            };
             res.headers_mut()
                 .insert("content-type", "application/octet-stream".parse().unwrap());
+            res.headers_mut().insert("content-length", length.into());
+            res.headers_mut().insert("etag", etag.parse().unwrap());
             res.headers_mut()
-                .insert("content-length", download.length.into());
+                .insert("accept-ranges", "bytes".parse().unwrap());
             res.headers_mut()
                 .insert("cache-control", "private, no-store".parse().unwrap());
-            res.stream(download.body);
+            res.stream(ranged_body(download.body, start, length));
         }
         Err(error) => response::failure(res, error),
+    }
+}
+
+fn byte_range(value: &str, length: u64) -> Option<(u64, u64)> {
+    let (start, end) = value.strip_prefix("bytes=")?.split_once('-')?;
+    let last = length.checked_sub(1)?;
+    if start.is_empty() {
+        let suffix = end.parse::<u64>().ok()?;
+        return (suffix > 0).then_some((length.saturating_sub(suffix), last));
+    }
+    let start = start.parse::<u64>().ok()?;
+    let end = if end.is_empty() {
+        last
+    } else {
+        end.parse::<u64>().ok()?.min(last)
+    };
+    (start <= end).then_some((start, end))
+}
+
+fn ranged_body(
+    body: crate::application::ports::ContentStream,
+    skip: u64,
+    length: u64,
+) -> crate::application::ports::ContentStream {
+    Box::pin(futures_util::stream::try_unfold(
+        (body, skip, length),
+        |(mut body, mut skip, mut remaining)| async move {
+            while remaining != 0 {
+                let chunk = body
+                    .next()
+                    .await
+                    .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::UnexpectedEof))??;
+                if skip >= chunk.len() as u64 {
+                    skip -= chunk.len() as u64;
+                    continue;
+                }
+                let start = skip as usize;
+                let count = remaining.min((chunk.len() - start) as u64) as usize;
+                remaining -= count as u64;
+                let bytes = if start == 0 && count == chunk.len() {
+                    chunk
+                } else {
+                    chunk[start..start + count].to_vec()
+                };
+                return Ok(Some((bytes, (body, 0, remaining))));
+            }
+            Ok(None)
+        },
+    ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[tokio::test]
+    async fn ranges_handle_boundaries_and_propagate_corrupt_or_short_streams() {
+        assert_eq!(byte_range("bytes=3-", 6), Some((3, 5)));
+        assert_eq!(byte_range("bytes=1-99", 6), Some((1, 5)));
+        assert_eq!(byte_range("bytes=-2", 6), Some((4, 5)));
+        for value in [
+            "bytes=6-",
+            "bytes=2-1",
+            "bytes=-0",
+            "bytes=0-1,3-4",
+            "garbage",
+        ] {
+            assert_eq!(byte_range(value, 6), None);
+        }
+        assert_eq!(byte_range("bytes=0-", 0), None);
+        let body = || {
+            Box::pin(futures_util::stream::iter([
+                Ok(b"abc".to_vec()),
+                Ok(b"def".to_vec()),
+            ])) as crate::application::ports::ContentStream
+        };
+        let mut range = ranged_body(body(), 2, 3);
+        let mut bytes = Vec::new();
+        while let Some(chunk) = range.next().await {
+            bytes.extend_from_slice(&chunk.unwrap());
+        }
+        assert_eq!(bytes, b"cde");
+        let mut short = ranged_body(body(), 5, 2);
+        assert_eq!(short.next().await.unwrap().unwrap(), b"f");
+        assert!(short.next().await.unwrap().is_err());
+        let corrupt = Box::pin(futures_util::stream::iter([Err(
+            std::io::ErrorKind::InvalidData.into(),
+        )]));
+        assert!(ranged_body(corrupt, 3, 3).next().await.unwrap().is_err());
     }
 }

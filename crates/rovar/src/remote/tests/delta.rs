@@ -580,12 +580,13 @@ fn download_reconstruction_ignores_local_edits_and_fetches_only_missing_media(
         let connection = r.connection(&link.connection).unwrap();
         let client = connection.client();
         let space = connection.space.id.clone();
+        let downloads = r.root.join("downloads");
         let executor = cx.background_executor().clone();
         r.busy = true;
         cx.spawn(async move |this, cx| {
             *output.lock().unwrap() = Some(
                 super::super::delta::receive(
-                    &client, &space, &updated, baseline, &cache, &executor,
+                    &client, &space, &updated, baseline, &cache, &downloads, &executor,
                 )
                 .await,
             );

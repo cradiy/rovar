@@ -993,8 +993,16 @@ impl Remote {
                     } else {
                         None
                     };
-                    let (object, bytes) =
-                        delta::receive(&client, &space, &object, base, &path, &executor).await?;
+                    let (object, bytes) = delta::receive(
+                        &client,
+                        &space,
+                        &object,
+                        base,
+                        &path,
+                        &root.join("downloads"),
+                        &executor,
+                    )
+                    .await?;
                     downloaded += bytes.len();
                     updates.push((path, object, Some(bytes)));
                 }

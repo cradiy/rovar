@@ -1,8 +1,5 @@
 use super::*;
 use rovar_format::BlockHandle;
-use rovar_storage::{fs, tempfile::NamedTempFile};
-use sha2::{Digest, Sha256};
-use std::io::Write;
 
 impl Client {
     pub async fn upload_media(&self, path: &str, block: BlockHandle) -> Result<()> {
@@ -72,49 +69,6 @@ impl Client {
                 );
             }
             Ok(())
-        })
-        .await
-    }
-
-    pub async fn download_media(
-        &self,
-        path: &str,
-        item: &rovar_api::Media,
-    ) -> Result<NamedTempFile> {
-        ensure!(
-            item.length <= rovar_api::MAX_MEDIA_BYTES as u64,
-            "Media exceeds the size limit"
-        );
-        let client = self.clone();
-        let path = path.to_owned();
-        let item = item.clone();
-        execute(async move {
-            let response = successful(client.request("GET", &path)?.send().await?).await?;
-            ensure!(
-                response.content_length().is_none_or(|n| n == item.length),
-                "Media checksum or length mismatch"
-            );
-            let output = NamedTempFile::new()?;
-            let mut file = fs::File::create(output.path())?;
-            let mut stream = response.bytes_stream();
-            let mut length = 0u64;
-            let mut hash = Sha256::new();
-            while let Some(chunk) = stream.next().await {
-                let chunk = chunk?;
-                ensure!(
-                    chunk.len() as u64 <= item.length.saturating_sub(length),
-                    "Media exceeds the declared length"
-                );
-                file.write_all(&chunk)?;
-                hash.update(&chunk);
-                length += chunk.len() as u64;
-            }
-            ensure!(
-                length == item.length && hex::encode(hash.finalize()) == item.hash,
-                "Media checksum mismatch"
-            );
-            file.flush()?;
-            Ok(output)
         })
         .await
     }

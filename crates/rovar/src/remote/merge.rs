@@ -58,6 +58,7 @@ impl Remote {
             let executor = cx.background_executor().clone();
             let text_system = cx.text_system().clone();
             let base_title = baseline.object.title.clone();
+            let downloads = self.root.join("downloads");
             cx.spawn(async move |this, cx| {
                 let result = async {
                     let actual: Identity = client.json("GET", "session", None).await?;
@@ -72,6 +73,7 @@ impl Remote {
                         &link.object,
                         Some(baseline),
                         &path,
+                        &downloads,
                         &executor,
                     )
                     .await?;

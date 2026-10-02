@@ -39,25 +39,43 @@ fn chunked_media_downloads_reject_incomplete_oversized_and_corrupt_bodies() {
             .unwrap();
     });
     tokio::runtime::Runtime::new().unwrap().block_on(async {
+        let root = tempfile::tempdir().unwrap();
         let client = Client::new(&url).unwrap();
         let item = rovar_api::Media {
             hash: hex::encode(Sha256::digest(b"abcdef")),
             length: 6,
         };
-        let output = client
-            .download_media("spaces/space/media/hash", &item)
+        let mut output = client
+            .download_media(
+                "spaces/space/media/hash",
+                &item,
+                &root.path().join("success"),
+            )
             .await
             .unwrap();
-        assert_eq!(std::fs::read(output.path()).unwrap(), b"abcdef");
-        for expected in ["checksum", "declared length", "checksum"] {
+        let mut bytes = Vec::new();
+        output.read_to_end(&mut bytes).unwrap();
+        assert_eq!(bytes, b"abcdef");
+        for (index, expected) in ["checksum", "declared length", "checksum"]
+            .into_iter()
+            .enumerate()
+        {
             let error = client
-                .download_media("spaces/space/media/hash", &item)
+                .download_media(
+                    "spaces/space/media/hash",
+                    &item,
+                    &root.path().join(index.to_string()),
+                )
                 .await
                 .unwrap_err();
             assert!(error.to_string().contains(expected), "{error}");
         }
         let error = client
-            .download_media("spaces/space/media/hash", &item)
+            .download_media(
+                "spaces/space/media/hash",
+                &item,
+                &root.path().join("unauthorized"),
+            )
             .await
             .unwrap_err();
         assert_eq!(error.downcast_ref::<HttpError>().unwrap().status, 401);

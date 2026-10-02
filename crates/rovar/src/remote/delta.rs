@@ -8,6 +8,7 @@ pub(super) async fn receive(
     expected: &Object,
     baseline: Option<baseline::Baseline>,
     local: &Path,
+    downloads: &Path,
     executor: &gpui::BackgroundExecutor,
 ) -> Result<(Object, Vec<u8>)> {
     let base = baseline
@@ -68,7 +69,7 @@ pub(super) async fn receive(
         client.json("GET", &route, None).await?
     };
     validate(&snapshot.object, expected)?;
-    let bytes = media::hydrate(client, space, &snapshot, local).await?;
+    let bytes = media::hydrate(client, space, &snapshot, local, downloads).await?;
     // Do not retain the encoded payload alongside the hydrated container.
     snapshot.content.clear();
     Ok((snapshot.object, bytes))

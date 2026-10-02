@@ -1,6 +1,7 @@
 use anyhow::{Result, ensure};
 use futures_util::StreamExt;
 use serde::de::DeserializeOwned;
+mod download;
 mod media;
 
 #[derive(Debug)]

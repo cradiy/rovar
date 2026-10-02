@@ -225,9 +225,15 @@ fn media_is_uploaded_once_reused_on_retry_and_verified_when_downloaded() {
             content: transfer.content,
             media: transfer.media,
         };
-        let reused = super::super::media::hydrate(&client, "personal", &snapshot, &path)
-            .await
-            .unwrap();
+        let reused = super::super::media::hydrate(
+            &client,
+            "personal",
+            &snapshot,
+            &path,
+            &root.path().join("downloads"),
+        )
+        .await
+        .unwrap();
         let output = root.path().join("download.rovar");
         std::fs::write(&output, reused).unwrap();
         let reader = rovar_format::Reader::open(&output).unwrap();
@@ -243,20 +249,32 @@ fn media_is_uploaded_once_reused_on_retry_and_verified_when_downloaded() {
             "Local media should not be downloaded again"
         );
         let missing = root.path().join("missing.rovar");
-        let downloaded = super::super::media::hydrate(&client, "personal", &snapshot, &missing)
-            .await
-            .unwrap();
+        let downloaded = super::super::media::hydrate(
+            &client,
+            "personal",
+            &snapshot,
+            &missing,
+            &root.path().join("downloads"),
+        )
+        .await
+        .unwrap();
         std::fs::write(&output, downloaded).unwrap();
         rovar_format::Reader::open(&output)
             .unwrap()
             .verify()
             .unwrap();
         assert!(
-            super::super::media::hydrate(&client, "personal", &snapshot, &missing)
-                .await
-                .unwrap_err()
-                .to_string()
-                .contains("checksum")
+            super::super::media::hydrate(
+                &client,
+                "personal",
+                &snapshot,
+                &missing,
+                &root.path().join("corrupt")
+            )
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("checksum")
         );
         assert!(
             !missing.exists(),

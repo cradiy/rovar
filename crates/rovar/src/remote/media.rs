@@ -83,6 +83,7 @@ pub(super) async fn hydrate(
     space: &str,
     snapshot: &Snapshot,
     local: &Path,
+    downloads: &Path,
 ) -> Result<Vec<u8>> {
     let bytes = STANDARD.decode(&snapshot.content)?;
     ensure!(
@@ -112,17 +113,16 @@ pub(super) async fn hydrate(
             continue;
         }
         let file = client
-            .download_media(&format!("spaces/{space}/media/{}", item.hash), item)
+            .download_media(
+                &format!("spaces/{space}/media/{}", item.hash),
+                item,
+                downloads,
+            )
             .await?;
         let hash: [u8; 32] = hex::decode(&item.hash)?
             .try_into()
             .map_err(|_| anyhow::anyhow!("Invalid media hash"))?;
-        writer.put(
-            &key,
-            "media",
-            rovar_storage::fs::File::open(file.path())?,
-            Some(hash),
-        )?;
+        writer.put(&key, "media", file, Some(hash))?;
     }
     writer.commit()?;
     drop(writer);
