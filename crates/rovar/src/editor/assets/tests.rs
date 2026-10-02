@@ -62,6 +62,7 @@ fn saved_group_embeds_media_and_inserts_independent_objects_with_one_undo(cx: &m
             editor.hierarchy.groups.insert(
                 4,
                 LayerGroup {
+                    uid: uuid::Uuid::new_v4(),
                     name: "Card".into(),
                     board: Some(1),
                     layer: Default::default(),
@@ -350,6 +351,7 @@ fn assets_panel_search_save_cancel_and_drop_respect_the_canvas(cx: &mut TestAppC
 
 fn board(id: usize, rect: Rect) -> Artboard {
     Artboard {
+        uid: uuid::Uuid::new_v4(),
         color_style: None,
         id,
         rect,

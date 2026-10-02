@@ -16,6 +16,7 @@ use std::ops::Range;
 use unicode_segmentation::UnicodeSegmentation;
 
 pub struct TextBox {
+    pub uid: uuid::Uuid,
     pub id: usize,
     pub layer: crate::scene::layer::LayerState,
     pub board: Option<usize>,
@@ -141,11 +142,13 @@ impl TextEditor {
     pub(crate) fn document_text(
         &self,
         id: usize,
+        uid: uuid::Uuid,
         board: Option<usize>,
         rect: Rect,
         layer: crate::scene::layer::LayerState,
     ) -> crate::document::Text {
         crate::document::Text {
+            uid,
             id,
             board,
             rect,

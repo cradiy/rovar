@@ -19,12 +19,16 @@ pub(super) fn content(path: &Path, deleted: bool) -> Result<Vec<u8>> {
     let bytes = rovar_storage::fs::read(path)?;
     // Color styles and legacy JSON documents have no container.
     Ok(match serde_json::from_slice::<serde_json::Value>(&bytes) {
-        Ok(value) => serde_json::to_vec(&value)?,
+        Ok(mut value) => {
+            normalize(&mut value);
+            serde_json::to_vec(&value)?
+        }
         Err(_) => bytes,
     })
 }
 
 fn normalize(value: &mut serde_json::Value) {
+    crate::document::identity::upgrade_json_node_ids(value);
     match value {
         serde_json::Value::Object(fields) => {
             // Allocation watermarks can advance after an undone insertion.
@@ -38,6 +42,9 @@ fn normalize(value: &mut serde_json::Value) {
             for value in fields.values_mut() {
                 normalize(value);
             }
+            // serde_json can preserve insertion order through workspace feature
+            // unification. Semantic equality must not depend on field order.
+            fields.sort_keys();
         }
         serde_json::Value::Array(values) => {
             for value in values {
@@ -46,6 +53,16 @@ fn normalize(value: &mut serde_json::Value) {
         }
         _ => {}
     }
+}
+
+fn baseline_content(bytes: &[u8]) -> Result<Vec<u8>> {
+    // A baseline saved before persistent node IDs was introduced must compare
+    // against the same deterministic upgrade used when loading its local cache.
+    if let Ok(mut value) = serde_json::from_slice::<serde_json::Value>(bytes) {
+        normalize(&mut value);
+        return Ok(serde_json::to_vec(&value)?);
+    }
+    Ok(bytes.to_vec())
 }
 
 pub(super) fn snapshot_content(bytes: &[u8], deleted: bool) -> Result<Vec<u8>> {
@@ -82,7 +99,9 @@ impl Remote {
             hex::encode(Sha256::digest(&bytes)) == *key,
             "Damaged sync baseline"
         );
-        Ok(Some(serde_json::from_slice(&bytes)?))
+        let mut baseline: Baseline = serde_json::from_slice(&bytes)?;
+        baseline.content = STANDARD.encode(baseline_content(&STANDARD.decode(&baseline.content)?)?);
+        Ok(Some(baseline))
     }
 
     /// Upgrade only caches whose bytes match a previously acknowledged upload/download.

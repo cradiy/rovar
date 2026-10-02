@@ -116,6 +116,8 @@ impl PartialEq for PathPoints {
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub(crate) struct Shape {
+    #[serde(default, skip_serializing_if = "uuid::Uuid::is_nil")]
+    pub uid: uuid::Uuid,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color_style: Option<String>,
     pub id: usize,
@@ -150,6 +152,7 @@ pub(crate) struct Shape {
 impl Shape {
     pub fn new(id: usize, board: Option<usize>, kind: ShapeKind, rect: Rect) -> Self {
         Self {
+            uid: uuid::Uuid::new_v4(),
             color_style: None,
             id,
             layer: Default::default(),

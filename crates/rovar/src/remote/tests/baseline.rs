@@ -1,6 +1,89 @@
 use super::*;
 
 #[gpui::test]
+fn upgrading_confirmed_legacy_node_ids_is_clean_but_replacing_a_node_is_not(
+    cx: &mut TestAppContext,
+) {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("legacy.rovar");
+    let mut page = crate::document::Page::empty("Design".into());
+    let mut shape = crate::scene::shape::Shape::new(
+        1,
+        None,
+        crate::scene::shape::ShapeKind::Rectangle,
+        crate::scene::artboard::Rect {
+            x: 0.,
+            y: 0.,
+            width: 100.,
+            height: 50.,
+        },
+    );
+    shape.uid = uuid::Uuid::nil();
+    page.shapes.push(shape);
+    page.next_id = 2;
+    let document = crate::document::Document::single(page);
+    let text_system = cx.update(|cx| cx.text_system().clone());
+    crate::document::save_as(
+        &path,
+        &serde_json::to_vec(&document).unwrap(),
+        &[],
+        &text_system,
+    )
+    .unwrap();
+    let remote = cx.update(|cx| Remote::shared(root.path(), cx));
+    let object = Object {
+        id: uuid::Uuid::new_v4().to_string(),
+        kind: Kind::Document,
+        title: "Design".into(),
+        revision: 1,
+        created: 1,
+        modified: 1,
+        deleted: false,
+    };
+    cx.update(|cx| {
+        confirmed_document(
+            &remote,
+            "https://example.test".into(),
+            path.clone(),
+            object.clone(),
+            cx,
+        )
+    });
+    remote.update(cx, |r, cx| {
+        let mut old: serde_json::Value =
+            serde_json::from_slice(&serde_json::to_vec(&document).unwrap()).unwrap();
+        old["pages"][0].as_object_mut().unwrap().remove("next_id");
+        let baseline = r
+            .store_baseline(&object, &serde_json::to_vec(&old).unwrap())
+            .unwrap();
+        r.catalog.links.get_mut(&path).unwrap().baseline = Some(baseline);
+        r.changed(&path, None, false, cx);
+        assert!(
+            !r.link(&path).unwrap().dirty,
+            "Adding deterministic identities must not create a local edit"
+        );
+    });
+    let loaded = crate::document::load(&path).unwrap();
+    let mut replaced = crate::document::Document::decode(&loaded.json).unwrap();
+    replaced.pages[0].shapes[0].uid = uuid::Uuid::new_v4();
+    crate::document::save(
+        &path,
+        &serde_json::to_vec(&replaced).unwrap(),
+        &[],
+        &loaded.json,
+        &text_system,
+    )
+    .unwrap();
+    remote.update(cx, |r, cx| {
+        r.changed(&path, None, false, cx);
+        assert!(
+            r.link(&path).unwrap().dirty,
+            "Replacing a node remains an edit even when its appearance and handle match"
+        );
+    });
+}
+
+#[gpui::test]
 fn confirmed_content_ignores_container_rewrites_and_undo_clears_pending_changes(
     cx: &mut TestAppContext,
 ) {

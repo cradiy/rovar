@@ -16,6 +16,7 @@ fn rect(x: f32, y: f32, width: f32, height: f32) -> Rect {
 fn fixture() -> Page {
     let mut page = Page::empty("Page 1".into());
     page.boards.push(Artboard {
+        uid: uuid::Uuid::new_v4(),
         color_style: None,
         id: 1,
         name: "Frame".into(),
@@ -83,6 +84,7 @@ fn nested_hug_frames_are_stable_and_serialize_without_ui_state(cx: &mut gpui::Te
     page.hierarchy.groups.insert(
         4,
         crate::scene::layer::LayerGroup {
+            uid: uuid::Uuid::new_v4(),
             name: "Stack".into(),
             board: Some(1),
             layer: Default::default(),
@@ -131,6 +133,7 @@ fn hug_text_resizes_its_container_and_wraps_at_fixed_width(cx: &mut gpui::TestAp
     let mut styles = StyledText::default();
     styles.replace(0..0, 5);
     page.texts.push(crate::document::Text {
+        uid: uuid::Uuid::new_v4(),
         id: 2,
         board: Some(1),
         rect: rect(0., 0., 80., 20.),

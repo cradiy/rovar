@@ -381,7 +381,8 @@ pub(crate) fn synchronize(pages: &mut [Page], definitions: &mut Definitions) -> 
             if *baseline == link.baseline {
                 continue;
             }
-            let old: Page = serde_json::from_value(link.baseline.clone())?;
+            let mut old: Page = serde_json::from_value(link.baseline.clone())?;
+            old.upgrade_node_ids();
             anyhow::ensure!(
                 ids(&old).iter().all(|id| link.nodes.contains_key(id)),
                 "Incomplete component mapping"
@@ -392,7 +393,9 @@ pub(crate) fn synchronize(pages: &mut [Page], definitions: &mut Definitions) -> 
             let external = board(page, root);
             let o = origin(page, external);
             let offset = [rect.x - o[0], rect.y - o[1]];
-            let previous = place(&old, &link.nodes, offset, external);
+            let root_uid = page.node_ids()[&root];
+            let mut previous = place(&old, &link.nodes, offset, external);
+            previous.instance_node_ids(root_uid);
             for id in ids(&definition.page) {
                 link.nodes.entry(id).or_insert_with(|| {
                     let id = page.next_id;
@@ -400,7 +403,8 @@ pub(crate) fn synchronize(pages: &mut [Page], definitions: &mut Definitions) -> 
                     id
                 });
             }
-            let next = place(&definition.page, &link.nodes, offset, external);
+            let mut next = place(&definition.page, &link.nodes, offset, external);
+            next.instance_node_ids(root_uid);
             // Preserve real media handles across JSON field merging.
             let media: BTreeMap<_, _> = page
                 .boards

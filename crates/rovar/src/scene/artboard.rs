@@ -16,6 +16,8 @@ pub struct Rect {
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Artboard {
+    #[serde(default, skip_serializing_if = "uuid::Uuid::is_nil")]
+    pub uid: uuid::Uuid,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color_style: Option<String>,
     pub id: usize,

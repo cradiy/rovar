@@ -124,6 +124,7 @@ impl Workspace {
             }
         });
         TextBox {
+            uid: uuid::Uuid::new_v4(),
             id,
             layer: Default::default(),
             board,

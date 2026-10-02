@@ -309,7 +309,7 @@ impl Workspace {
                 .map(|t| {
                     t.editor
                         .read(cx)
-                        .document_text(t.id, t.board, t.rect, t.layer)
+                        .document_text(t.id, t.uid, t.board, t.rect, t.layer)
                 })
                 .collect(),
             hierarchy: self.hierarchy.clone(),
@@ -332,6 +332,7 @@ impl Workspace {
         self.texts.clear();
         for text in page.texts {
             let mut item = self.make_text(text.id, text.board, text.rect, window, cx);
+            item.uid = text.uid;
             item.layer = text.layer;
             item.editor.update(cx, |editor, cx| {
                 editor.load_document_text(text);

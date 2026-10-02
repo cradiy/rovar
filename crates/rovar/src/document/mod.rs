@@ -20,11 +20,14 @@ pub(crate) use preview::render as render_preview;
 #[cfg(test)]
 mod tests;
 
+pub(crate) mod identity;
 mod storage;
 pub(crate) use storage::{cache_preview, load, read_id, save, save_as};
 
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) struct Text {
+    #[serde(default, skip_serializing_if = "uuid::Uuid::is_nil")]
+    pub uid: uuid::Uuid,
     pub id: usize,
     pub board: Option<usize>,
     pub rect: Rect,
@@ -72,7 +75,8 @@ impl Document {
         }
     }
     pub fn decode(json: &[u8]) -> Result<Self> {
-        let document: Self = serde_json::from_slice(json)?;
+        let mut document: Self = serde_json::from_slice(json)?;
+        document.upgrade_node_ids();
         document.validate()?;
         Ok(document)
     }
@@ -233,7 +237,8 @@ impl Page {
         }
     }
     pub fn decode(json: &[u8]) -> Result<Self> {
-        let document: Self = serde_json::from_slice(json)?;
+        let mut document: Self = serde_json::from_slice(json)?;
+        document.upgrade_node_ids();
         document.validate()?;
         Ok(document)
     }
@@ -243,6 +248,13 @@ impl Page {
             uuid::Uuid::parse_str(&self.id).is_ok(),
             "Invalid document ID"
         );
+        let mut identities = BTreeSet::new();
+        for uid in self.node_ids().into_values() {
+            ensure!(
+                !uid.is_nil() && identities.insert(uid),
+                "Duplicate or missing node identity"
+            );
+        }
         ensure!(
             !self.name.trim().is_empty() && self.name.chars().count() <= 200,
             "Invalid page name"

@@ -61,7 +61,7 @@ fn single_page_files_upgrade_on_save_and_keep_their_identity(cx: &mut gpui::Test
     assert!(reader.entry("shape/1").is_none());
     let manifest: serde_json::Value =
         serde_json::from_slice(&reader.read("document", 65536).unwrap()).unwrap();
-    assert_eq!(manifest["schema"], 2);
+    assert_eq!(manifest["schema"], 3);
 }
 
 #[gpui::test]
@@ -316,6 +316,7 @@ fn rich_text_paths_groups_and_external_edit_conflicts_round_trip(cx: &mut gpui::
     accent.size = 37.;
     accent.color.a = 0.4321;
     document.pages[0].texts.push(Text {
+        uid: uuid::Uuid::new_v4(),
         id: 2,
         board: None,
         rect: Rect {
@@ -343,6 +344,7 @@ fn rich_text_paths_groups_and_external_edit_conflicts_round_trip(cx: &mut gpui::
     document.pages[0].hierarchy.groups.insert(
         3,
         crate::scene::layer::LayerGroup {
+            uid: uuid::Uuid::new_v4(),
             name: "Group".into(),
             board: None,
             layer: Default::default(),
@@ -461,11 +463,13 @@ fn changed_object_is_appended_and_export_discards_obsolete_blocks(cx: &mut gpui:
     let mut document = fixture();
     let mut second = document.pages[0].shapes[0].clone();
     second.id = 2;
+    second.uid = uuid::Uuid::new_v4();
     document.pages[0].shapes.push(second);
     document.pages[0].next_id = 3;
     let first = serde_json::to_vec(&document).unwrap();
     save_as(&path, &first, &[], &text_system).unwrap();
     let before = rovar_format::Reader::open(&path).unwrap();
+    let original_shape = document.pages[0].shapes[0].clone();
     document.pages[0].shapes[0].name = "Changed".into();
     let json = serde_json::to_vec(&document).unwrap();
     save(&path, &json, &[], &first, &text_system).unwrap();
@@ -475,7 +479,7 @@ fn changed_object_is_appended_and_export_discards_obsolete_blocks(cx: &mut gpui:
     assert_ne!(before.entry(&key(1)), after.entry(&key(1)));
     assert_eq!(
         before.read(&key(1), 65536).unwrap(),
-        serde_json::to_vec(&fixture().pages[0].shapes[0]).unwrap()
+        serde_json::to_vec(&original_shape).unwrap()
     );
     let export = directory.path().join("export.rovar");
     save_as(&export, &json, &[], &text_system).unwrap();

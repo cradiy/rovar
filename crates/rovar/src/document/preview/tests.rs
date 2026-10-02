@@ -58,6 +58,7 @@ fn thumbnail_preserves_rich_text_alignment_wrapping_and_clipped_overflow(
         id: uuid::Uuid::new_v4().to_string(),
         next_id: 3,
         boards: vec![Artboard {
+            uid: uuid::Uuid::new_v4(),
             color_style: None,
             id: 1,
             layer: Default::default(),
@@ -70,6 +71,7 @@ fn thumbnail_preserves_rich_text_alignment_wrapping_and_clipped_overflow(
         }],
         shapes: vec![],
         texts: vec![Text {
+            uid: uuid::Uuid::new_v4(),
             id: 2,
             board: Some(1),
             rect: rect(20., 20., 320., 180.),

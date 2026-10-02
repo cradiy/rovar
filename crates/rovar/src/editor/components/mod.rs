@@ -200,7 +200,8 @@ impl Workspace {
             let old = item
                 .editor
                 .read(cx)
-                .document_text(item.id, item.board, item.rect, item.layer);
+                .document_text(item.id, item.uid, item.board, item.rect, item.layer);
+            item.uid = text.uid;
             item.rect = text.rect;
             item.board = text.board;
             item.layer = text.layer;
@@ -371,6 +372,7 @@ impl Workspace {
             page.hierarchy.groups.insert(
                 root,
                 crate::scene::layer::LayerGroup {
+                    uid: uuid::Uuid::new_v4(),
                     name: name.clone(),
                     board: None,
                     layer: Default::default(),
