@@ -1,0 +1,136 @@
+name: Remote build
+run-name: Build ${{ inputs.platform }} from ${{ github.ref_name }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Build target
+        type: choice
+        default: all
+        options:
+          - all
+          - linux-x64
+          - linux-arm64
+          - windows-x64
+          - macos-arm64
+          - web-server
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}-${{ inputs.platform }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: '0'
+  RUST_BACKTRACE: '1'
+
+jobs:
+  targets:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.select.outputs.matrix }}
+    steps:
+      - id: select
+        env:
+          PLATFORM: ${{ inputs.platform }}
+        run: |
+          matrix=$(jq -cn --arg platform "$PLATFORM" '{include: [
+            {id: "linux-x64", os: "ubuntu-24.04", native: "true", web: "false"},
+            {id: "linux-arm64", os: "ubuntu-24.04-arm", native: "true", web: "false"},
+            {id: "windows-x64", os: "windows-2022", native: "true", web: "false"},
+            {id: "macos-arm64", os: "macos-15", native: "true", web: "false"},
+            {id: "web-server", os: "ubuntu-24.04", native: "false", web: "true"}
+          ] | map(select($platform == "all" or .id == $platform))}')
+          jq -e '.include | length > 0' <<< "$matrix" > /dev/null
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build (${{ matrix.id }})
+    needs: targets
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.targets.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-rust
+        with:
+          native: ${{ matrix.native }}
+          web: ${{ matrix.web }}
+          cache-key: release-${{ matrix.id }}
+      - uses: cargo-bins/cargo-binstall@307bd5ffcec9b16554d0e7dfc0f1a364b2ceb695
+        with:
+          version: '1.25.0'
+      - name: Install Nushell
+        run: cargo binstall --no-confirm --locked nu@0.99.1
+      - name: Install Linux packaging tools
+        if: startsWith(matrix.id, 'linux-')
+        shell: bash
+        run: |
+          sudo apt-get install --no-install-recommends -y desktop-file-utils rpm libarchive-tools zstd squashfs-tools
+          cargo binstall --no-confirm --locked resvg@0.47.0
+          tool="$RUNNER_TEMP/appimagetool"
+          case "$(uname -m)" in
+            x86_64) checksum=ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0 ;;
+            aarch64) checksum=f0837e7448a0c1e4e650a93bb3e85802546e60654ef287576f46c71c126a9158 ;;
+            *) exit 1 ;;
+          esac
+          curl --fail --location --retry 3 "https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-$(uname -m).AppImage" -o "$tool"
+          echo "$checksum  $tool" | sha256sum --check
+          chmod +x "$tool"
+          echo "APPIMAGETOOL=$tool" >> "$GITHUB_ENV"
+      - name: Install Windows packaging tools
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Package Linux
+        if: startsWith(matrix.id, 'linux-')
+        run: nu scripts/build.nu all
+      - name: Package Windows
+        if: runner.os == 'Windows'
+        run: nu scripts/build.nu windows
+      - name: Package macOS
+        if: runner.os == 'macOS'
+        run: nu scripts/build.nu macos zip dmg
+      - name: Install Web build tools
+        if: matrix.id == 'web-server'
+        run: cargo binstall --no-confirm --locked trunk@0.21.14
+      - name: Build Web editor and embedded server
+        if: matrix.id == 'web-server'
+        run: nu scripts/server.nu
+      - name: Archive Web and server
+        if: matrix.id == 'web-server'
+        shell: bash
+        run: |
+          tar -czf dist/rovar-web.tar.gz -C dist/web .
+          cp LICENSE dist/LICENSE
+          tar -czf dist/rovar-server-linux-x64.tar.gz -C dist rovar-server rovar-server.example.toml LICENSE
+          cd dist
+          sha256sum rovar-web.tar.gz rovar-server-linux-x64.tar.gz > SHA256SUMS
+          rm -r web rovar-server rovar-server.example.toml LICENSE
+      - name: Record build source
+        shell: bash
+        env:
+          BUILD_TARGET: ${{ matrix.id }}
+          BUILD_REF: ${{ github.ref }}
+        run: |
+          jq -n --arg commit "$GITHUB_SHA" --arg ref "$BUILD_REF" \
+            --arg target "$BUILD_TARGET" --arg rust "$(rustc --version)" \
+            '{commit: $commit, ref: $ref, target: $target, rust: $rust}' > dist/build-source.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: rovar-${{ matrix.id }}-${{ github.sha }}
+          path: dist/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
