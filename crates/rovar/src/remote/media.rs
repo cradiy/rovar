@@ -3,27 +3,24 @@ use rovar_api::Media;
 
 /// The retry record remains the complete immutable local snapshot. Splitting it
 /// deterministically on every attempt preserves the idempotency fingerprint.
-pub(super) struct Upload {
+// None sends the immutable retry snapshot directly, without cloning it.
+pub(super) struct Upload(Option<Split>);
+
+struct Split {
     transfer: Save,
     // Keep the backing temporary file alive until every media block is sent.
-    source: Option<(rovar_format::Reader, rovar_storage::tempfile::NamedTempFile)>,
+    reader: rovar_format::Reader,
+    _source: rovar_storage::tempfile::NamedTempFile,
 }
 
-pub(super) fn prepare(input: &Save) -> Result<Upload> {
-    let mut transfer = input.clone();
+pub(super) fn prepare(input: &Save, bytes: &[u8]) -> Result<Upload> {
     if input.deleted || input.kind == Kind::ColorStyle {
-        return Ok(Upload {
-            transfer,
-            source: None,
-        });
+        return Ok(Upload(None));
     }
     let source = rovar_storage::tempfile::NamedTempFile::new()?;
-    rovar_storage::fs::write(source.path(), STANDARD.decode(&input.content)?)?;
+    rovar_storage::fs::write(source.path(), bytes)?;
     let Ok(reader) = rovar_format::Reader::open(source.path()) else {
-        return Ok(Upload {
-            transfer,
-            source: None,
-        });
+        return Ok(Upload(None));
     };
     let media: Vec<_> = reader
         .entries()
@@ -39,10 +36,7 @@ pub(super) fn prepare(input: &Save) -> Result<Upload> {
         })
         .collect();
     if media.is_empty() {
-        return Ok(Upload {
-            transfer,
-            source: None,
-        });
+        return Ok(Upload(None));
     }
     for (key, item) in &media {
         ensure!(
@@ -50,7 +44,15 @@ pub(super) fn prepare(input: &Save) -> Result<Upload> {
             "Invalid media block name"
         );
     }
-    transfer.media = media.iter().map(|(_, item)| item.clone()).collect();
+    let mut transfer = Save {
+        kind: input.kind.clone(),
+        title: input.title.clone(),
+        base_revision: input.base_revision,
+        request_id: input.request_id.clone(),
+        content: String::new(),
+        media: media.iter().map(|(_, item)| item.clone()).collect(),
+        deleted: input.deleted,
+    };
     let reduced = rovar_storage::tempfile::NamedTempFile::new()?;
     let mut writer = rovar_format::Writer::create(reduced.path())?;
     for (key, block) in reader.entries().filter(|(_, block)| block.kind != "media") {
@@ -70,17 +72,22 @@ pub(super) fn prepare(input: &Save) -> Result<Upload> {
     );
     validate_manifest(&transfer.media, bytes.len())?;
     transfer.content = STANDARD.encode(bytes);
-    Ok(Upload {
+    Ok(Upload(Some(Split {
         transfer,
-        source: Some((reader, source)),
-    })
+        reader,
+        _source: source,
+    })))
 }
 
 impl Upload {
-    pub(super) async fn send(self, client: &Client, space: &str) -> Result<Save> {
-        let Self { transfer, source } = self;
-        let Some((reader, _source)) = source else {
-            return Ok(transfer);
+    pub(super) async fn send(self, client: &Client, space: &str) -> Result<Option<Save>> {
+        let Some(Split {
+            transfer,
+            reader,
+            _source,
+        }) = self.0
+        else {
+            return Ok(None);
         };
         let missing: Vec<String> = client
             .json(
@@ -102,7 +109,7 @@ impl Upload {
                 )
                 .await?;
         }
-        Ok(transfer)
+        Ok(Some(transfer))
     }
 }
 

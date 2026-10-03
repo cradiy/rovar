@@ -90,14 +90,14 @@ fn validate(actual: &Object, expected: &Object) -> Result<()> {
 pub(super) fn prepare(
     base: Option<&rovar_format::delta::Snapshot>,
     input: &Save,
+    bytes: &[u8],
 ) -> Option<String> {
     if input.deleted || input.base_revision == 0 || input.kind == Kind::ColorStyle {
         return None;
     }
     let base = base?;
-    let bytes = STANDARD.decode(&input.content).ok()?;
     let next =
-        rovar_format::delta::Snapshot::from_bytes(&bytes, rovar_api::MAX_METADATA_BYTES).ok()?;
+        rovar_format::delta::Snapshot::from_bytes(bytes, rovar_api::MAX_METADATA_BYTES).ok()?;
     let delta = serde_json::to_vec(&base.difference(&next).ok()?).ok()?;
     let full_size = next.to_bytes(rovar_api::MAX_METADATA_BYTES).ok()?.len();
     // Small/new documents and large binary changes may be cheaper as snapshots.
@@ -111,23 +111,21 @@ pub(super) async fn send(
     id: &str,
     path: &Path,
     pending: PendingSave,
-    mut transfer: Save,
+    transfer: Option<Save>,
     executor: &gpui::BackgroundExecutor,
 ) -> Result<(Object, PendingSave)> {
     let route = format!("spaces/{space}/objects/{id}");
-    let (pending, transfer, full, body) = executor
+    let has_delta = pending.delta.is_some();
+    let (pending, transfer, body) = executor
         .spawn(async move {
-            let full = pending
-                .delta
-                .as_ref()
-                .map(|delta| std::mem::replace(&mut transfer.content, delta.clone()));
-            let body = serde_json::to_value(&transfer)?;
-            Ok::<_, anyhow::Error>((pending, transfer, full, body))
+            let input = transfer.as_ref().unwrap_or(&pending.input);
+            let body = save_body(input, pending.delta.as_deref(), &pending.input.request_id);
+            (pending, transfer, body)
         })
-        .await?;
-    let Some(full) = full else {
+        .await;
+    if !has_delta {
         return Ok((client.json("PUT", &route, Some(body)).await?, pending));
-    };
+    }
     let result = client
         .json("PUT", &format!("{route}/delta"), Some(body))
         .await;
@@ -146,13 +144,25 @@ pub(super) async fn send(
             let mut input = pending.input;
             input.request_id = uuid::Uuid::new_v4().to_string();
             let fallback = PendingSave { input, delta: None };
-            write_atomic(&path, &serde_json::to_vec(&fallback)?)?;
-            let mut transfer = transfer;
-            transfer.content = full;
-            transfer.request_id = fallback.input.request_id.clone();
-            let body = serde_json::to_value(&transfer)?;
+            upload::store_pending(&path, &fallback)?;
+            let input = transfer.as_ref().unwrap_or(&fallback.input);
+            let body = save_body(input, None, &fallback.input.request_id);
             Ok::<_, anyhow::Error>((fallback, body))
         })
         .await?;
     Ok((client.json("PUT", &route, Some(body)).await?, fallback))
+}
+
+// Serialize the selected content directly. Building a temporary Save would
+// duplicate the full snapshot (or copy it only to replace it with a patch).
+fn save_body(input: &Save, content: Option<&str>, request_id: &str) -> serde_json::Value {
+    serde_json::json!({
+        "kind": input.kind,
+        "title": input.title,
+        "base_revision": input.base_revision,
+        "request_id": request_id,
+        "content": content.unwrap_or(&input.content),
+        "media": input.media,
+        "deleted": input.deleted,
+    })
 }

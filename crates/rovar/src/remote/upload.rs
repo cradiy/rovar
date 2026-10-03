@@ -8,8 +8,13 @@ pub(super) struct Prepared {
 /// Called on the background executor. A retry is restored before reading the
 /// editable file, so changes made since the first attempt cannot alter it.
 pub(super) fn prepare(root: &Path, path: &Path, link: &Link, record: &Path) -> Result<Prepared> {
-    let pending = match rovar_storage::fs::read(record) {
-        Ok(bytes) => serde_json::from_slice::<PendingSave>(&bytes)?,
+    let (pending, bytes) = match rovar_storage::fs::read(record) {
+        Ok(record) => {
+            let pending = serde_json::from_slice::<PendingSave>(&record)?;
+            drop(record);
+            let bytes = STANDARD.decode(&pending.input.content)?;
+            (pending, bytes)
+        }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             let bytes = if link.object.deleted {
                 Vec::new()
@@ -25,7 +30,7 @@ pub(super) fn prepare(root: &Path, path: &Path, link: &Link, record: &Path) -> R
                 title: link.object.title.clone(),
                 base_revision: link.object.revision,
                 request_id: uuid::Uuid::new_v4().to_string(),
-                content: STANDARD.encode(bytes),
+                content: STANDARD.encode(&bytes),
                 media: Vec::new(),
                 deleted: link.object.deleted,
             };
@@ -37,16 +42,34 @@ pub(super) fn prepare(root: &Path, path: &Path, link: &Link, record: &Path) -> R
                     .flatten()
             });
             let pending = PendingSave {
-                delta: delta::prepare(base.as_ref(), &input),
+                delta: delta::prepare(base.as_ref(), &input, &bytes),
                 input,
             };
-            write_atomic(record, &serde_json::to_vec(&pending)?)?;
-            pending
+            store_pending(record, &pending)?;
+            (pending, bytes)
         }
         Err(error) => return Err(error.into()),
     };
-    let media = media::prepare(&pending.input)?;
+    let media = media::prepare(&pending.input, &bytes)?;
     Ok(Prepared { pending, media })
+}
+
+// A retry can contain the entire document. Stream its JSON to the atomic
+// staging file instead of allocating another complete serialized copy.
+pub(super) fn store_pending(path: &Path, pending: &PendingSave) -> Result<()> {
+    use std::io::{BufWriter, Write};
+    let directory = path.parent().unwrap();
+    rovar_storage::fs::create_dir_all(directory)?;
+    let mut file = rovar_storage::tempfile::NamedTempFile::new_in(directory)?;
+    {
+        let mut writer = BufWriter::new(&mut file);
+        serde_json::to_writer(&mut writer, pending)?;
+        writer.flush()?;
+    }
+    file.as_file().sync_all()?;
+    file.persist(path)?;
+    rovar_format::sync_parent(path)?;
+    Ok(())
 }
 
 pub(super) struct Confirmed {
