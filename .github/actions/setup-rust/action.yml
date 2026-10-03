@@ -1,0 +1,47 @@
+name: Set up Rovar build environment
+description: Install the Rust toolchain and platform dependencies, then restore Cargo caches.
+inputs:
+  native:
+    description: Install native desktop dependencies
+    default: 'true'
+  web:
+    description: Install the WASM target
+    default: 'false'
+  cache-key:
+    description: Separate caches by build purpose and target
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Install Rust
+      shell: bash
+      run: |
+        rustup toolchain install stable --profile minimal --component rustfmt --component clippy
+        rustup default stable
+    - name: Install WASM target
+      if: inputs.web == 'true'
+      shell: bash
+      run: rustup target add wasm32-unknown-unknown
+    - name: Install Linux dependencies
+      if: inputs.native == 'true' && runner.os == 'Linux'
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install --no-install-recommends -y \
+          build-essential clang cmake pkg-config libssl-dev libasound2-dev \
+          libfontconfig1-dev libfreetype-dev libwayland-dev libxkbcommon-dev \
+          libxkbcommon-x11-dev libx11-xcb-dev libxcb1-dev libxcb-shape0-dev \
+          libxcb-xfixes0-dev libxcb-randr0-dev libxcb-xkb-dev libvulkan-dev \
+          libudev-dev libdbus-1-dev libgstreamer1.0-dev \
+          libgstreamer-plugins-base1.0-dev gstreamer1.0-plugins-base \
+          gstreamer1.0-plugins-good fonts-dejavu-core fonts-noto-core fonts-noto-cjk
+    - name: Install macOS dependencies
+      if: inputs.native == 'true' && runner.os == 'macOS'
+      shell: bash
+      run: |
+        brew install pkg-config gstreamer
+        xcrun --find metal
+    - uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c # v2
+      with:
+        key: ${{ inputs.cache-key }}
+        save-if: ${{ github.event_name != 'pull_request' }}

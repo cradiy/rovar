@@ -28,20 +28,19 @@ fn add_rectangle(studio: &mut Studio, window: &mut Window, cx: &mut Context<Stud
         .snapshot_document(&tab.document_id, cx)
         .unwrap();
     let mut document = crate::document::Document::decode(&json).unwrap();
-    document.pages[0]
-        .shapes
-        .push(crate::scene::shape::Shape::new(
-            document.pages[0].next_id,
-            None,
-            crate::scene::shape::ShapeKind::Rectangle,
-            crate::scene::artboard::Rect {
-                x: 10.,
-                y: 20.,
-                width: 100.,
-                height: 80.,
-            },
-        ));
-    document.pages[0].next_id += 1;
+    let page = &mut document.pages[0];
+    page.shapes.push(crate::scene::shape::Shape::new(
+        page.next_id,
+        None,
+        crate::scene::shape::ShapeKind::Rectangle,
+        crate::scene::artboard::Rect {
+            x: 10.,
+            y: 20.,
+            width: 100.,
+            height: 80.,
+        },
+    ));
+    page.next_id += 1;
     editor.update(cx, |editor, cx| {
         editor
             .load_document(

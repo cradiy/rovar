@@ -1,0 +1,111 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: '0'
+  RUST_BACKTRACE: '1'
+
+jobs:
+  format:
+    name: Format
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-rust
+        with:
+          native: 'false'
+          cache-key: format
+      - run: cargo fmt --all -- --check
+
+  native:
+    name: Native (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-2022]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-rust
+        with:
+          cache-key: ci-${{ matrix.os }}
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Workspace tests
+        if: runner.os == 'Linux'
+        run: cargo test --workspace --all-targets --locked
+
+  web:
+    name: Web
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-rust
+        with:
+          native: 'false'
+          web: 'true'
+          cache-key: ci-web
+      - name: WASM Clippy
+        run: cargo clippy -p rovar -p rovar-render --target wasm32-unknown-unknown --lib --bins --locked -- -D warnings
+      - uses: cargo-bins/cargo-binstall@307bd5ffcec9b16554d0e7dfc0f1a364b2ceb695
+        with:
+          version: '1.25.0'
+      - name: Install Web build tools
+        run: cargo binstall --no-confirm --locked nu@0.99.1 trunk@0.21.14
+      - name: Build Web editor and renderer
+        run: nu scripts/web.nu
+      - name: Check embedded Web server
+        run: cargo clippy -p rovar-server --all-targets --features embedded-web --locked -- -D warnings
+
+  postgres:
+    name: PostgreSQL integration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: rovar
+          POSTGRES_PASSWORD: rovar-ci
+          POSTGRES_DB: rovar_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U rovar -d rovar_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      ROVAR_TEST_DATABASE_URL: postgres://rovar:rovar-ci@127.0.0.1:5432/rovar_test
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-rust
+        with:
+          native: 'false'
+          cache-key: ci-postgres
+      - name: Run database integration tests
+        run: cargo test -p rovar-server --locked -- --ignored --test-threads=1
