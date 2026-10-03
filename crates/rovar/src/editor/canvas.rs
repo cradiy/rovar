@@ -395,6 +395,7 @@ impl Workspace {
             .when(self.view.zoom >= 8., |el| el.child(self.canvas_grid(true)))
             .children(self.bezier_hover_preview())
             .children(self.creation_preview())
+            .child(self.grid_guides())
             .child(self.selection_overlay())
             .child(self.snap_guides())
             .child(self.measurement_overlay())

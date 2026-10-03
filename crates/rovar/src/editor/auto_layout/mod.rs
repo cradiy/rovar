@@ -9,6 +9,7 @@ use uic::components::{
     input::{Input, InputAppearance},
 };
 mod constraints;
+mod grid;
 mod limits;
 #[cfg(test)]
 mod tests;
@@ -20,6 +21,7 @@ pub(super) struct State {
     target: Option<(String, usize)>,
     inputs: Vec<Entity<TextInput>>,
     limits: limits::State,
+    pub(super) grid: grid::State,
     _subscriptions: Vec<Subscription>,
 }
 impl State {
@@ -52,6 +54,7 @@ impl State {
             target: None,
             inputs,
             limits: limits::State::new(window, cx),
+            grid: grid::State::new(window, cx),
             _subscriptions: subscriptions,
         }
     }
@@ -101,11 +104,32 @@ impl Workspace {
             .copied()
             .filter(|id| self.is_layout_flow_item(*id))
             .collect();
-        if self.hierarchy.layouts[&parent].wrap {
+        if axis == Axis::Grid {
+            let moved = self.world_rect(id)?;
+            let center = point(moved.x + moved.width / 2., moved.y + moved.height / 2.);
+            flow.retain(|item| *item != id);
+            let closest = flow
+                .iter()
+                .enumerate()
+                .filter_map(|(index, id)| self.world_rect(*id).map(|rect| (index, rect)))
+                .min_by(|(_, a), (_, b)| {
+                    let distance = |r: Rect| {
+                        (center.x - center.x.clamp(r.x, r.x + r.width)).powi(2)
+                            + (center.y - center.y.clamp(r.y, r.y + r.height)).powi(2)
+                    };
+                    distance(*a).total_cmp(&distance(*b))
+                });
+            let at = closest.map_or(0, |(index, rect)| {
+                let after = center.y > rect.y + rect.height
+                    || (center.y >= rect.y && center.x > rect.x + rect.width / 2.);
+                index + usize::from(after)
+            });
+            flow.insert(at, id);
+        } else if self.hierarchy.layouts[&parent].wrap {
             let moved = self.world_rect(id)?;
             flow.retain(|item| *item != id);
             let spans = |r: Rect| {
-                if axis == Axis::Horizontal {
+                if axis != Axis::Vertical {
                     (r.x + r.width / 2., r.y, r.y + r.height)
                 } else {
                     (r.y + r.height / 2., r.x, r.x + r.width)
@@ -287,6 +311,7 @@ impl Workspace {
             .map(|id| (self.pages.active.clone(), id))
     }
     fn refresh_layout_inputs(&mut self, cx: &mut Context<Self>) {
+        self.refresh_grid_inputs(cx);
         self.refresh_limit_inputs(cx);
         let Some(id) = self.layout_target() else {
             return;
@@ -400,7 +425,12 @@ impl Workspace {
             let previous = layout.clone();
             edit(layout);
             if *layout != previous {
-                if layout.wrap {
+                if layout.axis == Axis::Grid && layout.column_width.is_none() {
+                    let sizing = self.hierarchy.sizing.entry(id).or_default();
+                    if sizing.width == Mode::Hug {
+                        sizing.width = Mode::Fixed;
+                    }
+                } else if layout.wrap && layout.axis != Axis::Grid {
                     let sizing = self.hierarchy.sizing.entry(id).or_default();
                     let main = if layout.axis == Axis::Horizontal {
                         &mut sizing.width
@@ -473,6 +503,10 @@ impl Workspace {
             return;
         }
         let before = self.snapshot_hierarchy();
+        let fixed_grid_columns = self
+            .layer_parent(id)
+            .and_then(|p| self.hierarchy.layouts.get(&p))
+            .is_some_and(|l| l.axis == Axis::Grid && l.column_width.is_some());
         let parent = self
             .layer_parent(id)
             .and_then(|parent| self.hierarchy.sizing.get(&parent))
@@ -482,7 +516,7 @@ impl Workspace {
         sizing.absolute = !sizing.absolute;
         sizing.constraints = None;
         if !sizing.absolute {
-            if sizing.width == Mode::Fill && parent.width == Mode::Hug {
+            if sizing.width == Mode::Fill && parent.width == Mode::Hug && !fixed_grid_columns {
                 sizing.width = Mode::Fixed;
             }
             if sizing.height == Mode::Fill && parent.height == Mode::Hug {
@@ -520,12 +554,22 @@ impl Workspace {
         match mode {
             Mode::Fixed => true,
             Mode::Hug => {
-                if self
-                    .hierarchy
-                    .layouts
-                    .get(&id)
-                    .is_some_and(|l| l.wrap && (l.axis == Axis::Horizontal) == (axis == 0))
+                if axis == 0
+                    && let Some(layout) = self
+                        .hierarchy
+                        .layouts
+                        .get(&id)
+                        .filter(|l| l.axis == Axis::Grid)
                 {
+                    return layout.column_width.is_some();
+                }
+                if self.hierarchy.layouts.get(&id).is_some_and(|l| {
+                    if l.axis == Axis::Grid {
+                        axis == 0 && l.column_width.is_none()
+                    } else {
+                        l.wrap && (l.axis == Axis::Horizontal) == (axis == 0)
+                    }
+                }) {
                     return false;
                 }
                 (self.hierarchy.layouts.contains_key(&id) || self.texts.iter().any(|t| t.id == id))
@@ -535,9 +579,13 @@ impl Workspace {
             }
             Mode::Fill => {
                 self.is_layout_flow_item(id)
-                    && self
-                        .layer_parent(id)
-                        .is_some_and(|p| size_mode(p) != Mode::Hug)
+                    && self.layer_parent(id).is_some_and(|p| {
+                        size_mode(p) != Mode::Hug
+                            || (axis == 0
+                                && self.hierarchy.layouts.get(&p).is_some_and(|l| {
+                                    l.axis == Axis::Grid && l.column_width.is_some()
+                                }))
+                    })
             }
         }
     }
@@ -696,78 +744,85 @@ impl Workspace {
         .font_weight(FontWeight::NORMAL)
         .line_height(px(16.));
         if let Some(layout) = layout {
-            section = section.child(div().flex().gap(px(6.)).children(
-                [Axis::Horizontal, Axis::Vertical].into_iter().map(|axis| {
-                    let active = axis == layout.axis;
+            section = section.child(
+                div().flex().gap(px(6.)).children(
+                    [Axis::Horizontal, Axis::Vertical, Axis::Grid]
+                        .into_iter()
+                        .map(|axis| {
+                            let active = axis == layout.axis;
+                            let (label, glyph) = match axis {
+                                Axis::Horizontal => ("layout-horizontal", LucideIcons::ArrowRight),
+                                Axis::Vertical => ("layout-vertical", LucideIcons::ArrowDown),
+                                Axis::Grid => ("layout-grid", LucideIcons::Grid2x2),
+                            };
+                            div()
+                                .id(label)
+                                .debug_selector(move || label.into())
+                                .h(px(28.))
+                                .flex_1()
+                                .rounded(px(6.))
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .gap(px(6.))
+                                .cursor_pointer()
+                                .bg(rgb(if active { 0x383044 } else { 0x282b33 }))
+                                .text_color(rgb(if active { ACCENT } else { TEXT }))
+                                .child(icon(glyph, 14.))
+                                .child(t(label))
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    this.edit_layout(|l| l.axis = axis, cx)
+                                }))
+                        }),
+                ),
+            );
+            if layout.axis == Axis::Grid {
+                section = section.child(self.grid_container_controls(layout, cx));
+            } else {
+                section = section.child(
                     div()
-                        .id(if axis == Axis::Horizontal {
-                            "layout-horizontal"
-                        } else {
-                            "layout-vertical"
-                        })
+                        .id("layout-wrap")
+                        .debug_selector(|| "layout-wrap".into())
                         .h(px(28.))
-                        .flex_1()
+                        .px(px(8.))
                         .rounded(px(6.))
                         .flex()
                         .items_center()
-                        .justify_center()
-                        .gap(px(6.))
+                        .justify_between()
                         .cursor_pointer()
-                        .bg(rgb(if active { 0x383044 } else { 0x282b33 }))
-                        .text_color(rgb(if active { ACCENT } else { TEXT }))
+                        .bg(rgb(if layout.wrap { 0x383044 } else { 0x282b33 }))
+                        .text_color(rgb(if layout.wrap { ACCENT } else { TEXT }))
+                        .child(t("layout-wrap"))
                         .child(icon(
-                            if axis == Axis::Horizontal {
-                                LucideIcons::ArrowRight
+                            if layout.wrap {
+                                LucideIcons::Check
                             } else {
-                                LucideIcons::ArrowDown
+                                LucideIcons::Plus
                             },
                             14.,
                         ))
-                        .child(t(if axis == Axis::Horizontal {
-                            "layout-horizontal"
-                        } else {
-                            "layout-vertical"
-                        }))
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            this.edit_layout(|l| l.axis = axis, cx)
-                        }))
-                }),
-            ));
-            section = section.child(
-                div()
-                    .id("layout-wrap")
-                    .debug_selector(|| "layout-wrap".into())
-                    .h(px(28.))
-                    .px(px(8.))
-                    .rounded(px(6.))
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .cursor_pointer()
-                    .bg(rgb(if layout.wrap { 0x383044 } else { 0x282b33 }))
-                    .text_color(rgb(if layout.wrap { ACCENT } else { TEXT }))
-                    .child(t("layout-wrap"))
-                    .child(icon(
-                        if layout.wrap {
-                            LucideIcons::Check
-                        } else {
-                            LucideIcons::Plus
-                        },
-                        14.,
-                    ))
-                    .on_click(cx.listener(|this, _, _, cx| this.toggle_layout_wrap(cx))),
-            );
+                        .on_click(cx.listener(|this, _, _, cx| this.toggle_layout_wrap(cx))),
+                );
+            }
             for cross in [false, true] {
                 section = section.child(
                     div()
                         .flex()
                         .items_center()
                         .gap(px(6.))
-                        .child(div().flex_1().text_color(rgb(MUTED)).child(t(if cross {
-                            "layout-cross"
-                        } else {
-                            "layout-main"
-                        })))
+                        .child(div().flex_1().text_color(rgb(MUTED)).child(t(
+                            if layout.axis == Axis::Grid {
+                                if cross {
+                                    "layout-align-vertical"
+                                } else {
+                                    "layout-align-horizontal"
+                                }
+                            } else if cross {
+                                "layout-cross"
+                            } else {
+                                "layout-main"
+                            },
+                        )))
                         .children(
                             [Align::Start, Align::Center, Align::End]
                                 .into_iter()
@@ -789,7 +844,7 @@ impl Workspace {
                                         .bg(rgb(if active { 0x383044 } else { 0x282b33 }))
                                         .text_color(rgb(if active { ACCENT } else { MUTED }))
                                         .child(icon(
-                                            if (layout.axis == Axis::Horizontal) != cross {
+                                            if (layout.axis != Axis::Vertical) != cross {
                                                 [
                                                     LucideIcons::AlignStartVertical,
                                                     LucideIcons::AlignCenterVertical,
@@ -823,15 +878,29 @@ impl Workspace {
             section = section.child(
                 div().flex().flex_col().gap(px(6.)).children(
                     [
-                        (0, "layout-gap"),
-                        (5, "layout-line-gap"),
+                        (
+                            0,
+                            if layout.axis == Axis::Grid {
+                                "layout-column-gap"
+                            } else {
+                                "layout-gap"
+                            },
+                        ),
+                        (
+                            5,
+                            if layout.axis == Axis::Grid {
+                                "layout-row-gap"
+                            } else {
+                                "layout-line-gap"
+                            },
+                        ),
                         (1, "layout-padding-top"),
                         (2, "layout-padding-right"),
                         (3, "layout-padding-bottom"),
                         (4, "layout-padding-left"),
                     ]
                     .into_iter()
-                    .filter(|(index, _)| *index != 5 || layout.wrap)
+                    .filter(|(index, _)| *index != 5 || layout.wrap || layout.axis == Axis::Grid)
                     .map(|(index, label)| self.layout_number(index, t(label), cx)),
                 ),
             );
@@ -839,6 +908,9 @@ impl Workspace {
         section
     }
     pub(super) fn layout_number_value(&self, index: usize) -> Option<f32> {
+        if index >= 6 {
+            return self.grid_number_value(index - 6);
+        }
         let layout = self.hierarchy.layouts.get(&self.layout_target()?)?;
         Some(match index {
             0 => layout.gap,
@@ -860,6 +932,7 @@ impl Workspace {
         {
             return;
         }
+        self.commit_grid_input(window, cx);
         if let Some(focused) = self
             .auto_layout
             .inputs
@@ -889,6 +962,10 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) {
         if delta.abs() < 3. && !self.history.borrow().can_merge(None) {
+            return;
+        }
+        if index >= 6 {
+            self.scrub_grid_number(index - 6, original, delta, shift, cx);
             return;
         }
         let value = (original + (delta * if shift { 10. } else { 1. }).round())

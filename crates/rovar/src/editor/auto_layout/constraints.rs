@@ -84,6 +84,9 @@ impl Workspace {
     }
 
     pub(in crate::editor) fn constraint_controls(&self, cx: &mut Context<Self>) -> Div {
+        if self.grid_item_target().is_some() {
+            return self.grid_item_controls(cx);
+        }
         let Some(id) = self
             .layout_target()
             .filter(|id| self.constraint_geometry(*id).is_some())

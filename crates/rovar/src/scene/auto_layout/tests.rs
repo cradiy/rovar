@@ -1,4 +1,5 @@
 use super::*;
+mod grid;
 use crate::{
     scene::artboard::Artboard,
     scene::shape::{Shape, ShapeKind},

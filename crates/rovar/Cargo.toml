@@ -26,6 +26,8 @@ taffy = { version = "0.10.1", default-features = false, features = [
   "std",
   "taffy_tree",
   "flexbox",
+  "grid",
+  "detailed_layout_info",
   "block_layout",
 ] }
 fluent-bundle = "0.16"

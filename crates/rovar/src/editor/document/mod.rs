@@ -341,13 +341,18 @@ impl Workspace {
             assets,
         };
         let text_system = gpui::WindowTextSystem::new(cx.text_system().clone());
-        if let Err(error) = crate::scene::auto_layout::resolve(&mut page, &text_system) {
-            eprintln!("Could not resolve automatic layout: {error:#}");
+        match crate::scene::auto_layout::resolve(&mut page, &text_system) {
+            Ok(tracks) => *self.auto_layout.grid.tracks.borrow_mut() = tracks,
+            Err(error) => {
+                self.auto_layout.grid.tracks.borrow_mut().clear();
+                eprintln!("Could not resolve automatic layout: {error:#}");
+            }
         }
         (page, sources)
     }
 
     pub(super) fn load_page(&mut self, page: Page, window: &mut Window, cx: &mut Context<Self>) {
+        self.auto_layout.grid.tracks.borrow_mut().clear();
         self.auto_layout.revision = None;
         self.boards = page.boards;
         self.shapes = page.shapes;

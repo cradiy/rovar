@@ -15,6 +15,7 @@ pub(crate) enum Axis {
     #[default]
     Horizontal,
     Vertical,
+    Grid,
 }
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum Align {
@@ -30,7 +31,7 @@ pub(crate) enum Mode {
     Hug,
     Fill,
 }
-#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub(crate) struct Sizing {
     pub width: Mode,
     pub height: Mode,
@@ -39,6 +40,32 @@ pub(crate) struct Sizing {
     pub constraints: Option<Constraints>,
     #[serde(default, skip_serializing_if = "Limits::is_empty")]
     pub limits: Limits,
+    #[serde(default = "one")]
+    pub column_span: u16,
+    #[serde(default = "one")]
+    pub row_span: u16,
+}
+
+fn one() -> u16 {
+    1
+}
+fn default_columns() -> u16 {
+    2
+}
+pub(crate) const MAX_GRID_TRACKS: u16 = 256;
+
+impl Default for Sizing {
+    fn default() -> Self {
+        Self {
+            width: Mode::Fixed,
+            height: Mode::Fixed,
+            absolute: false,
+            constraints: None,
+            limits: Limits::default(),
+            column_span: 1,
+            row_span: 1,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -72,6 +99,10 @@ impl Limits {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub(crate) struct Container {
     pub axis: Axis,
+    #[serde(default = "default_columns")]
+    pub columns: u16,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub column_width: Option<f32>,
     pub gap: f32,
     #[serde(default)]
     pub wrap: bool,
@@ -88,6 +119,8 @@ impl Container {
     pub fn new(frame: Rect) -> Self {
         Self {
             axis: Axis::Horizontal,
+            columns: default_columns(),
+            column_width: None,
             gap: 12.,
             wrap: false,
             line_gap: 12.,
@@ -101,6 +134,13 @@ impl Container {
 
 pub(crate) fn validate(page: &Page, ids: &std::collections::BTreeSet<usize>) -> anyhow::Result<()> {
     for (id, layout) in &page.hierarchy.layouts {
+        anyhow::ensure!(
+            (1..=MAX_GRID_TRACKS).contains(&layout.columns)
+                && layout
+                    .column_width
+                    .is_none_or(|v| v.is_finite() && (1. ..=MAX_SIZE).contains(&v)),
+            "Invalid grid columns"
+        );
         anyhow::ensure!(
             page.hierarchy.groups.contains_key(id) || page.boards.iter().any(|b| b.id == *id),
             "Layout requires a container"
@@ -131,6 +171,12 @@ pub(crate) fn validate(page: &Page, ids: &std::collections::BTreeSet<usize>) -> 
         "Missing layout item"
     );
     for sizing in page.hierarchy.sizing.values() {
+        anyhow::ensure!(
+            [sizing.column_span, sizing.row_span]
+                .iter()
+                .all(|span| (1..=MAX_GRID_TRACKS).contains(span)),
+            "Invalid grid span"
+        );
         sizing.limits.validate()?;
         if let Some(constraints) = sizing.constraints {
             constraints.validate()?;
@@ -139,10 +185,20 @@ pub(crate) fn validate(page: &Page, ids: &std::collections::BTreeSet<usize>) -> 
     Ok(())
 }
 
-/// Layout uses the same text shaping and flex engine as the live editor.
-pub(crate) fn resolve(page: &mut Page, text_system: &gpui::WindowTextSystem) -> anyhow::Result<()> {
+#[derive(Clone, Debug)]
+pub(crate) struct GridTracks {
+    pub bounds: Rect,
+    pub columns: Vec<[f32; 2]>,
+    pub rows: Vec<[f32; 2]>,
+}
+
+/// Layout uses the same text shaping and layout engine as the live editor.
+pub(crate) fn resolve(
+    page: &mut Page,
+    text_system: &gpui::WindowTextSystem,
+) -> anyhow::Result<BTreeMap<usize, GridTracks>> {
     if page.hierarchy.layouts.is_empty() && page.hierarchy.sizing.is_empty() {
-        return Ok(());
+        return Ok(BTreeMap::new());
     }
     let boards: BTreeMap<_, _> = page.boards.iter().map(|b| (b.id, b.rect)).collect();
     let mut rects = BTreeMap::new();
@@ -267,6 +323,8 @@ pub(crate) fn resolve(page: &mut Page, text_system: &gpui::WindowTextSystem) -> 
             let mut style = Style {
                 display: if self.hidden[&id] {
                     Display::None
+                } else if own.is_some_and(|layout| layout.axis == Axis::Grid) {
+                    Display::Grid
                 } else if own.is_some() {
                     Display::Flex
                 } else {
@@ -288,17 +346,34 @@ pub(crate) fn resolve(page: &mut Page, text_system: &gpui::WindowTextSystem) -> 
                 ..Default::default()
             };
             if let Some(layout) = parent_layout.filter(|_| flowing) {
-                let (main, cross) = if layout.axis == Axis::Horizontal {
-                    (sizing.width, sizing.height)
+                if layout.axis == Axis::Grid {
+                    style.grid_column = taffy::Line {
+                        start: auto(),
+                        end: span(sizing.column_span.min(layout.columns)),
+                    };
+                    style.grid_row = taffy::Line {
+                        start: auto(),
+                        end: span(sizing.row_span),
+                    };
+                    if sizing.width == Mode::Fill {
+                        style.justify_self = Some(AlignItems::Stretch);
+                    }
+                    if sizing.height == Mode::Fill {
+                        style.align_self = Some(AlignItems::Stretch);
+                    }
                 } else {
-                    (sizing.height, sizing.width)
-                };
-                if main == Mode::Fill {
-                    style.flex_grow = 1.;
-                    style.flex_basis = length(0_f32);
-                }
-                if cross == Mode::Fill {
-                    style.align_self = Some(AlignItems::Stretch);
+                    let (main, cross) = if layout.axis == Axis::Horizontal {
+                        (sizing.width, sizing.height)
+                    } else {
+                        (sizing.height, sizing.width)
+                    };
+                    if main == Mode::Fill {
+                        style.flex_grow = 1.;
+                        style.flex_basis = length(0_f32);
+                    }
+                    if cross == Mode::Fill {
+                        style.align_self = Some(AlignItems::Stretch);
+                    }
                 }
             } else if let Some(parent) = parent {
                 style.position = Position::Absolute;
@@ -348,6 +423,24 @@ pub(crate) fn resolve(page: &mut Page, text_system: &gpui::WindowTextSystem) -> 
                     Align::Center => JustifyContent::Center,
                     Align::End => JustifyContent::End,
                 });
+                if layout.axis == Axis::Grid {
+                    let track = match layout.column_width {
+                        Some(width) => length(width),
+                        None => minmax(length(0_f32), fr(1_f32)),
+                    };
+                    style.grid_template_columns = vec![repeat(layout.columns, vec![track])];
+                    style.grid_auto_rows = vec![auto()];
+                    style.gap = Size {
+                        width: length(layout.gap),
+                        height: length(layout.line_gap),
+                    };
+                    style.justify_content = Some(JustifyContent::Start);
+                    style.justify_items = Some(match layout.main {
+                        Align::Start => AlignItems::Start,
+                        Align::Center => AlignItems::Center,
+                        Align::End => AlignItems::End,
+                    });
+                }
             }
             let children = self
                 .children
@@ -451,6 +544,39 @@ pub(crate) fn resolve(page: &mut Page, text_system: &gpui::WindowTextSystem) -> 
         )?;
         tree.collect(*id, None, rects[id].x, rects[id].y, &mut output)?;
     }
+    let mut grids = BTreeMap::new();
+    for (id, layout) in &page.hierarchy.layouts {
+        let Some(node) = tree.nodes.get(id) else {
+            continue;
+        };
+        let taffy::DetailedLayoutInfo::Grid(info) = tree.taffy.detailed_layout_info(*node) else {
+            continue;
+        };
+        let tracks = |sizes: &[f32], gutters: &[f32], mut offset: f32| {
+            sizes
+                .iter()
+                .enumerate()
+                .map(|(index, size)| {
+                    offset += gutters.get(index).copied().unwrap_or_default();
+                    let start = offset;
+                    offset += size;
+                    [start, offset]
+                })
+                .collect()
+        };
+        grids.insert(
+            *id,
+            GridTracks {
+                bounds: output[id],
+                columns: tracks(
+                    &info.columns.sizes,
+                    &info.columns.gutters,
+                    layout.padding[3],
+                ),
+                rows: tracks(&info.rows.sizes, &info.rows.gutters, layout.padding[0]),
+            },
+        );
+    }
     for board in &mut page.boards {
         if let Some(rect) = output.get(&board.id) {
             board.rect = *rect;
@@ -483,5 +609,5 @@ pub(crate) fn resolve(page: &mut Page, text_system: &gpui::WindowTextSystem) -> 
             layout.frame = rect;
         }
     }
-    Ok(())
+    Ok(grids)
 }
