@@ -1,7 +1,10 @@
 name: Remote build
-run-name: Build ${{ inputs.platform }} from ${{ github.ref_name }}
+run-name: Build ${{ inputs.platform || 'all' }} from ${{ github.ref_name }}
 
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       platform:
@@ -20,7 +23,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: build-${{ github.ref }}-${{ inputs.platform }}
+  group: build-${{ github.ref }}-${{ inputs.platform || 'all' }}
   cancel-in-progress: false
 
 env:
@@ -35,9 +38,22 @@ jobs:
     outputs:
       matrix: ${{ steps.select.outputs.matrix }}
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Validate release version
+        if: github.event_name == 'push'
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          version=$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["version"])')
+          if [[ "$RELEASE_TAG" != "v$version" ]]; then
+            echo "::error::Release tag $RELEASE_TAG must match workspace version v$version"
+            exit 1
+          fi
       - id: select
         env:
-          PLATFORM: ${{ inputs.platform }}
+          PLATFORM: ${{ inputs.platform || 'all' }}
         run: |
           matrix=$(jq -cn --arg platform "$PLATFORM" '{include: [
             {id: "linux-x64", os: "ubuntu-24.04", native: "true", web: "false"},
@@ -126,7 +142,7 @@ jobs:
         run: |
           jq -n --arg commit "$GITHUB_SHA" --arg ref "$BUILD_REF" \
             --arg target "$BUILD_TARGET" --arg rust "$(rustc --version)" \
-            '{commit: $commit, ref: $ref, target: $target, rust: $rust}' > dist/build-source.json
+            '{commit: $commit, ref: $ref, target: $target, rust: $rust}' > "dist/build-source-$BUILD_TARGET.json"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: rovar-${{ matrix.id }}-${{ github.sha }}
@@ -134,3 +150,74 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
+          overwrite: true
+
+  release:
+    name: Prepare release draft
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [targets, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: rovar-*-${{ github.sha }}
+          path: artifacts
+      - name: Verify and collect release assets
+        env:
+          BUILD_MATRIX: ${{ needs.targets.outputs.matrix }}
+        run: |
+          mkdir release
+          while IFS= read -r target; do
+            directory="artifacts/rovar-$target-$GITHUB_SHA"
+            jq -e --arg commit "$GITHUB_SHA" --arg target "$target" \
+              '.commit == $commit and .target == $target' \
+              "$directory/build-source-$target.json" > /dev/null
+            (
+              cd "$directory"
+              if [[ "$target" == web-server ]]; then
+                sha256sum --check --strict SHA256SUMS
+              else
+                for checksum in *.sha256; do
+                  sha256sum --check --strict "$checksum"
+                done
+              fi
+            )
+            for asset in "$directory"/*; do
+              name=$(basename "$asset")
+              [[ "$name" == SHA256SUMS ]] && continue
+              if [[ ! -f "$asset" || -e "release/$name" ]]; then
+                echo "::error::Unexpected or duplicate release asset: $asset"
+                exit 1
+              fi
+              cp "$asset" "release/$name"
+            done
+          done < <(jq -r '.include[].id' <<< "$BUILD_MATRIX")
+          (cd release && sha256sum ./* > SHA256SUMS)
+      - name: Upload assets to release draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          remote_commit=$(gh api "repos/$GH_REPO/commits/$RELEASE_TAG" --jq .sha)
+          if [[ "$remote_commit" != "$GITHUB_SHA" ]]; then
+            echo "::error::Release tag no longer points to the built commit"
+            exit 1
+          fi
+          if draft=$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft); then
+            if [[ "$draft" != true ]]; then
+              echo "::error::Refusing to overwrite an already published release"
+              exit 1
+            fi
+          else
+            options=()
+            [[ "$RELEASE_TAG" == *-* ]] && options+=(--prerelease)
+            gh release create "$RELEASE_TAG" --verify-tag --draft \
+              --title "$RELEASE_TAG" --generate-notes "${options[@]}"
+          fi
+          gh release upload "$RELEASE_TAG" release/* --clobber
+          url=$(gh release view "$RELEASE_TAG" --json url --jq .url)
+          printf 'Release draft: %s\n\nReview the assets and publish the draft when ready.\n' "$url" >> "$GITHUB_STEP_SUMMARY"
