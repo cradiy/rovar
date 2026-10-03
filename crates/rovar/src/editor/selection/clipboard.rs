@@ -587,6 +587,7 @@ impl Workspace {
                 self.reparent_group(id);
             }
             self.avoid_component_nesting(id);
+            self.refresh_constraints(id);
         }
         if let Change::Hierarchy { ref value, .. } = before
             && *value != self.hierarchy

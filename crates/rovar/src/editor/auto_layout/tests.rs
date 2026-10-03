@@ -13,6 +13,207 @@ fn rect(x: f32, y: f32, width: f32, height: f32) -> Rect {
 }
 
 #[gpui::test]
+fn constraints_follow_frame_resize_and_manual_move_with_undo(cx: &mut TestAppContext) {
+    use crate::scene::auto_layout::Constraint;
+    let window = open(cx);
+    window
+        .update(cx, |this, window, cx| {
+            this.add_artboard(rect(100., 100., 300., 200.), cx);
+            this.shapes.push(Shape::new(
+                2,
+                Some(1),
+                ShapeKind::Rectangle,
+                rect(200., 150., 50., 30.),
+            ));
+            this.next_id = 3;
+            this.set_selection(BTreeSet::from([2]), cx);
+            this.choose_constraint(2, 0, Constraint::End, cx);
+            this.choose_constraint(2, 1, Constraint::End, cx);
+            this.set_selection(BTreeSet::from([1]), cx);
+            this.edit_board(None, |b| {
+                b.rect.width = 500.;
+                b.rect.height = 300.;
+            });
+            this.reflow_layout(cx);
+            assert_eq!(this.shapes[0].rect, rect(400., 250., 50., 30.));
+            let jobs = this.component_export_jobs(window, cx).unwrap();
+            let exported = crate::document::Page::decode(&jobs[0].json).unwrap();
+            assert_eq!(exported.shapes[0].rect, this.shapes[0].rect);
+            assert!(jobs[0].svg().is_ok());
+            this.undo_redo(false, window, cx);
+            this.reflow_layout(cx);
+            assert_eq!(this.shapes[0].rect, rect(200., 150., 50., 30.));
+            this.undo_redo(true, window, cx);
+            this.reflow_layout(cx);
+            assert_eq!(this.shapes[0].rect, rect(400., 250., 50., 30.));
+            this.set_selection(BTreeSet::from([2]), cx);
+            this.edit_shape(|shape| shape.rect.x -= 20.);
+            this.reflow_layout(cx);
+            assert_eq!(this.shapes[0].rect.x, 380.);
+            this.undo_redo(false, window, cx);
+            this.reflow_layout(cx);
+            assert_eq!(this.shapes[0].rect.x, 400.);
+            this.undo_redo(true, window, cx);
+            this.reflow_layout(cx);
+            assert_eq!(this.shapes[0].rect.x, 380.);
+            let (page, _) = this.snapshot_page(cx);
+            let saved = crate::document::Page::decode(&serde_json::to_vec(&page).unwrap()).unwrap();
+            assert_eq!(saved.shapes[0].rect, rect(380., 250., 50., 30.));
+            this.duplicate_selection(window, cx);
+            let copied = *this.selection_ids().first().unwrap();
+            let position = this.world_rect(copied).unwrap();
+            this.reflow_layout(cx);
+            assert_eq!(this.world_rect(copied).unwrap(), position);
+        })
+        .unwrap();
+}
+
+#[gpui::test]
+fn wrap_switch_and_line_gap_are_undoable_and_fix_hug_main_axis(cx: &mut TestAppContext) {
+    let window = open(cx);
+    window
+        .update(cx, |this, window, cx| {
+            this.add_artboard(rect(100., 100., 130., 200.), cx);
+            for id in [2, 3] {
+                this.shapes.push(Shape::new(
+                    id,
+                    Some(1),
+                    ShapeKind::Rectangle,
+                    rect(0., 0., 60., 30.),
+                ));
+            }
+            this.next_id = 4;
+            this.enable_auto_layout(window, cx);
+            this.choose_sizing(1, 1, Mode::Hug, cx);
+            this.toggle_layout_wrap(cx);
+            assert!(this.hierarchy.layouts[&1].wrap);
+            assert_eq!(this.shapes[1].rect.y, 54.);
+            this.sync_layout_inputs(cx);
+            this.auto_layout.inputs[5].update(cx, |input, cx| input.set_value("20", cx));
+            this.apply_layout_number(5, cx);
+            assert_eq!(this.shapes[1].rect.y, 62.);
+            this.undo_redo(false, window, cx);
+            this.reflow_layout(cx);
+            assert_eq!(this.shapes[1].rect.y, 54.);
+            this.undo_redo(false, window, cx);
+            this.reflow_layout(cx);
+            assert!(!this.hierarchy.layouts[&1].wrap);
+            assert_eq!(this.shapes[1].rect.y, 12.);
+            this.choose_sizing(1, 0, Mode::Hug, cx);
+            this.toggle_layout_wrap(cx);
+            assert_eq!(this.hierarchy.sizing[&1].width, Mode::Fixed);
+            assert!(!this.sizing_enabled(1, 0, Mode::Hug));
+        })
+        .unwrap();
+}
+
+#[gpui::test]
+fn wrapped_drag_order_uses_the_destination_row(cx: &mut TestAppContext) {
+    let window = open(cx);
+    window
+        .update(cx, |this, window, cx| {
+            this.add_artboard(rect(100., 100., 160., 200.), cx);
+            for id in 2..6 {
+                this.shapes.push(Shape::new(
+                    id,
+                    Some(1),
+                    ShapeKind::Rectangle,
+                    rect(0., 0., 60., 30.),
+                ));
+            }
+            this.next_id = 6;
+            this.enable_auto_layout(window, cx);
+            this.toggle_layout_wrap(cx);
+            this.shapes[0].rect = rect(110., 58., 60., 30.);
+            let before = this.reorder_layout_item(2).unwrap();
+            this.history.borrow_mut().record(vec![before], None);
+            this.reflow_layout(cx);
+            assert_eq!(this.ordered_children(Some(1)), vec![3, 4, 5, 2]);
+            assert_eq!(this.shapes[0].rect, rect(84., 54., 60., 30.));
+            this.undo_redo(false, window, cx);
+            this.reflow_layout(cx);
+            assert_eq!(this.ordered_children(Some(1)), vec![2, 3, 4, 5]);
+            assert_eq!(this.shapes[0].rect, rect(12., 12., 60., 30.));
+        })
+        .unwrap();
+}
+
+#[gpui::test]
+fn frame_resize_previews_constraints_and_escape_restores_children(cx: &mut TestAppContext) {
+    use crate::scene::auto_layout::Constraint;
+    let window = open(cx);
+    window
+        .update(cx, |this, window, cx| {
+            this.add_artboard(rect(100., 100., 300., 200.), cx);
+            this.shapes.push(Shape::new(
+                2,
+                Some(1),
+                ShapeKind::Rectangle,
+                rect(200., 150., 50., 30.),
+            ));
+            this.next_id = 3;
+            this.set_selection(BTreeSet::from([2]), cx);
+            this.choose_constraint(2, 0, Constraint::End, cx);
+            this.set_selection(BTreeSet::from([1]), cx);
+            let original = this.boards[0].rect;
+            this.begin(
+                GestureKind::Resize {
+                    id: 1,
+                    original,
+                    handle: Handle(1, 1),
+                },
+                point(px(0.), px(0.)),
+                MouseButton::Left,
+                window,
+                cx,
+            );
+            this.boards[0].rect.width = 500.;
+            this.reflow_layout(cx);
+            assert_eq!(this.shapes[0].rect.x, 400.);
+            this.boards[0].rect.width = 450.;
+            this.reflow_layout(cx);
+            assert_eq!(this.shapes[0].rect.x, 350.);
+            this.cancel_gesture(window, cx);
+            this.reflow_layout(cx);
+            assert_eq!(this.shapes[0].rect.x, 200.);
+        })
+        .unwrap();
+}
+
+#[gpui::test]
+fn enabling_flow_releases_old_pins_and_undo_restores_them(cx: &mut TestAppContext) {
+    use crate::scene::auto_layout::Constraint;
+    let window = open(cx);
+    window
+        .update(cx, |this, window, cx| {
+            this.add_artboard(rect(100., 100., 300., 200.), cx);
+            this.shapes.push(Shape::new(
+                2,
+                Some(1),
+                ShapeKind::Rectangle,
+                rect(200., 150., 50., 30.),
+            ));
+            this.next_id = 3;
+            this.set_selection(BTreeSet::from([2]), cx);
+            this.choose_constraint(2, 0, Constraint::End, cx);
+            this.set_selection(BTreeSet::from([1]), cx);
+            this.enable_auto_layout(window, cx);
+            assert_eq!(this.shapes[0].rect, rect(12., 12., 50., 30.));
+            this.enable_auto_layout(window, cx);
+            assert_eq!(this.shapes[0].rect, rect(12., 12., 50., 30.));
+            this.undo_redo(false, window, cx);
+            this.undo_redo(false, window, cx);
+            this.reflow_layout(cx);
+            assert_eq!(this.shapes[0].rect, rect(200., 150., 50., 30.));
+            assert_eq!(
+                this.hierarchy.sizing[&2].constraints.unwrap().horizontal,
+                Constraint::End
+            );
+        })
+        .unwrap();
+}
+
+#[gpui::test]
 fn dragging_out_of_layout_detaches_at_drop_position_and_undo_restores_fill(
     cx: &mut TestAppContext,
 ) {

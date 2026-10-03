@@ -173,6 +173,9 @@ pub(crate) fn extract(page: &Page, root: usize) -> anyhow::Result<Page> {
     out.hierarchy.names.retain(|id, _| included.contains(id));
     out.hierarchy.layouts.retain(|id, _| included.contains(id));
     out.hierarchy.sizing.retain(|id, _| included.contains(id));
+    if let Some(sizing) = out.hierarchy.sizing.get_mut(&root) {
+        sizing.constraints = None;
+    }
     out.hierarchy.exports.retain(|id, _| included.contains(id));
     out.hierarchy.order.retain(|id| included.contains(id));
     out.hierarchy.components.clear();

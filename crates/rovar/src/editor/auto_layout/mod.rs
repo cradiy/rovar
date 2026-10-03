@@ -8,6 +8,7 @@ use uic::components::{
     context_menu::{self, ContextMenuItem},
     input::{Input, InputAppearance},
 };
+mod constraints;
 #[cfg(test)]
 mod tests;
 
@@ -22,7 +23,7 @@ pub(super) struct State {
 impl State {
     pub fn new(window: &mut Window, cx: &mut Context<Workspace>) -> Self {
         let mut subscriptions = Vec::new();
-        let inputs = (0..5)
+        let inputs = (0..6)
             .map(|index| {
                 let input = cx.new(TextInput::new);
                 subscriptions.push(cx.subscribe_in(
@@ -63,7 +64,8 @@ impl Workspace {
         let sizing = self.hierarchy.sizing.get(&id)?;
         let width = before.width != after.width && sizing.width != Mode::Fixed;
         let height = before.height != after.height && sizing.height != Mode::Fixed;
-        if !width && !height {
+        let constraints = before != after && sizing.constraints.is_some();
+        if !width && !height && !constraints {
             return None;
         }
         let change = self.snapshot_hierarchy();
@@ -74,6 +76,7 @@ impl Workspace {
         if height {
             sizing.height = Mode::Fixed;
         }
+        self.refresh_constraints(id);
         Some(change)
     }
     pub(super) fn is_layout_flow_item(&self, id: usize) -> bool {
@@ -95,18 +98,63 @@ impl Workspace {
             .copied()
             .filter(|id| self.is_layout_flow_item(*id))
             .collect();
-        flow.sort_by(|a, b| {
-            let key = |id| {
-                self.world_rect(id).map_or(0., |r| {
-                    if axis == Axis::Horizontal {
-                        r.x + r.width / 2.
-                    } else {
-                        r.y + r.height / 2.
-                    }
-                })
+        if self.hierarchy.layouts[&parent].wrap {
+            let moved = self.world_rect(id)?;
+            flow.retain(|item| *item != id);
+            let spans = |r: Rect| {
+                if axis == Axis::Horizontal {
+                    (r.x + r.width / 2., r.y, r.y + r.height)
+                } else {
+                    (r.y + r.height / 2., r.x, r.x + r.width)
+                }
             };
-            key(*a).total_cmp(&key(*b))
-        });
+            let (main, start, end) = spans(moved);
+            let cross = (start + end) / 2.;
+            let mut lines: Vec<(f32, f32, usize, usize)> = Vec::new();
+            for (index, item) in flow.iter().enumerate() {
+                let (_, start, end) = spans(self.world_rect(*item)?);
+                if let Some(line) = lines
+                    .last_mut()
+                    .filter(|line| start < line.1 && end > line.0)
+                {
+                    line.0 = line.0.min(start);
+                    line.1 = line.1.max(end);
+                    line.3 = index + 1;
+                } else {
+                    lines.push((start, end, index, index + 1));
+                }
+            }
+            let at = lines
+                .iter()
+                .min_by(|a, b| {
+                    let distance = |line: &(f32, f32, usize, usize)| {
+                        (cross - cross.clamp(line.0, line.1)).abs()
+                    };
+                    distance(a).total_cmp(&distance(b))
+                })
+                .map_or(0, |line| {
+                    (line.2..line.3)
+                        .find(|index| {
+                            self.world_rect(flow[*index])
+                                .is_some_and(|r| spans(r).0 > main)
+                        })
+                        .unwrap_or(line.3)
+                });
+            flow.insert(at, id);
+        } else {
+            flow.sort_by(|a, b| {
+                let key = |id| {
+                    self.world_rect(id).map_or(0., |r| {
+                        if axis == Axis::Horizontal {
+                            r.x + r.width / 2.
+                        } else {
+                            r.y + r.height / 2.
+                        }
+                    })
+                };
+                key(*a).total_cmp(&key(*b))
+            });
+        }
         let mut next = flow.into_iter();
         for item in &mut order {
             if self.is_layout_flow_item(*item) {
@@ -179,14 +227,18 @@ impl Workspace {
     }
     pub(super) fn reflow_layout(&mut self, cx: &mut Context<Self>) {
         let revision = self.history.borrow().revision();
-        if self
-            .gesture
-            .is_some_and(|g| !matches!(g.kind, GestureKind::LayoutProperty { .. }))
-            || self.auto_layout.revision == Some(revision)
+        let resizing_frame = self.gesture.is_some_and(|g| {
+            matches!(g.kind,
+            GestureKind::Resize { id, .. } if self.hierarchy.sizing.get(&id).is_none_or(|s|
+                s.constraints.is_none() && s.width == Mode::Fixed && s.height == Mode::Fixed))
+        });
+        if self.gesture.is_some_and(|g| {
+            !resizing_frame && !matches!(g.kind, GestureKind::LayoutProperty { .. })
+        }) || (!resizing_frame && self.auto_layout.revision == Some(revision))
         {
             return;
         }
-        self.auto_layout.revision = Some(revision);
+        self.auto_layout.revision = (!resizing_frame).then_some(revision);
         if self.hierarchy.layouts.is_empty() && self.hierarchy.sizing.is_empty() {
             return;
         }
@@ -239,6 +291,7 @@ impl Workspace {
             layout.padding[1],
             layout.padding[2],
             layout.padding[3],
+            layout.line_gap,
         ];
         for (input, value) in self.auto_layout.inputs.iter().zip(values) {
             input.update(cx, |input, cx| {
@@ -292,12 +345,21 @@ impl Workspace {
                     Sizing {
                         width,
                         height,
-                        absolute: false,
+                        ..self.hierarchy.sizing.get(&id).copied().unwrap_or_default()
                     },
                 );
             }
         } else {
-            self.hierarchy.sizing.remove(&id);
+            if let Some(sizing) = self.hierarchy.sizing.get_mut(&id) {
+                sizing.width = Mode::Fixed;
+                sizing.height = Mode::Fixed;
+                if *sizing == Sizing::default() {
+                    self.hierarchy.sizing.remove(&id);
+                }
+            }
+        }
+        for child in self.ordered_children(Some(id)) {
+            self.refresh_constraints(child);
         }
         self.record_page_edit(before);
         self.auto_layout.revision = None;
@@ -329,6 +391,17 @@ impl Workspace {
             let previous = layout.clone();
             edit(layout);
             if *layout != previous {
+                if layout.wrap {
+                    let sizing = self.hierarchy.sizing.entry(id).or_default();
+                    let main = if layout.axis == Axis::Horizontal {
+                        &mut sizing.width
+                    } else {
+                        &mut sizing.height
+                    };
+                    if *main == Mode::Hug {
+                        *main = Mode::Fixed;
+                    }
+                }
                 self.history.borrow_mut().record(vec![before], None);
             }
         }
@@ -350,12 +423,10 @@ impl Workspace {
             && (0. ..=crate::scene::artboard::MAX_SIZE).contains(&value)
         {
             self.edit_layout(
-                |layout| {
-                    if index == 0 {
-                        layout.gap = value
-                    } else {
-                        layout.padding[index - 1] = value
-                    }
+                |layout| match index {
+                    0 => layout.gap = value,
+                    5 => layout.line_gap = value,
+                    _ => layout.padding[index - 1] = value,
                 },
                 cx,
             );
@@ -400,6 +471,7 @@ impl Workspace {
             .unwrap_or_default();
         let sizing = self.hierarchy.sizing.entry(id).or_default();
         sizing.absolute = !sizing.absolute;
+        sizing.constraints = None;
         if !sizing.absolute {
             if sizing.width == Mode::Fill && parent.width == Mode::Hug {
                 sizing.width = Mode::Fixed;
@@ -412,6 +484,22 @@ impl Workspace {
         cx.notify();
     }
     fn sizing_enabled(&self, id: usize, axis: usize, mode: Mode) -> bool {
+        if mode != Mode::Fixed
+            && self
+                .hierarchy
+                .sizing
+                .get(&id)
+                .and_then(|s| s.constraints)
+                .is_some_and(|c| {
+                    matches!(
+                        if axis == 0 { c.horizontal } else { c.vertical },
+                        crate::scene::auto_layout::Constraint::Stretch
+                            | crate::scene::auto_layout::Constraint::Scale
+                    )
+                })
+        {
+            return false;
+        }
         let size_mode = |id| {
             let sizing = self.hierarchy.sizing.get(&id).copied().unwrap_or_default();
             if axis == 0 {
@@ -423,6 +511,14 @@ impl Workspace {
         match mode {
             Mode::Fixed => true,
             Mode::Hug => {
+                if self
+                    .hierarchy
+                    .layouts
+                    .get(&id)
+                    .is_some_and(|l| l.wrap && (l.axis == Axis::Horizontal) == (axis == 0))
+                {
+                    return false;
+                }
                 (self.hierarchy.layouts.contains_key(&id) || self.texts.iter().any(|t| t.id == id))
                     && !self.ordered_children(Some(id)).iter().any(|child| {
                         self.is_layout_flow_item(*child) && size_mode(*child) == Mode::Fill
@@ -628,6 +724,30 @@ impl Workspace {
                         }))
                 }),
             ));
+            section = section.child(
+                div()
+                    .id("layout-wrap")
+                    .debug_selector(|| "layout-wrap".into())
+                    .h(px(28.))
+                    .px(px(8.))
+                    .rounded(px(6.))
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .cursor_pointer()
+                    .bg(rgb(if layout.wrap { 0x383044 } else { 0x282b33 }))
+                    .text_color(rgb(if layout.wrap { ACCENT } else { TEXT }))
+                    .child(t("layout-wrap"))
+                    .child(icon(
+                        if layout.wrap {
+                            LucideIcons::Check
+                        } else {
+                            LucideIcons::Plus
+                        },
+                        14.,
+                    ))
+                    .on_click(cx.listener(|this, _, _, cx| this.toggle_layout_wrap(cx))),
+            );
             for cross in [false, true] {
                 section = section.child(
                     div()
@@ -695,11 +815,14 @@ impl Workspace {
                 div().flex().flex_col().gap(px(6.)).children(
                     [
                         (0, "layout-gap"),
+                        (5, "layout-line-gap"),
                         (1, "layout-padding-top"),
                         (2, "layout-padding-right"),
                         (3, "layout-padding-bottom"),
                         (4, "layout-padding-left"),
                     ]
+                    .into_iter()
+                    .filter(|(index, _)| *index != 5 || layout.wrap)
                     .map(|(index, label)| self.layout_number(index, t(label), cx)),
                 ),
             );
@@ -708,10 +831,10 @@ impl Workspace {
     }
     pub(super) fn layout_number_value(&self, index: usize) -> Option<f32> {
         let layout = self.hierarchy.layouts.get(&self.layout_target()?)?;
-        Some(if index == 0 {
-            layout.gap
-        } else {
-            layout.padding[index - 1]
+        Some(match index {
+            0 => layout.gap,
+            5 => layout.line_gap,
+            _ => layout.padding[index - 1],
         })
     }
     fn begin_layout_scrub(
@@ -765,12 +888,10 @@ impl Workspace {
             return;
         }
         self.edit_layout(
-            |layout| {
-                if index == 0 {
-                    layout.gap = value;
-                } else {
-                    layout.padding[index - 1] = value;
-                }
+            |layout| match index {
+                0 => layout.gap = value,
+                5 => layout.line_gap = value,
+                _ => layout.padding[index - 1] = value,
             },
             cx,
         );

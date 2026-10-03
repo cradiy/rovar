@@ -5,8 +5,10 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use taffy::prelude::*;
+mod constraints;
 #[cfg(test)]
 mod tests;
+pub(crate) use constraints::{Constraint, Constraints};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum Axis {
@@ -33,11 +35,17 @@ pub(crate) struct Sizing {
     pub width: Mode,
     pub height: Mode,
     pub absolute: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub constraints: Option<Constraints>,
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub(crate) struct Container {
     pub axis: Axis,
     pub gap: f32,
+    #[serde(default)]
+    pub wrap: bool,
+    #[serde(default)]
+    pub line_gap: f32,
     /// Top, right, bottom, left.
     pub padding: [f32; 4],
     pub main: Align,
@@ -50,6 +58,8 @@ impl Container {
         Self {
             axis: Axis::Horizontal,
             gap: 12.,
+            wrap: false,
+            line_gap: 12.,
             padding: [12.; 4],
             main: Align::Start,
             cross: Align::Start,
@@ -66,6 +76,7 @@ pub(crate) fn validate(page: &Page, ids: &std::collections::BTreeSet<usize>) -> 
         );
         anyhow::ensure!(
             std::iter::once(layout.gap)
+                .chain(std::iter::once(layout.line_gap))
                 .chain(layout.padding)
                 .all(|n| n.is_finite() && (0. ..=MAX_SIZE).contains(&n)),
             "Invalid layout spacing"
@@ -88,6 +99,11 @@ pub(crate) fn validate(page: &Page, ids: &std::collections::BTreeSet<usize>) -> 
         page.hierarchy.sizing.keys().all(|id| ids.contains(id)),
         "Missing layout item"
     );
+    for sizing in page.hierarchy.sizing.values() {
+        if let Some(constraints) = sizing.constraints {
+            constraints.validate()?;
+        }
+    }
     Ok(())
 }
 
@@ -259,6 +275,9 @@ pub(crate) fn resolve(page: &mut Page, text_system: &gpui::WindowTextSystem) -> 
                 style.position = Position::Absolute;
                 style.inset.left = length(rect.x - self.rects[&parent].x);
                 style.inset.top = length(rect.y - self.rects[&parent].y);
+                if let Some(constraints) = sizing.constraints {
+                    constraints.apply(&mut style);
+                }
             }
             if let Some(layout) = own {
                 style.flex_direction = if layout.axis == Axis::Horizontal {
@@ -267,9 +286,23 @@ pub(crate) fn resolve(page: &mut Page, text_system: &gpui::WindowTextSystem) -> 
                     FlexDirection::Column
                 };
                 style.gap = Size {
-                    width: length(layout.gap),
-                    height: length(layout.gap),
+                    width: length(if layout.wrap && layout.axis == Axis::Vertical {
+                        layout.line_gap
+                    } else {
+                        layout.gap
+                    }),
+                    height: length(if layout.wrap && layout.axis == Axis::Horizontal {
+                        layout.line_gap
+                    } else {
+                        layout.gap
+                    }),
                 };
+                style.flex_wrap = if layout.wrap {
+                    FlexWrap::Wrap
+                } else {
+                    FlexWrap::NoWrap
+                };
+                style.align_content = Some(AlignContent::Start);
                 style.padding = taffy::Rect {
                     top: length(layout.padding[0]),
                     right: length(layout.padding[1]),
@@ -306,6 +339,7 @@ pub(crate) fn resolve(page: &mut Page, text_system: &gpui::WindowTextSystem) -> 
         fn collect(
             &self,
             id: usize,
+            parent: Option<usize>,
             x: f32,
             y: f32,
             output: &mut BTreeMap<usize, Rect>,
@@ -314,15 +348,34 @@ pub(crate) fn resolve(page: &mut Page, text_system: &gpui::WindowTextSystem) -> 
                 return Ok(());
             }
             let layout = self.taffy.layout(self.nodes[&id])?;
-            let rect = Rect {
+            let mut rect = Rect {
                 x: x + layout.location.x,
                 y: y + layout.location.y,
                 width: layout.size.width,
                 height: layout.size.height,
             };
+            if let Some(parent) = parent
+                && let Some(sizing) = self.page.hierarchy.sizing.get(&id)
+                && (sizing.absolute || !self.page.hierarchy.layouts.contains_key(&parent))
+                && let Some(constraints) = sizing.constraints
+            {
+                let parent_rect = output[&parent];
+                if constraints.horizontal == Constraint::Center {
+                    rect.x = parent_rect.x
+                        + (parent_rect.width - rect.width) / 2.
+                        + constraints.rect.x
+                        + (constraints.rect.width - constraints.parent_size[0]) / 2.;
+                }
+                if constraints.vertical == Constraint::Center {
+                    rect.y = parent_rect.y
+                        + (parent_rect.height - rect.height) / 2.
+                        + constraints.rect.y
+                        + (constraints.rect.height - constraints.parent_size[1]) / 2.;
+                }
+            }
             output.insert(id, rect);
             for child in self.children.get(&Some(id)).into_iter().flatten() {
-                self.collect(*child, rect.x, rect.y, output)?;
+                self.collect(*child, Some(id), rect.x, rect.y, output)?;
             }
             Ok(())
         }
@@ -367,7 +420,7 @@ pub(crate) fn resolve(page: &mut Page, text_system: &gpui::WindowTextSystem) -> 
                 }
             },
         )?;
-        tree.collect(*id, rects[id].x, rects[id].y, &mut output)?;
+        tree.collect(*id, None, rects[id].x, rects[id].y, &mut output)?;
     }
     for board in &mut page.boards {
         if let Some(rect) = output.get(&board.id) {

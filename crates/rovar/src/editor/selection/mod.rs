@@ -109,6 +109,11 @@ impl Workspace {
     }
 
     pub(super) fn set_object_rect(&mut self, id: usize, parent: Option<usize>, rect: Rect) {
+        self.set_object_geometry(id, parent, rect);
+        self.refresh_constraints(id);
+    }
+
+    fn set_object_geometry(&mut self, id: usize, parent: Option<usize>, rect: Rect) {
         if self.hierarchy.groups.contains_key(&id)
             && let Some(layout) = self.hierarchy.layouts.get(&id)
         {
@@ -137,7 +142,7 @@ impl Workspace {
                 } else if let Some((board, mut child_rect)) = self.object_rect(child) {
                     child_rect.x += delta.x;
                     child_rect.y += delta.y;
-                    self.set_object_rect(child, board, child_rect);
+                    self.set_object_geometry(child, board, child_rect);
                 }
             }
             self.hierarchy.layouts.get_mut(&id).unwrap().frame = rect;
@@ -202,8 +207,10 @@ impl Workspace {
                 }
             })
             .chain(
-                (!self.hierarchy.groups.is_empty() || !self.hierarchy.layouts.is_empty())
-                    .then(|| self.snapshot_hierarchy()),
+                (!self.hierarchy.groups.is_empty()
+                    || !self.hierarchy.layouts.is_empty()
+                    || !self.hierarchy.sizing.is_empty())
+                .then(|| self.snapshot_hierarchy()),
             )
             .collect()
     }
@@ -230,7 +237,9 @@ impl Workspace {
                         *s = before.clone();
                     }
                 }
-                Change::TextRect { id, board, value } => self.set_object_rect(*id, *board, *value),
+                Change::TextRect { id, board, value } => {
+                    self.set_object_geometry(*id, *board, *value)
+                }
                 Change::Text { id, value } => {
                     if let Some(t) = self.texts.iter().find(|t| t.id == *id) {
                         t.editor.update(cx, |editor, cx| {
@@ -478,6 +487,9 @@ impl Workspace {
                 self.set_object_rect(id, parent, rect);
                 self.avoid_component_nesting(id);
             }
+        }
+        for id in self.selection_ids() {
+            self.refresh_constraints(id);
         }
         self.history.borrow_mut().record(before, None);
         if self.multi_selection.is_empty() {

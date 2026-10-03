@@ -46,6 +46,187 @@ fn fixture() -> Page {
     page.hierarchy.layouts.insert(1, layout);
     page
 }
+
+#[gpui::test]
+fn constraints_resize_restore_and_round_trip_without_drift(cx: &mut gpui::TestAppContext) {
+    let system = cx.update(|cx| gpui::WindowTextSystem::new(cx.text_system().clone()));
+    for (mode, expected) in [
+        (Constraint::Start, rect(60., 60., 50., 20.)),
+        (Constraint::End, rect(360., 220., 50., 20.)),
+        (Constraint::Center, rect(210., 140., 50., 20.)),
+        (Constraint::Stretch, rect(60., 60., 350., 180.)),
+        (Constraint::Scale, rect(120., 120., 100., 40.)),
+    ] {
+        let mut page = fixture();
+        page.hierarchy.layouts.clear();
+        page.hierarchy.sizing.insert(
+            2,
+            Sizing {
+                constraints: Some(Constraints {
+                    horizontal: mode,
+                    vertical: mode,
+                    rect: page.shapes[0].rect,
+                    parent_size: [300., 160.],
+                }),
+                ..Default::default()
+            },
+        );
+        let original = page.shapes[0].rect;
+        page.boards[0].rect.width = 600.;
+        page.boards[0].rect.height = 320.;
+        resolve(&mut page, &system).unwrap();
+        assert_eq!(page.shapes[0].rect, expected, "{mode:?}");
+        let encoded = serde_json::to_vec(&page).unwrap();
+        page = Page::decode(&encoded).unwrap();
+        resolve(&mut page, &system).unwrap();
+        assert_eq!(serde_json::to_vec(&page).unwrap(), encoded);
+        page.boards[0].rect.width = 1.;
+        page.boards[0].rect.height = 1.;
+        resolve(&mut page, &system).unwrap();
+        page.boards[0].rect.width = 300.;
+        page.boards[0].rect.height = 160.;
+        resolve(&mut page, &system).unwrap();
+        assert_eq!(page.shapes[0].rect, original, "restore {mode:?}");
+    }
+}
+
+#[gpui::test]
+fn wrapped_rows_and_columns_use_separate_gaps_and_hug_cross_axis(cx: &mut gpui::TestAppContext) {
+    let system = cx.update(|cx| gpui::WindowTextSystem::new(cx.text_system().clone()));
+    let mut page = fixture();
+    let layout = page.hierarchy.layouts.get_mut(&1).unwrap();
+    layout.wrap = true;
+    layout.line_gap = 15.;
+    page.boards[0].rect.width = 130.;
+    page.hierarchy.sizing.insert(
+        1,
+        Sizing {
+            height: Mode::Hug,
+            ..Default::default()
+        },
+    );
+    resolve(&mut page, &system).unwrap();
+    assert_eq!(page.shapes[0].rect, rect(10., 10., 50., 20.));
+    assert_eq!(page.shapes[1].rect, rect(10., 45., 70., 40.));
+    assert_eq!(page.boards[0].rect.height, 95.);
+    page.boards[0].rect.width = 148.;
+    resolve(&mut page, &system).unwrap();
+    assert_eq!(page.shapes[1].rect, rect(68., 10., 70., 40.));
+    assert_eq!(page.boards[0].rect.height, 60.);
+    page.hierarchy.layouts.get_mut(&1).unwrap().axis = Axis::Vertical;
+    page.boards[0].rect.height = 75.;
+    page.hierarchy.sizing.insert(
+        1,
+        Sizing {
+            width: Mode::Hug,
+            ..Default::default()
+        },
+    );
+    resolve(&mut page, &system).unwrap();
+    assert_eq!(page.shapes[1].rect, rect(75., 10., 70., 40.));
+    assert_eq!(page.boards[0].rect.width, 155.);
+}
+
+#[gpui::test]
+fn absolute_constraints_inside_padded_layout_do_not_enter_flow(cx: &mut gpui::TestAppContext) {
+    let system = cx.update(|cx| gpui::WindowTextSystem::new(cx.text_system().clone()));
+    let mut page = fixture();
+    page.hierarchy.sizing.insert(
+        2,
+        Sizing {
+            absolute: true,
+            constraints: Some(Constraints {
+                horizontal: Constraint::End,
+                vertical: Constraint::Stretch,
+                rect: page.shapes[0].rect,
+                parent_size: [300., 160.],
+            }),
+            ..Default::default()
+        },
+    );
+    page.boards[0].rect.width = 400.;
+    page.boards[0].rect.height = 260.;
+    resolve(&mut page, &system).unwrap();
+    assert_eq!(page.shapes[0].rect, rect(160., 60., 50., 120.));
+    assert_eq!(page.shapes[1].rect, rect(10., 10., 70., 40.));
+}
+
+#[gpui::test]
+fn component_instances_keep_internal_constraints_when_resized(cx: &mut gpui::TestAppContext) {
+    use crate::scene::components;
+    let system = cx.update(|cx| gpui::WindowTextSystem::new(cx.text_system().clone()));
+    let mut page = fixture();
+    page.hierarchy.layouts.clear();
+    page.hierarchy.sizing.insert(
+        2,
+        Sizing {
+            constraints: Some(Constraints {
+                horizontal: Constraint::End,
+                vertical: Constraint::Center,
+                rect: page.shapes[0].rect,
+                parent_size: [300., 160.],
+            }),
+            ..Default::default()
+        },
+    );
+    let template = components::extract(&page, 1).unwrap();
+    let mut instance = components::place(
+        &template,
+        &BTreeMap::from([(1, 10), (2, 11), (3, 12)]),
+        [700., 400.],
+        None,
+    );
+    instance.boards[0].rect.width = 500.;
+    instance.boards[0].rect.height = 360.;
+    resolve(&mut instance, &system).unwrap();
+    assert_eq!(instance.shapes[0].rect, rect(260., 160., 50., 20.));
+    instance.validate().unwrap();
+    let shape_template = components::extract(&page, 2).unwrap();
+    assert!(shape_template.hierarchy.sizing[&2].constraints.is_none());
+}
+
+#[gpui::test]
+fn centered_hug_text_keeps_its_center_when_content_changes(cx: &mut gpui::TestAppContext) {
+    let system = cx.update(|cx| gpui::WindowTextSystem::new(cx.text_system().clone()));
+    let mut page = fixture();
+    page.hierarchy.layouts.clear();
+    page.shapes.clear();
+    let mut styles = StyledText::default();
+    styles.replace(0..0, 5);
+    page.texts.push(crate::document::Text {
+        uid: uuid::Uuid::new_v4(),
+        id: 2,
+        board: Some(1),
+        rect: rect(100., 50., 100., 30.),
+        layer: Default::default(),
+        content: "Hello".into(),
+        styles,
+    });
+    page.hierarchy.sizing.insert(
+        2,
+        Sizing {
+            width: Mode::Hug,
+            height: Mode::Hug,
+            constraints: Some(Constraints {
+                horizontal: Constraint::Center,
+                vertical: Constraint::Center,
+                rect: page.texts[0].rect,
+                parent_size: [300., 160.],
+            }),
+            ..Default::default()
+        },
+    );
+    resolve(&mut page, &system).unwrap();
+    let first = page.texts[0].rect;
+    page.texts[0].content = "A much longer label".into();
+    let length = page.texts[0].content.len();
+    page.texts[0].styles.replace(0..5, length);
+    resolve(&mut page, &system).unwrap();
+    let after = page.texts[0].rect;
+    assert!(after.width > first.width);
+    assert_eq!(first.x + first.width / 2., after.x + after.width / 2.);
+    assert_eq!(first.y + first.height / 2., after.y + after.height / 2.);
+}
 #[gpui::test]
 fn flex_fixed_fill_absolute_hidden_and_reordering(cx: &mut gpui::TestAppContext) {
     let system = cx.update(|cx| gpui::WindowTextSystem::new(cx.text_system().clone()));
@@ -60,6 +241,7 @@ fn flex_fixed_fill_absolute_hidden_and_reordering(cx: &mut gpui::TestAppContext)
             width: Mode::Fill,
             height: Mode::Fill,
             absolute: false,
+            ..Default::default()
         },
     );
     resolve(&mut page, &system).unwrap();
@@ -103,6 +285,7 @@ fn nested_hug_frames_are_stable_and_serialize_without_ui_state(cx: &mut gpui::Te
             width: Mode::Hug,
             height: Mode::Hug,
             absolute: false,
+            ..Default::default()
         },
     );
     page.hierarchy.sizing.insert(
@@ -111,6 +294,7 @@ fn nested_hug_frames_are_stable_and_serialize_without_ui_state(cx: &mut gpui::Te
             width: Mode::Hug,
             height: Mode::Hug,
             absolute: false,
+            ..Default::default()
         },
     );
     page.next_id = 5;
@@ -147,6 +331,7 @@ fn hug_text_resizes_its_container_and_wraps_at_fixed_width(cx: &mut gpui::TestAp
             width: Mode::Hug,
             height: Mode::Hug,
             absolute: false,
+            ..Default::default()
         },
     );
     page.hierarchy.sizing.insert(
@@ -155,6 +340,7 @@ fn hug_text_resizes_its_container_and_wraps_at_fixed_width(cx: &mut gpui::TestAp
             width: Mode::Hug,
             height: Mode::Hug,
             absolute: false,
+            ..Default::default()
         },
     );
     resolve(&mut page, &system).unwrap();

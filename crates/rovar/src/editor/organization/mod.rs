@@ -290,6 +290,7 @@ impl Workspace {
         }
         for child in ids {
             self.hierarchy.parents.insert(child, id);
+            self.refresh_constraints(child);
         }
         let at = order
             .iter()
@@ -325,6 +326,7 @@ impl Workspace {
                 if let Some(p) = parent.filter(|p| self.hierarchy.groups.contains_key(p)) {
                     self.hierarchy.parents.insert(*child, p);
                 }
+                self.refresh_constraints(*child);
             }
             self.hierarchy.groups.remove(&id);
             self.hierarchy.components.remove(&id);
