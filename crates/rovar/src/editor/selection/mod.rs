@@ -113,7 +113,7 @@ impl Workspace {
         self.refresh_constraints(id);
     }
 
-    fn set_object_geometry(&mut self, id: usize, parent: Option<usize>, rect: Rect) {
+    pub(super) fn set_object_geometry(&mut self, id: usize, parent: Option<usize>, rect: Rect) {
         if self.hierarchy.groups.contains_key(&id)
             && let Some(layout) = self.hierarchy.layouts.get(&id)
         {

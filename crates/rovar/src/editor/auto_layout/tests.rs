@@ -13,6 +13,126 @@ fn rect(x: f32, y: f32, width: f32, height: f32) -> Rect {
 }
 
 #[gpui::test]
+fn moving_layout_group_between_boards_preserves_child_constraints(cx: &mut TestAppContext) {
+    use crate::scene::{auto_layout::Constraint, layer::LayerGroup};
+    let window = open(cx);
+    window
+        .update(cx, |this, window, cx| {
+            this.add_artboard(rect(100., 100., 300., 200.), cx);
+            this.add_artboard(rect(600., 100., 300., 200.), cx);
+            this.hierarchy.groups.insert(
+                3,
+                LayerGroup {
+                    uid: uuid::Uuid::new_v4(),
+                    name: "Card".into(),
+                    board: Some(1),
+                    layer: Default::default(),
+                },
+            );
+            this.hierarchy
+                .layouts
+                .insert(3, Container::new(rect(20., 20., 100., 80.)));
+            this.shapes.push(Shape::new(
+                4,
+                Some(1),
+                ShapeKind::Rectangle,
+                rect(80., 30., 20., 20.),
+            ));
+            this.hierarchy.parents.insert(4, 3);
+            this.hierarchy.sizing.insert(
+                4,
+                Sizing {
+                    absolute: true,
+                    ..Default::default()
+                },
+            );
+            this.next_id = 5;
+            this.set_selection(BTreeSet::from([4]), cx);
+            this.choose_constraint(4, 0, Constraint::End, cx);
+            let pins = this.hierarchy.sizing[&4].constraints;
+            this.set_selection(BTreeSet::from([3]), cx);
+            this.batch_before = this.before_geometry();
+            this.move_selection(point(500., 0.));
+            let expected = this.world_rect(4).unwrap();
+            this.finish_selection_move(cx);
+            assert_eq!(this.hierarchy.groups[&3].board, Some(2));
+            this.reflow_layout(cx);
+            assert_eq!(this.world_rect(4), Some(expected));
+            assert_eq!(this.hierarchy.sizing[&4].constraints, pins);
+            this.undo_redo(false, window, cx);
+            this.reflow_layout(cx);
+            assert_eq!(this.world_rect(4).unwrap(), rect(180., 130., 20., 20.));
+            this.undo_redo(true, window, cx);
+            this.reflow_layout(cx);
+            assert_eq!(this.world_rect(4), Some(expected));
+        })
+        .unwrap();
+}
+
+#[gpui::test]
+fn cancelling_numeric_scrub_restores_constraint_geometry(cx: &mut TestAppContext) {
+    use crate::scene::auto_layout::Constraint;
+    let window = open(cx);
+    window
+        .update(cx, |this, _, cx| {
+            this.add_artboard(rect(100., 100., 300., 200.), cx);
+            this.shapes.push(Shape::new(
+                2,
+                Some(1),
+                ShapeKind::Rectangle,
+                rect(200., 100., 50., 30.),
+            ));
+            this.next_id = 3;
+            this.set_selection(BTreeSet::from([2]), cx);
+            this.choose_constraint(2, 0, Constraint::End, cx);
+            let pins = this.hierarchy.sizing[&2].constraints;
+            let original = this.shapes[0].rect;
+            let depth = this.history.borrow().undo_len();
+            this.history.borrow_mut().begin_preview();
+            this.edit_shape(|shape| shape.rect.width = 80.);
+            this.finish_property_scrub(false, cx);
+            this.reflow_layout(cx);
+            assert_eq!(this.shapes[0].rect, original);
+            assert_eq!(this.hierarchy.sizing[&2].constraints, pins);
+            assert_eq!(this.history.borrow().undo_len(), depth);
+        })
+        .unwrap();
+}
+
+#[gpui::test]
+fn constrained_text_scrub_commits_and_undoes_geometry(cx: &mut TestAppContext) {
+    use crate::scene::auto_layout::Constraint;
+    let window = open(cx);
+    window
+        .update(cx, |this, window, cx| {
+            this.add_artboard(rect(100., 100., 300., 200.), cx);
+            let text = this.make_text(2, Some(1), rect(100., 50., 100., 30.), window, cx);
+            this.texts.push(text);
+            this.next_id = 3;
+            this.set_selection(BTreeSet::from([2]), cx);
+            this.choose_constraint(2, 0, Constraint::End, cx);
+            let original = this.texts[0].rect;
+            let x = this.field_value(1, cx).unwrap().parse().unwrap();
+            this.history.borrow_mut().begin_preview();
+            this.scrub_property(1, x, 20., false, cx);
+            this.finish_property_scrub(true, cx);
+            this.reflow_layout(cx);
+            assert_eq!(this.texts[0].rect.x, 120.);
+            this.undo_redo(false, window, cx);
+            this.reflow_layout(cx);
+            assert_eq!(this.texts[0].rect, original);
+            this.undo_redo(true, window, cx);
+            this.reflow_layout(cx);
+            assert_eq!(this.texts[0].rect.x, 120.);
+            this.history.borrow_mut().begin_preview();
+            this.scrub_property(3, 100., 30., false, cx);
+            this.finish_property_scrub(false, cx);
+            assert_eq!(this.texts[0].rect, rect(120., 50., 100., 30.));
+        })
+        .unwrap();
+}
+
+#[gpui::test]
 fn size_limit_edits_restore_geometry_on_undo_and_reject_invalid_ranges(cx: &mut TestAppContext) {
     let window = open(cx);
     window

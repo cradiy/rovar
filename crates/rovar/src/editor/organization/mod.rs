@@ -501,7 +501,7 @@ impl Workspace {
         for (id, mut rect) in positions {
             rect.x -= origin.x;
             rect.y -= origin.y;
-            self.set_object_rect(id, board, rect);
+            self.set_object_geometry(id, board, rect);
         }
         for id in descendants {
             if let Some(g) = self.hierarchy.groups.get_mut(&id) {

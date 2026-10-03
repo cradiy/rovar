@@ -87,14 +87,17 @@ impl Workspace {
             let id = text.id;
             apply_text_field(text, property, &value, stop, cx);
             if text.rect != before {
-                self.history.borrow_mut().record(
-                    vec![Change::TextRect {
-                        id,
-                        board,
-                        value: before,
-                    }],
-                    None,
-                );
+                let after = text.rect;
+                let mut changes: Vec<_> = self
+                    .fix_layout_size(id, before, after)
+                    .into_iter()
+                    .collect();
+                changes.push(Change::TextRect {
+                    id,
+                    board,
+                    value: before,
+                });
+                self.history.borrow_mut().record(changes, None);
             }
         } else if self.selected_shape.is_some() {
             let stroke = self.field_edits_stroke(index);
@@ -114,6 +117,7 @@ impl Workspace {
         let changes = self.history.borrow_mut().end_preview(commit);
         for change in changes {
             match change {
+                Change::Hierarchy { value, .. } => self.hierarchy = value,
                 Change::Layer { id, value } => {
                     if let Some(layer) = self.layer_state_mut(id) {
                         *layer = value;
@@ -154,6 +158,8 @@ impl Workspace {
                 _ => unreachable!("numeric scrubbing only edits the selected object"),
             }
         }
+        self.auto_layout.revision = None;
+        self.reflow_layout(cx);
         self.sync_fields(cx);
         cx.notify();
     }
