@@ -39,7 +39,7 @@ impl Studio {
                 &[("revision", panel.base_revision.to_string())],
             )
         };
-        let busy = self.remote.read(cx).busy || panel.resolving;
+        let busy = self.remote.read(cx).path_busy(&panel.path) || panel.resolving;
         let can_resolve = !busy && !panel.loading && panel.object.is_some();
         let page = panel.page;
         let server = panel.server_visible;

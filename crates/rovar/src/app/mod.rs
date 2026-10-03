@@ -21,6 +21,7 @@ mod spaces;
 mod startup;
 #[cfg(test)]
 mod storage_tests;
+mod sync;
 mod tabs;
 #[cfg(test)]
 mod tests;
@@ -79,6 +80,8 @@ pub(crate) struct Tab {
     saved_revision: Option<u64>,
     needs_upgrade: bool,
     loading: bool,
+    checking_remote: bool,
+    remote_baseline: Option<String>,
     saving: bool,
     close_after_save: bool,
     exporting: bool,
@@ -115,6 +118,7 @@ pub(crate) struct Studio {
     rename_input: Entity<TextInput>,
     renaming: Option<PathBuf>,
     deleting_document: Option<PathBuf>,
+    server_action: Option<servers::PendingAction>,
     open_errors: std::collections::VecDeque<open_error::OpenError>,
     _rename_subscriptions: Vec<Subscription>,
     all_files: bool,
@@ -138,8 +142,9 @@ impl Studio {
         window.set_window_title("Rovar");
         let directory = rovar_storage::fs::canonicalize(&directory).unwrap_or(directory);
         let remote = crate::remote::Remote::shared(&directory, cx);
-        let remote_subscription = cx.observe(&remote, |this, _, cx| {
+        let remote_subscription = cx.observe_in(&remote, window, |this, _, window, cx| {
             this.update_remote_catalog(cx);
+            this.reload_synced_tabs(window, cx);
         });
         let library = crate::document::library::Library::open(&directory, cx);
         let library_subscription = cx.observe_in(&library, window, |this, _, window, cx| {
@@ -252,6 +257,8 @@ impl Studio {
                     saved_revision: None,
                     needs_upgrade: false,
                     loading: false,
+                    checking_remote: false,
+                    remote_baseline: None,
                     saving: false,
                     close_after_save: false,
                     exporting: false,
@@ -319,6 +326,7 @@ impl Studio {
             rename_input,
             renaming: None,
             deleting_document: None,
+            server_action: None,
             open_errors: Default::default(),
             _rename_subscriptions: rename_subscriptions,
             all_files: false,
@@ -348,15 +356,6 @@ impl Studio {
     fn select_tab(&mut self, token: Option<usize>, window: &mut Window, cx: &mut Context<Self>) {
         self.server_info
             .update(cx, |state, cx| state.close(window, cx));
-        if self.remote.read(cx).busy
-            && self.tabs.iter().any(|tab| {
-                Some(tab.token) == token
-                    && tab.editor.is_none()
-                    && self.remote.read(cx).link(&tab.file.path).is_some()
-            })
-        {
-            return;
-        }
         self.dismiss_tab_preview(cx);
         if self.active == token {
             if let Some(token) = token {
@@ -427,6 +426,8 @@ impl Studio {
             saved_revision: None,
             needs_upgrade: false,
             loading: false,
+            checking_remote: false,
+            remote_baseline: None,
             saving: false,
             close_after_save: false,
             exporting: false,
@@ -507,6 +508,14 @@ impl Render for Studio {
                 if !this.open_errors.is_empty() {
                     if matches!(event.keystroke.key.as_str(), "escape" | "enter") {
                         this.dismiss_open_error(window, cx);
+                    }
+                    cx.stop_propagation();
+                    window.prevent_default();
+                    return;
+                }
+                if this.server_action.is_some() {
+                    if event.keystroke.key == "escape" {
+                        this.finish_server_action(false, window, cx);
                     }
                     cx.stop_propagation();
                     window.prevent_default();
@@ -692,6 +701,9 @@ impl Render for Studio {
             })
             .when(self.deleting_document.is_some(), |el| {
                 el.child(self.document_delete_dialog(cx))
+            })
+            .when(self.server_action.is_some(), |el| {
+                el.child(self.server_action_dialog(cx))
             })
             .when(!self.open_errors.is_empty(), |el| {
                 el.child(self.open_error_dialog(cx))

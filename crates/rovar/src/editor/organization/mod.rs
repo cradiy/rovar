@@ -279,6 +279,7 @@ impl Workspace {
         self.hierarchy.groups.insert(
             id,
             LayerGroup {
+                uid: uuid::Uuid::new_v4(),
                 name: crate::i18n::message("group-name", &[("id", id.to_string())]),
                 board,
                 layer: LayerState::default(),

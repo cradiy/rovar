@@ -19,7 +19,53 @@ pub(crate) struct Transfer {
     hand: bool,
 }
 
+pub(crate) struct SyncView {
+    views: PageViews,
+    selection: std::collections::BTreeSet<uuid::Uuid>,
+    pub focused: bool,
+}
+
 impl Workspace {
+    pub(crate) fn sync_view(&self, window: &Window, cx: &gpui::App) -> SyncView {
+        SyncView {
+            views: self.page_views(),
+            selection: {
+                let selected = self.selection_ids();
+                self.snapshot_page(cx)
+                    .0
+                    .node_ids()
+                    .into_iter()
+                    .filter_map(|(id, uid)| selected.contains(&id).then_some(uid))
+                    .collect()
+            },
+            focused: self.focus.contains_focused(window, cx),
+        }
+    }
+
+    pub(crate) fn restore_sync_view(
+        &mut self,
+        state: SyncView,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let page_exists = self
+            .pages
+            .entries
+            .iter()
+            .any(|page| page.page.id == state.views.active);
+        self.restore_page_views(state.views, window, cx);
+        if page_exists {
+            let selection = self
+                .snapshot_page(cx)
+                .0
+                .node_ids()
+                .into_iter()
+                .filter_map(|(id, uid)| state.selection.contains(&uid).then_some(id))
+                .collect();
+            self.set_selection(selection, cx);
+        }
+    }
+
     pub(crate) fn can_transfer(&self) -> bool {
         !self.assets.inserting && !self.export.busy && !self.media.busy()
     }
@@ -224,6 +270,15 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) -> anyhow::Result<String> {
         let document = loaded.into_document()?;
+        Ok(self.load_prepared_document(document, window, cx))
+    }
+
+    pub(crate) fn load_prepared_document(
+        &mut self,
+        document: Document,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> String {
         self.colors.palette = document.colors;
         self.components.definitions = document.components;
         self.components.revision = None;
@@ -239,7 +294,7 @@ impl Workspace {
             .borrow_mut()
             .set_page(self.pages.active.clone());
         self.load_page(self.pages.current().page.clone(), window, cx);
-        Ok(document.id)
+        document.id
     }
 
     pub(super) fn snapshot_page(&self, cx: &gpui::App) -> (Page, Vec<AssetSource>) {
@@ -278,7 +333,7 @@ impl Workspace {
                 .map(|t| {
                     t.editor
                         .read(cx)
-                        .document_text(t.id, t.board, t.rect, t.layer)
+                        .document_text(t.id, t.uid, t.board, t.rect, t.layer)
                 })
                 .collect(),
             hierarchy: self.hierarchy.clone(),
@@ -301,6 +356,7 @@ impl Workspace {
         self.texts.clear();
         for text in page.texts {
             let mut item = self.make_text(text.id, text.board, text.rect, window, cx);
+            item.uid = text.uid;
             item.layer = text.layer;
             item.editor.update(cx, |editor, cx| {
                 editor.load_document_text(text);
@@ -352,6 +408,12 @@ impl Workspace {
                 .texts
                 .iter()
                 .all(|text| !text.editor.read(cx).is_composing())
+    }
+    pub(crate) fn sync_ready(&self, cx: &gpui::App) -> bool {
+        self.save_ready(cx)
+            && self.can_transfer()
+            && self.image_crop.is_none()
+            && self.bezier_draft.is_none()
     }
     pub(crate) fn view_state(&self) -> [f32; 3] {
         [self.view.pan.x, self.view.pan.y, self.view.zoom]

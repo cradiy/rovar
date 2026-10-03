@@ -119,7 +119,11 @@ impl Workspace {
         cx.notify();
     }
 
-    pub(super) fn preview_canvas(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    pub(super) fn preview_canvas(
+        &self,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let bounds = self.bounds.clone();
         div()
             .size_full()
@@ -129,7 +133,7 @@ impl Workspace {
             .text_color(rgb(TEXT))
             .font_family(crate::ui::font::family(cx))
             .on_paint_before_children(move |rect, _, _, _| bounds.set(rect))
-            .child(self.scene_content(cx))
+            .child(self.scene_content(window, cx))
             // Cover all editable scene children; selection is handled here so
             // text editing, resize handles, drop and context menus cannot mutate
             // the server snapshot.

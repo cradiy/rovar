@@ -18,6 +18,7 @@ pub async fn connect(url: &str) -> Result<(PgPool, String)> {
 }
 pub mod auth;
 pub mod documents;
+pub(crate) mod retention;
 pub mod spaces;
 
 impl From<sqlx::Error> for crate::domain::error::Error {

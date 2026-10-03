@@ -1,13 +1,60 @@
 use super::*;
+mod baseline;
 mod colors;
+mod delta;
+mod directory;
+mod media;
+mod merge;
+mod scheduler;
 use gpui::TestAppContext;
+
+#[gpui::test]
+fn metadata_refresh_preserves_session_generation_but_auth_changes_invalidate_it(
+    cx: &mut TestAppContext,
+) {
+    let root = tempfile::tempdir().unwrap();
+    let remote = cx.update(|cx| Remote::shared(root.path(), cx));
+    remote.update(cx, |remote, cx| {
+        let url = "https://example.test".to_owned();
+        let id = remote
+            .connect(url.clone(), identity(), "token".into(), cx)
+            .unwrap();
+        let first = remote.connection(&id).unwrap().generation;
+        let mut refreshed = identity();
+        refreshed.spaces[0].name = "Renamed workspace".into();
+        remote
+            .connect(url.clone(), refreshed.clone(), "token".into(), cx)
+            .unwrap();
+        assert_eq!(remote.connection(&id).unwrap().generation, first);
+        assert_eq!(
+            remote.connection(&id).unwrap().space.name,
+            "Renamed workspace"
+        );
+        refreshed.spaces[0].role = "viewer".into();
+        remote
+            .connect(url.clone(), refreshed, "token".into(), cx)
+            .unwrap();
+        assert_ne!(remote.connection(&id).unwrap().generation, first);
+        let changed = remote.connection(&id).unwrap().generation;
+        remote
+            .connect(url.clone(), identity(), "new-token".into(), cx)
+            .unwrap();
+        assert_ne!(remote.connection(&id).unwrap().generation, changed);
+        let changed = remote.connection(&id).unwrap().generation;
+        remote.sign_out(&id, cx);
+        remote
+            .connect(url, identity(), "new-token".into(), cx)
+            .unwrap();
+        assert_ne!(remote.connection(&id).unwrap().generation, changed);
+    });
+}
 use std::{
     io::{Read, Write},
     sync::{Arc, Mutex},
     time::Duration,
 };
 
-fn identity() -> Identity {
+pub(crate) fn identity() -> Identity {
     Identity {
         server_id: "server".into(),
         user_id: "user".into(),
@@ -26,8 +73,66 @@ fn identity() -> Identity {
     }
 }
 
-fn server(
+pub(crate) fn confirmed_document(
+    remote: &Entity<Remote>,
+    url: String,
+    path: PathBuf,
+    object: Object,
+    cx: &mut gpui::App,
+) -> String {
+    remote.update(cx, |r, cx| {
+        let id = r.connect(url, identity(), "token".into(), cx).unwrap();
+        r.track(
+            path.clone(),
+            id.clone(),
+            object.title.clone(),
+            Kind::Document,
+            cx,
+        );
+        let bytes = rovar_storage::fs::read(&path).unwrap();
+        let key = r
+            .store_baseline(&object, &super::baseline::content(&path, false).unwrap())
+            .unwrap();
+        let link = r.catalog.links.get_mut(&path).unwrap();
+        link.digest = digest(&bytes, &object.title, false);
+        link.baseline = Some(key);
+        link.object = object;
+        link.dirty = false;
+        r.persist();
+        id
+    })
+}
+
+pub(crate) fn server(
     responses: Vec<(u16, serde_json::Value)>,
+) -> (
+    String,
+    Arc<Mutex<Vec<serde_json::Value>>>,
+    std::thread::JoinHandle<()>,
+) {
+    server_with_requests(responses, Arc::new(Mutex::new(Vec::new())))
+}
+
+fn server_with_requests(
+    responses: Vec<(u16, serde_json::Value)>,
+    requests: Arc<Mutex<Vec<String>>>,
+) -> (
+    String,
+    Arc<Mutex<Vec<serde_json::Value>>>,
+    std::thread::JoinHandle<()>,
+) {
+    server_with_bodies(
+        responses
+            .into_iter()
+            .map(|(status, body)| (status, serde_json::to_vec(&body).unwrap()))
+            .collect(),
+        requests,
+    )
+}
+
+fn server_with_bodies(
+    responses: Vec<(u16, Vec<u8>)>,
+    requests: Arc<Mutex<Vec<String>>>,
 ) -> (
     String,
     Arc<Mutex<Vec<serde_json::Value>>>,
@@ -81,19 +186,37 @@ fn server(
                 assert!(n > 0);
                 request.extend_from_slice(&buf[..n]);
             }
+            requests.lock().unwrap().push(
+                String::from_utf8_lossy(&request[..header_end])
+                    .lines()
+                    .next()
+                    .unwrap()
+                    .to_owned(),
+            );
             if request.starts_with(b"PUT ") {
+                let headers = String::from_utf8_lossy(&request[..header_end]).to_ascii_lowercase();
+                let bytes = &request[header_end..header_end + length];
                 observed.lock().unwrap().push(
-                    serde_json::from_slice(&request[header_end..header_end + length]).unwrap(),
+                    if headers.contains("content-type: application/octet-stream") {
+                        serde_json::json!({ "length": bytes.len(), "hash": hex::encode(Sha256::digest(bytes)) })
+                    } else {
+                        serde_json::from_slice(bytes).unwrap()
+                    },
                 );
             }
-            let body = body.to_string();
-            write!(socket, "HTTP/1.1 {status} Response\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
+            write!(
+                socket,
+                "HTTP/1.1 {status} Response\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            )
+            .unwrap();
+            socket.write_all(&body).unwrap();
         }
     });
     (url, saves, thread)
 }
 
-fn sync(remote: &Entity<Remote>, cx: &mut TestAppContext) {
+pub(crate) fn sync(remote: &Entity<Remote>, cx: &mut TestAppContext) {
     // This test uses real loopback I/O on the transport's Tokio runtime.
     cx.executor().allow_parking();
     remote.update(cx, |r, cx| {
@@ -103,11 +226,36 @@ fn sync(remote: &Entity<Remote>, cx: &mut TestAppContext) {
     wait_sync(remote, cx);
 }
 
-fn wait_sync(remote: &Entity<Remote>, cx: &mut TestAppContext) {
+pub(crate) fn resolve(
+    remote: &Entity<Remote>,
+    path: &Path,
+    reviewed: &Object,
+    bytes: Option<&[u8]>,
+    cx: &mut TestAppContext,
+) -> Result<()> {
+    let snapshot = bytes
+        .map(|bytes| {
+            let file = rovar_storage::tempfile::NamedTempFile::new()?;
+            rovar_storage::fs::write(file.path(), bytes)?;
+            Ok::<_, anyhow::Error>(file)
+        })
+        .transpose()?;
+    let task = remote.update(cx, |r, cx| {
+        r.resolve_conflict(
+            path,
+            reviewed,
+            snapshot.as_ref().map(|f| f.path().to_owned()),
+            cx,
+        )
+    })?;
+    cx.foreground_executor().clone().block_test(task)
+}
+
+pub(crate) fn wait_sync(remote: &Entity<Remote>, cx: &mut TestAppContext) {
     let start = std::time::Instant::now();
     loop {
         cx.run_until_parked();
-        if cx.update(|cx| !remote.read(cx).busy) {
+        if cx.update(|cx| !remote.read(cx).is_busy()) {
             break;
         }
         assert!(start.elapsed().as_secs() < 8, "Sync did not complete");
@@ -191,16 +339,21 @@ fn failed_upload_survives_restart_and_replays_before_newer_edits(cx: &mut TestAp
     });
     // Recreate the worker from disk: auth is not persisted, pending request is.
     let restarted = cx.new(|_| Remote {
+        cleanup_at: None,
+        baseline_cleanup: cleanup::Cleanup::default(),
+        merge_pending: BTreeSet::new(),
         root: root.path().into(),
         catalog: serde_json::from_slice(&std::fs::read(root.path().join("servers.json")).unwrap())
             .unwrap(),
         busy: false,
+        scheduler: Default::default(),
         error: None,
         libraries_changed: BTreeSet::new(),
         retry_at: web_time::Instant::now(),
         reconnect_at: BTreeMap::new(),
         refresh_at: BTreeMap::new(),
         auth_generation: 0,
+        local_changes: BTreeMap::new(),
     });
     restarted.update(cx, |r, cx| r.restore_credentials(&id, "token".into(), cx));
     sync(&restarted, cx);
@@ -313,10 +466,13 @@ fn resolving_local_conflict_uploads_merged_bytes_against_reviewed_revision(
     });
     sync(&remote, cx);
     std::fs::write(&path, b"merged with server objects").unwrap();
-    remote.update(cx, |r, cx| {
+    let reviewed = remote.update(cx, |r, _| {
         let mut reviewed = r.link(&path).unwrap().object.clone();
         reviewed.revision = 7;
-        r.resolve_conflict(&path, &reviewed, None, cx).unwrap();
+        reviewed
+    });
+    resolve(&remote, &path, &reviewed, None, cx).unwrap();
+    remote.update(cx, |r, _| {
         assert!(!r.link(&path).unwrap().conflict);
         assert!(r.link(&path).unwrap().dirty);
     });
@@ -344,7 +500,7 @@ fn resolving_with_server_snapshot_persists_clean_content_without_upload(cx: &mut
     let path = root.path().join("design.rovar");
     std::fs::write(&path, b"local version").unwrap();
     let remote = cx.update(|cx| Remote::shared(root.path(), cx));
-    remote.update(cx, |r, cx| {
+    let (reviewed, pending) = remote.update(cx, |r, cx| {
         let id = r
             .connect("http://127.0.0.1:1".into(), identity(), "token".into(), cx)
             .unwrap();
@@ -365,9 +521,27 @@ fn resolving_with_server_snapshot_persists_clean_content_without_upload(cx: &mut
             .join("pending")
             .join(id)
             .join(format!("{}.json", reviewed.id));
-        write_atomic(&pending, b"old rejected request").unwrap();
-        r.resolve_conflict(&path, &reviewed, Some(b"server version"), cx)
-            .unwrap();
+        write_atomic(
+            &pending,
+            &serde_json::to_vec(&PendingSave {
+                delta: None,
+                input: Save {
+                    kind: Kind::Document,
+                    title: "Design".into(),
+                    base_revision: 0,
+                    request_id: uuid::Uuid::new_v4().to_string(),
+                    content: STANDARD.encode(b"local version"),
+                    media: vec![],
+                    deleted: false,
+                },
+            })
+            .unwrap(),
+        )
+        .unwrap();
+        (reviewed, pending)
+    });
+    resolve(&remote, &path, &reviewed, Some(b"server version"), cx).unwrap();
+    remote.update(cx, |r, cx| {
         assert!(!pending.exists());
         r.sync(cx);
         assert!(

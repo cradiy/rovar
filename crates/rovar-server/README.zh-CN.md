@@ -27,6 +27,11 @@ cp dist/rovar-server.example.toml rovar-server.toml
 
 密码至少 6 个字符。
 
+`storage.retention` 默认保留最近 `history_days`（30 天）的历史内容，以及每个文档最新
+`history_versions`（100 个）版本；同时超出这两项范围的内容才会过期。当前版本和上传确认记录
+始终保留；增量基线过期的客户端会收到完整快照。无引用媒体和孤立文件有 `orphan_days`
+（默认 7 天）缓冲期。三项参数都必须为正数，传输进行中会暂停回收。
+
 ## 备份
 
 同时备份 PostgreSQL 和存储目录，包括 `master.key`。解密已存储的文档需要此密钥。

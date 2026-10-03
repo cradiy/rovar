@@ -27,6 +27,13 @@ Administrators can provision a personal account regardless of these switches:
 
 Passwords require at least 6 characters.
 
+`storage.retention` keeps historical content for `history_days` (default 30) and
+at least the latest `history_versions` (default 100) per document. Both limits
+must be exceeded before content expires. Current versions and upload receipts
+are preserved; clients with expired delta bases receive a full snapshot.
+Unreferenced media and orphan files get an `orphan_days` grace period (default 7).
+All three settings must be positive. Cleanup pauses for active transfers.
+
 ## Backup
 
 Back up PostgreSQL and the storage directory together, including `master.key`. The key is required to decrypt stored documents.

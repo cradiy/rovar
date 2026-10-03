@@ -387,6 +387,7 @@ mod tests {
     #[test]
     fn invalid_properties_preserve_geometry_and_hex_preserves_alpha() {
         let mut board = Artboard {
+            uid: uuid::Uuid::new_v4(),
             color_style: None,
             id: 1,
             layer: Default::default(),

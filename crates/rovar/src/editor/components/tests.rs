@@ -2,6 +2,55 @@ use super::*;
 use crate::editor::tests::{click, draw, open};
 use gpui::{EntityInputHandler, TestAppContext, VisualTestContext};
 
+#[gpui::test]
+fn component_generated_nodes_have_stable_identities_across_independent_refreshes(
+    cx: &mut TestAppContext,
+) {
+    let window = open(cx);
+    window
+        .update(cx, |this, window, cx| {
+            let component = main_component(this, window, cx);
+            this.insert_document_component(&component, false, Some(point(400., 100.)), window, cx);
+            let instance = *this.selection_ids().first().unwrap();
+            let original = this.snapshot_page(cx).0.node_ids();
+            let id = this.next_id;
+            this.next_id += 1;
+            let mut node = Shape::new(id, Some(1), ShapeKind::Ellipse, rect(20., 20., 20., 20.));
+            node.name = "New child".into();
+            this.shapes.push(node);
+            let mut a = vec![this.snapshot_page(cx).0];
+            let mut b = a.clone();
+            b[0].next_id += 20;
+            let mut definitions_a = this.components.definitions.clone();
+            let mut definitions_b = definitions_a.clone();
+            model::synchronize(&mut a, &mut definitions_a).unwrap();
+            model::synchronize(&mut b, &mut definitions_b).unwrap();
+            let added = |page: &crate::document::Page| {
+                page.shapes
+                    .iter()
+                    .find(|n| n.board == Some(instance) && n.name == "New child")
+                    .unwrap()
+                    .clone()
+            };
+            assert_ne!(added(&a[0]).id, added(&b[0]).id);
+            assert_eq!(
+                added(&a[0]).uid,
+                added(&b[0]).uid,
+                "Component propagation cannot invent different identities on each device"
+            );
+            for page in [&a[0], &b[0]] {
+                page.validate().unwrap();
+                for (id, uid) in &original {
+                    assert_eq!(page.node_ids()[id], *uid);
+                }
+            }
+            let before = a[0].node_ids();
+            model::synchronize(&mut a, &mut definitions_a).unwrap();
+            assert_eq!(a[0].node_ids(), before);
+        })
+        .unwrap();
+}
+
 fn rect(x: f32, y: f32, width: f32, height: f32) -> Rect {
     Rect {
         x,
@@ -83,7 +132,13 @@ fn main_changes_propagate_across_pages_preserving_text_overrides_and_undo(cx: &m
                     .unwrap()
                     .editor
                     .read(cx)
-                    .document_text(text, Some(root), rect(0., 0., 1., 1.), Default::default())
+                    .document_text(
+                        text,
+                        uuid::Uuid::new_v4(),
+                        Some(root),
+                        rect(0., 0., 1., 1.),
+                        Default::default()
+                    )
                     .content,
                 "Local label"
             );

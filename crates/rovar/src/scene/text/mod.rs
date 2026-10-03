@@ -16,6 +16,7 @@ use std::ops::Range;
 use unicode_segmentation::UnicodeSegmentation;
 
 pub struct TextBox {
+    pub uid: uuid::Uuid,
     pub id: usize,
     pub layer: crate::scene::layer::LayerState,
     pub board: Option<usize>,
@@ -132,6 +133,7 @@ pub struct TextEditor {
     selecting: bool,
     layout: Option<TextLayout>,
     layout_dirty: bool,
+    content_revision: u64,
     layout_zoom: f32,
     _blur: Subscription,
 }
@@ -140,11 +142,13 @@ impl TextEditor {
     pub(crate) fn document_text(
         &self,
         id: usize,
+        uid: uuid::Uuid,
         board: Option<usize>,
         rect: Rect,
         layer: crate::scene::layer::LayerState,
     ) -> crate::document::Text {
         crate::document::Text {
+            uid,
             id,
             board,
             rect,
@@ -159,7 +163,7 @@ impl TextEditor {
         self.anchor = 0;
         self.cursor = 0;
         self.editing = false;
-        self.layout_dirty = true;
+        self.invalidate_layout();
     }
     pub fn new(
         id: usize,
@@ -188,9 +192,19 @@ impl TextEditor {
             selecting: false,
             layout: None,
             layout_dirty: true,
+            content_revision: 0,
             layout_zoom: 0.,
             _blur: blur,
         }
+    }
+
+    pub(crate) fn content_revision(&self) -> u64 {
+        self.content_revision
+    }
+
+    fn invalidate_layout(&mut self) {
+        self.layout_dirty = true;
+        self.content_revision = self.content_revision.wrapping_add(1);
     }
 
     fn layout_for_bounds(
@@ -297,7 +311,7 @@ impl TextEditor {
         let old_styles = self.styles.clone();
         self.styles.apply(range, &change, whole);
         if self.styles != old_styles {
-            self.layout_dirty = true;
+            self.invalidate_layout();
             let changes = before
                 .map(|value| Change::Text { id: self.id, value })
                 .into_iter()
@@ -309,7 +323,7 @@ impl TextEditor {
     // The caller records one atomic history entry for all selected objects.
     pub(crate) fn apply_batch_style(&mut self, change: StyleChange, cx: &mut Context<Self>) {
         self.styles.apply(0..self.content.len(), &change, true);
-        self.layout_dirty = true;
+        self.invalidate_layout();
         cx.notify();
     }
     pub(crate) fn snapshot(&self) -> Snapshot {
@@ -322,7 +336,7 @@ impl TextEditor {
         }
     }
     pub(crate) fn restore(&mut self, snapshot: Snapshot) {
-        self.layout_dirty = true;
+        self.invalidate_layout();
         self.content = snapshot.content;
         self.editing = snapshot.editing;
         self.anchor = snapshot.anchor;
@@ -346,7 +360,7 @@ impl TextEditor {
                     None,
                 );
             } else {
-                self.layout_dirty = true;
+                self.invalidate_layout();
                 self.styles = before.styles;
             }
         }
@@ -368,7 +382,7 @@ impl TextEditor {
         let before = composition.or_else(|| {
             (changed && !self.history.borrow().can_merge(group.as_ref())).then(|| self.snapshot())
         });
-        self.layout_dirty = true;
+        self.invalidate_layout();
         self.styles.replace(range.clone(), text.len());
         self.content.replace_range(range.clone(), text);
         if let Some(before) = before {
@@ -589,7 +603,7 @@ impl EntityInputHandler for TextEditor {
             self.history.borrow_mut().break_group();
             self.composition = Some(self.snapshot());
         }
-        self.layout_dirty = true;
+        self.invalidate_layout();
         self.styles.replace(range.clone(), text.len());
         self.content.replace_range(range.clone(), text);
         self.marked = Some(range.start..range.start + text.len());

@@ -26,6 +26,8 @@ pub struct Database {
 #[serde(deny_unknown_fields)]
 pub struct Storage {
     pub directory: PathBuf,
+    #[serde(default)]
+    pub retention: crate::infrastructure::storage::retention::Policy,
 }
 #[derive(Clone, Copy, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -39,6 +41,7 @@ impl Config {
         let text =
             std::fs::read_to_string(path).with_context(|| format!("Read {}", path.display()))?;
         let mut config: Self = toml::from_str(&text).context("Invalid server configuration")?;
+        config.storage.retention.validate()?;
         let url = url::Url::parse(&config.server.public_origin)
             .context("Invalid server.public_origin")?;
         ensure!(
@@ -87,6 +90,9 @@ mod tests {
             example.replace("http://127.0.0.1:8699", "https://example.com/path"),
             example.replace("http://127.0.0.1:8699", "https://user:password@example.com"),
             example.replace("personal = false", "personnal = true"),
+            example.replace("history_versions = 100", "history_versions = 0"),
+            example.replace("history_days = 30", "history_days = 0"),
+            example.replace("orphan_days = 7", "orphan_days = 0"),
             example.replace("127.0.0.1:8699\"", "not-an-address\""),
         ] {
             std::fs::write(&path, invalid).unwrap();

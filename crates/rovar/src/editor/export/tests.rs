@@ -109,6 +109,7 @@ fn selection_export_separates_roots_expands_groups_and_clips_board_children(
             this.hierarchy.groups.insert(
                 20,
                 LayerGroup {
+                    uid: uuid::Uuid::new_v4(),
                     name: "Group".into(),
                     board: None,
                     layer: Default::default(),
@@ -235,6 +236,7 @@ fn exported_text_keeps_wrapping_rich_styles_and_alignment(cx: &mut TestAppContex
                 ..style.clone()
             };
             doc.pages[0].texts = vec![crate::document::Text {
+                uid: uuid::Uuid::new_v4(),
                 id: 10,
                 board: None,
                 rect: rect(100., 100., 80., 180.),
@@ -361,6 +363,7 @@ fn video_selection_exports_original_and_hides_image_options(cx: &mut TestAppCont
             this.hierarchy.groups.insert(
                 3,
                 LayerGroup {
+                    uid: uuid::Uuid::new_v4(),
                     name: "Group".into(),
                     board: None,
                     layer: Default::default(),

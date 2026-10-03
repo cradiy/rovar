@@ -121,6 +121,7 @@ fn artboard_bounds_clip_children_without_editor_checkerboard() {
     doc.shapes[0].color = rgb(0xff0000);
     let bounds = rect(100., 200., 100., 80.);
     doc.boards.push(Artboard {
+        uid: uuid::Uuid::new_v4(),
         color_style: None,
         id: 1,
         layer: Default::default(),
@@ -324,6 +325,7 @@ fn svg_text_is_outlined_and_png_contains_the_glyphs() {
     let bounds = rect(0., 0., 200., 50.);
     let mut doc = document(vec![]);
     doc.texts.push(Text {
+        uid: uuid::Uuid::new_v4(),
         id: 1,
         board: None,
         rect: bounds,

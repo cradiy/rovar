@@ -172,22 +172,17 @@ impl Studio {
             .flex()
             .flex_col()
             .gap(px(16.))
-            .child(view::field(
+            .child(self.password_field(
                 "account-current-password",
                 t("account-current-password"),
-                &panel.password,
+                0,
                 cx,
             ))
-            .child(view::field(
-                "account-new-password",
-                t("account-new-password"),
-                &panel.new_password,
-                cx,
-            ))
-            .child(view::field(
+            .child(self.password_field("account-new-password", t("account-new-password"), 1, cx))
+            .child(self.password_field(
                 "account-confirm-password",
                 t("account-confirm-password"),
-                &panel.confirm_password,
+                2,
                 cx,
             ))
             .child(
@@ -234,6 +229,13 @@ impl Studio {
                     .gap(px(8.))
                     .children(panel.sessions.iter().enumerate().map(|(index, session)| {
                         let id = session.id.clone();
+                        let device = &session.device;
+                        let details = [&device.system, &device.client]
+                            .into_iter()
+                            .filter(|part| !part.is_empty())
+                            .map(String::as_str)
+                            .collect::<Vec<_>>()
+                            .join(" · ");
                         let created = time::OffsetDateTime::from_unix_timestamp(session.created_at)
                             .map(|date| {
                                 format!(
@@ -253,18 +255,49 @@ impl Studio {
                             .flex()
                             .items_center()
                             .gap(px(12.))
-                            .child(icon(LucideIcons::Monitor, 18.).text_color(rgb(MUTED)))
+                            .child(
+                                icon(
+                                    if matches!(
+                                        device.system.as_str(),
+                                        "Android" | "iOS" | "iPadOS"
+                                    ) {
+                                        LucideIcons::Smartphone
+                                    } else {
+                                        LucideIcons::Monitor
+                                    },
+                                    18.,
+                                )
+                                .text_color(rgb(MUTED)),
+                            )
                             .child(
                                 div()
                                     .flex_1()
+                                    .min_w_0()
                                     .flex()
                                     .flex_col()
                                     .gap(px(4.))
-                                    .child(t(if session.current {
-                                        "account-current-session"
+                                    .child(div().truncate().child(if device.name.is_empty() {
+                                        t("account-device-unknown").to_owned()
                                     } else {
-                                        "account-other-session"
+                                        device.name.clone()
                                     }))
+                                    .when(session.current, |el| {
+                                        el.child(
+                                            div()
+                                                .text_size(px(11.))
+                                                .text_color(rgb(ACCENT))
+                                                .child(t("account-current-session")),
+                                        )
+                                    })
+                                    .when(!details.is_empty(), |el| {
+                                        el.child(
+                                            div()
+                                                .truncate()
+                                                .text_size(px(12.))
+                                                .text_color(rgb(MUTED))
+                                                .child(details),
+                                        )
+                                    })
                                     .child(
                                         div()
                                             .text_size(px(11.))

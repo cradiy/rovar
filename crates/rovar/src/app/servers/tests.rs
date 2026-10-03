@@ -4,6 +4,145 @@ use gpui::{TestAppContext, VisualTestContext, size};
 struct LoginPage(Entity<Studio>);
 
 #[gpui::test]
+fn server_removal_requires_confirmation_and_add_form_opens_explicitly(cx: &mut TestAppContext) {
+    cx.update(uic::init);
+    let root = tempfile::tempdir().unwrap();
+    let window = cx.open_window(size(px(840.), px(700.)), |window, cx| {
+        let mut studio = Studio::new(root.path().into(), window, cx);
+        studio.remote.update(cx, |remote, cx| {
+            remote
+                .save_server("https://example.test".into(), "Studio".into(), cx)
+                .unwrap();
+        });
+        studio.open_servers(None, window, cx);
+        studio
+    });
+    let mut visual = VisualTestContext::from_window(window.into(), cx);
+    let click = |visual: &mut VisualTestContext, id| {
+        visual.cx.run_until_parked();
+        visual.update(|window, cx| window.draw(cx).clear());
+        let bounds = visual.debug_bounds(id).unwrap();
+        visual.simulate_click(bounds.center(), Default::default());
+        visual.update(|window, cx| window.draw(cx).clear());
+    };
+    visual.update(|window, cx| window.draw(cx).clear());
+    assert!(visual.debug_bounds("server-url").is_none());
+    click(&mut visual, "remove-server-0");
+    assert!(visual.debug_bounds("server-action-dialog").is_some());
+    window
+        .update(&mut visual.cx, |studio, _, cx| {
+            assert!(studio.servers.as_ref().unwrap().view == View::Servers);
+            assert_eq!(studio.remote.read(cx).servers().len(), 1);
+        })
+        .unwrap();
+    visual.simulate_keystrokes("escape");
+    visual.update(|window, cx| window.draw(cx).clear());
+    assert!(visual.debug_bounds("server-action-dialog").is_none());
+    assert!(visual.debug_bounds("saved-server-0").is_some());
+    click(&mut visual, "server-add");
+    assert!(visual.debug_bounds("server-url").is_some());
+    click(&mut visual, "remove-server-0");
+    click(&mut visual, "cancel-server-action");
+    assert!(visual.debug_bounds("saved-server-0").is_some());
+    click(&mut visual, "remove-server-0");
+    click(&mut visual, "confirm-server-action");
+    window
+        .update(&mut visual.cx, |studio, _, cx| {
+            assert!(studio.remote.read(cx).servers().is_empty());
+            assert!(studio.server_action.is_none());
+        })
+        .unwrap();
+}
+
+#[gpui::test]
+fn password_visibility_preserves_value_selection_and_focus(cx: &mut TestAppContext) {
+    use gpui::EntityInputHandler;
+
+    cx.update(uic::init);
+    let root = tempfile::tempdir().unwrap();
+    let window = cx.open_window(size(px(900.), px(900.)), |window, cx| {
+        let mut studio = Studio::new(root.path().into(), window, cx);
+        studio.open_servers(None, window, cx);
+        let panel = studio.servers.as_mut().unwrap();
+        panel.view = View::Settings;
+        panel.mode = "password";
+        for input in [
+            &panel.password,
+            &panel.new_password,
+            &panel.confirm_password,
+        ] {
+            input.update(cx, |input, cx| input.set_value("secret", cx));
+        }
+        studio
+    });
+    let mut visual = VisualTestContext::from_window(window.into(), cx);
+    for (slot, id) in [
+        "account-current-password",
+        "account-new-password",
+        "account-confirm-password",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        visual.update(|window, cx| window.draw(cx).clear());
+        let bounds = visual.debug_bounds(id).unwrap();
+        visual.simulate_click(bounds.center(), Default::default());
+        visual.simulate_keystrokes("home right");
+        for visible in [true, false] {
+            visual.update(|window, cx| window.draw(cx).clear());
+            let toggle = visual
+                .debug_bounds(
+                    [
+                        "account-current-password-visibility",
+                        "account-new-password-visibility",
+                        "account-confirm-password-visibility",
+                    ][slot],
+                )
+                .unwrap();
+            visual.simulate_click(toggle.center(), Default::default());
+            window
+                .update(&mut visual.cx, |studio, window, cx| {
+                    let panel = studio.servers.as_ref().unwrap();
+                    let mut expected = [false; 3];
+                    expected[slot] = visible;
+                    assert_eq!(panel.password_visible, expected);
+                    [
+                        &panel.password,
+                        &panel.new_password,
+                        &panel.confirm_password,
+                    ][slot]
+                        .update(cx, |input, cx| {
+                            assert_eq!(input.value().as_ref(), "secret");
+                            assert!(input.focus_handle(cx).is_focused(window));
+                            assert_eq!(
+                                input.selected_text_range(false, window, cx).unwrap().range,
+                                1..1
+                            );
+                        });
+                })
+                .unwrap();
+        }
+        visual.simulate_input("X");
+        window
+            .update(&mut visual.cx, |studio, _, cx| {
+                let panel = studio.servers.as_ref().unwrap();
+                assert_eq!(
+                    [
+                        &panel.password,
+                        &panel.new_password,
+                        &panel.confirm_password
+                    ][slot]
+                        .read(cx)
+                        .value()
+                        .as_ref(),
+                    "sXecret"
+                );
+            })
+            .unwrap();
+    }
+}
+
+#[gpui::test]
 fn account_settings_validate_passwords_and_reauthentication_preserves_tabs(
     cx: &mut TestAppContext,
 ) {
@@ -260,6 +399,52 @@ fn address_first_dialog_renders_and_groups_accounts_across_spaces(cx: &mut TestA
     assert!(visual.debug_bounds("server-account-0").is_some());
     assert!(visual.debug_bounds("server-account-1").is_none());
     assert!(visual.debug_bounds("server-user").is_none());
+    let account = visual.debug_bounds("server-account-0").unwrap();
+    visual.simulate_click(
+        gpui::point(account.right() - px(12.), account.center().y),
+        Default::default(),
+    );
+    visual.update(|window, cx| window.draw(cx).clear());
+    assert!(visual.debug_bounds("account-workspace-0-0").is_some());
+    assert!(visual.debug_bounds("account-workspace-0-1").is_some());
+    let account = visual.debug_bounds("server-account-0").unwrap();
+    visual.simulate_click(account.center(), Default::default());
+    visual.update(|window, cx| window.draw(cx).clear());
+    assert!(visual.debug_bounds("account-workspace-0-0").is_none());
+    let account = visual.debug_bounds("server-account-0").unwrap();
+    visual.simulate_click(account.center(), Default::default());
+    visual.update(|window, cx| window.draw(cx).clear());
+    let workspace = visual.debug_bounds("account-workspace-0-1").unwrap();
+    // Keep this interaction test independent of background HTTP refreshes.
+    window
+        .update(&mut visual.cx, |this, _, cx| {
+            this.remote.update(cx, |remote, _| remote.busy = true);
+        })
+        .unwrap();
+    visual.simulate_click(workspace.center(), Default::default());
+    window
+        .update(&mut visual.cx, |this, window, cx| {
+            assert!(
+                this.servers.is_none(),
+                "workspace click must close the dialog"
+            );
+            let selected = this
+                .remote
+                .read(cx)
+                .connection(this.source.as_ref().unwrap())
+                .unwrap();
+            assert_eq!(selected.space.id, "team");
+            this.remote.update(cx, |remote, _| remote.busy = false);
+            this.select_source(None, window, cx);
+            this.open_servers(None, window, cx);
+            let panel = this.servers.as_mut().unwrap();
+            panel.selected = Some("https://first.example".into());
+            panel.registration = Some(rovar_api::RegistrationPolicy {
+                personal: true,
+                teams: true,
+            });
+        })
+        .unwrap();
     window
         .update(&mut visual.cx, |this, window, cx| {
             this.server_view(View::Login, window, cx)
@@ -278,6 +463,20 @@ fn address_first_dialog_renders_and_groups_accounts_across_spaces(cx: &mut TestA
     assert!(visual.debug_bounds("server-team").is_some());
     window
         .update(&mut visual.cx, |this, window, cx| {
+            this.server_logout(id.clone(), window, cx);
+            assert!(matches!(
+                this.server_action,
+                Some(PendingAction::SignOut(_))
+            ));
+            assert!(!this.signing_out);
+            assert!(this.remote.read(cx).connection(&id).unwrap().authenticated);
+            this.finish_server_action(false, window, cx);
+            assert!(this.server_action.is_none());
+            assert!(this.remote.read(cx).connection(&id).unwrap().authenticated);
+            this.server_action = Some(PendingAction::Remove("https://first.example".into()));
+            this.finish_server_action(true, window, cx);
+            assert_eq!(this.remote.read(cx).servers().len(), 2);
+            assert!(this.servers.as_ref().unwrap().error.is_some());
             this.remote
                 .update(cx, |remote, cx| remote.sign_out(&id, cx));
             assert_eq!(this.remote.read(cx).servers().len(), 2);

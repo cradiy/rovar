@@ -14,8 +14,9 @@ These rules apply throughout the repository.
 
 ## Compatibility
 
-- Treat uncommitted work as unpublished and allow breaking changes. Do not add compatibility logic for its previous implementations, APIs, configuration, or data formats.
-- When revising uncommitted work, update affected callers, configuration, data structures, and tests directly. Remove superseded implementations instead of retaining compatibility branches or transition layers.
+- Treat all commits not yet pushed to the remote base branch, together with uncommitted work, as one unpublished development phase. Breaking changes are allowed throughout that phase; local commits do not establish compatibility boundaries.
+- Keep the API version exactly one above the remote base branch during the development phase. Do not increment it for each local commit or intermediate protocol change.
+- When revising unpublished work, update affected callers, configuration, data structures, and tests directly. Remove superseded implementations instead of retaining compatibility branches or transition layers for intermediate implementations, APIs, configuration, or data formats.
 
 ## Code Validation
 

@@ -256,6 +256,19 @@ fn save_is_internal_and_exported_files_are_independent(cx: &mut TestAppContext) 
         .unwrap();
     visual.cx.run_until_parked();
     let loaded = crate::document::load(&imported).unwrap();
+    window
+        .update(&mut visual.cx, |studio, _, cx| {
+            let tab = &studio.tabs[0];
+            let editor = tab.editor.as_ref().unwrap().read(cx);
+            assert!(!tab.loading);
+            assert_eq!(tab.last_saved, loaded.json);
+            assert_eq!(tab.needs_upgrade, loaded.needs_upgrade);
+            assert_eq!(tab.saved_revision, Some(editor.document_revision()));
+            let (json, _) = editor.snapshot_document(&tab.document_id, cx).unwrap();
+            let document = crate::document::Document::decode(&json).unwrap();
+            assert_eq!(document.pages[0].shapes[0].rect.x, 125.);
+        })
+        .unwrap();
     assert_eq!(
         crate::document::Document::decode(&loaded.json)
             .unwrap()

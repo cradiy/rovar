@@ -1,6 +1,148 @@
 use super::*;
 use gpui::{TestAppContext, VisualTestContext, WindowHandle};
 
+#[gpui::test]
+fn canvas_culls_offscreen_artwork_but_preserves_edges_and_editing(cx: &mut TestAppContext) {
+    let handle = open(cx);
+    handle
+        .update(cx, |this, window, cx| {
+            this.view.zoom = 1.;
+            this.view.pan = point(0., 0.);
+            this.bounds.set(Bounds::new(
+                point(px(0.), px(0.)),
+                size(px(1280.), px(800.)),
+            ));
+            this.shapes.push(Shape::new(
+                1,
+                None,
+                ShapeKind::Rectangle,
+                Rect {
+                    x: 10000.,
+                    y: 10000.,
+                    width: 50.,
+                    height: 50.,
+                },
+            ));
+            assert!(this.content_elements(window, cx).is_empty());
+            this.view.pan = point(-10000., -10000.);
+            assert_eq!(this.content_elements(window, cx).len(), 1);
+            this.view.pan = point(0., 0.);
+            let mut rotated = Shape::new(
+                2,
+                None,
+                ShapeKind::Rectangle,
+                Rect {
+                    x: 1300.,
+                    y: 200.,
+                    width: 20.,
+                    height: 200.,
+                },
+            );
+            rotated.layer.rotation = 90.;
+            this.shapes.push(rotated);
+            let mut stroked = Shape::new(
+                3,
+                None,
+                ShapeKind::Rectangle,
+                Rect {
+                    x: 1300.,
+                    y: 400.,
+                    width: 20.,
+                    height: 20.,
+                },
+            );
+            stroked.stroke.enabled = true;
+            stroked.stroke.width = 100.;
+            stroked.stroke.align = crate::scene::shape::StrokeAlign::Outside;
+            this.shapes.push(stroked);
+            assert_eq!(this.content_elements(window, cx).len(), 2);
+            let text = this.make_text(
+                4,
+                None,
+                Rect {
+                    x: 10000.,
+                    y: 0.,
+                    width: 100.,
+                    height: 50.,
+                },
+                window,
+                cx,
+            );
+            this.texts.push(text);
+            cx.notify();
+        })
+        .unwrap();
+    let mut visual = VisualTestContext::from_window(handle.into(), cx);
+    draw(&mut visual);
+    assert!(visual.debug_bounds("text-box-4").is_some());
+    handle
+        .update(&mut visual.cx, |this, _, cx| {
+            this.texts[0].editor.update(cx, |text, cx| {
+                text.editing = false;
+                cx.notify();
+            });
+        })
+        .unwrap();
+    draw(&mut visual);
+    assert!(visual.debug_bounds("text-box-4").is_none());
+}
+
+#[gpui::test]
+fn caret_movement_does_not_invalidate_layout_but_ime_preedit_does(cx: &mut TestAppContext) {
+    use gpui::EntityInputHandler;
+
+    let handle = open(cx);
+    handle
+        .update(cx, |this, window, cx| {
+            this.add_artboard(
+                Rect {
+                    x: 0.,
+                    y: 0.,
+                    width: 600.,
+                    height: 400.,
+                },
+                cx,
+            );
+            this.enable_auto_layout(window, cx);
+            let board = this.boards[0].id;
+            this.add_text(
+                Some(board),
+                Rect {
+                    x: 200.,
+                    y: 100.,
+                    width: 300.,
+                    height: 100.,
+                },
+                window,
+                cx,
+            );
+        })
+        .unwrap();
+    let mut visual = VisualTestContext::from_window(handle.into(), cx);
+    draw(&mut visual);
+    visual.simulate_input("你好");
+    draw(&mut visual);
+    let reflows = handle
+        .update(&mut visual.cx, |this, _, _| this.auto_layout.reflows)
+        .unwrap();
+    visual.simulate_keystrokes("left");
+    draw(&mut visual);
+    handle
+        .update(&mut visual.cx, |this, window, cx| {
+            assert_eq!(this.auto_layout.reflows, reflows);
+            this.texts[0].editor.update(cx, |text, cx| {
+                text.replace_and_mark_text_in_range(None, "ni", None, window, cx);
+            });
+        })
+        .unwrap();
+    draw(&mut visual);
+    handle
+        .update(&mut visual.cx, |this, _, _| {
+            assert!(this.auto_layout.reflows > reflows);
+        })
+        .unwrap();
+}
+
 pub(super) fn open(cx: &mut TestAppContext) -> WindowHandle<Workspace> {
     cx.update(uic::init);
     let window = cx.open_window(size(px(1280.), px(800.)), |window, cx| {

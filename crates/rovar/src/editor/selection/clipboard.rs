@@ -362,6 +362,7 @@ impl Workspace {
                 .texts
                 .into_iter()
                 .map(|text| SavedText {
+                    uid: text.uid,
                     id: text.id,
                     layer: text.layer,
                     board: text.board,
@@ -457,6 +458,7 @@ impl Workspace {
         }
         let mut changes = Vec::new();
         for mut board in clipboard.boards {
+            board.uid = uuid::Uuid::new_v4();
             board.id = id_map[&board.id];
             if rename {
                 board.name = crate::i18n::message("copy-name", &[("name", board.name.clone())]);
@@ -471,6 +473,7 @@ impl Workspace {
             self.boards.push(board);
         }
         for mut shape in clipboard.shapes {
+            shape.uid = uuid::Uuid::new_v4();
             shape.id = id_map[&shape.id];
             if rename {
                 shape.name = crate::i18n::message("copy-name", &[("name", shape.name.clone())]);
@@ -512,6 +515,7 @@ impl Workspace {
             self.texts.push(text);
         }
         for (id, mut group) in clipboard.hierarchy.groups {
+            group.uid = uuid::Uuid::new_v4();
             group.board = group.board.and_then(|p| id_map.get(&p).copied());
             self.hierarchy.groups.insert(id_map[&id], group);
         }

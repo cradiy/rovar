@@ -20,6 +20,7 @@ async fn registration_invitation_membership_and_space_isolation() {
         },
         storage: Storage {
             directory: root.path().into(),
+            retention: Default::default(),
         },
         registration: Registration {
             personal: false,
@@ -32,7 +33,7 @@ async fn registration_invitation_membership_and_space_isolation() {
     for short in ["12345", "你好世界啊", "😀😀😀😀😀"] {
         assert!(matches!(
             app.auth
-                .register(&owner_name, short, Some("Design team"))
+                .register(&owner_name, short, Some("Design team"), Default::default())
                 .await,
             Err(Error::Invalid(_))
         ));
@@ -42,18 +43,25 @@ async fn registration_invitation_membership_and_space_isolation() {
         .await
         .unwrap();
     assert!(matches!(
-        app.auth.register(&owner_name, password, None).await,
+        app.auth
+            .register(&owner_name, password, None, Default::default())
+            .await,
         Err(Error::Forbidden)
     ));
     let owner = app
         .auth
-        .register(&owner_name, password, Some("Design team"))
+        .register(
+            &owner_name,
+            password,
+            Some("Design team"),
+            Default::default(),
+        )
         .await
         .unwrap();
     assert_eq!(owner.identity.spaces.len(), 2);
     assert!(matches!(
         app.auth
-            .register(&owner_name, password, Some("Duplicate"))
+            .register(&owner_name, password, Some("Duplicate"), Default::default())
             .await,
         Err(Error::AlreadyExists)
     ));
@@ -78,12 +86,22 @@ async fn registration_invitation_membership_and_space_isolation() {
     let closed = bootstrap::build(&config).await.unwrap();
     let member = closed
         .auth
-        .register(&uuid::Uuid::new_v4().to_string(), password, None)
+        .register(
+            &uuid::Uuid::new_v4().to_string(),
+            password,
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     let outsider = closed
         .auth
-        .register(&uuid::Uuid::new_v4().to_string(), password, None)
+        .register(
+            &uuid::Uuid::new_v4().to_string(),
+            password,
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     let member_id = &member.identity.user_id;
@@ -91,7 +109,12 @@ async fn registration_invitation_membership_and_space_isolation() {
     assert!(matches!(
         closed
             .auth
-            .register(&uuid::Uuid::new_v4().to_string(), password, Some("Closed"))
+            .register(
+                &uuid::Uuid::new_v4().to_string(),
+                password,
+                Some("Closed"),
+                Default::default()
+            )
             .await,
         Err(Error::Forbidden)
     ));
@@ -135,6 +158,7 @@ async fn registration_invitation_membership_and_space_isolation() {
     // Identical document IDs in different spaces never alias, including components.
     let id = uuid::Uuid::new_v4().to_string();
     let command = |content: &[u8], kind| SaveDocument {
+        media: Vec::new(),
         id: id.clone(),
         kind,
         title: "Shared".into(),

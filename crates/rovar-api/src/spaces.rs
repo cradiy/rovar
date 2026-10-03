@@ -12,6 +12,8 @@ pub struct Registration {
     pub username: String,
     pub password: String,
     pub team_name: Option<String>,
+    #[serde(default)]
+    pub device: crate::SessionDevice,
 }
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct RegistrationPolicy {

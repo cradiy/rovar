@@ -14,6 +14,7 @@ fn command(id: &str, base: i64, request: &str, content: &[u8]) -> SaveDocument {
         base_revision: base,
         request_id: request.into(),
         content: content.into(),
+        media: Vec::new(),
         deleted: false,
     }
 }
@@ -32,6 +33,7 @@ async fn isolated_accounts_atomic_versions_retries_and_encrypted_restart() {
         },
         storage: bootstrap::config::Storage {
             directory: root.path().into(),
+            retention: Default::default(),
         },
         registration: bootstrap::config::Registration::default(),
     };
@@ -48,17 +50,19 @@ async fn isolated_accounts_atomic_versions_retries_and_encrypted_restart() {
         .await
         .unwrap();
     assert!(matches!(
-        app.auth.login(user_a.clone(), "wrong".into()).await,
+        app.auth
+            .login(user_a.clone(), "wrong".into(), Default::default())
+            .await,
         Err(Error::Unauthorized)
     ));
     let a = app
         .auth
-        .login(user_a, "integration-password-a".into())
+        .login(user_a, "integration-password-a".into(), Default::default())
         .await
         .unwrap();
     let b = app
         .auth
-        .login(user_b, "integration-password-b".into())
+        .login(user_b, "integration-password-b".into(), Default::default())
         .await
         .unwrap();
     let a_space = &a.identity.spaces[0].id;
@@ -86,6 +90,28 @@ async fn isolated_accounts_atomic_versions_retries_and_encrypted_restart() {
         .await
         .unwrap();
     assert_eq!(replay.revision, 1);
+    let first_page = app
+        .documents
+        .changes(&a.identity.user_id, a_space, 0)
+        .await
+        .unwrap();
+    assert_eq!(
+        first_page.cursor, 1,
+        "Idempotent retries must not consume another cursor"
+    );
+    assert_eq!(first_page.documents.len(), 1);
+    assert!(
+        app.documents
+            .changes(&a.identity.user_id, a_space, 1)
+            .await
+            .unwrap()
+            .documents
+            .is_empty()
+    );
+    assert!(matches!(
+        app.documents.changes(&b.identity.user_id, a_space, 0).await,
+        Err(Error::Forbidden)
+    ));
     assert!(matches!(
         app.documents
             .save(
@@ -122,12 +148,18 @@ async fn isolated_accounts_atomic_versions_retries_and_encrypted_restart() {
         app.documents.save(
             &a.identity.user_id,
             a_space,
-            command(&id, 1, &r1, b"first edit")
+            SaveDocument {
+                title: "Renamed by another client".into(),
+                ..command(&id, 1, &r1, b"first edit")
+            }
         ),
         app.documents.save(
             &a.identity.user_id,
             a_space,
-            command(&id, 1, &r2, b"second edit")
+            SaveDocument {
+                title: "Renamed by another client".into(),
+                ..command(&id, 1, &r2, b"second edit")
+            }
         )
     );
     assert_eq!(usize::from(first.is_ok()) + usize::from(second.is_ok()), 1);
@@ -138,6 +170,57 @@ async fn isolated_accounts_atomic_versions_retries_and_encrypted_restart() {
         .await
         .unwrap();
     assert_eq!(current.document.revision, 2);
+    let second_page = app
+        .documents
+        .changes(&a.identity.user_id, a_space, first_page.cursor)
+        .await
+        .unwrap();
+    assert_eq!(
+        second_page.cursor, 2,
+        "A rejected competing write must not publish a change"
+    );
+    assert_eq!(second_page.documents[0].revision, 2);
+    // The first client lost its acknowledgement, while another client has
+    // already advanced the head. Replay must return the original receipt.
+    let historical = app
+        .documents
+        .save(
+            &a.identity.user_id,
+            a_space,
+            command(&id, 0, &request, original),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        (
+            historical.revision,
+            historical.title,
+            historical.modified,
+            historical.deleted
+        ),
+        (
+            saved.revision,
+            saved.title.clone(),
+            saved.modified,
+            saved.deleted
+        )
+    );
+    assert_eq!(
+        app.documents
+            .read(&a.identity.user_id, a_space, &id)
+            .await
+            .unwrap()
+            .content,
+        current.content
+    );
+    assert!(
+        app.documents
+            .changes(&a.identity.user_id, a_space, second_page.cursor)
+            .await
+            .unwrap()
+            .documents
+            .is_empty()
+    );
     let reopened = bootstrap::build(&config).await.unwrap();
     assert_eq!(
         reopened
@@ -169,6 +252,244 @@ async fn isolated_accounts_atomic_versions_retries_and_encrypted_restart() {
             .unwrap()
             .iter()
             .any(|item| item.id == id && item.deleted)
+    );
+    let deleted_page = app
+        .documents
+        .changes(&a.identity.user_id, a_space, second_page.cursor)
+        .await
+        .unwrap();
+    assert_eq!(deleted_page.cursor, 3);
+    assert_eq!(deleted_page.documents.len(), 1);
+    assert!(deleted_page.documents[0].deleted);
+    let historical = app
+        .documents
+        .save(
+            &a.identity.user_id,
+            a_space,
+            command(&id, 0, &request, original),
+        )
+        .await
+        .unwrap();
+    assert_eq!(historical.revision, 1);
+    assert!(!historical.deleted);
+    assert!(matches!(
+        app.documents
+            .save(
+                &a.identity.user_id,
+                a_space,
+                command(&id, 0, &request, b"changed retry"),
+            )
+            .await,
+        Err(Error::Conflict)
+    ));
+    assert!(
+        app.documents
+            .changes(&a.identity.user_id, a_space, 3)
+            .await
+            .unwrap()
+            .documents
+            .is_empty()
+    );
+    assert!(
+        app.documents
+            .metadata(&a.identity.user_id, a_space, &id)
+            .await
+            .unwrap()
+            .deleted
+    );
+    // The first scan is bounded. Objects edited between pages move forward in
+    // the feed and are still seen; historical states need not be downloaded.
+    let mut ids = Vec::new();
+    for _ in 0..257 {
+        let object_id = uuid::Uuid::new_v4().to_string();
+        app.documents
+            .save(
+                &a.identity.user_id,
+                a_space,
+                command(
+                    &object_id,
+                    0,
+                    &uuid::Uuid::new_v4().to_string(),
+                    b"page item",
+                ),
+            )
+            .await
+            .unwrap();
+        ids.push(object_id);
+    }
+    let page = app
+        .documents
+        .changes(&a.identity.user_id, a_space, 3)
+        .await
+        .unwrap();
+    assert_eq!(page.documents.len(), 256);
+    assert!(page.has_more);
+    app.documents
+        .save(
+            &a.identity.user_id,
+            a_space,
+            command(
+                &ids[0],
+                1,
+                &uuid::Uuid::new_v4().to_string(),
+                b"edited between pages",
+            ),
+        )
+        .await
+        .unwrap();
+    let tail = app
+        .documents
+        .changes(&a.identity.user_id, a_space, page.cursor)
+        .await
+        .unwrap();
+    assert_eq!(tail.documents.len(), 2);
+    assert!(!tail.has_more);
+    assert_eq!(tail.documents[0].id, ids[256]);
+    assert_eq!(tail.documents[1].id, ids[0]);
+    assert_eq!(tail.documents[1].revision, 2);
+    assert!(
+        app.documents
+            .changes(&a.identity.user_id, a_space, tail.cursor)
+            .await
+            .unwrap()
+            .documents
+            .is_empty()
+    );
+    let media_bytes = format!("shared media {suffix}").into_bytes();
+    let hash = {
+        use sha2::Digest;
+        format!("{:x}", sha2::Sha256::digest(&media_bytes))
+    };
+    let media = crate::domain::document::Media {
+        hash: hash.clone(),
+        length: media_bytes.len() as u64,
+    };
+    let metadata_file = root.path().join("metadata.rovar");
+    let mut writer = rovar_format::Writer::create(&metadata_file).unwrap();
+    writer
+        .put_bytes("document", "json", br#"{"name":"Shared media"}"#)
+        .unwrap();
+    writer.commit().unwrap();
+    drop(writer);
+    let metadata = std::fs::read(&metadata_file).unwrap();
+    let media_id = uuid::Uuid::new_v4().to_string();
+    let media_request = uuid::Uuid::new_v4().to_string();
+    let media_command = || {
+        let mut input = command(&media_id, 0, &media_request, &metadata);
+        input.media = vec![media.clone()];
+        input
+    };
+    assert!(
+        matches!(
+            app.documents
+                .save(&a.identity.user_id, a_space, media_command())
+                .await,
+            Err(Error::Invalid(_))
+        ),
+        "A revision cannot commit before its media exists"
+    );
+    assert!(matches!(
+        app.documents
+            .upload_media_chunk(
+                &a.identity.user_id,
+                a_space,
+                media.clone(),
+                0,
+                futures_util::stream::iter([Ok(b"wrong bytes".to_vec())])
+            )
+            .await,
+        Err(Error::Invalid(_))
+    ));
+    app.documents
+        .upload_media_chunk(
+            &a.identity.user_id,
+            a_space,
+            media.clone(),
+            0,
+            futures_util::stream::iter([Ok(media_bytes.clone())]),
+        )
+        .await
+        .unwrap();
+    app.documents
+        .finish_media_upload(&a.identity.user_id, a_space, media.clone())
+        .await
+        .unwrap();
+    let blob_count = std::fs::read_dir(root.path().join("blobs"))
+        .unwrap()
+        .count();
+    app.documents
+        .upload_media_chunk(
+            &a.identity.user_id,
+            a_space,
+            media.clone(),
+            0,
+            futures_util::stream::iter([Ok(media_bytes.clone())]),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        std::fs::read_dir(root.path().join("blobs"))
+            .unwrap()
+            .count(),
+        blob_count,
+        "Duplicate uploads must reuse the encrypted resource"
+    );
+    assert!(
+        app.documents
+            .missing_media(&a.identity.user_id, a_space, std::slice::from_ref(&media))
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(
+        app.documents
+            .missing_media(&b.identity.user_id, b_space, std::slice::from_ref(&media))
+            .await
+            .unwrap(),
+        vec![hash.clone()]
+    );
+    assert!(matches!(
+        app.documents
+            .download_media(&b.identity.user_id, a_space, &hash)
+            .await,
+        Err(Error::Forbidden)
+    ));
+    assert!(matches!(
+        app.documents
+            .download_media(&b.identity.user_id, b_space, &hash)
+            .await,
+        Err(Error::NotFound)
+    ));
+    app.documents
+        .save(&a.identity.user_id, a_space, media_command())
+        .await
+        .unwrap();
+    app.documents
+        .save(&a.identity.user_id, a_space, media_command())
+        .await
+        .unwrap();
+    let reopened = bootstrap::build(&config).await.unwrap();
+    let transfer = reopened
+        .documents
+        .transfer(&a.identity.user_id, a_space, &media_id)
+        .await
+        .unwrap();
+    assert_eq!(transfer.content, metadata);
+    assert_eq!(transfer.media[0].hash, hash);
+    let complete = reopened
+        .documents
+        .read(&a.identity.user_id, a_space, &media_id)
+        .await
+        .unwrap();
+    assert!(complete.media.is_empty());
+    let complete_file = root.path().join("complete.rovar");
+    std::fs::write(&complete_file, complete.content).unwrap();
+    assert_eq!(
+        rovar_format::Reader::open(&complete_file)
+            .unwrap()
+            .read(&format!("media/{hash}"), media.length)
+            .unwrap(),
+        media_bytes
     );
     app.auth.logout(&a.token).await.unwrap();
     assert!(matches!(

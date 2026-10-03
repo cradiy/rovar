@@ -36,6 +36,14 @@ pub fn snapshot(value: DocumentSnapshot) -> rovar_api::Snapshot {
     rovar_api::Snapshot {
         object: document(value.document),
         content: STANDARD.encode(value.content),
+        media: value
+            .media
+            .into_iter()
+            .map(|m| rovar_api::Media {
+                hash: m.hash,
+                length: m.length,
+            })
+            .collect(),
     }
 }
 
@@ -54,6 +62,14 @@ pub fn save(id: String, value: rovar_api::Save) -> Result<SaveDocument> {
         base_revision: value.base_revision,
         request_id: value.request_id,
         content,
+        media: value
+            .media
+            .into_iter()
+            .map(|m| crate::domain::document::Media {
+                hash: m.hash,
+                length: m.length,
+            })
+            .collect(),
         deleted: value.deleted,
     })
 }

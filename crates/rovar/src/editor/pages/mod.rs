@@ -247,6 +247,7 @@ impl Workspace {
                 link.master = false;
             }
             page.id = uuid::Uuid::new_v4().to_string();
+            page.renew_node_ids();
             page.name = message(
                 "page-copy-name",
                 &[("name", page.name.chars().take(180).collect())],

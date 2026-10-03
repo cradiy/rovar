@@ -66,6 +66,7 @@ impl Studio {
             "register"
         };
         let credentials = serde_json::json!({
+            "device": crate::platform::session_device(),
             "username": panel.username.read(cx).value().trim(),
             "password": panel.password.read(cx).value().to_string(),
             "team_name": if panel.mode == "team" { Some(panel.team_name.read(cx).value().trim().to_owned()) } else { None }
@@ -166,6 +167,20 @@ impl Studio {
     }
 
     pub(in crate::app) fn server_logout(
+        &mut self,
+        id: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.signing_out || self.remote.read(cx).connection(&id).is_none() {
+            return;
+        }
+        self.server_action = Some(super::PendingAction::SignOut(id));
+        self.focus.focus(window, cx);
+        cx.notify();
+    }
+
+    pub(super) fn perform_server_logout(
         &mut self,
         id: String,
         window: &mut Window,

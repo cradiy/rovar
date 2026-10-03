@@ -76,7 +76,7 @@ fn manifest(reader: &Reader) -> Result<Index> {
         .context("Missing document schema")?;
     let index = match schema {
         1 => Index::Single(serde_json::from_value(value)?),
-        2 => Index::Pages(serde_json::from_value(value)?),
+        2 | 3 => Index::Pages(serde_json::from_value(value)?),
         _ => anyhow::bail!("Unsupported Rovar document schema: {schema}"),
     };
     ensure!(
@@ -90,7 +90,7 @@ pub(crate) fn read_id(reader: &Reader) -> Result<String> {
     Ok(manifest(reader)?.id().to_owned())
 }
 
-fn read_page(reader: &Reader, prefix: &str, info: PageIndex) -> Result<Page> {
+fn read_page(reader: &Reader, prefix: &str, info: PageIndex, legacy: bool) -> Result<Page> {
     fn objects<T: serde::de::DeserializeOwned>(
         reader: &Reader,
         prefix: &str,
@@ -105,7 +105,7 @@ fn read_page(reader: &Reader, prefix: &str, info: PageIndex) -> Result<Page> {
             })
             .collect()
     }
-    let page = Page {
+    let mut page = Page {
         id: info.id,
         name: info.name,
         next_id: info.next_id,
@@ -123,6 +123,9 @@ fn read_page(reader: &Reader, prefix: &str, info: PageIndex) -> Result<Page> {
             && page.texts.iter().map(|x| x.id).eq(info.texts),
         "Object index differs from page"
     );
+    if legacy {
+        page.upgrade_node_ids();
+    }
     page.validate()?;
     Ok(page)
 }
@@ -135,14 +138,22 @@ pub(crate) fn read_document(reader: &Reader) -> Result<Document> {
                 let index: PageIndex =
                     serde_json::from_slice(&reader.read(&format!("page/{id}"), METADATA_LIMIT)?)?;
                 ensure!(index.id == id, "Page index differs from document");
-                pages.push(read_page(reader, &format!("page/{id}/"), index)?);
+                pages.push(read_page(
+                    reader,
+                    &format!("page/{id}/"),
+                    index,
+                    info.schema < 3,
+                )?);
             }
             let mut components = crate::scene::components::Definitions::new();
             for id in info.components {
                 ensure!(uuid::Uuid::parse_str(&id).is_ok(), "Invalid component ID");
-                let definition = serde_json::from_slice(
+                let mut definition: crate::scene::components::Definition = serde_json::from_slice(
                     &reader.read(&format!("component/{id}"), METADATA_LIMIT)?,
                 )?;
+                if info.schema < 3 {
+                    definition.page.upgrade_node_ids();
+                }
                 ensure!(
                     components.insert(id, definition).is_none(),
                     "Duplicate component ID"
@@ -169,6 +180,7 @@ pub(crate) fn read_document(reader: &Reader) -> Result<Document> {
                     texts: info.texts,
                     assets: info.assets,
                 },
+                true,
             )?;
             Document {
                 id: info.id,
@@ -269,7 +281,7 @@ fn write_document(
     );
     let info = Manifest {
         colors: document.colors.clone(),
-        schema: 2,
+        schema: 3,
         id: document.id.clone(),
         previous_cover: None,
         pages: document.pages.iter().map(|page| page.id.clone()).collect(),
@@ -415,7 +427,7 @@ pub(crate) fn load(path: &Path) -> Result<Loaded> {
         assets,
         needs_upgrade: match info {
             Index::Single(_) => true,
-            Index::Pages(info) => info.previous_cover.is_some(),
+            Index::Pages(info) => info.schema < 3 || info.previous_cover.is_some(),
         },
     })
 }

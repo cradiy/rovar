@@ -102,6 +102,7 @@ impl Workspace {
             document.hierarchy.groups.insert(
                 id,
                 crate::scene::layer::LayerGroup {
+                    uid: uuid::Uuid::new_v4(),
                     name: t("asset-default-name").into(),
                     board: None,
                     layer: Default::default(),

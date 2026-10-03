@@ -2,6 +2,7 @@ mod account;
 mod auth;
 mod documents;
 mod mapping;
+mod media;
 mod response;
 mod spaces;
 mod web;
@@ -50,6 +51,30 @@ fn routes(config: &Config, app: Application) -> Router {
                                 .delete(spaces::remove),
                         )
                         .push(Router::with_path("spaces/{space}/objects").get(documents::list))
+                        .push(
+                            Router::with_path("spaces/{space}/media/missing").post(media::missing),
+                        )
+                        .push(
+                            Router::with_path("spaces/{space}/media/{hash}/upload")
+                                .get(media::upload_status)
+                                .put(media::upload)
+                                .post(media::finish_upload),
+                        )
+                        .push(Router::with_path("spaces/{space}/media/{hash}").get(media::read))
+                        .push(
+                            Router::with_path("spaces/{space}/objects/{id}/delta")
+                                .put(documents::save_delta),
+                        )
+                        .push(
+                            Router::with_path("spaces/{space}/objects/{id}/transfer")
+                                .get(documents::transfer)
+                                .post(documents::download),
+                        )
+                        .push(Router::with_path("spaces/{space}/changes").get(documents::changes))
+                        .push(
+                            Router::with_path("spaces/{space}/objects/{id}/metadata")
+                                .get(documents::metadata),
+                        )
                         .push(
                             Router::with_path("spaces/{space}/objects/{id}")
                                 .get(documents::read)

@@ -3,6 +3,42 @@ use crate::editor::tests::{click, draw, open};
 use gpui::{EntityInputHandler, Modifiers, TestAppContext, VisualTestContext, WindowHandle};
 
 #[gpui::test]
+fn copied_nodes_get_new_identities_and_undo_redo_restores_them(cx: &mut TestAppContext) {
+    let window = fixture(cx);
+    window
+        .update(cx, |this, window, cx| {
+            this.set_selection(BTreeSet::from([1, 2, 3]), cx);
+            this.group_selection(cx);
+            let original = this.snapshot_page(cx).0.node_ids();
+            this.duplicate_selection(window, cx);
+            let copied = this.snapshot_page(cx).0.node_ids();
+            assert_eq!(copied.len(), original.len() * 2);
+            assert_eq!(copied.values().collect::<BTreeSet<_>>().len(), copied.len());
+            for (id, uid) in &original {
+                assert_eq!(copied[id], *uid);
+            }
+            this.undo_redo(false, window, cx);
+            assert_eq!(this.snapshot_page(cx).0.node_ids(), original);
+            this.undo_redo(true, window, cx);
+            assert_eq!(this.snapshot_page(cx).0.node_ids(), copied);
+            this.delete_selected(cx);
+            this.undo_redo(false, window, cx);
+            assert_eq!(this.snapshot_page(cx).0.node_ids(), copied);
+            let page = this.pages.active.clone();
+            this.add_page(Some(&page), window, cx);
+            let duplicated_page = this.snapshot_page(cx).0.node_ids();
+            assert!(
+                duplicated_page
+                    .values()
+                    .all(|uid| !copied.values().any(|old| old == uid))
+            );
+            this.undo_redo(false, window, cx);
+            assert_eq!(this.snapshot_page(cx).0.node_ids(), copied);
+        })
+        .unwrap();
+}
+
+#[gpui::test]
 fn repeated_multiselection_copy_keeps_relative_geometry_and_cancelled_motion(
     cx: &mut TestAppContext,
 ) {

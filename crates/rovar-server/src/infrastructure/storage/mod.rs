@@ -1,4 +1,8 @@
+mod cleanup;
 mod crypto;
+mod media;
+pub(crate) mod retention;
+mod upload;
 
 use crate::{application::ports::ContentStorage, domain::error};
 use anyhow::Result;
@@ -8,20 +12,107 @@ use std::path::{Path, PathBuf};
 
 pub struct ContentStore {
     directory: PathBuf,
+    uploads: PathBuf,
     key: StorageKey,
+    activity: PathBuf,
+    retention_scan: tokio::sync::Mutex<retention::Scan>,
 }
 
 impl ContentStore {
+    pub fn start_cleanup(self: &std::sync::Arc<Self>) {
+        let weak = std::sync::Arc::downgrade(self);
+        tokio::spawn(async move {
+            while let Some(store) = weak.upgrade() {
+                let result = tokio::task::spawn_blocking(move || {
+                    cleanup::sweep(&store.uploads, std::time::SystemTime::now())
+                })
+                .await;
+                match result {
+                    Ok(Ok(())) => {}
+                    result => eprintln!("Upload cache cleanup failed: {result:?}"),
+                }
+                tokio::time::sleep(cleanup::INTERVAL).await;
+            }
+        });
+    }
+    #[cfg(test)]
+    pub async fn create_media(
+        &self,
+        context: String,
+    ) -> error::Result<Box<dyn crate::application::ports::MediaWriter>> {
+        Ok(Box::new(
+            media::Writer::create(&self.directory, &self.key, &context).await?,
+        ))
+    }
     pub fn open(root: &Path) -> Result<Self> {
         let key = StorageKey::load(root)?;
         let directory = root.join("blobs");
         std::fs::create_dir_all(&directory)?;
-        Ok(Self { directory, key })
+        let uploads = root.join("uploads");
+        std::fs::create_dir_all(&uploads)?;
+        let activity = root.join(".content.lock");
+        retention::open_lock(&activity)?;
+        Ok(Self {
+            directory,
+            uploads,
+            key,
+            activity,
+            retention_scan: Default::default(),
+        })
     }
 }
 
 #[async_trait]
 impl ContentStorage for ContentStore {
+    async fn lease(&self) -> error::Result<Box<dyn Send + Sync>> {
+        let activity = self.activity.clone();
+        Ok(
+            tokio::task::spawn_blocking(move || -> Result<Box<dyn Send + Sync>> {
+                let lock = retention::open_lock(&activity)?;
+                lock.lock_shared()?;
+                Ok(Box::new(lock))
+            })
+            .await
+            .map_err(anyhow::Error::from)??,
+        )
+    }
+    async fn media_upload(
+        &self,
+        context: String,
+        expected: crate::domain::document::Media,
+    ) -> error::Result<Box<dyn crate::application::ports::MediaUpload>> {
+        let root = self.uploads.clone();
+        let blobs = self.directory.clone();
+        let key = self.key.clone();
+        Ok(Box::new(
+            tokio::task::spawn_blocking(move || {
+                upload::Upload::open(root, blobs, key, context, expected)
+            })
+            .await
+            .map_err(anyhow::Error::from)??,
+        ))
+    }
+    async fn read_media(
+        &self,
+        blob: &str,
+        context: String,
+        expected: crate::domain::document::Media,
+    ) -> error::Result<crate::application::ports::ContentStream> {
+        uuid::Uuid::parse_str(blob).map_err(anyhow::Error::from)?;
+        let reader =
+            media::Reader::open(&self.directory.join(blob), &self.key, &context, expected).await?;
+        Ok(Box::pin(futures_util::stream::try_unfold(
+            reader,
+            |mut reader| async move {
+                reader
+                    .next()
+                    .await
+                    .map(|bytes| bytes.map(|bytes| (bytes, reader)))
+                    .map_err(std::io::Error::other)
+            },
+        )))
+    }
+
     async fn write(&self, bytes: Vec<u8>, context: String) -> error::Result<String> {
         let key = self.key.clone();
         let directory = self.directory.clone();

@@ -1,6 +1,7 @@
 use super::*;
 use crate::i18n::t;
 use crate::scene::artboard::{MAX_SIZE, MIN_SIZE};
+use std::sync::Arc;
 
 pub(super) fn set_dimension(rect: &mut Rect, property: Property, value: f32, locked: bool) -> bool {
     if !matches!(property, Property::Width | Property::Height)
@@ -80,8 +81,8 @@ impl Workspace {
                     point(p.x, 1. - p.y)
                 }
             };
-            shape.points.0 = Rc::new(shape.points.0.iter().copied().map(mirror).collect());
-            shape.nodes.0 = Rc::new(shape.nodes.0.iter().map(|n| n.map(mirror)).collect());
+            shape.points.0 = Arc::new(shape.points.0.iter().copied().map(mirror).collect());
+            shape.nodes.0 = Arc::new(shape.nodes.0.iter().map(|n| n.map(mirror)).collect());
             if let Some(c) = shape.corners {
                 shape.corners = Some(if horizontal {
                     [c[1], c[0], c[3], c[2]]

@@ -1,6 +1,7 @@
 use super::*;
 use crate::editor::tests::{click, create, draw, open};
 use gpui::{Modifiers, TestAppContext, VisualTestContext, WindowHandle};
+use std::sync::Arc;
 
 fn screen(
     window: WindowHandle<Workspace>,
@@ -203,7 +204,7 @@ fn pen_keeps_bends_and_moves_from_bounding_box_with_shared_geometry(cx: &mut Tes
     window
         .update(&mut visual.cx, |this, _, _| {
             assert_eq!(this.selected_shape, Some(2));
-            assert!(Rc::ptr_eq(&points, &this.shapes[0].points.0));
+            assert!(Arc::ptr_eq(&points, &this.shapes[0].points.0));
             assert!(Rc::ptr_eq(&geometry, &this.shape_paths.borrow()[&2]));
             assert_eq!(this.shapes[0].stroke.width, 3.);
             assert_eq!(this.shapes[0].path_point(0), point(100., 90.));

@@ -5,7 +5,11 @@ impl Studio {
         let Some(panel) = self.comparison.as_mut() else {
             return;
         };
-        if panel.resolving || panel.loading || panel.object.is_none() || self.remote.read(cx).busy {
+        if panel.resolving
+            || panel.loading
+            || panel.object.is_none()
+            || self.remote.read(cx).path_busy(&panel.path)
+        {
             return;
         }
         let Some(tab) = self.tabs.iter_mut().find(|t| t.file.path == panel.path) else {
@@ -60,7 +64,7 @@ impl Studio {
                         {
                             return false;
                         }
-                        if this.remote.read(cx).busy {
+                        if this.remote.read(cx).path_busy(&tab.file.path) {
                             return false;
                         }
                         let result = this.finish_comparison_resolution(token, window, cx);
@@ -106,32 +110,62 @@ impl Studio {
                 .read(cx)
                 .connection(&panel.connection)
                 .is_some_and(|c| c.authenticated && c.generation == panel.generation),
-            "Server account changed; reopen the comparison"
+            crate::i18n::t("comparison-account-changed")
         );
         let server = panel.server_visible;
-        let bytes = if server {
+        let snapshot = if server {
             let snapshot = panel
                 ._snapshot
                 .as_ref()
                 .ok_or_else(|| anyhow::anyhow!("Server snapshot is unavailable"))?;
-            Some(rovar_storage::fs::read(&snapshot.0)?)
+            Some(snapshot.0.clone())
         } else {
             None
         };
-        self.remote.update(cx, |remote, cx| {
-            remote.resolve_conflict(
-                &panel.path,
-                panel.object.as_ref().unwrap(),
-                bytes.as_deref(),
-                cx,
-            )
+        let task = self.remote.update(cx, |remote, cx| {
+            remote.resolve_conflict(&panel.path, panel.object.as_ref().unwrap(), snapshot, cx)
         })?;
+        let request = panel.request;
+        cx.spawn_in(window, async move |this, cx| {
+            let result = task.await;
+            let _ = this.update_in(cx, |this, window, cx| {
+                if this
+                    .comparison
+                    .as_ref()
+                    .is_none_or(|p| p.request != request)
+                {
+                    return;
+                }
+                match result {
+                    Ok(()) => this.complete_comparison_resolution(token, server, window, cx),
+                    Err(error) => this.comparison_resolution_error(error.to_string(), cx),
+                }
+            });
+        })
+        .detach();
+        Ok(())
+    }
+
+    fn complete_comparison_resolution(
+        &mut self,
+        token: usize,
+        server: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.comparison.as_mut().unwrap().resolving = false;
         self.close_comparison(window, cx);
         if server {
             // Reload from the permanent file, so lazy media does not reference
             // the temporary comparison snapshot and stale undo history is gone.
-            let tab = self.tabs.iter_mut().find(|t| t.token == token).unwrap();
+            let Some(tab) = self.tabs.iter_mut().find(|t| t.token == token) else {
+                return;
+            };
+            tab.remote_baseline = self
+                .remote
+                .read(cx)
+                .link(&tab.file.path)
+                .and_then(|link| link.baseline.clone());
             tab.editor = None;
             tab._subscription = None;
             tab.saved_revision = None;
@@ -142,6 +176,5 @@ impl Studio {
             self.remote.update(cx, |remote, cx| remote.sync(cx));
         }
         cx.notify();
-        Ok(())
     }
 }

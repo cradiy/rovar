@@ -28,6 +28,7 @@ impl Studio {
             && self.preferences.is_none()
             && self.renaming.is_none()
             && self.deleting_document.is_none()
+            && self.server_action.is_none()
             && let Some(editor) = self.active_editor()
         {
             editor.update(cx, |editor, cx| editor.focus_canvas(window, cx));

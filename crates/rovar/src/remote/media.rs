@@ -1,0 +1,235 @@
+use super::*;
+use rovar_api::Media;
+
+/// The retry record remains the complete immutable local snapshot. Splitting it
+/// deterministically on every attempt preserves the idempotency fingerprint.
+// None sends the immutable retry snapshot directly, without cloning it.
+pub(super) struct Upload(Option<Split>);
+
+struct Split {
+    transfer: Save,
+    // Keep the backing temporary file alive until every media block is sent.
+    reader: rovar_format::Reader,
+    _source: rovar_storage::tempfile::NamedTempFile,
+}
+
+pub(super) fn prepare(input: &Save, bytes: &[u8]) -> Result<Upload> {
+    if input.deleted || input.kind == Kind::ColorStyle {
+        return Ok(Upload(None));
+    }
+    let source = rovar_storage::tempfile::NamedTempFile::new()?;
+    rovar_storage::fs::write(source.path(), bytes)?;
+    let Ok(reader) = rovar_format::Reader::open(source.path()) else {
+        return Ok(Upload(None));
+    };
+    let media: Vec<_> = reader
+        .entries()
+        .filter(|(_, block)| block.kind == "media")
+        .map(|(key, block)| {
+            (
+                key.to_owned(),
+                Media {
+                    hash: hex::encode(block.hash),
+                    length: block.length,
+                },
+            )
+        })
+        .collect();
+    if media.is_empty() {
+        return Ok(Upload(None));
+    }
+    for (key, item) in &media {
+        ensure!(
+            *key == format!("media/{}", item.hash),
+            "Invalid media block name"
+        );
+    }
+    let mut transfer = Save {
+        kind: input.kind.clone(),
+        title: input.title.clone(),
+        base_revision: input.base_revision,
+        request_id: input.request_id.clone(),
+        content: String::new(),
+        media: media.iter().map(|(_, item)| item.clone()).collect(),
+        deleted: input.deleted,
+    };
+    let reduced = rovar_storage::tempfile::NamedTempFile::new()?;
+    let mut writer = rovar_format::Writer::create(reduced.path())?;
+    for (key, block) in reader.entries().filter(|(_, block)| block.kind != "media") {
+        writer.put(
+            key,
+            &block.kind,
+            reader.block(key)?.reader(),
+            Some(block.hash),
+        )?;
+    }
+    writer.commit()?;
+    drop(writer);
+    let bytes = rovar_storage::fs::read(reduced.path())?;
+    ensure!(
+        bytes.len() <= rovar_api::MAX_METADATA_BYTES,
+        "Document metadata exceeds the size limit"
+    );
+    validate_manifest(&transfer.media, bytes.len())?;
+    transfer.content = STANDARD.encode(bytes);
+    Ok(Upload(Some(Split {
+        transfer,
+        reader,
+        _source: source,
+    })))
+}
+
+impl Upload {
+    pub(super) async fn send(self, client: &Client, space: &str) -> Result<Option<Save>> {
+        let Some(Split {
+            transfer,
+            reader,
+            _source,
+        }) = self.0
+        else {
+            return Ok(None);
+        };
+        let missing: Vec<String> = client
+            .json(
+                "POST",
+                &format!("spaces/{space}/media/missing"),
+                Some(serde_json::to_value(&transfer.media)?),
+            )
+            .await?;
+        let expected: BTreeSet<_> = transfer.media.iter().map(|m| m.hash.as_str()).collect();
+        ensure!(
+            missing.iter().all(|hash| expected.contains(hash.as_str())),
+            "Server requested unknown media"
+        );
+        for hash in missing {
+            client
+                .upload_media(
+                    &format!("spaces/{space}/media/{hash}"),
+                    reader.block(&format!("media/{hash}"))?,
+                )
+                .await?;
+        }
+        Ok(Some(transfer))
+    }
+}
+
+pub(super) async fn hydrate(
+    client: &Client,
+    space: &str,
+    snapshot: Snapshot,
+    local: &Path,
+    downloads: &Path,
+    executor: &gpui::BackgroundExecutor,
+) -> Result<Vec<u8>> {
+    let local = local.to_owned();
+    let prepared = executor
+        .spawn(async move { prepare_hydration(snapshot, &local) })
+        .await?;
+    let (output, mut writer, missing) = match prepared {
+        Hydration::Pending {
+            output,
+            writer,
+            missing,
+        } => (output, writer, missing),
+        Hydration::Complete(bytes) => return Ok(bytes),
+    };
+    for item in missing {
+        let file = client
+            .download_media(
+                &format!("spaces/{space}/media/{}", item.hash),
+                &item,
+                downloads,
+            )
+            .await?;
+        writer = executor
+            .spawn(async move {
+                let hash: [u8; 32] = hex::decode(&item.hash)?
+                    .try_into()
+                    .map_err(|_| anyhow::anyhow!("Invalid media hash"))?;
+                writer.put(&format!("media/{}", item.hash), "media", file, Some(hash))?;
+                Ok::<_, anyhow::Error>(writer)
+            })
+            .await?;
+    }
+    executor
+        .spawn(async move {
+            writer.commit()?;
+            drop(writer);
+            Ok(rovar_storage::fs::read(output.path())?)
+        })
+        .await
+}
+
+enum Hydration {
+    Complete(Vec<u8>),
+    Pending {
+        writer: rovar_format::Writer,
+        output: rovar_storage::tempfile::NamedTempFile,
+        missing: Vec<Media>,
+    },
+}
+
+fn prepare_hydration(snapshot: Snapshot, local: &Path) -> Result<Hydration> {
+    let bytes = STANDARD.decode(&snapshot.content)?;
+    ensure!(
+        bytes.len() <= rovar_api::MAX_METADATA_BYTES,
+        "Document exceeds the server's size limit"
+    );
+    validate_manifest(&snapshot.media, bytes.len())?;
+    if snapshot.media.is_empty() {
+        return Ok(Hydration::Complete(bytes));
+    }
+    let output = rovar_storage::tempfile::NamedTempFile::new()?;
+    rovar_storage::fs::write(output.path(), bytes)?;
+    let mut writer = rovar_format::Writer::open(output.path())?;
+    let previous = rovar_format::Reader::open(local).ok();
+    let mut missing = Vec::new();
+    for item in snapshot.media {
+        let key = format!("media/{}", item.hash);
+        let cached = previous.as_ref().and_then(|reader| {
+            let block = reader.entry(&key)?;
+            (block.length == item.length && hex::encode(block.hash) == item.hash)
+                .then(|| reader.block(&key).ok())
+                .flatten()
+        });
+        if let Some(block) = cached
+            && block.copy_verified(&mut std::io::sink()).is_ok()
+        {
+            writer.put(&key, "media", block.reader(), Some(block.info.hash))?;
+            continue;
+        }
+        missing.push(item);
+    }
+    Ok(Hydration::Pending {
+        output,
+        writer,
+        missing,
+    })
+}
+
+fn validate_manifest(media: &[Media], metadata_length: usize) -> Result<()> {
+    ensure!(
+        media.len() <= rovar_api::MAX_MEDIA_REFERENCES,
+        "Too many media references"
+    );
+    let mut seen = BTreeSet::new();
+    let mut total = metadata_length as u64;
+    for item in media {
+        ensure!(
+            item.hash.len() == 64
+                && item
+                    .hash
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+                && seen.insert(&item.hash)
+                && item.length <= rovar_api::MAX_MEDIA_BYTES as u64,
+            "Invalid media reference"
+        );
+        total = total.saturating_add(item.length);
+    }
+    ensure!(
+        total <= rovar_api::MAX_DOCUMENT_BYTES as u64,
+        "Document exceeds the server's size limit"
+    );
+    Ok(())
+}

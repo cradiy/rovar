@@ -13,10 +13,10 @@ impl CanvasScene {
     }
 }
 impl Render for CanvasScene {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.workspace
             .update(cx, |workspace, cx| {
-                workspace.scene_content(cx).into_any_element()
+                workspace.scene_content(window, cx).into_any_element()
             })
             .unwrap_or_else(|_| div().into_any_element())
     }
@@ -380,12 +380,16 @@ impl Workspace {
         .size_full()
     }
 
-    pub(super) fn scene_content(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+    pub(super) fn scene_content(
+        &self,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement + use<> {
         div()
             .absolute()
             .size_full()
             .when(self.view.zoom < 8., |el| el.child(self.canvas_grid(false)))
-            .children(self.content_elements(cx))
+            .children(self.content_elements(window, cx))
             // Paint over artwork too, while keeping selection and guides on top.
             // Canvas does not insert a hitbox, so editing remains unobstructed.
             .when(self.view.zoom >= 8., |el| el.child(self.canvas_grid(true)))

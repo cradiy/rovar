@@ -38,6 +38,7 @@ impl SavedPage {
 
 #[derive(Clone)]
 pub(crate) struct SavedText {
+    pub uid: uuid::Uuid,
     pub id: usize,
     pub layer: crate::scene::layer::LayerState,
     pub board: Option<usize>,

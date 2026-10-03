@@ -91,23 +91,69 @@ impl Workspace {
         self.sync_fields(cx);
         cx.notify();
     }
-    pub(super) fn content_elements(&self, cx: &mut Context<Self>) -> Vec<AnyElement> {
+    pub(super) fn content_elements(
+        &self,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> Vec<AnyElement> {
         let boards: HashMap<_, _> = self.boards.iter().map(|b| (b.id, b)).collect();
         let texts: HashMap<_, _> = self.texts.iter().map(|t| (t.id, t)).collect();
         let shapes: HashMap<_, _> = self.shapes.iter().map(|s| (s.id, s)).collect();
+        // Use this frame's window size: canvas bounds still describe the previous
+        // layout when the window is resized. The larger viewport is conservative.
+        let viewport_size = window.viewport_size();
+        let origin = self.view.world(point(0., 0.));
+        let viewport = Rect {
+            x: origin.x,
+            y: origin.y,
+            width: f32::from(viewport_size.width) / self.view.zoom,
+            height: f32::from(viewport_size.height) / self.view.zoom,
+        };
+        let visible = |mut rect: Rect, board: Option<usize>, rotation: f32, margin: f32| {
+            // Before the canvas has its first layout, retain all objects.
+            if viewport.width <= 0. || viewport.height <= 0. {
+                return true;
+            }
+            if let Some(board) = board.and_then(|id| boards.get(&id)) {
+                rect.x += board.rect.x;
+                rect.y += board.rect.y;
+            }
+            let margin = margin / self.view.zoom;
+            rect.x -= margin;
+            rect.y -= margin;
+            rect.width += margin * 2.;
+            rect.height += margin * 2.;
+            crate::scene::rotation::intersects(rect, rotation, viewport)
+        };
         let mut elements: Vec<_> = self
             .canvas_layer_order()
             .into_iter()
             .filter_map(|id| {
                 if let Some(board) = boards.get(&id) {
-                    Some((id, self.board_element(board, cx).into_any_element()))
+                    let mut rect = board.rect;
+                    rect.width = rect.width.max(100. / self.view.zoom);
+                    (self.is_selected(id) || visible(rect, None, 0., 32.))
+                        .then(|| (id, self.board_element(board, cx).into_any_element()))
                 } else if let Some(text) = texts.get(&id) {
-                    Some((id, self.text_element(text, cx).into_any_element()))
+                    (text.editor.read(cx).editing
+                        || self.is_selected(id)
+                        || visible(text.rect, text.board, text.layer.rotation, 32.))
+                    .then(|| (id, self.text_element(text, cx).into_any_element()))
                 } else if self.hierarchy.groups.contains_key(&id) {
                     self.group_element(id, cx).map(|el| (id, el))
                 } else {
                     shapes
                         .get(&id)
+                        .filter(|s| {
+                            self.is_selected(id)
+                                || self.vector_edit == Some(id)
+                                || visible(
+                                    s.rect,
+                                    s.board,
+                                    s.layer.rotation,
+                                    GeometryKey::outset(s, self.view.zoom) + 16.,
+                                )
+                        })
                         .map(|s| (id, self.shape_element(s, cx).into_any_element()))
                 }
             })

@@ -55,6 +55,7 @@ impl Accounts for AuthRepository {
         hash: &[u8],
         expires_at: i64,
         password_hash: &str,
+        device: &crate::domain::identity::SessionDevice,
     ) -> Result<()> {
         let mut tx = self.0.begin().await?;
         let current: String =
@@ -69,10 +70,13 @@ impl Accounts for AuthRepository {
             .bind(crate::domain::error::now())
             .execute(&mut *tx)
             .await?;
-        sqlx::query("INSERT INTO sessions(token_hash,user_id,expires_at) VALUES($1,$2,$3)")
+        sqlx::query("INSERT INTO sessions(token_hash,user_id,expires_at,system,device_name,client) VALUES($1,$2,$3,$4,$5,$6)")
             .bind(hash)
             .bind(user_id)
             .bind(expires_at)
+            .bind(&device.system)
+            .bind(&device.name)
+            .bind(&device.client)
             .execute(&mut *tx)
             .await?;
         tx.commit().await?;
@@ -93,9 +97,12 @@ impl Accounts for AuthRepository {
     }
 
     async fn sessions(&self, user: &str, current: &[u8]) -> Result<Vec<AccountSession>> {
-        Ok(sqlx::query("SELECT id,created_at,expires_at,token_hash=$2 AS current FROM sessions WHERE user_id=$1 AND expires_at>$3 ORDER BY created_at DESC,id")
+        Ok(sqlx::query("SELECT id,created_at,expires_at,system,device_name,client,token_hash=$2 AS current FROM sessions WHERE user_id=$1 AND expires_at>$3 ORDER BY created_at DESC,id")
             .bind(user).bind(current).bind(now()).fetch_all(&self.0).await?.into_iter().map(|row| AccountSession {
                 id: row.get("id"), created_at: row.get("created_at"), expires_at: row.get("expires_at"), current: row.get("current"),
+                device: crate::domain::identity::SessionDevice {
+                    system: row.get("system"), name: row.get("device_name"), client: row.get("client"),
+                },
             }).collect())
     }
 

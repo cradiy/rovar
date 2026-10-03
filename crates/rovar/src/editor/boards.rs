@@ -44,6 +44,7 @@ impl Workspace {
         let id = self.next_id;
         self.next_id += 1;
         self.boards.push(Artboard {
+            uid: uuid::Uuid::new_v4(),
             color_style: None,
             id,
             layer: Default::default(),

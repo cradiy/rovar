@@ -710,12 +710,12 @@ fn library_colors_copy_values_and_persist_without_changing_applied_objects(
                 .unwrap()
         });
         assert_eq!(w.shapes[0].color, rgb(0x336699));
-        let saved: Palette = serde_json::from_slice(
-            &std::fs::read(root.path().join("components/colors.json")).unwrap(),
-        )
-        .unwrap();
-        assert_eq!(saved[&id].color, rgb(0xff0000));
         w.undo_redo(false, window, cx);
         assert!(w.shapes[0].color_style.is_some());
     });
+    cx.run_until_parked();
+    let saved: Palette =
+        serde_json::from_slice(&std::fs::read(root.path().join("components/colors.json")).unwrap())
+            .unwrap();
+    assert_eq!(saved[&id].color, rgb(0xff0000));
 }

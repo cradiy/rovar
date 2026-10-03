@@ -47,6 +47,7 @@ impl Workspace {
     pub(super) fn saved_text(&self, index: usize, cx: &gpui::App) -> SavedText {
         let text = &self.texts[index];
         SavedText {
+            uid: text.uid,
             id: text.id,
             layer: text.layer,
             board: text.board,
@@ -499,6 +500,7 @@ impl Workspace {
                     if let Some(saved) = value {
                         let mut text =
                             self.make_text(saved.id, saved.board, saved.rect, window, cx);
+                        text.uid = saved.uid;
                         text.layer = saved.layer;
                         text.editor.update(cx, |editor, _| {
                             editor.restore(saved.text);
