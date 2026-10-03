@@ -15,7 +15,7 @@ impl Remote {
     pub(super) fn cleanup_baselines(&mut self, cx: &mut Context<Self>) {
         // Background downloads can still hold old links. Delete only between
         // sync operations, serialized with all baseline publication on the UI.
-        if self.busy {
+        if self.is_busy() {
             return;
         }
         if let Some(candidates) = self.baseline_cleanup.pending.take() {

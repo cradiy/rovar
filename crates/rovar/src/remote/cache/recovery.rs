@@ -151,6 +151,7 @@ impl Remote {
                     this.error = Some(error.to_string());
                 }
                 done(result, this, cx);
+                this.publish_completed(cx);
                 cx.notify();
             });
         })

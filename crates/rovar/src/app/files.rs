@@ -332,7 +332,7 @@ impl Studio {
             let deadline = web_time::Instant::now() + Duration::from_secs(2);
             loop {
                 let waiting = this
-                    .update_in(cx, |this, _, cx| this.remote.read(cx).busy)
+                    .update_in(cx, |this, _, cx| this.remote.read(cx).path_busy(&path))
                     .unwrap_or(false);
                 if !check_remote || !waiting || web_time::Instant::now() >= deadline {
                     break;
@@ -343,7 +343,7 @@ impl Studio {
             }
             let refreshed = this
                 .update_in(cx, |this, _, cx| {
-                    if !check_remote || this.remote.read(cx).busy {
+                    if !check_remote || this.remote.read(cx).path_busy(&path) {
                         return false;
                     }
                     let connection = this
@@ -364,7 +364,7 @@ impl Studio {
             if refreshed {
                 loop {
                     let waiting = this
-                        .update_in(cx, |this, _, cx| this.remote.read(cx).busy)
+                        .update_in(cx, |this, _, cx| this.remote.read(cx).path_busy(&path))
                         .unwrap_or(false);
                     if !waiting || web_time::Instant::now() >= deadline {
                         break;

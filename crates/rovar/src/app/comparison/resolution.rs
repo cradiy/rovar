@@ -5,7 +5,11 @@ impl Studio {
         let Some(panel) = self.comparison.as_mut() else {
             return;
         };
-        if panel.resolving || panel.loading || panel.object.is_none() || self.remote.read(cx).busy {
+        if panel.resolving
+            || panel.loading
+            || panel.object.is_none()
+            || self.remote.read(cx).path_busy(&panel.path)
+        {
             return;
         }
         let Some(tab) = self.tabs.iter_mut().find(|t| t.file.path == panel.path) else {
@@ -60,7 +64,7 @@ impl Studio {
                         {
                             return false;
                         }
-                        if this.remote.read(cx).busy {
+                        if this.remote.read(cx).path_busy(&tab.file.path) {
                             return false;
                         }
                         let result = this.finish_comparison_resolution(token, window, cx);

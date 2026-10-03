@@ -27,7 +27,7 @@ impl Remote {
             };
             let Some(connection) = self
                 .connection(&link.connection)
-                .filter(|c| c.authenticated)
+                .filter(|c| c.authenticated && self.can_start(&c.id))
             else {
                 continue;
             };
@@ -37,7 +37,7 @@ impl Remote {
             let generation = connection.generation;
             let pending = self.pending_path(&link);
             self.merge_pending.remove(&path);
-            self.busy = true;
+            self.start_network(&link.connection);
             let executor = cx.background_executor().clone();
             let text_system = cx.text_system().clone();
             let root = self.root.clone();
@@ -115,49 +115,50 @@ impl Remote {
                 }
                 .await;
                 cx.update(|cx| {
-                    let protected = crate::app::Studio::protected_document_paths(cx);
                     let _ = this.update(cx, |this, cx| {
-                        this.busy = false;
-                        if this
-                            .connection(&link.connection)
-                            .is_none_or(|c| c.generation != generation || !c.authenticated)
-                        {
-                            cx.notify();
-                            return;
-                        }
-                        // The local cache may have been saved while downloading.
-                        // Merge its latest contents, but never an unsaved editor.
-                        if protected.contains(&path) {
-                            this.merge_pending.insert(path.clone());
-                            cx.notify();
-                            return;
-                        }
-                        if !this.merge_is_current(&path, &link) {
-                            cx.notify();
-                            return;
-                        }
-                        let result = result.and_then(|outcome| {
-                            this.publish_merge(&path, &link, local_generation, outcome)
-                        });
-                        if let Err(error) = result {
-                            if error.downcast_ref::<reqwest::Error>().is_some()
-                                || error
-                                    .downcast_ref::<HttpError>()
-                                    .is_some_and(|e| e.status == 429 || e.status >= 500)
+                        this.finish_network(link.connection.clone(), cx, move |this, cx| {
+                            let protected = crate::app::Studio::protected_document_paths(cx);
+                            if this
+                                .connection(&link.connection)
+                                .is_none_or(|c| c.generation != generation || !c.authenticated)
                             {
+                                cx.notify();
+                                return;
+                            }
+                            // The local cache may have been saved while downloading.
+                            // Merge its latest contents, but never an unsaved editor.
+                            if protected.contains(&path) {
                                 this.merge_pending.insert(path.clone());
+                                cx.notify();
+                                return;
                             }
-                            if error
-                                .downcast_ref::<HttpError>()
-                                .is_some_and(|e| e.status == 401)
-                            {
-                                this.sign_out(&link.connection, cx);
+                            if !this.merge_is_current(&path, &link) {
+                                cx.notify();
+                                return;
                             }
-                            if let Some(current) = this.catalog.links.get_mut(&path) {
-                                current.error = Some(error.to_string());
+                            let result = result.and_then(|outcome| {
+                                this.publish_merge(&path, &link, local_generation, outcome)
+                            });
+                            if let Err(error) = result {
+                                if error.downcast_ref::<reqwest::Error>().is_some()
+                                    || error
+                                        .downcast_ref::<HttpError>()
+                                        .is_some_and(|e| e.status == 429 || e.status >= 500)
+                                {
+                                    this.merge_pending.insert(path.clone());
+                                }
+                                if error
+                                    .downcast_ref::<HttpError>()
+                                    .is_some_and(|e| e.status == 401)
+                                {
+                                    this.sign_out(&link.connection, cx);
+                                }
+                                if let Some(current) = this.catalog.links.get_mut(&path) {
+                                    current.error = Some(error.to_string());
+                                }
                             }
-                        }
-                        cx.notify();
+                            cx.notify();
+                        });
                     });
                 });
             })

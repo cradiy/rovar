@@ -202,7 +202,7 @@ impl Studio {
         path: &std::path::Path,
         cx: &mut Context<Self>,
     ) {
-        if self.remote.read(cx).busy {
+        if self.remote.read(cx).path_busy(path) {
             return;
         }
         let Some(connection) = self

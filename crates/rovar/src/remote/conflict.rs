@@ -10,7 +10,7 @@ impl Remote {
         server: Option<PathBuf>,
         cx: &mut Context<Self>,
     ) -> Result<gpui::Task<Result<()>>> {
-        ensure!(!self.busy, "Sync is busy; try again");
+        ensure!(!self.path_busy(path), "Sync is busy; try again");
         ensure!(
             !self.recover_incoming(cx, |_, _, _| {}),
             "Sync recovery is pending; try again"
@@ -77,6 +77,7 @@ impl Remote {
                         this.install_resolution(prepared?)
                     })();
                     cx.notify();
+                    this.publish_completed(cx);
                     result
                 })
                 .and_then(|result| result);

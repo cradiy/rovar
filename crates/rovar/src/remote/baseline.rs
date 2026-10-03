@@ -187,6 +187,7 @@ impl Remote {
                     done(this, cx);
                 }
                 cx.notify();
+                this.publish_completed(cx);
             });
         })
         .detach();

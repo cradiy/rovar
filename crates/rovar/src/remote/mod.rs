@@ -8,6 +8,7 @@ mod directory;
 use directory::Directory;
 mod media;
 mod merge;
+mod scheduler;
 #[cfg(all(test, not(target_family = "wasm")))]
 pub(crate) mod tests;
 mod transport;
@@ -90,7 +91,9 @@ struct PendingSave {
 pub(crate) struct Remote {
     root: PathBuf,
     catalog: Catalog,
+    /// Local preflight/recovery owns publication; network work is tracked separately.
     pub busy: bool,
+    scheduler: scheduler::Scheduler,
     pub error: Option<String>,
     libraries_changed: BTreeSet<String>,
     retry_at: web_time::Instant,
@@ -177,6 +180,7 @@ impl Remote {
             root: root.into(),
             catalog,
             busy: false,
+            scheduler: Default::default(),
             error,
             libraries_changed: BTreeSet::new(),
             retry_at: web_time::Instant::now(),
@@ -378,7 +382,8 @@ impl Remote {
             .connections
             .iter()
             .find(|c| {
-                !c.authenticated
+                self.can_start(&c.id)
+                    && !c.authenticated
                     && !c.token.is_empty()
                     && self.catalog.servers.contains_key(&c.url)
                     && self
@@ -392,38 +397,39 @@ impl Remote {
         };
         self.reconnect_at
             .insert(connection.id.clone(), web_time::Instant::now());
-        self.busy = true;
+        self.start_network(&connection.id);
         cx.spawn(async move |this, cx| {
             let result = connection
                 .client()
                 .json::<Identity>("GET", "session", None)
                 .await;
             let _ = this.update(cx, |this, cx| {
-                this.busy = false;
-                if this.connection(&connection.id).is_none_or(|c| {
-                    c.token != connection.token || c.generation != connection.generation
-                }) {
-                    return;
-                }
-                match result {
-                    Ok(identity)
-                        if identity.server_id == connection.identity.server_id
-                            && identity.user_id == connection.identity.user_id =>
-                    {
-                        let _ = this.connect(connection.url, identity, connection.token, cx);
-                        this.retry(cx);
+                this.finish_network(connection.id.clone(), cx, move |this, cx| {
+                    if this.connection(&connection.id).is_none_or(|c| {
+                        c.token != connection.token || c.generation != connection.generation
+                    }) {
+                        return;
                     }
-                    Ok(_) => this.sign_out(&connection.id, cx),
-                    Err(error)
-                        if error
-                            .downcast_ref::<HttpError>()
-                            .is_some_and(|e| e.status == 401) =>
-                    {
-                        this.sign_out(&connection.id, cx)
+                    match result {
+                        Ok(identity)
+                            if identity.server_id == connection.identity.server_id
+                                && identity.user_id == connection.identity.user_id =>
+                        {
+                            let _ = this.connect(connection.url, identity, connection.token, cx);
+                            this.retry(cx);
+                        }
+                        Ok(_) => this.sign_out(&connection.id, cx),
+                        Err(error)
+                            if error
+                                .downcast_ref::<HttpError>()
+                                .is_some_and(|e| e.status == 401) =>
+                        {
+                            this.sign_out(&connection.id, cx)
+                        }
+                        Err(error) => this.error = Some(error.to_string()),
                     }
-                    Err(error) => this.error = Some(error.to_string()),
-                }
-                cx.notify();
+                    cx.notify();
+                });
             });
         })
         .detach();
@@ -432,7 +438,7 @@ impl Remote {
 
     pub fn remove_server(&mut self, url: &str, cx: &mut Context<Self>) -> Result<()> {
         ensure!(
-            !self.busy
+            !self.is_busy()
                 && !self
                     .catalog
                     .connections
@@ -534,7 +540,7 @@ impl Remote {
         cx.notify();
     }
 
-    /// A single shared worker owns uploads across all application windows.
+    /// Connections transfer independently; shared local publication is serialized.
     pub fn sync(&mut self, cx: &mut Context<Self>) {
         if self
             .cleanup_at
@@ -550,7 +556,8 @@ impl Remote {
                 })
                 .detach();
         }
-        if self.busy {
+        self.publish_completed(cx);
+        if self.busy || self.scheduler.active.len() >= scheduler::CONNECTIONS {
             return;
         }
         self.cleanup_baselines(cx);
@@ -568,7 +575,10 @@ impl Remote {
             .catalog
             .links
             .iter()
-            .filter(|(_, link)| link.dirty || link.baseline.is_none())
+            .filter(|(_, link)| {
+                (link.dirty || link.baseline.is_none())
+                    && !self.scheduler.active.contains(&link.connection)
+            })
             .map(|(path, _)| path.clone())
             .collect();
         self.reconcile_baselines(paths, cx, Self::sync_ready);
@@ -586,39 +596,51 @@ impl Remote {
                 link.error = None;
             }
         }
-        let next = self.catalog.links.iter().find_map(|(path, link)| {
-            if (!link.dirty && !rovar_storage::exists(self.pending_path(link)))
-                || link.conflict
-                || link.error.is_some()
-            {
-                return None;
-            }
-            if !link.object.deleted && !rovar_storage::exists(path) {
-                return None;
-            }
-            let connection = self.connection(&link.connection)?;
-            if !connection.authenticated {
-                return None;
-            }
-            if !cfg!(target_family = "wasm") && connection.token.is_empty() {
-                return None;
-            }
-            Some((
-                path.clone(),
-                link.clone(),
-                connection.client(),
-                connection.identity.clone(),
-                connection.space.id.clone(),
-                connection.generation,
-            ))
-        });
+        let next = self
+            .catalog
+            .links
+            .iter()
+            .filter_map(|(path, link)| {
+                if !self.can_start(&link.connection) {
+                    return None;
+                }
+                if (!link.dirty && !rovar_storage::exists(self.pending_path(link)))
+                    || link.conflict
+                    || link.error.is_some()
+                {
+                    return None;
+                }
+                if !link.object.deleted && !rovar_storage::exists(path) {
+                    return None;
+                }
+                let connection = self.connection(&link.connection)?;
+                if !connection.authenticated {
+                    return None;
+                }
+                if !cfg!(target_family = "wasm") && connection.token.is_empty() {
+                    return None;
+                }
+                Some((
+                    path.clone(),
+                    link.clone(),
+                    connection.client(),
+                    connection.identity.clone(),
+                    connection.space.id.clone(),
+                    connection.generation,
+                ))
+            })
+            .min_by_key(|(_, link, _, _, _, _)| {
+                self.scheduler.order.get(&link.connection).copied()
+            });
         let Some((path, link, client, identity, space, generation)) = next else {
             if let Some(connection) = self
                 .catalog
                 .connections
                 .iter()
                 .filter(|c| {
-                    c.authenticated && (cfg!(target_family = "wasm") || !c.token.is_empty())
+                    self.can_start(&c.id)
+                        && c.authenticated
+                        && (cfg!(target_family = "wasm") || !c.token.is_empty())
                 })
                 .filter(|c| {
                     self.refresh_at
@@ -650,7 +672,7 @@ impl Remote {
             }
             return;
         };
-        self.busy = true;
+        self.start_network(&link.connection);
         let pending_path = self
             .root
             .join("pending")
@@ -691,80 +713,81 @@ impl Remote {
             }
             .await;
             let _ = this.update(cx, |this, cx| {
-                this.busy = false;
-                if result.is_err()
-                    && this
+                this.finish_network(link.connection.clone(), cx, move |this, cx| {
+                    if result.is_err()
+                        && this
+                            .connection(&link.connection)
+                            .is_none_or(|c| c.generation != generation)
+                    {
+                        cx.notify();
+                        return;
+                    }
+                    if this
                         .connection(&link.connection)
-                        .is_none_or(|c| c.generation != generation)
-                {
-                    cx.notify();
-                    return;
-                }
-                if this
-                    .connection(&link.connection)
-                    .is_some_and(|c| c.generation == generation)
-                    && result.as_ref().err().is_some_and(|error| {
-                        error
-                            .downcast_ref::<HttpError>()
-                            .is_some_and(|e| e.status == 401)
-                    })
-                {
-                    this.sign_out(&link.connection, cx);
-                }
-                if let Some(current) = this.catalog.links.get_mut(&path) {
-                    match result {
-                        Ok(upload::Confirmed {
-                            object,
-                            digest: sent_digest,
-                            baseline,
-                        }) => {
-                            // Compare the latest local file against this confirmed
-                            // baseline in the background after persisting the receipt.
-                            current.dirty = true;
-                            current.baseline = Some(baseline);
-                            current.object.revision = object.revision;
-                            current.object.created = object.created;
-                            current.object.modified = object.modified;
-                            current.digest = sent_digest;
-                            current.error = None;
-                            // Persist the acknowledged revision before removing the retry record.
-                            if this.persist() {
-                                let _ = rovar_storage::fs::remove_file(&pending_path);
+                        .is_some_and(|c| c.generation == generation)
+                        && result.as_ref().err().is_some_and(|error| {
+                            error
+                                .downcast_ref::<HttpError>()
+                                .is_some_and(|e| e.status == 401)
+                        })
+                    {
+                        this.sign_out(&link.connection, cx);
+                    }
+                    if let Some(current) = this.catalog.links.get_mut(&path) {
+                        match result {
+                            Ok(upload::Confirmed {
+                                object,
+                                digest: sent_digest,
+                                baseline,
+                            }) => {
+                                // Compare the latest local file against this confirmed
+                                // baseline in the background after persisting the receipt.
+                                current.dirty = true;
+                                current.baseline = Some(baseline);
+                                current.object.revision = object.revision;
+                                current.object.created = object.created;
+                                current.object.modified = object.modified;
+                                current.digest = sent_digest;
+                                current.error = None;
+                                // Persist the acknowledged revision before removing the retry record.
+                                if this.persist() {
+                                    let _ = rovar_storage::fs::remove_file(&pending_path);
+                                }
+                            }
+                            Err(error) => {
+                                current.conflict = error
+                                    .downcast_ref::<HttpError>()
+                                    .is_some_and(HttpError::is_conflict);
+                                current.error = Some(error.to_string());
+                                this.persist();
                             }
                         }
-                        Err(error) => {
-                            current.conflict = error
-                                .downcast_ref::<HttpError>()
-                                .is_some_and(HttpError::is_conflict);
-                            current.error = Some(error.to_string());
-                            this.persist();
-                        }
                     }
-                }
-                if this
-                    .catalog
-                    .links
-                    .get(&path)
-                    .is_some_and(|link| link.conflict && link.object.kind == Kind::ColorStyle)
-                    && let Err(error) = this.preserve_color_conflict(&path, cx)
-                {
-                    this.error = Some(error.to_string());
-                }
-                if this.catalog.links.get(&path).is_some_and(|link| {
-                    link.conflict && !link.object.deleted && link.object.kind == Kind::Document
-                }) {
-                    this.merge_pending.insert(path.clone());
-                    let remote = cx.entity().downgrade();
-                    cx.defer(move |cx| {
-                        let protected = crate::app::Studio::protected_document_paths(cx);
-                        let _ = remote.update(cx, |this, cx| {
-                            this.try_merge(&protected, cx);
+                    if this
+                        .catalog
+                        .links
+                        .get(&path)
+                        .is_some_and(|link| link.conflict && link.object.kind == Kind::ColorStyle)
+                        && let Err(error) = this.preserve_color_conflict(&path, cx)
+                    {
+                        this.error = Some(error.to_string());
+                    }
+                    if this.catalog.links.get(&path).is_some_and(|link| {
+                        link.conflict && !link.object.deleted && link.object.kind == Kind::Document
+                    }) {
+                        this.merge_pending.insert(path.clone());
+                        let remote = cx.entity().downgrade();
+                        cx.defer(move |cx| {
+                            let protected = crate::app::Studio::protected_document_paths(cx);
+                            let _ = remote.update(cx, |this, cx| {
+                                this.try_merge(&protected, cx);
+                            });
                         });
-                    });
-                } else {
-                    this.reconcile_baselines(vec![path], cx, |_, _| {});
-                }
-                cx.notify();
+                    } else {
+                        this.reconcile_baselines(vec![path], cx, |_, _| {});
+                    }
+                    cx.notify();
+                });
             });
         })
         .detach();
@@ -772,7 +795,7 @@ impl Remote {
     }
 
     pub fn fork_conflict(&mut self, path: &Path, cx: &mut Context<Self>) {
-        if self.busy {
+        if self.path_busy(path) {
             return;
         }
         let Some(link) = self
@@ -831,7 +854,7 @@ impl Remote {
         selected: Option<String>,
         cx: &mut Context<Self>,
     ) {
-        if self.busy {
+        if !self.can_start(&connection) {
             return;
         }
         let resume_connection = connection.clone();
@@ -863,7 +886,7 @@ impl Remote {
         selected: Option<String>,
         cx: &mut Context<Self>,
     ) {
-        if !self.persist() {
+        if !self.can_start(&connection) || !self.persist() {
             return;
         }
         // The user may have signed out while the preflight scan was running.
@@ -885,7 +908,7 @@ impl Remote {
         let executor = cx.background_executor().clone();
         self.refresh_at
             .insert(connection.clone(), web_time::Instant::now());
-        self.busy = true;
+        self.start_network(&connection);
         self.error = None;
         cx.spawn(async move |this, cx| {
             let mut observed_identity = None;
@@ -1047,94 +1070,101 @@ impl Remote {
             }
             .await;
             let _ = this.update(cx, |this, cx| {
-                this.busy = false;
-                if this
-                    .connection(&connection)
-                    .is_none_or(|c| c.generation != generation)
-                {
-                    cx.notify();
-                    return;
-                }
-                if let Some(identity) = observed_identity
-                    && this.connection(&connection).is_some_and(|current| {
-                        current.authenticated && current.token == client.token
-                    })
-                {
-                    let _ = this.connect(client.url.clone(), identity, client.token.clone(), cx);
-                }
-                match result {
-                    Ok((updates, directory)) => {
-                        let paths = updates.iter().map(|(path, _)| path.clone()).collect();
-                        this.reconcile_baselines(paths, cx, move |this, cx| {
-                            if this
-                                .connection(&connection)
-                                .is_none_or(|c| c.generation != generation)
-                            {
-                                return;
-                            }
-                            let previous = this
-                                .catalog
-                                .directories
-                                .insert(connection.clone(), directory);
-                            if !this.persist() {
-                                if let Some(previous) = previous {
-                                    this.catalog
-                                        .directories
-                                        .insert(connection.clone(), previous);
-                                } else {
-                                    this.catalog.directories.remove(&connection);
-                                }
-                                cx.notify();
-                                return;
-                            }
-                            let currently_open = crate::app::Studio::protected_document_paths(cx);
-                            for (path, prepared) in updates {
-                                if currently_open.contains(&path)
-                                    || this.catalog.links.get(&path).is_some_and(|link| link.dirty)
+                this.finish_network(connection.clone(), cx, move |this, cx| {
+                    if this
+                        .connection(&connection)
+                        .is_none_or(|c| c.generation != generation)
+                    {
+                        cx.notify();
+                        return;
+                    }
+                    if let Some(identity) = observed_identity
+                        && this.connection(&connection).is_some_and(|current| {
+                            current.authenticated && current.token == client.token
+                        })
+                    {
+                        let _ =
+                            this.connect(client.url.clone(), identity, client.token.clone(), cx);
+                    }
+                    match result {
+                        Ok((updates, directory)) => {
+                            let paths = updates.iter().map(|(path, _)| path.clone()).collect();
+                            this.reconcile_baselines(paths, cx, move |this, cx| {
+                                if this
+                                    .connection(&connection)
+                                    .is_none_or(|c| c.generation != generation)
                                 {
-                                    continue;
+                                    return;
                                 }
-                                let object = prepared.object.clone();
-                                let id = object.id.clone();
-                                if let Err(error) =
-                                    this.install_snapshot(path, connection.clone(), prepared)
-                                {
+                                let previous = this
+                                    .catalog
+                                    .directories
+                                    .insert(connection.clone(), directory);
+                                if !this.persist() {
+                                    if let Some(previous) = previous {
+                                        this.catalog
+                                            .directories
+                                            .insert(connection.clone(), previous);
+                                    } else {
+                                        this.catalog.directories.remove(&connection);
+                                    }
+                                    cx.notify();
+                                    return;
+                                }
+                                let currently_open =
+                                    crate::app::Studio::protected_document_paths(cx);
+                                for (path, prepared) in updates {
+                                    if currently_open.contains(&path)
+                                        || this
+                                            .catalog
+                                            .links
+                                            .get(&path)
+                                            .is_some_and(|link| link.dirty)
+                                    {
+                                        continue;
+                                    }
+                                    let object = prepared.object.clone();
+                                    let id = object.id.clone();
+                                    if let Err(error) =
+                                        this.install_snapshot(path, connection.clone(), prepared)
+                                    {
+                                        this.catalog
+                                            .directories
+                                            .get_mut(&connection)
+                                            .unwrap()
+                                            .fail(&object, &error);
+                                        // A journal must be recovered before another
+                                        // publication can reuse it. Keep later items queued.
+                                        if this.ensure_recovered().is_err() {
+                                            break;
+                                        }
+                                        continue;
+                                    }
                                     this.catalog
                                         .directories
                                         .get_mut(&connection)
                                         .unwrap()
-                                        .fail(&object, &error);
-                                    // A journal must be recovered before another
-                                    // publication can reuse it. Keep later items queued.
-                                    if this.ensure_recovered().is_err() {
-                                        break;
-                                    }
-                                    continue;
+                                        .complete(&id);
                                 }
-                                this.catalog
-                                    .directories
-                                    .get_mut(&connection)
-                                    .unwrap()
-                                    .complete(&id);
-                            }
-                            if this.error.is_none() {
-                                this.error = this.catalog.directories[&connection].error();
-                            }
-                            this.persist();
-                            this.recover_incoming(cx, |_, _, _| {});
-                        });
-                    }
-                    Err(error) => {
-                        if error
-                            .downcast_ref::<HttpError>()
-                            .is_some_and(|e| e.status == 401)
-                        {
-                            this.sign_out(&connection, cx);
+                                if this.error.is_none() {
+                                    this.error = this.catalog.directories[&connection].error();
+                                }
+                                this.persist();
+                                this.recover_incoming(cx, |_, _, _| {});
+                            });
                         }
-                        this.error = Some(error.to_string());
+                        Err(error) => {
+                            if error
+                                .downcast_ref::<HttpError>()
+                                .is_some_and(|e| e.status == 401)
+                            {
+                                this.sign_out(&connection, cx);
+                            }
+                            this.error = Some(error.to_string());
+                        }
                     }
-                }
-                cx.notify();
+                    cx.notify();
+                });
             });
         })
         .detach();

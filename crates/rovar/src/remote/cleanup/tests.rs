@@ -174,6 +174,10 @@ fn idle_sync_reclaims_in_bounded_batches_and_defers_while_busy(cx: &mut TestAppC
         r.sync(cx);
         assert!(obsolete.iter().all(|key| directory.join(key).exists()));
         r.busy = false;
+        r.start_network("downloading");
+        r.cleanup_baselines(cx);
+        assert!(obsolete.iter().all(|key| directory.join(key).exists()));
+        r.finish_network("downloading".into(), cx, |_, _| {});
         r.sync(cx);
     });
     assert_eq!(

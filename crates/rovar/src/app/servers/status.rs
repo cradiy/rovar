@@ -40,7 +40,7 @@ impl Studio {
             ("server-conflict-title", LucideIcons::CircleAlert, 0xd5b777)
         } else if failed {
             ("server-sync-paused", LucideIcons::CircleAlert, 0xd5b777)
-        } else if tab.saving || (pending && remote.busy) {
+        } else if tab.saving || (pending && remote.connection_busy(&connection.id)) {
             ("server-syncing", LucideIcons::RefreshCw, ACCENT)
         } else if pending || tab.saved_revision != Some(editor.read(cx).document_revision()) {
             ("server-pending", LucideIcons::Clock, 0xd5b777)
@@ -175,7 +175,7 @@ impl Studio {
             .when(
                 authenticated
                     && !link.conflict
-                    && !remote.busy
+                    && !remote.connection_busy(&link.connection)
                     && !tab.saving
                     && (pending || failed),
                 |el| {

@@ -5,6 +5,7 @@ mod delta;
 mod directory;
 mod media;
 mod merge;
+mod scheduler;
 use gpui::TestAppContext;
 
 #[gpui::test]
@@ -254,7 +255,7 @@ pub(crate) fn wait_sync(remote: &Entity<Remote>, cx: &mut TestAppContext) {
     let start = std::time::Instant::now();
     loop {
         cx.run_until_parked();
-        if cx.update(|cx| !remote.read(cx).busy) {
+        if cx.update(|cx| !remote.read(cx).is_busy()) {
             break;
         }
         assert!(start.elapsed().as_secs() < 8, "Sync did not complete");
@@ -345,6 +346,7 @@ fn failed_upload_survives_restart_and_replays_before_newer_edits(cx: &mut TestAp
         catalog: serde_json::from_slice(&std::fs::read(root.path().join("servers.json")).unwrap())
             .unwrap(),
         busy: false,
+        scheduler: Default::default(),
         error: None,
         libraries_changed: BTreeSet::new(),
         retry_at: web_time::Instant::now(),
