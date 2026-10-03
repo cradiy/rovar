@@ -109,7 +109,17 @@ impl Workspace {
                                 .truncate()
                                 .text_size(px(13.))
                                 .font_weight(FontWeight::SEMIBOLD)
-                                .child(title),
+                                .map(|el| {
+                                    if self.selection_ids().len() == 1
+                                        && self.selected_board().is_some()
+                                        && self.selected_text.is_none()
+                                        && self.selected_shape.is_none()
+                                    {
+                                        el.child(self.frame_preset_control(cx))
+                                    } else {
+                                        el.child(title)
+                                    }
+                                }),
                         )
                         .when(self.multi_selection.len() > 1, |el| {
                             el.child(

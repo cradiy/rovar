@@ -6,6 +6,7 @@ mod fields;
 mod fill_tests;
 #[cfg(test)]
 mod font_tests;
+mod frame_presets;
 mod image_fill;
 mod name_input;
 mod paint;

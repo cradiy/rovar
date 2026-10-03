@@ -17,7 +17,8 @@ I want to build a beautiful, cross-platform UI design tool that is easy for AI a
 ## Features
 
 - **Canvas editing** — artboards, layers, multi-page documents, vector shapes, Bézier paths, and text.
-- **Auto layout** — horizontal and vertical layouts, alignment, padding, gaps, and fixed, hug-content, or fill sizing.
+- **Auto layout** — horizontal and vertical layouts, wrapping, alignment, padding, gaps, fixed/hug/fill sizing, and minimum/maximum dimensions.
+- **Responsive layouts** — edge, center, stretch, and scale constraints, plus frame size presets for phones, tablets, desktop screens, and more.
 - **Precision tools** — snapping, distance measurements, equal spacing, multi-selection resizing, repeated duplication, and on-canvas corner editing.
 - **Colors and gradients** — document color styles, color libraries, and linear, radial, angular, and diamond gradients.
 - **Reusable components** — component libraries, instances, overrides, and updates.
@@ -28,7 +29,7 @@ I want to build a beautiful, cross-platform UI design tool that is easy for AI a
 
 ## Planned
 
-- [ ] **Responsive layouts** — constraints, grids, wrapping, and previews at multiple sizes.
+- [ ] **Layout grids** — row and column grids.
 - [ ] **Component variants** — sizes, styles, and hover, pressed, and disabled states.
 - [ ] **Vector composition** — Boolean operations and masks.
 - [ ] **Visual effects** — shadows, layer and background blur, glass, glow, blend modes, and effect stacks.
