@@ -15,6 +15,7 @@ pub struct ContentStore {
     uploads: PathBuf,
     key: StorageKey,
     activity: PathBuf,
+    retention_scan: tokio::sync::Mutex<retention::Scan>,
 }
 
 impl ContentStore {
@@ -56,6 +57,7 @@ impl ContentStore {
             uploads,
             key,
             activity,
+            retention_scan: Default::default(),
         })
     }
 }

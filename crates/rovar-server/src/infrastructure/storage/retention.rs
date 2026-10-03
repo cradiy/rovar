@@ -6,6 +6,54 @@ use std::{
 };
 
 pub(crate) const BATCH: usize = 256;
+const SCAN_BATCH: usize = 1024;
+
+#[derive(Default)]
+pub(super) struct Scan {
+    entries: Option<tokio::fs::ReadDir>,
+    pending: Vec<String>,
+}
+
+impl Scan {
+    async fn collect(&mut self, directory: &Path, policy: Policy, now: SystemTime) -> Result<()> {
+        // Keep candidates when the store is busy or a previous database call
+        // failed. Restarting at the directory's beginning can starve later files.
+        if !self.pending.is_empty() {
+            return Ok(());
+        }
+        if self.entries.is_none() {
+            self.entries = Some(tokio::fs::read_dir(directory).await?);
+        }
+        for _ in 0..SCAN_BATCH {
+            let Some(entry) = self.entries.as_mut().unwrap().next_entry().await? else {
+                self.entries = None;
+                break;
+            };
+            let name = entry.file_name();
+            let Some(name) = name.to_str().filter(|name| valid_blob(name)) else {
+                continue;
+            };
+            if eligible(&entry.path(), policy, now).await? {
+                self.pending.push(name.to_owned());
+                if self.pending.len() == BATCH {
+                    break;
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+async fn eligible(path: &Path, policy: Policy, now: SystemTime) -> Result<bool> {
+    let metadata = match tokio::fs::symlink_metadata(path).await {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(error.into()),
+    };
+    Ok(metadata.is_file()
+        && now.duration_since(metadata.modified()?).unwrap_or_default()
+            >= Duration::from_secs(u64::from(policy.orphan_days) * 86400))
+}
 
 #[derive(Clone, Copy, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -72,6 +120,13 @@ impl ContentStore {
         now: SystemTime,
     ) -> Result<Option<bool>> {
         policy.validate()?;
+        let Ok(mut scan) = self.retention_scan.try_lock() else {
+            return Ok(None);
+        };
+        // Directory traversal never holds the cross-process content lease.
+        // Bound examined entries as well as candidates, including live stores
+        // where most files are referenced or too recent to be collected.
+        scan.collect(&self.directory, policy, now).await?;
         let activity = self.activity.clone();
         let guard = tokio::task::spawn_blocking(move || -> Result<Option<File>> {
             let file = open_lock(&activity)?;
@@ -84,62 +139,39 @@ impl ContentStore {
         .await??;
         let Some(_guard) = guard else { return Ok(None) };
         let timestamp = i64::try_from(now.duration_since(SystemTime::UNIX_EPOCH)?.as_secs())?;
-        let mut more =
+        let more =
             crate::infrastructure::postgres::retention::expire(pool, policy, timestamp).await?;
-        let mut entries = tokio::fs::read_dir(&self.directory).await?;
-        let mut batch = Vec::new();
-        let mut removed = 0;
-        while let Some(entry) = entries.next_entry().await? {
-            let name = entry.file_name();
-            let Some(name) = name.to_str().filter(|name| valid_blob(name)) else {
-                continue;
-            };
-            if !entry.file_type().await?.is_file() {
-                continue;
-            }
-            let age = now
-                .duration_since(entry.metadata().await?.modified()?)
-                .unwrap_or_default();
-            if age < Duration::from_secs(u64::from(policy.orphan_days) * 86400) {
-                continue;
-            }
-            batch.push(name.to_owned());
-            if batch.len() == BATCH {
-                removed += self.remove_orphans(pool, &batch, BATCH - removed).await?;
-                batch.clear();
-                if removed >= BATCH {
-                    more = true;
-                    break;
-                }
-            }
+        if !scan.pending.is_empty() {
+            self.remove_orphans(pool, &scan.pending, policy, now)
+                .await?;
         }
-        if !batch.is_empty() {
-            self.remove_orphans(pool, &batch, BATCH - removed).await?;
-        }
-        Ok(Some(more))
+        scan.pending.clear();
+        Ok(Some(more || scan.entries.is_some()))
     }
 
     async fn remove_orphans(
         &self,
         pool: &sqlx::PgPool,
         batch: &[String],
-        budget: usize,
-    ) -> Result<usize> {
+        policy: Policy,
+        now: SystemTime,
+    ) -> Result<()> {
         let referenced =
             crate::infrastructure::postgres::retention::references(pool, batch).await?;
-        let mut removed = 0;
-        for blob in batch
-            .iter()
-            .filter(|blob| !referenced.contains(*blob))
-            .take(budget)
-        {
-            match tokio::fs::remove_file(self.directory.join(blob)).await {
-                Ok(()) => removed += 1,
+        for blob in batch.iter().filter(|blob| !referenced.contains(*blob)) {
+            let path = self.directory.join(blob);
+            // Scanning happened without a lease, possibly on an earlier tick.
+            // Recheck the current file under the exclusive lease before deletion.
+            if !eligible(&path, policy, now).await? {
+                continue;
+            }
+            match tokio::fs::remove_file(path).await {
+                Ok(()) => {}
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
                 Err(error) => return Err(error.into()),
             }
         }
-        Ok(removed)
+        Ok(())
     }
 }
 

@@ -9,6 +9,96 @@ use std::sync::Arc;
 const DOCUMENT: &str = "00000000-0000-0000-0000-000000000001";
 
 #[tokio::test]
+async fn recent_files_consume_scan_budget_and_resume_while_publishers_hold_leases() {
+    let root = tempfile::tempdir().unwrap();
+    let store = ContentStore::open(root.path()).unwrap();
+    for _ in 0..=SCAN_BATCH {
+        fs::write(
+            store.directory.join(uuid::Uuid::new_v4().to_string()),
+            b"recent",
+        )
+        .unwrap();
+    }
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .connect_lazy("postgresql://localhost/unused")
+        .unwrap();
+    let lease = store.lease().await.unwrap();
+    assert_eq!(
+        store
+            .reclaim(&pool, Policy::default(), SystemTime::now())
+            .await
+            .unwrap(),
+        None
+    );
+    {
+        let scan = store.retention_scan.lock().await;
+        assert!(scan.pending.is_empty());
+        assert!(
+            scan.entries.is_some(),
+            "Recent files must also consume the scan budget"
+        );
+    }
+    assert_eq!(
+        store
+            .reclaim(&pool, Policy::default(), SystemTime::now())
+            .await
+            .unwrap(),
+        None
+    );
+    assert!(
+        store.retention_scan.lock().await.entries.is_none(),
+        "The next tick must resume, not restart"
+    );
+    drop(lease);
+    pool.close().await;
+}
+
+#[tokio::test]
+async fn candidate_batches_survive_contention_and_failed_database_access() {
+    let root = tempfile::tempdir().unwrap();
+    let store = ContentStore::open(root.path()).unwrap();
+    let count = BATCH + 17;
+    for _ in 0..count {
+        fs::write(
+            store.directory.join(uuid::Uuid::new_v4().to_string()),
+            b"orphan",
+        )
+        .unwrap();
+    }
+    let now = SystemTime::now() + Duration::from_secs(8 * 86400);
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .connect_lazy("postgresql://localhost/unused")
+        .unwrap();
+    let lease = store.lease().await.unwrap();
+    assert_eq!(
+        store.reclaim(&pool, Policy::default(), now).await.unwrap(),
+        None
+    );
+    let first = store.retention_scan.lock().await.pending.clone();
+    assert_eq!(first.len(), BATCH);
+    assert_eq!(
+        store.reclaim(&pool, Policy::default(), now).await.unwrap(),
+        None
+    );
+    assert_eq!(store.retention_scan.lock().await.pending, first);
+    drop(lease);
+    pool.close().await;
+    assert!(store.reclaim(&pool, Policy::default(), now).await.is_err());
+    let mut scan = store.retention_scan.lock().await;
+    assert_eq!(scan.pending, first);
+    assert_eq!(fs::read_dir(&store.directory).unwrap().count(), count);
+    // Simulate finishing the first bounded batch. The cursor must reach every
+    // remaining candidate even when the earlier files are still referenced.
+    scan.pending.clear();
+    scan.collect(&store.directory, Policy::default(), now)
+        .await
+        .unwrap();
+    assert_eq!(scan.pending.len(), 17);
+    assert!(scan.entries.is_none());
+    assert!(scan.pending.iter().all(|name| !first.contains(name)));
+}
+
+#[tokio::test]
 async fn active_leases_exclude_collection_across_store_instances() {
     let root = tempfile::tempdir().unwrap();
     let store = ContentStore::open(root.path()).unwrap();
@@ -186,6 +276,47 @@ async fn retention_preserves_current_content_receipts_and_recent_media_probes() 
         history_versions: 2,
         orphan_days: 1,
     };
+    // Candidates can change after a lock-free scan. A renewed file and a newly
+    // referenced blob must both survive final validation under the store lease.
+    let renewed = store
+        .write(b"renewed".to_vec(), "renewed".into())
+        .await
+        .unwrap();
+    let referenced_later = store
+        .write(b"later reference".to_vec(), "later".into())
+        .await
+        .unwrap();
+    for blob in [&renewed, &referenced_later] {
+        File::options()
+            .write(true)
+            .open(store.directory.join(blob))
+            .unwrap()
+            .set_modified(SystemTime::UNIX_EPOCH + Duration::from_secs(old as u64))
+            .unwrap();
+    }
+    {
+        let mut scan = store.retention_scan.lock().await;
+        scan.collect(&store.directory, policy, SystemTime::now())
+            .await
+            .unwrap();
+        assert!(scan.pending.contains(&renewed));
+        assert!(scan.pending.contains(&referenced_later));
+    }
+    File::options()
+        .write(true)
+        .open(store.directory.join(&renewed))
+        .unwrap()
+        .set_modified(SystemTime::now())
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO media(space_id,hash,length,blob,last_used) VALUES('space',$1,1,$2,$3)",
+    )
+    .bind("d".repeat(64))
+    .bind(&referenced_later)
+    .bind(now)
+    .execute(&pool)
+    .await
+    .unwrap();
     // Even after a cancelled HTTP request releases its file lease, an
     // unfinished database publication must fence off the collector.
     let mut publication = pool.begin().await.unwrap();
@@ -228,11 +359,13 @@ async fn retention_preserves_current_content_receipts_and_recent_media_probes() 
     }
     assert!(!store.directory.join(orphan).exists());
     assert!(store.directory.join(recent).exists());
+    assert!(store.directory.join(renewed).exists());
+    assert!(store.directory.join(referenced_later).exists());
     let media: Vec<String> = sqlx::query_scalar("SELECT hash FROM media ORDER BY hash")
         .fetch_all(&pool)
         .await
         .unwrap();
-    assert_eq!(media, ["b".repeat(64), "c".repeat(64)]);
+    assert_eq!(media, ["b".repeat(64), "c".repeat(64), "d".repeat(64)]);
     assert_eq!(
         service
             .save("actor", "space", first)
