@@ -23,6 +23,24 @@ pub(crate) struct Entry {
     pub preview: Option<PathBuf>,
     pub size: [f32; 2],
     pub error: Option<String>,
+    pub fingerprint: Option<Fingerprint>,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct Fingerprint {
+    pub hash: String,
+    stamp: (u64, web_time::SystemTime),
+}
+
+impl Fingerprint {
+    fn stamp(path: &Path) -> Result<(u64, web_time::SystemTime)> {
+        let metadata = rovar_storage::fs::metadata(path)?;
+        Ok((metadata.len(), metadata.modified()?))
+    }
+
+    pub fn is_current(&self, path: &Path) -> bool {
+        Self::stamp(path).is_ok_and(|stamp| stamp == self.stamp)
+    }
 }
 
 pub(crate) struct Library {
@@ -88,6 +106,9 @@ impl Library {
         self.busy = true;
         self.error = None;
         let directory = self.directory.clone();
+        let session = crate::remote::Remote::existing(cx)
+            .and_then(|remote| remote.read(cx).library_session(&directory));
+        let synchronize = session.is_some();
         cx.spawn(async move |this, cx| {
             let result = cx
                 .background_executor()
@@ -96,7 +117,10 @@ impl Library {
                         crate::render::raster::prepare_preview().await;
                     }
                     operation(&directory)?;
-                    Ok::<_, anyhow::Error>((catalog(&directory)?, colors::read(&directory)?))
+                    Ok::<_, anyhow::Error>((
+                        catalog(&directory, synchronize)?,
+                        colors::read(&directory)?,
+                    ))
                 })
                 .await;
             let _ = this.update(cx, |this, cx| {
@@ -107,18 +131,26 @@ impl Library {
                 }
                 match result {
                     Ok((entries, colors)) => {
+                        if let Some(remote) = crate::remote::Remote::existing(cx)
+                            && (remote.read(cx).library_session(&this.directory) != session
+                                || session.as_ref().is_some_and(|session| {
+                                    !remote.update(cx, |remote, cx| {
+                                        remote.library_changed(session, &entries, cx)
+                                    })
+                                }))
+                        {
+                            this.refresh(cx);
+                            return;
+                        }
                         this.colors = colors;
                         this.entries = entries;
                         this.ready = true;
-                        if let Some(remote) = crate::remote::Remote::existing(cx) {
-                            remote.update(cx, |remote, cx| {
-                                remote.library_changed(&this.directory, &this.entries, cx)
-                            });
-                            if let Err(error) = remote.update(cx, |remote, cx| {
+                        if let Some(remote) = crate::remote::Remote::existing(cx)
+                            && let Err(error) = remote.update(cx, |remote, cx| {
                                 remote.colors_changed(&this.directory, &this.colors, cx)
-                            }) {
-                                this.error = Some(error.to_string());
-                            }
+                            })
+                        {
+                            this.error = Some(error.to_string());
                         }
                     }
                     Err(error) => this.error = Some(format!("{error:#}")),
@@ -263,7 +295,7 @@ fn store(
     Ok(())
 }
 
-fn catalog(directory: &Path) -> Result<Vec<Entry>> {
+fn catalog(directory: &Path, synchronize: bool) -> Result<Vec<Entry>> {
     let files = match rovar_storage::fs::read_dir(directory) {
         Ok(files) => files,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
@@ -287,9 +319,16 @@ fn catalog(directory: &Path) -> Result<Vec<Entry>> {
             preview: None,
             size: [0., 0.],
             error: None,
+            fingerprint: None,
         };
         let result = (|| -> Result<()> {
             component_path(directory, &entry.id)?;
+            if synchronize {
+                entry.fingerprint = Some(Fingerprint {
+                    hash: String::new(),
+                    stamp: Fingerprint::stamp(&path)?,
+                });
+            }
             let reader = Reader::open(&path)?;
             let metadata: Metadata = serde_json::from_slice(&reader.read("component", 4096)?)?;
             valid_name(&metadata.name)?;
@@ -302,6 +341,14 @@ fn catalog(directory: &Path) -> Result<Vec<Entry>> {
             let previews = directory.join("previews");
             entry.preview =
                 document::cache_preview(&path, &previews)?.map(|name| previews.join(name));
+            if let Some(fingerprint) = &mut entry.fingerprint {
+                let bytes = rovar_storage::fs::read(&path)?;
+                fingerprint.hash = crate::remote::digest(&bytes, &entry.name, false);
+                ensure!(
+                    fingerprint.is_current(&path),
+                    "Component changed during scan"
+                );
+            }
             Ok(())
         })();
         if let Err(error) = result {

@@ -1142,29 +1142,44 @@ impl Remote {
 
     pub fn library_changed(
         &mut self,
-        directory: &Path,
+        session: &(String, u64),
         entries: &[crate::document::library::Entry],
         cx: &mut Context<Self>,
-    ) {
-        let Some(connection) = self
-            .connections()
-            .iter()
-            .find(|c| self.library_root(&c.id).join("components") == directory)
-            .map(|c| c.id.clone())
-        else {
-            return;
-        };
+    ) -> bool {
+        let (connection, generation) = session;
+        if self
+            .connection(connection)
+            .is_none_or(|c| c.generation != *generation)
+            || entries.iter().any(|entry| {
+                entry
+                    .fingerprint
+                    .as_ref()
+                    .map_or(entry.error.is_none(), |fingerprint| {
+                        !fingerprint.is_current(&entry.path)
+                    })
+            })
+        {
+            return false;
+        }
         let paths: BTreeSet<_> = entries.iter().map(|entry| entry.path.clone()).collect();
+        // A download or a restored local file may have appeared after read_dir.
+        // Refresh the listing instead of treating that omitted entry as deleted.
+        if self.catalog.links.iter().any(|(path, link)| {
+            link.connection == *connection
+                && link.object.kind == Kind::Component
+                && !paths.contains(path)
+                && rovar_storage::fs::metadata(path).is_ok()
+        }) {
+            return false;
+        }
         let mut changed = false;
         for entry in entries.iter().filter(|entry| entry.error.is_none()) {
             *self.local_changes.entry(entry.path.clone()).or_default() += 1;
-            let Ok(bytes) = rovar_storage::fs::read(&entry.path) else {
-                continue;
-            };
-            let hash = digest(&bytes, &entry.name, false);
+            let hash = &entry.fingerprint.as_ref().unwrap().hash;
             if let Some(link) = self.catalog.links.get_mut(&entry.path) {
-                if link.digest != hash {
+                if link.digest != *hash || link.object.deleted {
                     link.object.title = entry.name.clone();
+                    link.object.deleted = false;
                     link.dirty = true;
                     changed = true;
                 }
@@ -1193,10 +1208,12 @@ impl Remote {
             }
         }
         for (path, link) in &mut self.catalog.links {
-            if link.connection == connection
+            if link.connection == *connection
                 && link.object.kind == Kind::Component
                 && !link.object.deleted
                 && !paths.contains(path)
+                && rovar_storage::fs::metadata(path)
+                    .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
             {
                 link.object.deleted = true;
                 link.dirty = true;
@@ -1208,5 +1225,13 @@ impl Remote {
             self.persist();
             cx.notify();
         }
+        true
+    }
+
+    pub fn library_session(&self, directory: &Path) -> Option<(String, u64)> {
+        self.connections()
+            .iter()
+            .find(|c| self.library_root(&c.id).join("components") == directory)
+            .map(|c| (c.id.clone(), c.generation))
     }
 }

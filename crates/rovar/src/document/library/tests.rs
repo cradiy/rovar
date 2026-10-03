@@ -46,8 +46,9 @@ fn catalog_recovers_editable_components_and_failed_overwrite_keeps_original(
         &text_system,
     )
     .unwrap();
-    let entries = catalog(&directory).unwrap();
+    let entries = catalog(&directory, false).unwrap();
     assert_eq!(entries.len(), 1);
+    assert!(entries[0].fingerprint.is_none());
     assert_eq!(entries[0].name, "按钮 / primary");
     assert!(entries[0].preview.as_ref().unwrap().exists());
     assert_eq!(
@@ -70,10 +71,177 @@ fn catalog_recovers_editable_components_and_failed_overwrite_keeps_original(
         )
         .is_err()
     );
-    assert_eq!(catalog(&directory).unwrap()[0].name, "按钮 / primary");
+    assert_eq!(
+        catalog(&directory, false).unwrap()[0].name,
+        "按钮 / primary"
+    );
     assert_eq!(document::load(&entries[0].path).unwrap().json, json);
     assert!(store(&directory, " ", &json, &[], [80., 40.], &text_system).is_err());
     assert!(component_path(&directory, "../documents/other").is_err());
+}
+
+#[gpui::test]
+fn sync_catalog_rejects_stale_files_and_detects_deletion_and_restoration(
+    cx: &mut gpui::TestAppContext,
+) {
+    use crate::remote::{Remote, tests::identity};
+    let root = tempfile::tempdir().unwrap();
+    let remote = cx.update(|cx| Remote::shared(root.path(), cx));
+    let (connection, directory) = remote.update(cx, |remote, cx| {
+        let id = remote
+            .connect(
+                "https://example.test".into(),
+                identity(),
+                "token".into(),
+                cx,
+            )
+            .unwrap();
+        let directory = remote.library_root(&id).join("components");
+        (id, directory)
+    });
+    let document = fixture();
+    let text_system = cx.update(|cx| cx.text_system().clone());
+    store(
+        &directory,
+        "Card",
+        &serde_json::to_vec(&document).unwrap(),
+        &[],
+        [80., 40.],
+        &text_system,
+    )
+    .unwrap();
+    let path = component_path(&directory, &document.id).unwrap();
+    let object = rovar_api::Object {
+        id: uuid::Uuid::new_v4().to_string(),
+        kind: rovar_api::Kind::Component,
+        title: "Card".into(),
+        revision: 1,
+        created: 1,
+        modified: 1,
+        deleted: false,
+    };
+    cx.update(|cx| {
+        crate::remote::tests::confirmed_document(
+            &remote,
+            "https://example.test".into(),
+            path.clone(),
+            object,
+            cx,
+        );
+    });
+    let session = remote.read_with(cx, |r, _| r.library_session(&directory).unwrap());
+    assert_eq!(session.0, connection);
+    let entries = catalog(&directory, true).unwrap();
+    remote.update(cx, |r, cx| {
+        assert!(r.library_changed(&session, &entries, cx));
+        assert!(
+            !r.link(&path).unwrap().dirty,
+            "An unchanged download stays clean"
+        );
+    });
+    {
+        let mut writer = Writer::open(&path).unwrap();
+        writer
+            .put_bytes(
+                "component",
+                "json",
+                &serde_json::to_vec(&Metadata {
+                    name: "Renamed card".into(),
+                    size: [80., 40.],
+                })
+                .unwrap(),
+            )
+            .unwrap();
+        writer.commit().unwrap();
+    }
+    remote.update(cx, |r, cx| {
+        assert!(!r.library_changed(&session, &entries, cx));
+        assert_eq!(r.link(&path).unwrap().object.title, "Card");
+        assert!(!r.link(&path).unwrap().dirty);
+    });
+    let entries = catalog(&directory, true).unwrap();
+    remote.update(cx, |r, cx| {
+        assert!(r.library_changed(&session, &entries, cx));
+        assert_eq!(r.link(&path).unwrap().object.title, "Renamed card");
+        assert!(r.link(&path).unwrap().dirty);
+    });
+    let bytes = std::fs::read(&path).unwrap();
+    std::fs::remove_file(&path).unwrap();
+    remote.update(cx, |r, cx| {
+        assert!(!r.library_changed(&session, &entries, cx));
+        assert!(!r.link(&path).unwrap().object.deleted);
+        assert!(r.library_changed(&session, &[], cx));
+        assert!(r.link(&path).unwrap().object.deleted);
+    });
+    std::fs::write(&path, bytes).unwrap();
+    remote.update(cx, |r, cx| {
+        assert!(!r.library_changed(&session, &[], cx));
+        assert!(r.link(&path).unwrap().object.deleted);
+    });
+    let entries = catalog(&directory, true).unwrap();
+    remote.update(cx, |r, cx| {
+        assert!(r.library_changed(&session, &entries, cx));
+        assert!(!r.link(&path).unwrap().object.deleted);
+        assert!(r.link(&path).unwrap().dirty);
+        r.sign_out(&connection, cx);
+        assert!(!r.library_changed(&session, &entries, cx));
+    });
+}
+
+#[gpui::test]
+fn library_refresh_retries_a_changed_session_and_keeps_corrupt_entries(
+    cx: &mut gpui::TestAppContext,
+) {
+    use crate::remote::{Remote, tests::identity};
+    let root = tempfile::tempdir().unwrap();
+    let remote = cx.update(|cx| Remote::shared(root.path(), cx));
+    let (connection, library_root) = remote.update(cx, |remote, cx| {
+        let id = remote
+            .connect(
+                "https://example.test".into(),
+                identity(),
+                "token".into(),
+                cx,
+            )
+            .unwrap();
+        let root = remote.library_root(&id);
+        (id, root)
+    });
+    let directory = library_root.join("components");
+    let document = fixture();
+    let path = component_path(&directory, &document.id).unwrap();
+    let text_system = cx.update(|cx| cx.text_system().clone());
+    store(
+        &directory,
+        "Card",
+        &serde_json::to_vec(&document).unwrap(),
+        &[],
+        [80., 40.],
+        &text_system,
+    )
+    .unwrap();
+    let library = cx.update(|cx| {
+        let library = Library::open(&library_root, cx);
+        remote.update(cx, |remote, cx| remote.sign_out(&connection, cx));
+        library
+    });
+    cx.run_until_parked();
+    library.read_with(cx, |library, _| {
+        assert!(library.ready && !library.busy);
+        assert!(library.error.is_none());
+        assert!(library.entries[0].fingerprint.is_some());
+    });
+    remote.read_with(cx, |remote, _| assert!(remote.link(&path).is_some()));
+    std::fs::write(&path, b"damaged component").unwrap();
+    library.update(cx, |library, cx| library.refresh(cx));
+    cx.run_until_parked();
+    library.read_with(cx, |library, _| {
+        assert!(!library.busy);
+        assert!(library.entries[0].error.is_some());
+    });
+    remote.read_with(cx, |remote, _| {
+        assert!(!remote.link(&path).unwrap().object.deleted)
+    });
 }
 
 #[gpui::test]
@@ -105,7 +273,7 @@ fn shared_catalog_rename_delete_and_restart_preserve_existing_copies(
         "Renamed 卡片"
     );
     assert_eq!(
-        catalog(&root.path().join("components")).unwrap()[0].name,
+        catalog(&root.path().join("components"), false).unwrap()[0].name,
         "Renamed 卡片"
     );
     library.update(cx, |lib, cx| lib.delete(entry.clone(), cx));
@@ -173,7 +341,7 @@ fn invalid_component_is_isolated_and_removal_survives_refresh(cx: &mut gpui::Tes
     assert_eq!(library.read_with(cx, |lib, _| lib.entries.len()), 3);
     library.update(cx, |lib, cx| lib.remove_failed(failed, cx));
     cx.run_until_parked();
-    let entries = catalog(&directory).unwrap();
+    let entries = catalog(&directory, false).unwrap();
     assert_eq!(entries.len(), 2);
     assert!(entries.iter().all(|entry| entry.error.is_none()));
     assert!(!invalid_path.exists());
