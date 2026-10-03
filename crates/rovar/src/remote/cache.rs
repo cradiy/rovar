@@ -33,7 +33,6 @@ pub(super) fn prepare_snapshot(
     object: Object,
     bytes: Option<Vec<u8>>,
 ) -> Result<PreparedSnapshot> {
-    use std::io::Write;
     ensure!(
         object.deleted == bytes.is_none(),
         "Invalid downloaded snapshot"
@@ -52,14 +51,7 @@ pub(super) fn prepare_snapshot(
         object.deleted,
     );
     let file = if let Some(bytes) = bytes {
-        let parent = path
-            .parent()
-            .ok_or_else(|| anyhow::anyhow!("Missing cache directory"))?;
-        rovar_storage::fs::create_dir_all(parent)?;
-        let mut file = rovar_storage::tempfile::NamedTempFile::new_in(parent)?;
-        file.write_all(&bytes)?;
-        file.as_file().sync_all()?;
-        Some(file)
+        Some(stage(path, &bytes)?)
     } else {
         None
     };
@@ -68,6 +60,95 @@ pub(super) fn prepare_snapshot(
         baseline,
         digest,
         file,
+    })
+}
+
+fn stage(path: &Path, bytes: &[u8]) -> Result<rovar_storage::tempfile::NamedTempFile> {
+    use std::io::Write;
+    let parent = path
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("Missing cache directory"))?;
+    rovar_storage::fs::create_dir_all(parent)?;
+    let mut file = rovar_storage::tempfile::NamedTempFile::new_in(parent)?;
+    file.write_all(bytes)?;
+    file.as_file().sync_all()?;
+    Ok(file)
+}
+
+pub(super) struct PreparedMerge {
+    incoming: Incoming,
+    file: rovar_storage::tempfile::NamedTempFile,
+    pending_stamp: Option<baseline::Stamp>,
+}
+
+pub(super) struct RejectedRequest {
+    id: String,
+    stamp: Option<baseline::Stamp>,
+}
+
+pub(super) fn prepare_rejected_request(path: &Path) -> Result<RejectedRequest> {
+    let stamp = baseline::stamp(path, false)?;
+    let saved: PendingSave = serde_json::from_slice(&rovar_storage::fs::read(path)?)?;
+    ensure!(
+        baseline::stamp(path, false)? == stamp,
+        "Pending request changed during merge"
+    );
+    Ok(RejectedRequest {
+        id: saved.input.request_id,
+        stamp,
+    })
+}
+
+#[derive(Clone, Copy)]
+enum RequestCheck {
+    Read,
+    Verified,
+}
+
+pub(super) struct MergeInput {
+    pub object: Object,
+    pub title: String,
+    pub server: Vec<u8>,
+    pub merged: Vec<u8>,
+    pub rejected_request: RejectedRequest,
+}
+
+pub(super) fn prepare_merge(
+    root: &Path,
+    path: PathBuf,
+    previous: Link,
+    input: MergeInput,
+) -> Result<PreparedMerge> {
+    let MergeInput {
+        object,
+        title,
+        server,
+        merged,
+        rejected_request,
+    } = input;
+    let confirmed = baseline::snapshot_content(&server, false)?;
+    let content = baseline::snapshot_content(&merged, false)?;
+    let transfer =
+        rovar_format::delta::Snapshot::from_bytes(&server, rovar_api::MAX_METADATA_BYTES).ok();
+    let mut next = previous.clone();
+    next.baseline = Some(baseline::store(root, &object, &confirmed, transfer)?);
+    next.digest = digest(&server, &object.title, false);
+    next.dirty = content != confirmed || title != object.title;
+    next.object = object;
+    next.object.title = title;
+    next.conflict = false;
+    next.error = None;
+    let file = stage(&path, &merged)?;
+    Ok(PreparedMerge {
+        incoming: Incoming {
+            path,
+            previous: Some(previous),
+            next,
+            installed_content: Some(hex::encode(Sha256::digest(content))),
+            rejected_request: Some(rejected_request.id),
+        },
+        file,
+        pending_stamp: rejected_request.stamp,
     })
 }
 
@@ -120,43 +201,22 @@ impl Remote {
         self.install_incoming(
             incoming,
             file.map_or(Installation::Delete, Installation::Prepared),
+            RequestCheck::Read,
         )
     }
 
-    pub(super) fn install_merge(
-        &mut self,
-        path: PathBuf,
-        object: Object,
-        title: String,
-        server: &[u8],
-        merged: &[u8],
-        rejected_request: String,
-    ) -> Result<()> {
+    pub(super) fn install_merge(&mut self, prepared: PreparedMerge) -> Result<()> {
         self.recover_incoming()?;
-        let previous = self
-            .catalog
-            .links
-            .get(&path)
-            .cloned()
-            .ok_or_else(|| anyhow::anyhow!("Missing sync link"))?;
-        let confirmed = baseline::snapshot_content(server, false)?;
-        let content = baseline::snapshot_content(merged, false)?;
-        let mut next = previous.clone();
-        next.baseline = Some(self.store_snapshot_baseline(&object, &confirmed, server)?);
-        next.digest = digest(server, &object.title, false);
-        next.dirty = content != confirmed || title != object.title;
-        next.object = object;
-        next.object.title = title;
-        next.conflict = false;
-        next.error = None;
-        let incoming = Incoming {
-            path,
-            previous: Some(previous),
-            next,
-            installed_content: Some(hex::encode(Sha256::digest(&content))),
-            rejected_request: Some(rejected_request),
-        };
-        self.install_incoming(incoming, Installation::Replace(merged))
+        ensure!(
+            baseline::stamp(&self.pending_path(&prepared.incoming.next), false)?
+                == prepared.pending_stamp,
+            "Pending request changed during merge"
+        );
+        self.install_incoming(
+            prepared.incoming,
+            Installation::Prepared(prepared.file),
+            RequestCheck::Verified,
+        )
     }
 
     pub(super) fn install_resolution(
@@ -181,6 +241,7 @@ impl Remote {
         self.install_incoming(
             incoming,
             server_bytes.map_or(Installation::Preserve, Installation::Replace),
+            RequestCheck::Read,
         )
     }
 
@@ -188,6 +249,7 @@ impl Remote {
         &mut self,
         incoming: Incoming,
         installation: Installation<'_>,
+        request_check: RequestCheck,
     ) -> Result<()> {
         let journal = self.root.join("incoming.json");
         write_atomic(&journal, &serde_json::to_vec(&incoming)?)?;
@@ -202,12 +264,12 @@ impl Remote {
             }
             Installation::Delete | Installation::Preserve => {}
         }
-        self.finish_incoming(&incoming)?;
+        self.finish_incoming(&incoming, request_check)?;
         rovar_storage::fs::remove_file(journal)?;
         Ok(())
     }
 
-    fn finish_incoming(&mut self, incoming: &Incoming) -> Result<()> {
+    fn finish_incoming(&mut self, incoming: &Incoming, request_check: RequestCheck) -> Result<()> {
         if incoming.next.object.kind == Kind::ColorStyle {
             let bytes = if incoming.next.object.deleted {
                 None
@@ -233,7 +295,7 @@ impl Remote {
             }
             anyhow::bail!("Could not persist downloaded revision");
         }
-        self.retire_rejected_request(incoming)?;
+        self.retire_rejected_request(incoming, request_check)?;
         if matches!(
             incoming.next.object.kind,
             Kind::Component | Kind::ColorStyle
@@ -244,13 +306,23 @@ impl Remote {
         Ok(())
     }
 
-    fn retire_rejected_request(&self, incoming: &Incoming) -> Result<()> {
+    fn retire_rejected_request(
+        &self,
+        incoming: &Incoming,
+        request_check: RequestCheck,
+    ) -> Result<()> {
         if let Some(request) = &incoming.rejected_request {
             let pending = self.pending_path(&incoming.next);
             if rovar_storage::exists(&pending) {
-                let saved: PendingSave =
-                    serde_json::from_slice(&rovar_storage::fs::read(&pending)?)?;
-                if saved.input.request_id == *request {
+                let matches = match request_check {
+                    RequestCheck::Verified => true,
+                    RequestCheck::Read => {
+                        let saved: PendingSave =
+                            serde_json::from_slice(&rovar_storage::fs::read(&pending)?)?;
+                        saved.input.request_id == *request
+                    }
+                };
+                if matches {
                     rovar_storage::fs::remove_file(pending)?;
                 }
             }
@@ -289,7 +361,7 @@ impl Remote {
         if already_applied {
             // The catalog committed before a crash, but retiring the rejected
             // request may not have. Do not reset any subsequent local edits.
-            self.retire_rejected_request(&incoming)?;
+            self.retire_rejected_request(&incoming, RequestCheck::Read)?;
         } else if unchanged {
             // A present baseline must still pass integrity checks. Only the
             // explicit local-resolution path may recover without one.
@@ -308,7 +380,7 @@ impl Remote {
                     .is_ok_and(|content| STANDARD.encode(content) == baseline.content)
             };
             if installed {
-                self.finish_incoming(&incoming)?;
+                self.finish_incoming(&incoming, RequestCheck::Read)?;
             }
         }
         rovar_storage::fs::remove_file(journal)?;

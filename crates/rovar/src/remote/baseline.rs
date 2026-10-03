@@ -234,12 +234,12 @@ impl Remote {
 }
 
 #[derive(PartialEq, Eq)]
-struct Stamp {
+pub(super) struct Stamp {
     len: u64,
     modified: web_time::SystemTime,
 }
 
-fn stamp(path: &Path, deleted: bool) -> Result<Option<Stamp>> {
+pub(super) fn stamp(path: &Path, deleted: bool) -> Result<Option<Stamp>> {
     if deleted {
         return Ok(None);
     }
