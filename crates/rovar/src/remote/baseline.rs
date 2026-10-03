@@ -101,6 +101,7 @@ impl Remote {
         self.store_transfer_baseline(object, content, None)
     }
 
+    #[cfg(test)]
     pub(super) fn store_snapshot_baseline(
         &self,
         object: &Object,
@@ -115,6 +116,7 @@ impl Remote {
         self.store_transfer_baseline(object, content, transfer)
     }
 
+    #[cfg(test)]
     pub(super) fn store_transfer_baseline(
         &self,
         object: &Object,

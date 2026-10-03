@@ -109,29 +109,54 @@ impl Studio {
             crate::i18n::t("comparison-account-changed")
         );
         let server = panel.server_visible;
-        let bytes = if server {
+        let snapshot = if server {
             let snapshot = panel
                 ._snapshot
                 .as_ref()
                 .ok_or_else(|| anyhow::anyhow!("Server snapshot is unavailable"))?;
-            Some(rovar_storage::fs::read(&snapshot.0)?)
+            Some(snapshot.0.clone())
         } else {
             None
         };
-        self.remote.update(cx, |remote, cx| {
-            remote.resolve_conflict(
-                &panel.path,
-                panel.object.as_ref().unwrap(),
-                bytes.as_deref(),
-                cx,
-            )
+        let task = self.remote.update(cx, |remote, cx| {
+            remote.resolve_conflict(&panel.path, panel.object.as_ref().unwrap(), snapshot, cx)
         })?;
+        let request = panel.request;
+        cx.spawn_in(window, async move |this, cx| {
+            let result = task.await;
+            let _ = this.update_in(cx, |this, window, cx| {
+                if this
+                    .comparison
+                    .as_ref()
+                    .is_none_or(|p| p.request != request)
+                {
+                    return;
+                }
+                match result {
+                    Ok(()) => this.complete_comparison_resolution(token, server, window, cx),
+                    Err(error) => this.comparison_resolution_error(error.to_string(), cx),
+                }
+            });
+        })
+        .detach();
+        Ok(())
+    }
+
+    fn complete_comparison_resolution(
+        &mut self,
+        token: usize,
+        server: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.comparison.as_mut().unwrap().resolving = false;
         self.close_comparison(window, cx);
         if server {
             // Reload from the permanent file, so lazy media does not reference
             // the temporary comparison snapshot and stale undo history is gone.
-            let tab = self.tabs.iter_mut().find(|t| t.token == token).unwrap();
+            let Some(tab) = self.tabs.iter_mut().find(|t| t.token == token) else {
+                return;
+            };
             tab.remote_baseline = self
                 .remote
                 .read(cx)
@@ -147,6 +172,5 @@ impl Studio {
             self.remote.update(cx, |remote, cx| remote.sync(cx));
         }
         cx.notify();
-        Ok(())
     }
 }

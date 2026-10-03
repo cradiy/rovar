@@ -1,4 +1,5 @@
 use super::*;
+use crate::remote::tests::resolve;
 use gpui::TestAppContext;
 
 fn setup(root: &Path, cx: &mut TestAppContext) -> (Entity<Remote>, PathBuf, Object, PathBuf) {
@@ -57,6 +58,64 @@ fn reload(r: &mut Remote) {
 }
 
 #[gpui::test]
+fn resolving_rejects_new_edits_and_sign_out_and_dropped_waiters_release_the_worker(
+    cx: &mut TestAppContext,
+) {
+    let root = tempfile::tempdir().unwrap();
+    let (remote, path, reviewed, pending) = setup(root.path(), cx);
+    let request = rovar_storage::fs::read(&pending).unwrap();
+    let snapshot = root.path().join("reviewed.rovar");
+    write_atomic(&snapshot, b"server").unwrap();
+    let task = remote.update(cx, |r, cx| {
+        let task = r
+            .resolve_conflict(&path, &reviewed, Some(snapshot.clone()), cx)
+            .unwrap();
+        r.changed(&path, Some("Rename".into()), false, cx);
+        r.changed(&path, Some("Local title".into()), false, cx);
+        task
+    });
+    assert!(cx.foreground_executor().clone().block_test(task).is_err());
+    remote.read_with(cx, |r, _| {
+        assert!(!r.busy && r.link(&path).unwrap().conflict);
+    });
+    assert_eq!(rovar_storage::fs::read(&path).unwrap(), b"local");
+    assert_eq!(rovar_storage::fs::read(&pending).unwrap(), request);
+    assert!(!root.path().join("incoming.json").exists());
+
+    let task = remote.update(cx, |r, cx| {
+        let task = r
+            .resolve_conflict(&path, &reviewed, Some(snapshot), cx)
+            .unwrap();
+        let connection = r.link(&path).unwrap().connection.clone();
+        r.sign_out(&connection, cx);
+        task
+    });
+    assert!(cx.foreground_executor().clone().block_test(task).is_err());
+    assert_eq!(rovar_storage::fs::read(&path).unwrap(), b"local");
+    assert_eq!(rovar_storage::fs::read(&pending).unwrap(), request);
+    remote.update(cx, |r, cx| {
+        assert!(!r.busy && r.link(&path).unwrap().conflict);
+        r.connect(
+            "https://example.test".into(),
+            crate::remote::tests::identity(),
+            "token".into(),
+            cx,
+        )
+        .unwrap();
+        let task = r.resolve_conflict(&path, &reviewed, None, cx).unwrap();
+        drop(task);
+    });
+    crate::remote::tests::wait_sync(&remote, cx);
+    remote.read_with(cx, |r, _| {
+        assert!(!r.busy);
+        let link = r.link(&path).unwrap();
+        assert!(link.dirty && !link.conflict);
+    });
+    assert_eq!(rovar_storage::fs::read(&path).unwrap(), b"local");
+    assert!(!pending.exists());
+}
+
+#[gpui::test]
 fn resolution_recovers_both_choices_after_catalog_failure_and_keeps_later_requests(
     cx: &mut TestAppContext,
 ) {
@@ -68,15 +127,32 @@ fn resolution_recovers_both_choices_after_catalog_failure_and_keeps_later_reques
         write_atomic(&root.path().join("servers.json"), &original_catalog).unwrap();
         write_atomic(&path, b"local").unwrap();
         write_atomic(&pending, &original_pending).unwrap();
+        let catalog = root.path().join("servers.json");
         remote.update(cx, |r, cx| {
             reload(r);
+            // Authentication is intentionally not persisted in the catalog.
+            r.connect(
+                "https://example.test".into(),
+                crate::remote::tests::identity(),
+                "token".into(),
+                cx,
+            )
+            .unwrap();
             let catalog = root.path().join("servers.json");
             // Force the real persist path to fail after the recovery record and
             // (for the server choice) the replacement document are durable.
             rovar_storage::fs::remove_file(&catalog).unwrap();
             rovar_storage::fs::create_dir(&catalog).unwrap();
-            let server = use_server.then_some(b"server".as_slice());
-            assert!(r.resolve_conflict(&path, &reviewed, server, cx).is_err());
+        });
+        let server = use_server.then_some(b"server".as_slice());
+        let error = resolve(&remote, &path, &reviewed, server, cx).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("Could not persist downloaded revision"),
+            "{error}"
+        );
+        remote.update(cx, |r, _| {
             let journal = root.path().join("incoming.json");
             let record = rovar_storage::fs::read(&journal).unwrap();
             assert!(
@@ -146,13 +222,12 @@ fn failed_replacement_retains_conflict_and_request_without_overwriting_later_edi
     let root = tempfile::tempdir().unwrap();
     let (remote, path, reviewed, pending) = setup(root.path(), cx);
     let request = rovar_storage::fs::read(&pending).unwrap();
-    remote.update(cx, |r, cx| {
+    remote.update(cx, |_, _| {
         rovar_storage::fs::remove_file(&path).unwrap();
         rovar_storage::fs::create_dir(&path).unwrap();
-        assert!(
-            r.resolve_conflict(&path, &reviewed, Some(b"server"), cx)
-                .is_err()
-        );
+    });
+    assert!(resolve(&remote, &path, &reviewed, Some(b"server"), cx).is_err());
+    remote.update(cx, |r, _| {
         assert!(root.path().join("incoming.json").exists());
         rovar_storage::fs::remove_dir(&path).unwrap();
         write_atomic(&path, b"later local edit").unwrap();
@@ -171,11 +246,8 @@ fn failed_baseline_preparation_leaves_local_file_and_request_untouched(cx: &mut 
     let (remote, path, reviewed, pending) = setup(root.path(), cx);
     let request = rovar_storage::fs::read(&pending).unwrap();
     write_atomic(&root.path().join("baselines"), b"blocked").unwrap();
-    remote.update(cx, |r, cx| {
-        assert!(
-            r.resolve_conflict(&path, &reviewed, Some(b"server"), cx)
-                .is_err()
-        );
+    assert!(resolve(&remote, &path, &reviewed, Some(b"server"), cx).is_err());
+    remote.update(cx, |r, _| {
         assert_eq!(rovar_storage::fs::read(&path).unwrap(), b"local");
         assert_eq!(rovar_storage::fs::read(&pending).unwrap(), request);
         assert!(r.link(&path).unwrap().conflict);

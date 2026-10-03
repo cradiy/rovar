@@ -11,11 +11,90 @@ struct Incoming {
     rejected_request: Option<String>,
 }
 
-enum Installation<'a> {
-    Replace(&'a [u8]),
+enum Installation {
     Prepared(rovar_storage::tempfile::NamedTempFile),
     Delete,
     Preserve,
+}
+
+pub(super) struct PreparedResolution {
+    incoming: Incoming,
+    file: Option<rovar_storage::tempfile::NamedTempFile>,
+    local_stamp: Option<baseline::Stamp>,
+    pending_stamp: Option<baseline::Stamp>,
+}
+
+fn optional_stamp(path: &Path) -> Result<Option<baseline::Stamp>> {
+    match baseline::stamp(path, false) {
+        Err(error)
+            if error
+                .downcast_ref::<std::io::Error>()
+                .is_some_and(|e| e.kind() == std::io::ErrorKind::NotFound) =>
+        {
+            Ok(None)
+        }
+        result => result,
+    }
+}
+
+pub(super) fn prepare_resolution(
+    root: &Path,
+    path: PathBuf,
+    previous: Link,
+    reviewed: Object,
+    server: Option<PathBuf>,
+) -> Result<PreparedResolution> {
+    let local_stamp = optional_stamp(&path)?;
+    let pending = root
+        .join("pending")
+        .join(&previous.connection)
+        .join(format!("{}.json", previous.object.id));
+    let rejected = if optional_stamp(&pending)?.is_some() {
+        Some(prepare_rejected_request(&pending)?)
+    } else {
+        None
+    };
+    let mut next = previous.clone();
+    next.object.revision = reviewed.revision;
+    next.object.modified = reviewed.modified;
+    next.conflict = false;
+    next.error = None;
+    next.dirty = true;
+    next.baseline = None;
+    next.digest.clear();
+    let (content, file) = if let Some(server) = server {
+        let bytes = rovar_storage::fs::read(server)?;
+        let content = baseline::snapshot_content(&bytes, false)?;
+        let transfer =
+            rovar_format::delta::Snapshot::from_bytes(&bytes, rovar_api::MAX_METADATA_BYTES).ok();
+        next.baseline = Some(baseline::store(root, &reviewed, &content, transfer)?);
+        next.digest = digest(&bytes, &reviewed.title, false);
+        next.object = reviewed;
+        next.dirty = false;
+        (content, Some(stage(&path, &bytes)?))
+    } else {
+        (baseline::content(&path, false)?, None)
+    };
+    ensure!(
+        optional_stamp(&path)? == local_stamp,
+        "Local document changed while resolving; try again"
+    );
+    let (rejected_request, pending_stamp) = match rejected {
+        Some(request) => (Some(request.id), request.stamp),
+        None => (None, None),
+    };
+    Ok(PreparedResolution {
+        incoming: Incoming {
+            path,
+            previous: Some(previous),
+            next,
+            installed_content: Some(hex::encode(Sha256::digest(content))),
+            rejected_request,
+        },
+        file,
+        local_stamp,
+        pending_stamp,
+    })
 }
 
 pub(super) struct PreparedSnapshot {
@@ -219,42 +298,33 @@ impl Remote {
         )
     }
 
-    pub(super) fn install_resolution(
-        &mut self,
-        path: &Path,
-        previous: Link,
-        next: Link,
-        server_bytes: Option<&[u8]>,
-        rejected_request: Option<String>,
-    ) -> Result<()> {
-        let content = match server_bytes {
-            Some(bytes) => baseline::snapshot_content(bytes, next.object.deleted)?,
-            None => baseline::content(path, next.object.deleted)?,
-        };
-        let incoming = Incoming {
-            path: path.into(),
-            previous: Some(previous),
-            next,
-            installed_content: Some(hex::encode(Sha256::digest(content))),
-            rejected_request,
-        };
+    pub(super) fn install_resolution(&mut self, prepared: PreparedResolution) -> Result<()> {
+        ensure!(
+            optional_stamp(&prepared.incoming.path)? == prepared.local_stamp,
+            "Local document changed while resolving; try again"
+        );
+        ensure!(
+            optional_stamp(&self.pending_path(&prepared.incoming.next))? == prepared.pending_stamp,
+            "Pending request changed while resolving; try again"
+        );
         self.install_incoming(
-            incoming,
-            server_bytes.map_or(Installation::Preserve, Installation::Replace),
-            RequestCheck::Read,
+            prepared.incoming,
+            prepared
+                .file
+                .map_or(Installation::Preserve, Installation::Prepared),
+            RequestCheck::Verified,
         )
     }
 
     fn install_incoming(
         &mut self,
         incoming: Incoming,
-        installation: Installation<'_>,
+        installation: Installation,
         request_check: RequestCheck,
     ) -> Result<()> {
         let journal = self.root.join("incoming.json");
         write_atomic(&journal, &serde_json::to_vec(&incoming)?)?;
         match installation {
-            Installation::Replace(bytes) => write_atomic(&incoming.path, bytes)?,
             Installation::Prepared(file) => {
                 file.persist(&incoming.path)?;
                 rovar_format::sync_parent(&incoming.path)?;

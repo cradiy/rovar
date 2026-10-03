@@ -7,9 +7,9 @@ impl Remote {
         &mut self,
         path: &Path,
         reviewed: &Object,
-        server_bytes: Option<&[u8]>,
+        server: Option<PathBuf>,
         cx: &mut Context<Self>,
-    ) -> Result<()> {
+    ) -> Result<gpui::Task<Result<()>>> {
         ensure!(!self.busy, "Sync is busy; try again");
         self.recover_incoming()?;
         let previous = self
@@ -26,38 +26,61 @@ impl Remote {
                 && !reviewed.deleted,
             "The compared document has changed"
         );
-        // Retire only this rejected request, after the chosen revision has
-        // committed. A later request must survive replaying an old journal.
-        let rejected_request = match rovar_storage::fs::read(self.pending_path(&previous)) {
-            Ok(bytes) => Some(
-                serde_json::from_slice::<PendingSave>(&bytes)?
-                    .input
-                    .request_id,
-            ),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
-            Err(error) => return Err(error.into()),
+        let connection = self
+            .connection(&previous.connection)
+            .filter(|c| c.authenticated)
+            .ok_or_else(|| anyhow::anyhow!("Server account changed; reopen the comparison"))?;
+        let generation = connection.generation;
+        let local_generation = self.local_changes.get(path).copied().unwrap_or_default();
+        let root = self.root.clone();
+        let path = path.to_owned();
+        let task = {
+            let path = path.clone();
+            let previous = previous.clone();
+            let reviewed = reviewed.clone();
+            cx.background_executor().spawn(async move {
+                cache::prepare_resolution(&root, path, previous, reviewed, server)
+            })
         };
-        let mut resolved = previous.clone();
-        resolved.object.revision = reviewed.revision;
-        resolved.object.modified = reviewed.modified;
-        resolved.conflict = false;
-        resolved.error = None;
-        resolved.dirty = true;
-        // Choosing the local version rebases it onto the reviewed revision.
-        resolved.baseline = None;
-        resolved.digest.clear();
-        if let Some(bytes) = server_bytes {
-            resolved.object = reviewed.clone();
-            resolved.digest = digest(bytes, &reviewed.title, false);
-            resolved.baseline = Some(self.store_snapshot_baseline(
-                reviewed,
-                &baseline::snapshot_content(bytes, false)?,
-                bytes,
-            )?);
-            resolved.dirty = false;
-        }
-        self.install_resolution(path, previous, resolved, server_bytes, rejected_request)?;
+        self.busy = true;
+        // The worker outlives a dropped completion task so closing a window
+        // cannot strand the shared busy flag.
+        let (sender, receiver) = futures_channel::oneshot::channel();
+        cx.spawn(async move |this, cx| {
+            let prepared = task.await;
+            let result = this
+                .update(cx, |this, cx| {
+                    this.busy = false;
+                    let result = (|| {
+                        ensure!(
+                            this.connection(&previous.connection)
+                                .is_some_and(|c| c.authenticated && c.generation == generation),
+                            "Server account changed; reopen the comparison"
+                        );
+                        ensure!(
+                            this.local_changes.get(&path).copied().unwrap_or_default()
+                                == local_generation
+                                && this.catalog.links.get(&path).is_some_and(|current| {
+                                    current.connection == previous.connection
+                                        && current.object.id == previous.object.id
+                                        && current.object.revision == previous.object.revision
+                                        && current.object.title == previous.object.title
+                                        && current.object.deleted == previous.object.deleted
+                                        && current.baseline == previous.baseline
+                                        && current.conflict
+                                }),
+                            "Local document changed while resolving; try again"
+                        );
+                        this.install_resolution(prepared?)
+                    })();
+                    cx.notify();
+                    result
+                })
+                .and_then(|result| result);
+            let _ = sender.send(result);
+        })
+        .detach();
         cx.notify();
-        Ok(())
+        Ok(cx.spawn(async move |_, _| receiver.await?))
     }
 }

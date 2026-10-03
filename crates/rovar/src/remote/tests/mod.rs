@@ -225,6 +225,31 @@ pub(crate) fn sync(remote: &Entity<Remote>, cx: &mut TestAppContext) {
     wait_sync(remote, cx);
 }
 
+pub(crate) fn resolve(
+    remote: &Entity<Remote>,
+    path: &Path,
+    reviewed: &Object,
+    bytes: Option<&[u8]>,
+    cx: &mut TestAppContext,
+) -> Result<()> {
+    let snapshot = bytes
+        .map(|bytes| {
+            let file = rovar_storage::tempfile::NamedTempFile::new()?;
+            rovar_storage::fs::write(file.path(), bytes)?;
+            Ok::<_, anyhow::Error>(file)
+        })
+        .transpose()?;
+    let task = remote.update(cx, |r, cx| {
+        r.resolve_conflict(
+            path,
+            reviewed,
+            snapshot.as_ref().map(|f| f.path().to_owned()),
+            cx,
+        )
+    })?;
+    cx.foreground_executor().clone().block_test(task)
+}
+
 pub(crate) fn wait_sync(remote: &Entity<Remote>, cx: &mut TestAppContext) {
     let start = std::time::Instant::now();
     loop {
@@ -439,10 +464,13 @@ fn resolving_local_conflict_uploads_merged_bytes_against_reviewed_revision(
     });
     sync(&remote, cx);
     std::fs::write(&path, b"merged with server objects").unwrap();
-    remote.update(cx, |r, cx| {
+    let reviewed = remote.update(cx, |r, _| {
         let mut reviewed = r.link(&path).unwrap().object.clone();
         reviewed.revision = 7;
-        r.resolve_conflict(&path, &reviewed, None, cx).unwrap();
+        reviewed
+    });
+    resolve(&remote, &path, &reviewed, None, cx).unwrap();
+    remote.update(cx, |r, _| {
         assert!(!r.link(&path).unwrap().conflict);
         assert!(r.link(&path).unwrap().dirty);
     });
@@ -470,7 +498,7 @@ fn resolving_with_server_snapshot_persists_clean_content_without_upload(cx: &mut
     let path = root.path().join("design.rovar");
     std::fs::write(&path, b"local version").unwrap();
     let remote = cx.update(|cx| Remote::shared(root.path(), cx));
-    remote.update(cx, |r, cx| {
+    let (reviewed, pending) = remote.update(cx, |r, cx| {
         let id = r
             .connect("http://127.0.0.1:1".into(), identity(), "token".into(), cx)
             .unwrap();
@@ -508,8 +536,10 @@ fn resolving_with_server_snapshot_persists_clean_content_without_upload(cx: &mut
             .unwrap(),
         )
         .unwrap();
-        r.resolve_conflict(&path, &reviewed, Some(b"server version"), cx)
-            .unwrap();
+        (reviewed, pending)
+    });
+    resolve(&remote, &path, &reviewed, Some(b"server version"), cx).unwrap();
+    remote.update(cx, |r, cx| {
         assert!(!pending.exists());
         r.sync(cx);
         assert!(
