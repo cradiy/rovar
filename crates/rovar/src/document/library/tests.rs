@@ -5,6 +5,49 @@ use crate::{
     scene::shape::{Shape, ShapeKind},
 };
 
+#[gpui::test]
+fn failed_color_writes_keep_the_latest_edit_for_refresh_retry(cx: &mut gpui::TestAppContext) {
+    let root = tempfile::tempdir().unwrap();
+    let library = cx.update(|cx| Library::open(root.path(), cx));
+    cx.run_until_parked();
+    let file = root.path().join("components/colors.json");
+    std::fs::create_dir_all(&file).unwrap();
+    let id = uuid::Uuid::new_v4().to_string();
+    let style = |color| crate::scene::color_styles::ColorStyle {
+        name: "Brand".into(),
+        color: gpui::rgb(color),
+        gradient: None,
+    };
+    library.update(cx, |library, cx| {
+        library
+            .set_color(id.clone(), Some(style(0xff0000)), cx)
+            .unwrap();
+        library
+            .set_color(id.clone(), Some(style(0x00ff00)), cx)
+            .unwrap();
+        library.refresh(cx);
+    });
+    cx.run_until_parked();
+    library.read_with(cx, |library, _| {
+        assert!(!library.busy);
+        assert!(library.error.is_some());
+        assert!(library.has_pending_colors());
+        assert_eq!(library.colors[&id], style(0x00ff00));
+    });
+    std::fs::remove_dir(&file).unwrap();
+    library.update(cx, |library, cx| library.refresh(cx));
+    cx.run_until_parked();
+    assert_eq!(
+        colors::read(file.parent().unwrap()).unwrap()[&id],
+        style(0x00ff00)
+    );
+    library.read_with(cx, |library, _| {
+        assert!(!library.busy && !library.has_pending_colors());
+        assert!(library.error.is_none());
+        assert_eq!(library.colors[&id], style(0x00ff00));
+    });
+}
+
 fn fixture() -> Document {
     Document::single(crate::document::Page {
         name: "Page 1".into(),

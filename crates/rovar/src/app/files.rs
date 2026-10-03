@@ -512,7 +512,8 @@ impl Studio {
             editor.update(cx, |editor, cx| editor.suspend(window, cx));
         }
         self.closing = true;
-        self.awaiting_library |= self.library.read(cx).busy;
+        self.awaiting_library |=
+            self.library.read(cx).busy || self.library.read(cx).has_pending_colors();
         self.autosave(window, cx);
     }
     fn finish_close(&mut self, window: &mut Window, cx: &mut Context<Self>) {

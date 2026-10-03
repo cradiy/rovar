@@ -25,6 +25,67 @@ fn object(id: &str, title: &str, revision: i64, deleted: bool) -> Object {
 }
 
 #[gpui::test]
+fn queued_color_edits_merge_with_remote_changes_and_keep_the_latest_local_value(
+    cx: &mut TestAppContext,
+) {
+    let root = tempfile::tempdir().unwrap();
+    let remote = cx.update(|cx| Remote::shared(root.path(), cx));
+    let connection = remote.update(cx, |r, cx| {
+        r.connect(
+            "https://example.test".into(),
+            identity(),
+            "token".into(),
+            cx,
+        )
+        .unwrap()
+    });
+    let library_root = remote.read_with(cx, |r, _| r.library_root(&connection));
+    let library = cx.update(|cx| Library::open(&library_root, cx));
+    cx.run_until_parked();
+    let local = uuid::Uuid::new_v4().to_string();
+    let other = uuid::Uuid::new_v4().to_string();
+    remote.update(cx, |r, _| r.busy = true);
+    library.update(cx, |library, cx| {
+        library
+            .set_color(local.clone(), Some(style("First", 0xff0000)), cx)
+            .unwrap();
+        library
+            .set_color(local.clone(), Some(style("Final", 0x00ff00)), cx)
+            .unwrap();
+        library.refresh(cx);
+    });
+    remote.update(cx, |r, cx| {
+        // A publication already ahead of the queued edit changes another color.
+        r.apply_color(
+            &connection,
+            &object(&other, "Remote", 1, false),
+            Some(&serde_json::to_vec(&style("Remote", 0x0000ff)).unwrap()),
+        )
+        .unwrap();
+        r.busy = false;
+        r.publish_completed(cx);
+    });
+    cx.run_until_parked();
+    let palette = colors::read(&library_root.join("components")).unwrap();
+    assert_eq!(palette[&local], style("Final", 0x00ff00));
+    assert_eq!(palette[&other], style("Remote", 0x0000ff));
+    library.read_with(cx, |library, _| {
+        assert!(!library.busy && library.error.is_none());
+        assert_eq!(library.colors, palette);
+    });
+    remote.read_with(cx, |r, _| {
+        assert!(!r.is_busy());
+        let path = library_root.join("colors").join(format!("{local}.json"));
+        assert!(r.link(&path).unwrap().dirty);
+        assert_eq!(r.link(&path).unwrap().object.title, "Final");
+        assert_eq!(
+            serde_json::from_slice::<ColorStyle>(&std::fs::read(path).unwrap()).unwrap(),
+            style("Final", 0x00ff00)
+        );
+    });
+}
+
+#[gpui::test]
 fn existing_library_colors_upload_then_sync_edits_and_deletion(cx: &mut TestAppContext) {
     let id = uuid::Uuid::new_v4().to_string();
     let original = style("Brand", 0x8844cc);
@@ -64,6 +125,7 @@ fn existing_library_colors_upload_then_sync_edits_and_deletion(cx: &mut TestAppC
     library.update(cx, |lib, cx| {
         lib.set_color(id.clone(), Some(edited.clone()), cx).unwrap()
     });
+    cx.run_until_parked();
     sync(&remote, cx);
     let mut temporary = edited.clone();
     temporary.name = "Temporary".into();
@@ -72,6 +134,7 @@ fn existing_library_colors_upload_then_sync_edits_and_deletion(cx: &mut TestAppC
         lib.set_color(id.clone(), Some(edited.clone()), cx).unwrap();
     });
     library.update(cx, |lib, cx| lib.set_color(id.clone(), None, cx).unwrap());
+    cx.run_until_parked();
     sync(&remote, cx);
     thread.join().unwrap();
     let saves = saves.lock().unwrap();
@@ -221,6 +284,7 @@ fn conflicting_color_upload_preserves_a_copy_and_refetches_original(cx: &mut Tes
     library.update(cx, |lib, cx| {
         lib.set_color(id.clone(), Some(local.clone()), cx).unwrap()
     });
+    cx.run_until_parked();
     sync(&remote, cx);
     thread.join().unwrap();
     let palette = colors::read(&library_root.join("components")).unwrap();

@@ -51,6 +51,8 @@ pub(crate) struct Library {
     pub ready: bool,
     pub error: Option<String>,
     refresh_pending: bool,
+    writing_colors: bool,
+    color_changes: colors::Changes,
 }
 
 #[derive(Default)]
@@ -75,6 +77,8 @@ impl Library {
             ready: false,
             error: None,
             refresh_pending: false,
+            writing_colors: false,
+            color_changes: Default::default(),
         });
         if cx.try_global::<Libraries>().is_none() {
             cx.set_global(Libraries::default());
@@ -89,6 +93,11 @@ impl Library {
     pub fn refresh(&mut self, cx: &mut Context<Self>) {
         if self.busy {
             self.refresh_pending = true;
+            return;
+        }
+        if !self.color_changes.is_empty() {
+            self.refresh_pending = true;
+            self.flush_colors(cx);
             return;
         }
         self.run(|_| Ok(()), false, cx);
@@ -117,10 +126,7 @@ impl Library {
                         crate::render::raster::prepare_preview().await;
                     }
                     operation(&directory)?;
-                    Ok::<_, anyhow::Error>((
-                        catalog(&directory, synchronize)?,
-                        colors::read(&directory)?,
-                    ))
+                    catalog(&directory, synchronize)
                 })
                 .await;
             let _ = this.update(cx, |this, cx| {
@@ -130,7 +136,7 @@ impl Library {
                     return;
                 }
                 match result {
-                    Ok((entries, colors)) => {
+                    Ok(entries) => {
                         if let Some(remote) = crate::remote::Remote::existing(cx)
                             && (remote.read(cx).library_session(&this.directory) != session
                                 || session.as_ref().is_some_and(|session| {
@@ -142,16 +148,9 @@ impl Library {
                             this.refresh(cx);
                             return;
                         }
-                        this.colors = colors;
                         this.entries = entries;
                         this.ready = true;
-                        if let Some(remote) = crate::remote::Remote::existing(cx)
-                            && let Err(error) = remote.update(cx, |remote, cx| {
-                                remote.colors_changed(&this.directory, &this.colors, cx)
-                            })
-                        {
-                            this.error = Some(error.to_string());
-                        }
+                        this.flush_colors(cx);
                     }
                     Err(error) => this.error = Some(format!("{error:#}")),
                 }
