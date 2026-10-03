@@ -426,6 +426,7 @@ impl Workspace {
             .child(inspector_section(t("fill")).child(self.paint_value_row(cx)))
             .child(self.auto_layout_controls(cx))
             .child(self.constraint_controls(cx))
+            .child(self.size_limit_controls(cx))
             .child(self.export_properties(cx))
     }
 }

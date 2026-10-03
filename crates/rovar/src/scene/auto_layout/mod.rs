@@ -37,6 +37,37 @@ pub(crate) struct Sizing {
     pub absolute: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub constraints: Option<Constraints>,
+    #[serde(default, skip_serializing_if = "Limits::is_empty")]
+    pub limits: Limits,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub(crate) struct Limits {
+    pub min_width: Option<f32>,
+    pub max_width: Option<f32>,
+    pub min_height: Option<f32>,
+    pub max_height: Option<f32>,
+}
+
+impl Limits {
+    pub fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
+
+    pub fn validate(self) -> anyhow::Result<()> {
+        for (min, max) in [
+            (self.min_width, self.max_width),
+            (self.min_height, self.max_height),
+        ] {
+            anyhow::ensure!(
+                min.is_none_or(|v| v.is_finite() && (0. ..=MAX_SIZE).contains(&v))
+                    && max.is_none_or(|v| v.is_finite() && (1. ..=MAX_SIZE).contains(&v))
+                    && min.zip(max).is_none_or(|(min, max)| min <= max),
+                "Invalid size limits"
+            );
+        }
+        Ok(())
+    }
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub(crate) struct Container {
@@ -100,6 +131,7 @@ pub(crate) fn validate(page: &Page, ids: &std::collections::BTreeSet<usize>) -> 
         "Missing layout item"
     );
     for sizing in page.hierarchy.sizing.values() {
+        sizing.limits.validate()?;
         if let Some(constraints) = sizing.constraints {
             constraints.validate()?;
         }
@@ -221,6 +253,11 @@ pub(crate) fn resolve(page: &mut Page, text_system: &gpui::WindowTextSystem) -> 
             let parent_layout = parent.and_then(|p| self.page.hierarchy.layouts.get(&p));
             let flowing = parent_layout.is_some() && !sizing.absolute;
             let own = self.page.hierarchy.layouts.get(&id);
+            let minimum = if flowing || own.is_some() {
+                1_f32
+            } else {
+                0_f32
+            };
             let dimension = |mode, value| match mode {
                 Mode::Fixed => length(value),
                 Mode::Hug => auto(),
@@ -240,20 +277,12 @@ pub(crate) fn resolve(page: &mut Page, text_system: &gpui::WindowTextSystem) -> 
                     height: dimension(sizing.height, rect.height),
                 },
                 min_size: Size {
-                    width: length(if flowing || own.is_some() {
-                        1_f32
-                    } else {
-                        0_f32
-                    }),
-                    height: length(if flowing || own.is_some() {
-                        1_f32
-                    } else {
-                        0_f32
-                    }),
+                    width: length(sizing.limits.min_width.unwrap_or(minimum).max(minimum)),
+                    height: length(sizing.limits.min_height.unwrap_or(minimum).max(minimum)),
                 },
                 max_size: Size {
-                    width: length(MAX_SIZE),
-                    height: length(MAX_SIZE),
+                    width: length(sizing.limits.max_width.unwrap_or(MAX_SIZE)),
+                    height: length(sizing.limits.max_height.unwrap_or(MAX_SIZE)),
                 },
                 flex_shrink: 0.,
                 ..Default::default()

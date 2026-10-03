@@ -48,6 +48,98 @@ fn fixture() -> Page {
 }
 
 #[gpui::test]
+fn size_limits_bound_fill_and_force_wrapping_at_minimum_width(cx: &mut gpui::TestAppContext) {
+    let system = cx.update(|cx| gpui::WindowTextSystem::new(cx.text_system().clone()));
+    let mut page = fixture();
+    page.hierarchy.sizing.insert(
+        2,
+        Sizing {
+            width: Mode::Fill,
+            limits: Limits {
+                min_width: Some(80.),
+                max_width: Some(100.),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    );
+    page.hierarchy.sizing.insert(
+        3,
+        Sizing {
+            width: Mode::Fill,
+            limits: Limits {
+                min_width: Some(70.),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    );
+    resolve(&mut page, &system).unwrap();
+    assert_eq!(page.shapes[0].rect.width, 100.);
+    assert_eq!(page.shapes[1].rect.width, 172.);
+    page.hierarchy.layouts.get_mut(&1).unwrap().wrap = true;
+    page.hierarchy.layouts.get_mut(&1).unwrap().line_gap = 15.;
+    page.boards[0].rect.width = 130.;
+    resolve(&mut page, &system).unwrap();
+    assert_eq!(page.shapes[0].rect, rect(10., 10., 100., 20.));
+    assert_eq!(page.shapes[1].rect, rect(10., 45., 110., 40.));
+    let bytes = serde_json::to_vec(&page).unwrap();
+    page = Page::decode(&bytes).unwrap();
+    resolve(&mut page, &system).unwrap();
+    assert_eq!(serde_json::to_vec(&page).unwrap(), bytes);
+    page.hierarchy.sizing.get_mut(&2).unwrap().limits.max_width = Some(79.);
+    assert!(page.validate().is_err());
+}
+
+#[gpui::test]
+fn size_limits_cap_hug_text_and_preserve_center_constraints(cx: &mut gpui::TestAppContext) {
+    let system = cx.update(|cx| gpui::WindowTextSystem::new(cx.text_system().clone()));
+    let mut page = fixture();
+    page.hierarchy.layouts.clear();
+    page.shapes.clear();
+    let content = "A long label which wraps onto several lines";
+    let mut styles = StyledText::default();
+    styles.replace(0..0, content.len());
+    page.texts.push(crate::document::Text {
+        uid: uuid::Uuid::new_v4(),
+        id: 2,
+        board: Some(1),
+        rect: rect(100., 40., 100., 30.),
+        layer: Default::default(),
+        content: content.into(),
+        styles,
+    });
+    page.hierarchy.sizing.insert(
+        2,
+        Sizing {
+            width: Mode::Hug,
+            height: Mode::Hug,
+            limits: Limits {
+                max_width: Some(100.),
+                ..Default::default()
+            },
+            constraints: Some(Constraints {
+                horizontal: Constraint::Center,
+                vertical: Constraint::Start,
+                rect: page.texts[0].rect,
+                parent_size: [300., 160.],
+            }),
+            ..Default::default()
+        },
+    );
+    resolve(&mut page, &system).unwrap();
+    let wrapped = page.texts[0].rect;
+    assert!(wrapped.width <= 100.);
+    assert_eq!(wrapped.x + wrapped.width / 2., 150.);
+    page.hierarchy.sizing.get_mut(&2).unwrap().limits = Limits::default();
+    resolve(&mut page, &system).unwrap();
+    let unwrapped = page.texts[0].rect;
+    assert!(unwrapped.width > wrapped.width);
+    assert!(unwrapped.height < wrapped.height);
+    assert_eq!(unwrapped.x + unwrapped.width / 2., 150.);
+}
+
+#[gpui::test]
 fn constraints_resize_restore_and_round_trip_without_drift(cx: &mut gpui::TestAppContext) {
     let system = cx.update(|cx| gpui::WindowTextSystem::new(cx.text_system().clone()));
     for (mode, expected) in [

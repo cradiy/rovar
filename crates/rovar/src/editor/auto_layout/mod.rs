@@ -9,6 +9,7 @@ use uic::components::{
     input::{Input, InputAppearance},
 };
 mod constraints;
+mod limits;
 #[cfg(test)]
 mod tests;
 
@@ -18,6 +19,7 @@ pub(super) struct State {
     pub reflows: usize,
     target: Option<(String, usize)>,
     inputs: Vec<Entity<TextInput>>,
+    limits: limits::State,
     _subscriptions: Vec<Subscription>,
 }
 impl State {
@@ -49,6 +51,7 @@ impl State {
             reflows: 0,
             target: None,
             inputs,
+            limits: limits::State::new(window, cx),
             _subscriptions: subscriptions,
         }
     }
@@ -240,6 +243,7 @@ impl Workspace {
         }
         self.auto_layout.revision = (!resizing_frame).then_some(revision);
         if self.hierarchy.layouts.is_empty() && self.hierarchy.sizing.is_empty() {
+            self.refresh_limit_inputs(cx);
             return;
         }
         #[cfg(test)]
@@ -272,6 +276,10 @@ impl Workspace {
             return;
         }
         self.auto_layout.target = target;
+        self.auto_layout.limits.expanded = self
+            .layout_target()
+            .and_then(|id| self.hierarchy.sizing.get(&id))
+            .is_some_and(|s| !s.limits.is_empty());
         self.refresh_layout_inputs(cx);
     }
     fn layout_input_target(&self) -> Option<(String, usize)> {
@@ -279,6 +287,7 @@ impl Workspace {
             .map(|id| (self.pages.active.clone(), id))
     }
     fn refresh_layout_inputs(&mut self, cx: &mut Context<Self>) {
+        self.refresh_limit_inputs(cx);
         let Some(id) = self.layout_target() else {
             return;
         };

@@ -13,6 +13,71 @@ fn rect(x: f32, y: f32, width: f32, height: f32) -> Rect {
 }
 
 #[gpui::test]
+fn size_limit_edits_restore_geometry_on_undo_and_reject_invalid_ranges(cx: &mut TestAppContext) {
+    let window = open(cx);
+    window
+        .update(cx, |this, window, cx| {
+            this.add_artboard(rect(100., 100., 300., 200.), cx);
+            this.sync_layout_inputs(cx);
+            this.auto_layout.limits.inputs[1].update(cx, |input, cx| input.set_value("200", cx));
+            this.apply_size_limit(1, cx);
+            assert_eq!(this.boards[0].rect.width, 200.);
+            this.undo_redo(false, window, cx);
+            this.reflow_layout(cx);
+            assert_eq!(this.boards[0].rect.width, 300.);
+            assert!(
+                this.auto_layout.limits.inputs[1]
+                    .read(cx)
+                    .value()
+                    .is_empty()
+            );
+            this.undo_redo(true, window, cx);
+            this.reflow_layout(cx);
+            assert_eq!(this.boards[0].rect.width, 200.);
+            let depth = this.history.borrow().undo_len();
+            for invalid in ["201", "NaN", "-1", "invalid"] {
+                this.auto_layout.limits.inputs[0]
+                    .update(cx, |input, cx| input.set_value(invalid, cx));
+                this.apply_size_limit(0, cx);
+                assert!(this.hierarchy.sizing[&1].limits.min_width.is_none());
+                assert_eq!(this.history.borrow().undo_len(), depth);
+            }
+            this.auto_layout.limits.inputs[0].update(cx, |input, cx| input.set_value("150", cx));
+            this.apply_size_limit(0, cx);
+            assert_eq!(this.hierarchy.sizing[&1].limits.min_width, Some(150.));
+            let jobs = this.component_export_jobs(window, cx).unwrap();
+            let exported = crate::document::Page::decode(&jobs[0].json).unwrap();
+            assert_eq!(exported.boards[0].rect.width, 200.);
+            this.auto_layout.limits.inputs[1].update(cx, |input, cx| input.set_value("", cx));
+            this.apply_size_limit(1, cx);
+            assert!(this.hierarchy.sizing[&1].limits.max_width.is_none());
+        })
+        .unwrap();
+}
+
+#[gpui::test]
+fn size_limit_blur_cannot_edit_another_page_with_the_same_object_id(cx: &mut TestAppContext) {
+    let window = open(cx);
+    window
+        .update(cx, |this, window, cx| {
+            this.add_artboard(rect(0., 0., 300., 200.), cx);
+            this.sync_layout_inputs(cx);
+            this.auto_layout.limits.inputs[1].update(cx, |input, cx| input.set_value("100", cx));
+            this.add_page(None, window, cx);
+            this.add_artboard(rect(0., 0., 400., 200.), cx);
+            this.apply_size_limit(1, cx);
+            assert_eq!(this.boards[0].rect.width, 400.);
+            assert!(
+                this.hierarchy
+                    .sizing
+                    .get(&1)
+                    .is_none_or(|s| s.limits.is_empty())
+            );
+        })
+        .unwrap();
+}
+
+#[gpui::test]
 fn constraints_follow_frame_resize_and_manual_move_with_undo(cx: &mut TestAppContext) {
     use crate::scene::auto_layout::Constraint;
     let window = open(cx);
