@@ -14,7 +14,7 @@ fn grouped_flip_reflects_geometry_handles_corners_and_paint_with_undo(cx: &mut T
             this.shapes[0].gradient.angle = 30.;
             this.shapes[0].stroke.gradient.angle = 120.;
             this.shapes[1].kind = ShapeKind::Bezier;
-            this.shapes[1].nodes = Nodes(Rc::new(vec![
+            this.shapes[1].nodes = Nodes(Arc::new(vec![
                 Node {
                     smooth: false,
                     anchor: point(0.25, 0.5),

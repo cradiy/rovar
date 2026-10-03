@@ -1,6 +1,7 @@
 use super::*;
 use crate::editor::tests::{click, create, draw, open};
 use gpui::{TestAppContext, VisualTestContext, WindowHandle};
+use std::sync::Arc;
 
 fn screen(
     window: WindowHandle<Workspace>,
@@ -313,7 +314,7 @@ fn hover_previews_next_curve_without_committing_and_tracks_closure_zoom_and_undo
             near(from.outgoing, point(80., 180.));
             near(to.anchor, point(280., 100.));
             near(to.incoming, to.anchor);
-            assert!(Rc::ptr_eq(
+            assert!(Arc::ptr_eq(
                 &nodes,
                 &this.bezier_draft.as_ref().unwrap().shape.nodes.0
             ));

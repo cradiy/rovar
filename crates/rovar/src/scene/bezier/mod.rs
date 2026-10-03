@@ -1,5 +1,5 @@
 use gpui::{Point, point};
-use std::rc::Rc;
+use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub(crate) struct Node {
@@ -31,10 +31,10 @@ mod editing;
 pub(crate) use editing::{nearest_segment, smooth_node, split_segment};
 
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
-pub(crate) struct Nodes(pub Rc<Vec<Node>>);
+pub(crate) struct Nodes(pub Arc<Vec<Node>>);
 impl PartialEq for Nodes {
     fn eq(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.0, &other.0) || self.0 == other.0
+        Arc::ptr_eq(&self.0, &other.0) || self.0 == other.0
     }
 }
 

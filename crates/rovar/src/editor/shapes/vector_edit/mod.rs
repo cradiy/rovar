@@ -1,6 +1,7 @@
 use super::*;
 use crate::i18n::t;
 use crate::scene::bezier;
+use std::sync::Arc;
 #[cfg(test)]
 mod tests;
 
@@ -190,7 +191,7 @@ impl Workspace {
 
     pub(super) fn vector_handle_shape(&self, shape: &Shape) -> Shape {
         let mut handles = shape.clone();
-        handles.nodes = bezier::Nodes(Rc::new(
+        handles.nodes = bezier::Nodes(Arc::new(
             shape
                 .editable_nodes()
                 .iter()

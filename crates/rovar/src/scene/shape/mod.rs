@@ -1,7 +1,7 @@
 use crate::i18n::t;
 use crate::scene::artboard::{FillMode, LinearGradient, Rect};
 use gpui::{Background, Point, Rgba, point, rgb};
-use std::rc::Rc;
+use std::sync::Arc;
 mod vector;
 pub(crate) use vector::arrow_wings;
 
@@ -107,10 +107,10 @@ impl Stroke {
 
 /// Immutable normalized points shared by rendering and history snapshots.
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
-pub(crate) struct PathPoints(pub Rc<Vec<Point<f32>>>);
+pub(crate) struct PathPoints(pub Arc<Vec<Point<f32>>>);
 impl PartialEq for PathPoints {
     fn eq(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.0, &other.0) || self.0 == other.0
+        Arc::ptr_eq(&self.0, &other.0) || self.0 == other.0
     }
 }
 
@@ -208,7 +208,7 @@ impl Shape {
             width: (max.x - min.x).max(floor),
             height: (max.y - min.y).max(floor),
         };
-        self.points = PathPoints(Rc::new(
+        self.points = PathPoints(Arc::new(
             points
                 .iter()
                 .map(|p| {
@@ -278,7 +278,7 @@ impl Shape {
         self.closed = closed;
         let bounds = crate::scene::bezier::extrema(nodes, closed);
         self.set_path(&bounds);
-        self.nodes = crate::scene::bezier::Nodes(Rc::new(
+        self.nodes = crate::scene::bezier::Nodes(Arc::new(
             nodes
                 .iter()
                 .map(|node| {

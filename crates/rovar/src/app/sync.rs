@@ -1,7 +1,13 @@
 use super::*;
+use std::path::Path;
 
 #[cfg(all(test, not(target_family = "wasm")))]
 mod tests;
+
+fn file_stamp(path: &Path) -> anyhow::Result<(u64, web_time::SystemTime)> {
+    let metadata = rovar_storage::fs::metadata(path)?;
+    Ok((metadata.len(), metadata.modified()?))
+}
 
 impl Studio {
     pub(super) fn protected_paths(&self, cx: &gpui::App) -> Vec<PathBuf> {
@@ -40,22 +46,86 @@ impl Studio {
                 self.tabs[index].error = Some(t("server-document-deleted").into());
                 continue;
             }
-            let result = crate::document::load(&tab.file.path);
-            match result {
-                Ok(loaded) => {
-                    let json = loaded.json.clone();
-                    if json != tab.last_saved {
-                        let previous = tab.editor.as_ref().unwrap();
+            let token = tab.token;
+            let path = tab.file.path.clone();
+            let previous = tab.editor.as_ref().unwrap().clone();
+            let revision = previous.read(cx).document_revision();
+            let generation = self
+                .remote
+                .read(cx)
+                .connection(&link.connection)
+                .map(|c| c.generation);
+            // Keep the current editor usable, but coalesce reloads and protect
+            // the cache from another download while it is being read.
+            self.tabs[index].loading = true;
+            self.tabs[index].checking_remote = false;
+            let input = path.clone();
+            let task = cx.background_executor().spawn(async move {
+                let stamp = file_stamp(&input)?;
+                let loaded = crate::document::load(&input)?;
+                let json = loaded.json.clone();
+                let needs_upgrade = loaded.needs_upgrade;
+                let document = loaded.into_document()?;
+                anyhow::ensure!(
+                    file_stamp(&input)? == stamp,
+                    "Document changed while reloading"
+                );
+                Ok::<_, anyhow::Error>((document, json, needs_upgrade, stamp))
+            });
+            cx.spawn_in(window, async move |this, cx| {
+                let result = task.await;
+                let _ = this.update_in(cx, |this, window, cx| {
+                    let Some(index) = this.tabs.iter().position(|tab| tab.token == token) else {
+                        return;
+                    };
+                    let tab = &mut this.tabs[index];
+                    tab.loading = false;
+                    cx.notify();
+                    if tab.file.path != path
+                        || tab.editor.as_ref() != Some(&previous)
+                        || previous.read(cx).document_revision() != revision
+                        || this.protected_paths(cx).contains(&path)
+                    {
+                        return;
+                    }
+                    let remote = this.remote.read(cx);
+                    let current = remote.link(&path).is_some_and(|current| {
+                        current.connection == link.connection
+                            && current.object.id == link.object.id
+                            && current.object.revision == link.object.revision
+                            && current.baseline == link.baseline
+                            && current.digest == link.digest
+                            && !current.conflict
+                            && !current.object.deleted
+                    }) && remote.connection(&link.connection).map(|c| c.generation)
+                        == generation;
+                    if !current {
+                        this.reload_synced_tabs(window, cx);
+                        return;
+                    }
+                    let (document, json, needs_upgrade, stamp) = match result {
+                        Ok(prepared) => prepared,
+                        Err(error) => {
+                            this.tabs[index].error = Some(error.to_string());
+                            return;
+                        }
+                    };
+                    if !file_stamp(&path).is_ok_and(|current| current == stamp) {
+                        return;
+                    }
+                    if json != this.tabs[index].last_saved {
+                        // Capture selection, viewport and focus at publication,
+                        // so navigation during the background load is preserved.
                         let view = previous.read(cx).sync_view(window, cx);
                         let restore_focus = !view.focused;
                         let previous_focus = window.focused(cx);
-                        let library = self.source_library(Some(link.connection), cx);
+                        let library = this.source_library(Some(link.connection), cx);
                         let editor = cx.new(|cx| Workspace::new(window, cx));
-                        let result = editor.update(cx, |editor, cx| {
+                        let id = editor.update(cx, |editor, cx| {
                             editor.attach_library(library, cx);
-                            let id = editor.load_document(loaded, window, cx)?;
+                            let id = editor.load_prepared_document(document, window, cx);
                             editor.restore_sync_view(view, window, cx);
-                            Ok::<_, anyhow::Error>(id)
+                            id
                         });
                         if restore_focus {
                             if let Some(focus) = previous_focus {
@@ -64,32 +134,23 @@ impl Studio {
                                 window.blur();
                             }
                         }
-                        match result {
-                            Ok(id) => {
-                                previous.update(cx, |editor, cx| editor.suspend(window, cx));
-                                let tab = &mut self.tabs[index];
-                                tab.document_id = id;
-                                tab.saved_revision = Some(editor.read(cx).document_revision());
-                                tab._subscription =
-                                    Some(cx.observe(&editor, |_, _, cx| cx.notify()));
-                                tab.editor = Some(editor);
-                                tab.last_saved = json;
-                                tab.needs_upgrade = false;
-                            }
-                            Err(error) => {
-                                self.tabs[index].error = Some(error.to_string());
-                                continue;
-                            }
-                        }
+                        previous.update(cx, |editor, cx| editor.suspend(window, cx));
+                        let tab = &mut this.tabs[index];
+                        tab.document_id = id;
+                        tab.saved_revision = Some(editor.read(cx).document_revision());
+                        tab._subscription = Some(cx.observe(&editor, |_, _, cx| cx.notify()));
+                        tab.editor = Some(editor);
+                        tab.last_saved = json;
                     }
-                    let tab = &mut self.tabs[index];
+                    let tab = &mut this.tabs[index];
+                    tab.needs_upgrade = needs_upgrade;
                     tab.remote_baseline = link.baseline;
                     tab.file.title = link.object.title;
                     tab.file.modified = link.object.modified;
                     tab.error = None;
-                }
-                Err(error) => self.tabs[index].error = Some(error.to_string()),
-            }
+                });
+            })
+            .detach();
         }
     }
 }

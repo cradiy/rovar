@@ -3,6 +3,23 @@ use crate::remote::tests::{confirmed_document, identity, server, wait_sync};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use gpui::{Focusable, TestAppContext, size};
 
+fn wait_loaded(window: gpui::WindowHandle<Studio>, cx: &mut TestAppContext) {
+    let start = std::time::Instant::now();
+    loop {
+        cx.run_until_parked();
+        if window
+            .update(cx, |studio, _, _| {
+                studio.tabs.iter().all(|tab| !tab.loading)
+            })
+            .unwrap()
+        {
+            break;
+        }
+        assert!(start.elapsed().as_secs() < 8, "Document reload timed out");
+        std::thread::sleep(Duration::from_millis(5));
+    }
+}
+
 #[gpui::test]
 fn open_editor_loads_a_merged_dirty_cache_before_the_next_upload(cx: &mut TestAppContext) {
     cx.update(uic::init);
@@ -112,7 +129,7 @@ fn open_editor_loads_a_merged_dirty_cache_before_the_next_upload(cx: &mut TestAp
         .unwrap();
     crate::remote::tests::sync(&remote, cx);
     thread.join().unwrap();
-    cx.run_until_parked();
+    wait_loaded(window, cx);
     window
         .update(cx, |studio, _, cx| {
             let tab = &studio.tabs[0];
@@ -263,7 +280,7 @@ fn opening_a_clean_cache_fetches_new_revision_and_open_clean_editors_follow_upda
         })
         .unwrap();
     wait_sync(&remote, cx);
-    cx.run_until_parked();
+    wait_loaded(window, cx);
     assert_version(cx, "Version 3");
     window
         .update(cx, |studio, window, cx| {
@@ -308,4 +325,115 @@ fn opening_a_clean_cache_fetches_new_revision_and_open_clean_editors_follow_upda
             .name,
         "Version 3"
     );
+}
+
+#[gpui::test]
+fn background_reload_keeps_new_edits_and_preserves_navigation_at_publication(
+    cx: &mut TestAppContext,
+) {
+    cx.update(uic::init);
+    cx.executor().allow_parking();
+    let root = tempfile::tempdir().unwrap();
+    let directory = root.path().join("documents");
+    std::fs::create_dir_all(&directory).unwrap();
+    let path = directory.join(format!("{}.rovar", uuid::Uuid::new_v4()));
+    let mut document =
+        crate::document::Document::single(crate::document::Page::empty("Original".into()));
+    let text_system = cx.update(|cx| cx.text_system().clone());
+    let save = |document: &crate::document::Document| {
+        crate::document::save_as(
+            &path,
+            &serde_json::to_vec(document).unwrap(),
+            &[],
+            &text_system,
+        )
+        .unwrap();
+    };
+    save(&document);
+    let window = cx.open_window(size(px(1000.), px(800.)), |window, cx| {
+        Studio::new(root.path().into(), window, cx)
+    });
+    window
+        .update(cx, |studio, window, cx| {
+            studio.open_path(path.clone(), window, cx)
+        })
+        .unwrap();
+    wait_loaded(window, cx);
+    document.pages[0].name = "Server".into();
+    save(&document);
+    let previous = window
+        .update(cx, |studio, window, cx| {
+            confirmed_document(
+                &studio.remote,
+                "http://127.0.0.1:1".into(),
+                path.clone(),
+                rovar_api::Object {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    kind: rovar_api::Kind::Document,
+                    title: "Design".into(),
+                    revision: 2,
+                    created: 1,
+                    modified: 2,
+                    deleted: false,
+                },
+                cx,
+            );
+            let previous = studio.tabs[0].editor.as_ref().unwrap().clone();
+            studio.reload_synced_tabs(window, cx);
+            assert!(studio.tabs[0].loading);
+            assert_eq!(studio.tabs[0].editor.as_ref(), Some(&previous));
+            // The worker cannot publish until this UI update has finished.
+            // Even a saved edit must invalidate the captured editor revision.
+            document.pages[0].name = "New local edit".into();
+            previous.update(cx, |editor, cx| {
+                editor.load_prepared_document(document.clone(), window, cx);
+            });
+            studio.tabs[0].saved_revision = Some(previous.read(cx).document_revision());
+            studio.tabs[0].last_saved = serde_json::to_vec(&document).unwrap();
+            previous
+        })
+        .unwrap();
+    wait_loaded(window, cx);
+    window
+        .update(cx, |studio, window, cx| {
+            let tab = &studio.tabs[0];
+            assert_eq!(tab.editor.as_ref(), Some(&previous));
+            let (json, _) = previous
+                .read(cx)
+                .snapshot_document(&tab.document_id, cx)
+                .unwrap();
+            assert_eq!(
+                crate::document::Document::decode(&json).unwrap().pages[0].name,
+                "New local edit"
+            );
+            assert!(tab.remote_baseline.is_none());
+
+            // With no intervening edit, a later reload publishes normally and
+            // uses navigation/focus from after the background work was queued.
+            studio.reload_synced_tabs(window, cx);
+            assert!(studio.tabs[0].loading);
+            previous.update(cx, |editor, _| editor.restore_view([90., 120., 3.]));
+            studio.search.focus_handle(cx).focus(window, cx);
+        })
+        .unwrap();
+    wait_loaded(window, cx);
+    window
+        .update(cx, |studio, window, cx| {
+            let tab = &studio.tabs[0];
+            let editor = tab.editor.as_ref().unwrap();
+            assert_ne!(editor, &previous);
+            assert_eq!(editor.read(cx).view_state(), [90., 120., 3.]);
+            assert!(studio.search.focus_handle(cx).is_focused(window));
+            assert!(tab.remote_baseline.is_some());
+            assert!(tab.error.is_none());
+            let (json, _) = editor
+                .read(cx)
+                .snapshot_document(&tab.document_id, cx)
+                .unwrap();
+            assert_eq!(
+                crate::document::Document::decode(&json).unwrap().pages[0].name,
+                "Server"
+            );
+        })
+        .unwrap();
 }

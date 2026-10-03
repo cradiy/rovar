@@ -48,7 +48,7 @@ impl GeometryKey {
             outset: Self::outset(shape, zoom),
             points: shape.points.clone(),
             nodes: if shape.kind.is_polygon() {
-                crate::scene::bezier::Nodes(std::rc::Rc::new(
+                crate::scene::bezier::Nodes(std::sync::Arc::new(
                     shape
                         .polygon_points()
                         .into_iter()

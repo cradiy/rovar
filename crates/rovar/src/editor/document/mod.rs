@@ -270,6 +270,15 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) -> anyhow::Result<String> {
         let document = loaded.into_document()?;
+        Ok(self.load_prepared_document(document, window, cx))
+    }
+
+    pub(crate) fn load_prepared_document(
+        &mut self,
+        document: Document,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> String {
         self.colors.palette = document.colors;
         self.components.definitions = document.components;
         self.components.revision = None;
@@ -285,7 +294,7 @@ impl Workspace {
             .borrow_mut()
             .set_page(self.pages.active.clone());
         self.load_page(self.pages.current().page.clone(), window, cx);
-        Ok(document.id)
+        document.id
     }
 
     pub(super) fn snapshot_page(&self, cx: &gpui::App) -> (Page, Vec<AssetSource>) {
