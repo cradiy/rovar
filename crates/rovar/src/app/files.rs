@@ -328,22 +328,11 @@ impl Studio {
         let text_system = cx.text_system().clone();
         cx.spawn_in(window, async move |this, cx| {
             // The loading tab is not editable while its cached revision is checked.
-            // Queue behind an existing transfer instead of dropping the open action.
+            // Refresh requests remain queued even when all transfer slots are busy.
             let deadline = web_time::Instant::now() + Duration::from_secs(2);
-            loop {
-                let waiting = this
-                    .update_in(cx, |this, _, cx| this.remote.read(cx).path_busy(&path))
-                    .unwrap_or(false);
-                if !check_remote || !waiting || web_time::Instant::now() >= deadline {
-                    break;
-                }
-                cx.background_executor()
-                    .timer(Duration::from_millis(50))
-                    .await;
-            }
             let refreshed = this
                 .update_in(cx, |this, _, cx| {
-                    if !check_remote || this.remote.read(cx).path_busy(&path) {
+                    if !check_remote {
                         return false;
                     }
                     let connection = this

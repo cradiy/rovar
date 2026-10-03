@@ -585,6 +585,10 @@ impl Remote {
     }
 
     fn sync_ready(&mut self, cx: &mut Context<Self>) {
+        self.publish_completed(cx);
+        if self.busy || self.scheduler.active.len() >= scheduler::CONNECTIONS {
+            return;
+        }
         if self.retry_at.elapsed().as_secs() >= 30 {
             self.retry_at = web_time::Instant::now();
             for link in self
@@ -827,7 +831,7 @@ impl Remote {
     }
 
     pub fn refresh(&mut self, connection: String, open: BTreeSet<PathBuf>, cx: &mut Context<Self>) {
-        self.refresh_selected(connection, open, None, cx);
+        self.queue_refresh(connection, open, None, cx);
     }
 
     pub(crate) fn refresh_document(
@@ -839,7 +843,7 @@ impl Remote {
         let Some(link) = self.catalog.links.get(&path) else {
             return;
         };
-        self.refresh_selected(
+        self.queue_refresh(
             link.connection.clone(),
             open,
             Some(link.object.id.clone()),
@@ -852,6 +856,7 @@ impl Remote {
         connection: String,
         open: BTreeSet<PathBuf>,
         selected: Option<String>,
+        generation: u64,
         cx: &mut Context<Self>,
     ) {
         if !self.can_start(&connection) {
@@ -862,7 +867,13 @@ impl Remote {
         let resume_selected = selected.clone();
         if self.recover_incoming(cx, move |result, this, cx| {
             if result.is_ok() {
-                this.refresh_selected(resume_connection, resume_open, resume_selected, cx);
+                this.refresh_selected(
+                    resume_connection,
+                    resume_open,
+                    resume_selected,
+                    generation,
+                    cx,
+                );
             }
         }) {
             return;
@@ -875,7 +886,7 @@ impl Remote {
             .map(|(path, _)| path.clone())
             .collect();
         self.reconcile_baselines(paths, cx, move |this, cx| {
-            this.refresh_ready(connection, open, selected, cx);
+            this.refresh_ready(connection, open, selected, generation, cx);
         });
     }
 
@@ -884,17 +895,20 @@ impl Remote {
         connection: String,
         open: BTreeSet<PathBuf>,
         selected: Option<String>,
+        generation: u64,
         cx: &mut Context<Self>,
     ) {
         if !self.can_start(&connection) || !self.persist() {
             return;
         }
         // The user may have signed out while the preflight scan was running.
-        let Some(server) = self.connection(&connection).filter(|c| c.authenticated) else {
+        let Some(server) = self
+            .connection(&connection)
+            .filter(|c| c.authenticated && c.generation == generation)
+        else {
             return;
         };
         let client = server.client();
-        let generation = server.generation;
         let identity = server.identity.clone();
         let space = server.space.id.clone();
         let known = self.catalog.links.clone();

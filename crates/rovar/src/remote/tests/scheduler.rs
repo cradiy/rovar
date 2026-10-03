@@ -1,5 +1,156 @@
 use super::*;
 
+#[gpui::test]
+fn queued_document_refreshes_resume_when_a_slot_opens_and_coalesce_duplicates(
+    cx: &mut TestAppContext,
+) {
+    cx.executor().allow_parking();
+    let root = tempfile::tempdir().unwrap();
+    let paths = [
+        root.path().join("first.rovar"),
+        root.path().join("second.rovar"),
+    ];
+    let objects: Vec<_> = (0..2)
+        .map(|_| Object {
+            id: uuid::Uuid::new_v4().to_string(),
+            kind: Kind::Document,
+            title: "Design".into(),
+            revision: 1,
+            created: 1,
+            modified: 1,
+            deleted: false,
+        })
+        .collect();
+    let mut responses = Vec::new();
+    for original in &objects {
+        let latest = Object {
+            revision: 2,
+            ..original.clone()
+        };
+        responses.extend([
+            (200, serde_json::to_value(identity()).unwrap()),
+            (200, serde_json::to_value(&latest).unwrap()),
+            (
+                200,
+                serde_json::to_value(Snapshot {
+                    object: latest,
+                    media: Vec::new(),
+                    content: STANDARD.encode(b"server edit"),
+                })
+                .unwrap(),
+            ),
+        ]);
+    }
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let (url, _, server) = server_with_requests(responses, requests.clone());
+    let remote = cx.update(|cx| Remote::shared(root.path(), cx));
+    for (path, object) in paths.iter().zip(&objects) {
+        std::fs::write(path, b"base").unwrap();
+        cx.update(|cx| confirmed_document(&remote, url.clone(), path.clone(), object.clone(), cx));
+    }
+    remote.update(cx, |r, cx| {
+        for i in 0..super::super::scheduler::CONNECTIONS {
+            r.start_network(&format!("occupied-{i}"));
+        }
+        for path in &paths {
+            for _ in 0..3 {
+                r.refresh_document(path.clone(), BTreeSet::new(), cx);
+            }
+            assert!(r.path_busy(path));
+        }
+        assert!(requests.lock().unwrap().is_empty());
+        // Completion must start queued work without another autosave/sync tick.
+        r.finish_network("occupied-0".into(), cx, |_, _| {});
+    });
+    pump(cx, |cx| {
+        remote.read_with(cx, |r, _| !r.path_busy(&paths[1]))
+    });
+    server.join().unwrap();
+    for path in &paths {
+        assert_eq!(std::fs::read(path).unwrap(), b"server edit");
+        remote.read_with(cx, |r, _| {
+            assert_eq!(r.link(path).unwrap().object.revision, 2)
+        });
+    }
+    let requests = requests.lock().unwrap();
+    assert_eq!(requests.len(), 6);
+    for object in objects {
+        assert_eq!(
+            requests
+                .iter()
+                .filter(|r| r.contains(&format!("/{}/metadata", object.id)))
+                .count(),
+            1
+        );
+    }
+}
+
+#[gpui::test]
+fn queued_refresh_preserves_edits_made_while_the_connection_is_busy(cx: &mut TestAppContext) {
+    cx.executor().allow_parking();
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("design.rovar");
+    std::fs::write(&path, b"base").unwrap();
+    let object = Object {
+        id: uuid::Uuid::new_v4().to_string(),
+        kind: Kind::Document,
+        title: "Design".into(),
+        revision: 1,
+        created: 1,
+        modified: 1,
+        deleted: false,
+    };
+    let latest = Object {
+        revision: 2,
+        ..object.clone()
+    };
+    let (url, _, server) = server(vec![
+        (200, serde_json::to_value(identity()).unwrap()),
+        (200, serde_json::to_value(latest).unwrap()),
+    ]);
+    let remote = cx.update(|cx| Remote::shared(root.path(), cx));
+    let id = cx.update(|cx| confirmed_document(&remote, url, path.clone(), object, cx));
+    remote.update(cx, |r, cx| {
+        r.start_network(&id);
+        r.refresh_document(path.clone(), BTreeSet::new(), cx);
+        std::fs::write(&path, b"local edit while waiting").unwrap();
+        r.changed(&path, None, false, cx);
+        r.finish_network(id, cx, |_, _| {});
+    });
+    wait_sync(&remote, cx);
+    server.join().unwrap();
+    assert_eq!(std::fs::read(&path).unwrap(), b"local edit while waiting");
+    remote.read_with(cx, |r, _| {
+        let link = r.link(&path).unwrap();
+        assert_eq!(link.object.revision, 1);
+        assert!(link.dirty);
+        assert!(r.error.is_none());
+    });
+}
+
+#[gpui::test]
+fn queued_refresh_is_discarded_after_sign_out_and_reauthentication(cx: &mut TestAppContext) {
+    let root = tempfile::tempdir().unwrap();
+    let remote = cx.update(|cx| Remote::shared(root.path(), cx));
+    remote.update(cx, |r, cx| {
+        let url = "http://127.0.0.1:1".to_owned();
+        let id = r
+            .connect(url.clone(), identity(), "old-token".into(), cx)
+            .unwrap();
+        r.busy = true;
+        r.refresh(id.clone(), BTreeSet::new(), cx);
+        r.sign_out(&id, cx);
+        r.connect(url, identity(), "new-token".into(), cx).unwrap();
+        r.busy = false;
+        r.publish_completed(cx);
+        assert!(
+            !r.is_busy(),
+            "The old request must not run in the new session"
+        );
+        assert!(r.scheduler.active.is_empty());
+    });
+}
+
 fn pump(cx: &mut TestAppContext, mut ready: impl FnMut(&mut TestAppContext) -> bool) {
     let start = std::time::Instant::now();
     loop {
