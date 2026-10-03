@@ -11,7 +11,10 @@ impl Remote {
         cx: &mut Context<Self>,
     ) -> Result<gpui::Task<Result<()>>> {
         ensure!(!self.busy, "Sync is busy; try again");
-        self.recover_incoming()?;
+        ensure!(
+            !self.recover_incoming(cx, |_, _, _| {}),
+            "Sync recovery is pending; try again"
+        );
         let previous = self
             .catalog
             .links

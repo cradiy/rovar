@@ -171,11 +171,11 @@ fn resolution_recovers_both_choices_after_catalog_failure_and_keeps_later_reques
                     .join(incoming.next.baseline.unwrap());
                 let confirmed = rovar_storage::fs::read(&baseline).unwrap();
                 write_atomic(&baseline, b"damaged baseline").unwrap();
-                assert!(r.recover_incoming().is_err());
+                assert!(recovery::recover_for_test(r).is_err());
                 assert!(journal.exists() && pending.exists());
                 write_atomic(&baseline, &confirmed).unwrap();
             }
-            r.recover_incoming().unwrap();
+            recovery::recover_for_test(r).unwrap();
             let link = r.link(&path).unwrap();
             assert!(!link.conflict);
             assert_eq!(link.object.revision, reviewed.revision);
@@ -206,7 +206,7 @@ fn resolution_recovers_both_choices_after_catalog_failure_and_keeps_later_reques
             assert!(r.persist());
             write_atomic(&journal, &record).unwrap();
             reload(r);
-            r.recover_incoming().unwrap();
+            recovery::recover_for_test(r).unwrap();
             assert_eq!(rovar_storage::fs::read(&path).unwrap(), b"later edit");
             assert_eq!(rovar_storage::fs::read(&pending).unwrap(), next_bytes);
             assert_eq!(r.link(&path).unwrap().object.title, "Later title");
@@ -232,7 +232,7 @@ fn failed_replacement_retains_conflict_and_request_without_overwriting_later_edi
         rovar_storage::fs::remove_dir(&path).unwrap();
         write_atomic(&path, b"later local edit").unwrap();
         reload(r);
-        r.recover_incoming().unwrap();
+        recovery::recover_for_test(r).unwrap();
         assert!(r.link(&path).unwrap().conflict);
         assert_eq!(rovar_storage::fs::read(&pending).unwrap(), request);
         assert_eq!(rovar_storage::fs::read(&path).unwrap(), b"later local edit");

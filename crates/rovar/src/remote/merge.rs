@@ -11,6 +11,9 @@ impl Remote {
         if self.busy {
             return false;
         }
+        if self.recover_incoming(cx, |_, _, _| {}) {
+            return true;
+        }
         let pending: Vec<_> = self.merge_pending.iter().cloned().collect();
         for path in pending {
             if protected.contains(&path) {

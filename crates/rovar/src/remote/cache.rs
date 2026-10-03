@@ -1,5 +1,7 @@
 use super::*;
 
+mod recovery;
+
 #[derive(Serialize, Deserialize)]
 struct Incoming {
     path: PathBuf,
@@ -180,7 +182,7 @@ pub(super) fn prepare_rejected_request(path: &Path) -> Result<RejectedRequest> {
 
 #[derive(Clone, Copy)]
 enum RequestCheck {
-    Read,
+    Skip,
     Verified,
 }
 
@@ -255,7 +257,7 @@ impl Remote {
         connection: String,
         prepared: PreparedSnapshot,
     ) -> Result<()> {
-        self.recover_incoming()?;
+        self.ensure_recovered()?;
         let PreparedSnapshot {
             object,
             baseline,
@@ -280,12 +282,12 @@ impl Remote {
         self.install_incoming(
             incoming,
             file.map_or(Installation::Delete, Installation::Prepared),
-            RequestCheck::Read,
+            RequestCheck::Skip,
         )
     }
 
     pub(super) fn install_merge(&mut self, prepared: PreparedMerge) -> Result<()> {
-        self.recover_incoming()?;
+        self.ensure_recovered()?;
         ensure!(
             baseline::stamp(&self.pending_path(&prepared.incoming.next), false)?
                 == prepared.pending_stamp,
@@ -299,6 +301,7 @@ impl Remote {
     }
 
     pub(super) fn install_resolution(&mut self, prepared: PreparedResolution) -> Result<()> {
+        self.ensure_recovered()?;
         ensure!(
             optional_stamp(&prepared.incoming.path)? == prepared.local_stamp,
             "Local document changed while resolving; try again"
@@ -381,16 +384,12 @@ impl Remote {
         incoming: &Incoming,
         request_check: RequestCheck,
     ) -> Result<()> {
-        if let Some(request) = &incoming.rejected_request {
+        if incoming.rejected_request.is_some() {
             let pending = self.pending_path(&incoming.next);
             if rovar_storage::exists(&pending) {
                 let matches = match request_check {
                     RequestCheck::Verified => true,
-                    RequestCheck::Read => {
-                        let saved: PendingSave =
-                            serde_json::from_slice(&rovar_storage::fs::read(&pending)?)?;
-                        saved.input.request_id == *request
-                    }
+                    RequestCheck::Skip => false,
                 };
                 if matches {
                     rovar_storage::fs::remove_file(pending)?;
@@ -400,60 +399,11 @@ impl Remote {
         Ok(())
     }
 
-    pub(super) fn recover_incoming(&mut self) -> Result<()> {
-        let journal = self.root.join("incoming.json");
-        if !rovar_storage::exists(&journal) {
-            return Ok(());
-        }
-        let incoming: Incoming = serde_json::from_slice(&rovar_storage::fs::read(&journal)?)?;
-        let current = self.catalog.links.get(&incoming.path);
-        let unchanged = match (current, incoming.previous.as_ref()) {
-            (Some(current), Some(previous)) => {
-                current.connection == previous.connection
-                    && current.object.id == previous.object.id
-                    && current.object.revision == previous.object.revision
-                    && current.object.title == previous.object.title
-                    && current.object.deleted == previous.object.deleted
-                    && current.baseline == previous.baseline
-                    && current.dirty == previous.dirty
-                    && current.conflict == previous.conflict
-            }
-            (None, None) => true,
-            _ => false,
-        };
-        let already_applied = current.is_some_and(|link| {
-            link.baseline == incoming.next.baseline
-                && link.object.revision == incoming.next.object.revision
-                && link.object.id == incoming.next.object.id
-                && link.connection == incoming.next.connection
-                && link.conflict == incoming.next.conflict
-        });
-        if already_applied {
-            // The catalog committed before a crash, but retiring the rejected
-            // request may not have. Do not reset any subsequent local edits.
-            self.retire_rejected_request(&incoming, RequestCheck::Read)?;
-        } else if unchanged {
-            // A present baseline must still pass integrity checks. Only the
-            // explicit local-resolution path may recover without one.
-            let baseline = self.read_baseline(&incoming.next)?;
-            let installed = if incoming.next.object.deleted {
-                !rovar_storage::exists(&incoming.path)
-            } else if let Some(hash) = &incoming.installed_content {
-                // Keeping local content has no confirmed server baseline. Its
-                // recorded content hash is the recovery witness instead.
-                baseline::content(&incoming.path, false)
-                    .is_ok_and(|content| hex::encode(Sha256::digest(content)) == *hash)
-            } else {
-                let baseline =
-                    baseline.ok_or_else(|| anyhow::anyhow!("Missing incoming baseline"))?;
-                baseline::content(&incoming.path, false)
-                    .is_ok_and(|content| STANDARD.encode(content) == baseline.content)
-            };
-            if installed {
-                self.finish_incoming(&incoming, RequestCheck::Read)?;
-            }
-        }
-        rovar_storage::fs::remove_file(journal)?;
+    pub(super) fn ensure_recovered(&self) -> Result<()> {
+        ensure!(
+            !rovar_storage::exists(self.root.join("incoming.json")),
+            "Sync recovery is pending; try again"
+        );
         Ok(())
     }
 }
@@ -595,13 +545,13 @@ mod tests {
             let record = serde_json::to_vec(&incoming).unwrap();
             // Crash before the new cache is installed must leave the old request.
             write_atomic(&journal, &record).unwrap();
-            r.recover_incoming().unwrap();
+            recovery::recover_for_test(r).unwrap();
             assert_eq!(r.link(&path).unwrap().object.revision, 1);
             assert!(rovar_storage::exists(&pending));
             // Crash after writing the merged cache, before committing its revision.
             write_atomic(&journal, &record).unwrap();
             write_atomic(&path, b"merged").unwrap();
-            r.recover_incoming().unwrap();
+            recovery::recover_for_test(r).unwrap();
             assert_eq!(r.link(&path).unwrap().object.revision, 2);
             assert!(r.link(&path).unwrap().dirty);
             assert!(!r.link(&path).unwrap().conflict);
@@ -615,7 +565,7 @@ mod tests {
             write_atomic(&pending, &request_bytes).unwrap();
             write_atomic(&path, b"later edit").unwrap();
             r.catalog.links.get_mut(&path).unwrap().object.title = "Later title".into();
-            r.recover_incoming().unwrap();
+            recovery::recover_for_test(r).unwrap();
             assert!(!rovar_storage::exists(&pending));
             assert_eq!(r.link(&path).unwrap().object.title, "Later title");
             assert_eq!(rovar_storage::fs::read(&path).unwrap(), b"later edit");
@@ -674,12 +624,12 @@ mod tests {
             let record = serde_json::to_vec(&incoming).unwrap();
             // Interrupted before replacing the file: keep the old version.
             write_atomic(&journal, &record).unwrap();
-            r.recover_incoming().unwrap();
+            recovery::recover_for_test(r).unwrap();
             assert_eq!(r.link(&path).unwrap().object.revision, 1);
             // Interrupted after the file write but before the catalog commit.
             write_atomic(&journal, &record).unwrap();
             write_atomic(&path, b"version two").unwrap();
-            r.recover_incoming().unwrap();
+            recovery::recover_for_test(r).unwrap();
             assert_eq!(r.link(&path).unwrap().object.revision, 2);
             assert!(!r.link(&path).unwrap().dirty);
             let persisted: Catalog = serde_json::from_slice(
@@ -691,7 +641,7 @@ mod tests {
             r.catalog.links.insert(path.clone(), previous);
             write_atomic(&journal, &record).unwrap();
             write_atomic(&path, b"new local edits").unwrap();
-            r.recover_incoming().unwrap();
+            recovery::recover_for_test(r).unwrap();
             r.reconcile_baselines(vec![path.clone()], cx, |_, _| {});
         });
         crate::remote::tests::wait_sync(&remote, cx);

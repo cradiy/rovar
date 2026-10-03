@@ -126,6 +126,7 @@ impl Remote {
         store(&self.root, object, content, transfer)
     }
 
+    #[cfg(test)]
     pub(super) fn read_baseline(&self, link: &Link) -> Result<Option<Baseline>> {
         read(&self.root, link)
     }

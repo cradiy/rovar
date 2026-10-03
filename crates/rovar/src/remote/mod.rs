@@ -189,10 +189,8 @@ impl Remote {
             local_changes: BTreeMap::new(),
         });
         cx.set_global(SharedRemote(remote.clone()));
-        remote.update(cx, |remote, _| {
-            if let Err(error) = remote.recover_incoming() {
-                remote.error = Some(error.to_string());
-            }
+        remote.update(cx, |remote, cx| {
+            remote.recover_incoming(cx, |_, _, _| {});
         });
         remote
     }
@@ -556,8 +554,11 @@ impl Remote {
             return;
         }
         self.cleanup_baselines(cx);
-        if let Err(error) = self.recover_incoming() {
-            self.error = Some(error.to_string());
+        if self.recover_incoming(cx, |result, this, cx| {
+            if result.is_ok() {
+                this.sync(cx);
+            }
+        }) {
             return;
         }
         if self.reconnect(cx) {
@@ -833,8 +834,14 @@ impl Remote {
         if self.busy {
             return;
         }
-        if let Err(error) = self.recover_incoming() {
-            self.error = Some(error.to_string());
+        let resume_connection = connection.clone();
+        let resume_open = open.clone();
+        let resume_selected = selected.clone();
+        if self.recover_incoming(cx, move |result, this, cx| {
+            if result.is_ok() {
+                this.refresh_selected(resume_connection, resume_open, resume_selected, cx);
+            }
+        }) {
             return;
         }
         let paths: Vec<_> = self
@@ -1097,11 +1104,9 @@ impl Remote {
                                         .get_mut(&connection)
                                         .unwrap()
                                         .fail(&object, &error);
-                                    // Only continue if the shared recovery journal
-                                    // can be resolved safely. A global persistence
-                                    // failure must not be hidden as an object retry.
-                                    if let Err(error) = this.recover_incoming() {
-                                        this.error = Some(error.to_string());
+                                    // A journal must be recovered before another
+                                    // publication can reuse it. Keep later items queued.
+                                    if this.ensure_recovered().is_err() {
                                         break;
                                     }
                                     continue;
@@ -1116,6 +1121,7 @@ impl Remote {
                                 this.error = this.catalog.directories[&connection].error();
                             }
                             this.persist();
+                            this.recover_incoming(cx, |_, _, _| {});
                         });
                     }
                     Err(error) => {
