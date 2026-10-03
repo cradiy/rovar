@@ -384,8 +384,13 @@ impl Studio {
                     } else {
                         document::import(&path, &documents, &text_system)?
                     };
+                    let json = loaded.json.clone();
+                    let needs_upgrade = loaded.needs_upgrade;
+                    let document = loaded.into_document()?;
                     Ok::<_, anyhow::Error>((
-                        loaded,
+                        document,
+                        json,
+                        needs_upgrade,
                         document::cache_preview(&path, &previews).ok().flatten(),
                         path,
                     ))
@@ -411,22 +416,22 @@ impl Studio {
                 };
                 tab.loading = false;
                 tab.remote_baseline = remote_baseline;
-                let result = loaded.and_then(|(loaded, preview, path)| {
-                    tab.needs_upgrade = loaded.needs_upgrade;
+                let result = loaded.map(|(document, json, needs_upgrade, preview, path)| {
+                    tab.needs_upgrade = needs_upgrade;
                     tab.file.path = path;
                     tab.file.preview = preview;
-                    let json = loaded.json.clone();
                     let editor = cx.new(|cx| Workspace::new(window, cx));
                     editor.update(cx, |editor, cx| editor.attach_library(library, cx));
-                    let id =
-                        editor.update(cx, |editor, cx| editor.load_document(loaded, window, cx))?;
+                    let id = editor.update(cx, |editor, cx| {
+                        editor.load_prepared_document(document, window, cx)
+                    });
                     editor.update(cx, |editor, cx| {
                         editor.restore_page_views(tab.file.views.clone(), window, cx);
                         if this.active == Some(token) && this.open_errors.is_empty() {
                             editor.focus_canvas(window, cx);
                         }
                     });
-                    Ok((editor, id, json))
+                    (editor, id, json)
                 });
                 match result {
                     Ok((editor, id, json)) => {
