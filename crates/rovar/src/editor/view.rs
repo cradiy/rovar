@@ -96,6 +96,13 @@ impl Render for Workspace {
                     }
                     return;
                 }
+                if this.components.rename.is_some() {
+                    if event.keystroke.key == "escape" {
+                        this.finish_variant_rename(false, window, cx);
+                        cx.stop_propagation();
+                    }
+                    return;
+                }
                 if this.colors.dialog.is_some() {
                     if event.keystroke.key == "escape" {
                         if this.gesture.is_some_and(|g| {

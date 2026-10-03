@@ -222,6 +222,7 @@ impl Workspace {
             id: id.into(),
             pages,
             components: self.components.definitions.clone(),
+            component_sets: self.components.sets.clone(),
         };
         crate::scene::components::synchronize(&mut document.pages, &mut document.components)?;
         for page in document
@@ -281,6 +282,8 @@ impl Workspace {
     ) -> String {
         self.colors.palette = document.colors;
         self.components.definitions = document.components;
+        self.components.sets = document.component_sets;
+        self.components.rename = None;
         self.components.revision = None;
         self.suspend(window, cx);
         self.history.borrow_mut().mark_changed();
@@ -383,6 +386,7 @@ impl Workspace {
         self.pick_hover = None;
         self.suspend_assets();
         self.colors.dialog = None;
+        self.components.rename = None;
         for menu in &self.colors.menu {
             menu.update(cx, |menu, cx| menu.close(window, cx));
         }

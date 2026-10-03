@@ -245,6 +245,9 @@ fn canonical(document: Document) -> Result<Value> {
     if value.get("colors").is_none() {
         value["colors"] = Value::Object(Map::new());
     }
+    if value.get("component_sets").is_none() {
+        value["component_sets"] = Value::Object(Map::new());
+    }
     Ok(value)
 }
 

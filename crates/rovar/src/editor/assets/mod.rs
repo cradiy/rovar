@@ -204,6 +204,10 @@ impl Workspace {
             let before = self.page_edit(&pages, cx);
             if matches!(dialog, Dialog::DocumentDelete(_)) {
                 self.components.definitions.remove(id);
+                self.components.sets.retain(|_, set| {
+                    set.variants.remove(id);
+                    !set.variants.is_empty()
+                });
                 self.hierarchy.components.retain(|_, b| &b.component != id);
                 for page in &mut self.pages.entries {
                     page.page

@@ -13,6 +13,7 @@ pub(crate) type SharedHistory = Rc<RefCell<History>>;
 pub(crate) struct PageEdit {
     pub colors: crate::scene::color_styles::Palette,
     pub components: crate::scene::components::Definitions,
+    pub component_sets: crate::scene::components::variants::Sets,
     pub pages: std::collections::BTreeMap<String, Option<SavedPage>>,
     pub order: Vec<String>,
     pub active: String,

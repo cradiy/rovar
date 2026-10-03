@@ -387,6 +387,7 @@ impl Workspace {
             .flex_col()
             .child(div().p(px(14.)).flex_shrink_0().child(actions))
             .child(self.auto_layout_controls(cx))
+            .child(self.variant_controls(cx))
             .child(self.constraint_controls(cx))
             .child(self.size_limit_controls(cx))
             .child(

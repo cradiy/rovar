@@ -1,6 +1,7 @@
 use crate::{document::Page, scene::artboard::Rect};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
+pub(crate) mod variants;
 
 pub(crate) type Definitions = BTreeMap<String, Definition>;
 

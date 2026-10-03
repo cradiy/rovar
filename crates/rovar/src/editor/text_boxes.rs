@@ -303,6 +303,7 @@ impl Workspace {
             .flex()
             .flex_col()
             .child(self.geometry_controls(cx))
+            .child(self.variant_controls(cx))
             .child(
                 inspector_section(t("typography"))
                     .child(

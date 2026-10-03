@@ -58,9 +58,9 @@ impl Workspace {
         let entries: Vec<_> = self
             .components
             .definitions
-            .iter()
-            .filter(|(_, c)| c.name.to_lowercase().contains(&query))
-            .map(|(id, c)| (id.clone(), c.name.clone()))
+            .keys()
+            .map(|id| (id.clone(), self.component_display_name(id)))
+            .filter(|(_, name)| name.to_lowercase().contains(&query))
             .collect();
         let enabled = self.can_create_component();
         div()

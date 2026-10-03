@@ -329,18 +329,6 @@ impl Workspace {
     }
 
     pub(super) fn tool_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let hint = match self.draw_tool {
-            Some(DrawTool::Board) => Some(t("draw-board-hint")),
-            Some(DrawTool::Text) => Some(t("draw-text-hint")),
-            Some(DrawTool::Shape(
-                ShapeKind::Rectangle | ShapeKind::Ellipse | ShapeKind::Polygon | ShapeKind::Star,
-            )) => Some(t("draw-shape-hint")),
-            Some(DrawTool::Shape(ShapeKind::Line | ShapeKind::Arrow)) => Some(t("draw-line-hint")),
-            Some(DrawTool::Shape(ShapeKind::Bezier)) => Some(t("draw-pen-hint")),
-            Some(DrawTool::Shape(ShapeKind::Pen)) => Some(t("draw-pencil-hint")),
-            _ if self.toolbar.hand => Some(t("pan-hint")),
-            _ => None,
-        };
         div()
             .absolute()
             .bottom(px(panels::PANEL_BOTTOM))
@@ -349,10 +337,6 @@ impl Workspace {
             .flex()
             .flex_col()
             .items_center()
-            .gap(px(10.))
-            .when_some(hint, |el, hint| {
-                el.child(div().text_size(px(11.)).text_color(rgb(MUTED)).child(hint))
-            })
             .child(
                 super::layers::glass_surface()
                     .id("tool-bar")

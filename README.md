@@ -23,6 +23,7 @@ I want to build a beautiful, cross-platform UI design tool that is easy for AI a
 - **Precision tools** — snapping, distance measurements, equal spacing, multi-selection resizing, repeated duplication, and on-canvas corner editing.
 - **Colors and gradients** — document color styles, color libraries, and linear, radial, angular, and diamond gradients.
 - **Reusable components** — component libraries, instances, overrides, and updates.
+- **Component variants** — named versions in component sets, edited on canvas with the property panel, and instance switching that preserves matching overrides.
 - **Images and video** — media import, image fills, non-destructive cropping, and video playback.
 - **Local and self-hosted workspaces** — personal and team spaces, document and library synchronization, and version-conflict comparison.
 - **Export** — `.rovar` documents, PNG, and SVG.
@@ -30,7 +31,6 @@ I want to build a beautiful, cross-platform UI design tool that is easy for AI a
 
 ## Planned
 
-- [ ] **Component variants** — sizes, styles, and hover, pressed, and disabled states.
 - [ ] **Vector composition** — Boolean operations and masks.
 - [ ] **Visual effects** — shadows, layer and background blur, glass, glow, blend modes, and effect stacks.
 - [ ] **Animation** — keyframes, easing, animated gradients, and layer effects.

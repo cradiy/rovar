@@ -64,6 +64,8 @@ pub(crate) struct Document {
     pub pages: Vec<Page>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub components: crate::scene::components::Definitions,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub component_sets: crate::scene::components::variants::Sets,
 }
 
 impl Document {
@@ -73,6 +75,7 @@ impl Document {
             id: uuid::Uuid::new_v4().to_string(),
             pages: vec![page],
             components: Default::default(),
+            component_sets: Default::default(),
         }
     }
     pub fn decode(json: &[u8]) -> Result<Self> {
@@ -82,6 +85,7 @@ impl Document {
         Ok(document)
     }
     pub fn validate(&self) -> Result<()> {
+        crate::scene::components::variants::validate(&self.component_sets, &self.components)?;
         for (id, style) in &self.colors {
             ensure!(uuid::Uuid::parse_str(id).is_ok(), "Invalid color style ID");
             style.validate()?;

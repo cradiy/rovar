@@ -171,6 +171,7 @@ impl Workspace {
         PageEdit {
             colors: self.colors.palette.clone(),
             components: self.components.definitions.clone(),
+            component_sets: self.components.sets.clone(),
             pages: ids
                 .iter()
                 .map(|id| {
@@ -215,6 +216,8 @@ impl Workspace {
         let inverse = self.page_edit(&ids, cx);
         self.colors.palette = value.colors;
         self.components.definitions = value.components;
+        self.components.sets = value.component_sets;
+        self.components.rename = None;
         self.components.revision = None;
         for (id, state) in value.pages {
             self.pages.entries.retain(|p| p.page.id != id);

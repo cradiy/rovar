@@ -66,6 +66,7 @@ fn comparison_copies_server_objects_into_local_history_without_modifying_server(
                 id: studio.tabs[0].document_id.clone(),
                 pages: vec![page],
                 components: Default::default(),
+                component_sets: Default::default(),
             };
             original.update(cx, |editor, cx| {
                 editor.load_document(loaded(&document), window, cx).unwrap();

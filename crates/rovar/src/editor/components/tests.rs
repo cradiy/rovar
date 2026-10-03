@@ -60,7 +60,7 @@ fn rect(x: f32, y: f32, width: f32, height: f32) -> Rect {
     }
 }
 
-fn main_component(
+pub(super) fn main_component(
     this: &mut Workspace,
     window: &mut Window,
     cx: &mut Context<Workspace>,

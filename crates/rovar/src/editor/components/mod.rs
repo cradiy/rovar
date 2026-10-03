@@ -5,6 +5,7 @@ use std::collections::BTreeSet;
 
 #[cfg(test)]
 mod tests;
+mod variants;
 
 #[derive(Clone)]
 pub(super) struct ComponentDrag {
@@ -44,6 +45,8 @@ impl Render for ComponentDrag {
 #[derive(Default)]
 pub(super) struct State {
     pub definitions: Definitions,
+    pub sets: model::variants::Sets,
+    pub rename: Option<variants::Rename>,
     pub revision: Option<u64>,
     pub previews:
         std::collections::BTreeMap<String, (Vec<u8>, Option<std::sync::Arc<gpui::RenderImage>>)>,

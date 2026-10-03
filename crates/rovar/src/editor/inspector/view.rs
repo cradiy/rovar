@@ -171,6 +171,7 @@ impl Workspace {
                                 .child(self.property_field(0, t("name"), cx)),
                         )
                         .child(self.geometry_controls(cx))
+                        .child(self.variant_controls(cx))
                         .when(self.vector_edit.is_some(), |el| {
                             el.child(self.node_controls(cx))
                         })

@@ -16,6 +16,8 @@ struct Manifest {
     pages: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     components: Vec<String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    component_sets: crate::scene::components::variants::Sets,
     media: BTreeMap<String, Media>,
 }
 #[derive(Serialize, Deserialize)]
@@ -164,6 +166,7 @@ pub(crate) fn read_document(reader: &Reader) -> Result<Document> {
                 colors: info.colors,
                 pages,
                 components,
+                component_sets: info.component_sets,
             }
         }
         Index::Single(info) => {
@@ -187,6 +190,7 @@ pub(crate) fn read_document(reader: &Reader) -> Result<Document> {
                 colors: Default::default(),
                 pages: vec![page],
                 components: Default::default(),
+                component_sets: Default::default(),
             }
         }
     };
@@ -286,6 +290,7 @@ fn write_document(
         previous_cover: None,
         pages: document.pages.iter().map(|page| page.id.clone()).collect(),
         components: document.components.keys().cloned().collect(),
+        component_sets: document.component_sets.clone(),
         media,
     };
     put_json(writer, "document", "document", &info)?;
