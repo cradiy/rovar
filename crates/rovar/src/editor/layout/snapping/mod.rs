@@ -1,4 +1,5 @@
 use super::*;
+use crate::ui::theme::Color;
 mod resize;
 mod spacing;
 use super::measurement::{Dimension, dimension_overlay};
@@ -366,7 +367,7 @@ impl Workspace {
                     .top(px(start.y))
                     .w(px(if g.axis == 0 { 1. } else { len }))
                     .h(px(if g.axis == 0 { len } else { 1. }))
-                    .bg(gpui::rgba(0xf28bd9cc)),
+                    .bg(Color::Component.color().opacity(0.8000)),
             );
         }
         el.child(dimension_overlay(

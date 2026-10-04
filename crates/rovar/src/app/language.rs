@@ -1,5 +1,6 @@
 use super::*;
 use crate::i18n::{self, Language, t};
+use crate::ui::theme::Color;
 use uic::components::dropdown::{DropdownPlacement, dropdown};
 
 impl Studio {
@@ -72,9 +73,9 @@ impl Studio {
             .min_w(px(192.))
             .p(px(4.))
             .rounded(px(8.))
-            .bg(rgb(PANEL))
-            .border_color(rgb(BORDER))
-            .text_color(rgb(TEXT))
+            .bg(PANEL.color())
+            .border_color(BORDER.color())
+            .text_color(TEXT.color())
             .text_size(px(12.))
             .trigger(
                 div()
@@ -87,7 +88,7 @@ impl Studio {
                     .items_center()
                     .gap(px(8.))
                     .cursor_pointer()
-                    .hover(|style| style.bg(rgb(0x282b33)))
+                    .hover(|style| style.bg(Color::Input.color()))
                     .child(icon(LucideIcons::Languages, 16.))
                     .child(icon(LucideIcons::ChevronDown, 12.)),
             )
@@ -108,7 +109,7 @@ impl Studio {
                             .items_center()
                             .gap(px(8.))
                             .cursor_pointer()
-                            .hover(|style| style.bg(rgb(0x353044)))
+                            .hover(|style| style.bg(Color::Selected.color()))
                             .child(div().w(px(16.)).when(i18n::preference() == language, |el| {
                                 el.child(icon(LucideIcons::Check, 14.))
                             }))

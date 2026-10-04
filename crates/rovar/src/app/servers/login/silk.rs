@@ -1,6 +1,6 @@
 use gpui::{
     Bounds, IntoElement, PathBuilder, Pixels, Window, canvas, linear_color_stop, linear_gradient,
-    point, prelude::*, px, rgb, rgba,
+    point, prelude::*, px,
 };
 use std::{cell::RefCell, rc::Rc};
 use web_time::Instant;
@@ -153,16 +153,21 @@ pub(super) fn background(motion: Rc<RefCell<Motion>>) -> impl IntoElement {
                     let body = (1. - middle * middle).max(0.).powf(1.4);
                     let crest = (-((middle - 0.16) / 0.32).powi(2)).exp();
                     let light = (body * 0.10 + crest * 0.25) * strength;
-                    let channel = |base: f32, tint: f32| (base + tint * light) as u32;
-                    let color =
-                        channel(17., 119.) << 16 | channel(18., 103.) << 8 | channel(23., 160.);
+                    let base = crate::ui::WORKSPACE.color();
+                    let tint = crate::ui::ACCENT.color();
+                    let color = gpui::Rgba {
+                        r: base.r + (tint.r - base.r) * light,
+                        g: base.g + (tint.g - base.g) * light,
+                        b: base.b + (tint.b - base.b) * light,
+                        a: 1.,
+                    };
                     if let Ok(path) = path.build() {
                         window.paint_path(
                             path,
                             linear_gradient(
                                 110. + layer as f32 * 25.,
-                                linear_color_stop(rgb(color), 0.),
-                                linear_color_stop(rgba((color << 8) | 0x55), 1.),
+                                linear_color_stop(color, 0.),
+                                linear_color_stop(color.opacity(1. / 3.), 1.),
                             ),
                         );
                     }

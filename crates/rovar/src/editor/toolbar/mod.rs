@@ -1,5 +1,6 @@
 use super::*;
 use crate::i18n::t;
+use crate::ui::theme::Color;
 use uic::components::dropdown::{DropdownPlacement, DropdownState, dropdown};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -77,11 +78,11 @@ impl Render for ToolTip {
             .px(px(10.))
             .py(px(7.))
             .rounded(px(7.))
-            .bg(rgb(0x292c34))
+            .bg(Color::Input.color())
             .border_1()
-            .border_color(rgb(BORDER))
+            .border_color(BORDER.color())
             .text_size(px(12.))
-            .text_color(rgb(TEXT))
+            .text_color(TEXT.color())
             .child(self.0.clone())
     }
 }
@@ -235,10 +236,14 @@ impl Workspace {
             .items_center()
             .justify_center()
             .cursor_pointer()
-            .hover(|s| s.bg(rgb(0x3b3e47)))
-            .when(active, |el| el.bg(rgb(0x7960be)))
+            .hover(|s| s.bg(Color::Hover.color()))
+            .when(active, |el| el.bg(Color::Accent.color()))
             .tooltip(move |_, cx| cx.new(|_| ToolTip(format!("{label}  {key}"))).into())
-            .child(icon(glyph, 23.).text_color(rgb(if active { 0xffffff } else { TEXT })))
+            .child(icon(glyph, 23.).text_color(if active {
+                Color::OnAccent.color()
+            } else {
+                TEXT.color()
+            }))
             .on_click(cx.listener(move |this, _, window, cx| this.choose_tool(tool, window, cx)))
     }
 
@@ -268,13 +273,13 @@ impl Workspace {
                     .items_center()
                     .gap(px(10.))
                     .cursor_pointer()
-                    .hover(|s| s.bg(rgb(0x3b3e47)))
+                    .hover(|s| s.bg(Color::Hover.color()))
                     .child(div().w(px(16.)).child(
                         icon(LucideIcons::Check, 15.).when(tool != selected, |el| el.opacity(0.)),
                     ))
                     .child(icon(glyph, 19.))
                     .child(div().flex_1().child(label))
-                    .child(div().text_color(rgb(MUTED)).child(key))
+                    .child(div().text_color(MUTED.color()).child(key))
                     .on_click(
                         cx.listener(move |this, _, window, cx| this.choose_tool(tool, window, cx)),
                     )
@@ -298,9 +303,9 @@ impl Workspace {
                     .p(px(6.))
                     .rounded(px(12.))
                     .shadow_lg()
-                    .bg(rgb(0x252830))
-                    .border_color(rgb(0x414550))
-                    .text_color(rgb(TEXT))
+                    .bg(Color::Input.color())
+                    .border_color(Color::Border.color())
+                    .text_color(TEXT.color())
                     .text_size(px(13.))
                     .trigger(
                         div()
@@ -312,9 +317,9 @@ impl Workspace {
                             .flex()
                             .items_center()
                             .justify_center()
-                            .when(open, |el| el.bg(rgb(0x3b3e47)))
-                            .hover(|s| s.bg(rgb(0x3b3e47)))
-                            .child(icon(LucideIcons::ChevronDown, 12.).text_color(rgb(MUTED))),
+                            .when(open, |el| el.bg(Color::Hover.color()))
+                            .hover(|s| s.bg(Color::Hover.color()))
+                            .child(icon(LucideIcons::ChevronDown, 12.).text_color(MUTED.color())),
                     )
                     .menu(
                         div()
@@ -345,7 +350,7 @@ impl Workspace {
                     .p(px(7.))
                     .rounded(px(14.))
                     .border_1()
-                    .border_color(rgb(0x444852))
+                    .border_color(Color::Border.color())
                     .shadow_lg()
                     .flex()
                     .items_center()
@@ -362,7 +367,13 @@ impl Workspace {
                         &[Tool::Move, Tool::Hand],
                         cx,
                     ))
-                    .child(div().w(px(1.)).h(px(24.)).mx(px(2.)).bg(rgb(0x464952)))
+                    .child(
+                        div()
+                            .w(px(1.))
+                            .h(px(24.))
+                            .mx(px(2.))
+                            .bg(Color::Border.color()),
+                    )
                     .child(self.tool_button(Tool::Board, cx))
                     .child(self.tool_group(
                         1,

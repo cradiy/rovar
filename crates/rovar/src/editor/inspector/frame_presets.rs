@@ -71,10 +71,10 @@ impl Workspace {
                 .cursor_pointer()
                 .text_size(px(13.))
                 .font_weight(FontWeight::SEMIBOLD)
-                .text_color(rgb(TEXT))
-                .hover(|s| s.bg(rgb(BORDER)))
+                .text_color(TEXT.color())
+                .hover(|s| s.bg(BORDER.color()))
                 .child(t("artboard"))
-                .child(icon(LucideIcons::ChevronDown, 12.).text_color(rgb(MUTED))),
+                .child(icon(LucideIcons::ChevronDown, 12.).text_color(MUTED.color())),
             move |window, cx| {
                 weak.update(cx, |this, cx| this.frame_presets(id, &page, window, cx))
                     .unwrap_or_default()
@@ -126,11 +126,16 @@ impl Workspace {
                                 .when(checked, |el| el.child(icon(LucideIcons::Check, 13.))),
                         )
                         .child(div().flex_1().min_w_0().truncate().child(label.clone()))
-                        .child(div().flex_shrink_0().text_color(rgb(MUTED)).child(format!(
-                            "{} × {}",
-                            inspector::number(size[0]),
-                            inspector::number(size[1])
-                        )))
+                        .child(
+                            div()
+                                .flex_shrink_0()
+                                .text_color(MUTED.color())
+                                .child(format!(
+                                    "{} × {}",
+                                    inspector::number(size[0]),
+                                    inspector::number(size[1])
+                                )),
+                        )
                 },
                 move |window, cx| {
                     let _ = weak.update(cx, |this, cx| {

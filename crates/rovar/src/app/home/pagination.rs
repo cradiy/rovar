@@ -1,4 +1,5 @@
 use super::*;
+use crate::ui::theme::Color;
 
 impl Studio {
     pub(in crate::app) fn set_home_page(&mut self, page: usize, cx: &mut Context<Self>) {
@@ -25,7 +26,7 @@ impl Studio {
                     div()
                         .w(px(20.))
                         .text_center()
-                        .text_color(rgb(MUTED))
+                        .text_color(MUTED.color())
                         .child("…")
                         .into_any_element(),
                 );
@@ -41,11 +42,21 @@ impl Studio {
                     .flex()
                     .items_center()
                     .justify_center()
-                    .text_color(rgb(if current == page { ACCENT } else { MUTED }))
-                    .when(current == page, |el| el.bg(rgba(0xb4a2ee22)))
+                    .text_color(if current == page {
+                        ACCENT.color()
+                    } else {
+                        MUTED.color()
+                    })
+                    .when(current == page, |el| {
+                        el.bg(Color::Accent.color().opacity(0.1333))
+                    })
                     .when(current != page, |el| {
                         el.cursor_pointer()
-                            .hover(|style| style.bg(rgba(0xffffff08)).text_color(rgb(TEXT)))
+                            .hover(|style| {
+                                style
+                                    .bg(Color::Text.color().opacity(0.0314))
+                                    .text_color(TEXT.color())
+                            })
                             .on_click(
                                 cx.listener(move |this, _, _, cx| this.set_home_page(page, cx)),
                             )
@@ -60,7 +71,7 @@ impl Studio {
             .w_full()
             .flex_shrink_0()
             .border_t_1()
-            .border_color(rgba(0xffffff0c))
+            .border_color(Color::Text.color().opacity(0.0471))
             .flex()
             .justify_center()
             .child(
@@ -73,7 +84,7 @@ impl Studio {
                     .justify_between()
                     .gap(px(8.))
                     .text_size(px(12.))
-                    .child(div().text_color(rgb(MUTED)).child(crate::i18n::message(
+                    .child(div().text_color(MUTED.color()).child(crate::i18n::message(
                         "home-page-range",
                         &[
                             ("start", (current * PAGE_SIZE + 1).to_string()),
@@ -122,7 +133,11 @@ impl Studio {
             .flex()
             .items_center()
             .justify_center()
-            .text_color(rgb(if enabled { MUTED } else { 0x45434e }))
+            .text_color(if enabled {
+                MUTED.color()
+            } else {
+                Color::Muted.color()
+            })
             .cursor(gpui::CursorStyle::Arrow)
             .child(icon(
                 if next {
@@ -134,7 +149,11 @@ impl Studio {
             ))
             .when(enabled, |el| {
                 el.cursor_pointer()
-                    .hover(|style| style.bg(rgba(0xffffff08)).text_color(rgb(TEXT)))
+                    .hover(|style| {
+                        style
+                            .bg(Color::Text.color().opacity(0.0314))
+                            .text_color(TEXT.color())
+                    })
                     .on_click(cx.listener(move |this, _, _, cx| this.set_home_page(page, cx)))
             })
     }

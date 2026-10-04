@@ -357,7 +357,7 @@ impl TextLayout {
                         self.bounds.origin + point(left, row.origin.y),
                         size((right - left).max(px(2.)), row.height),
                     ),
-                    rgba(0x8560d955),
+                    crate::ui::theme::Color::Selection.color(),
                 ));
             }
             for fragment in &row.fragments {
@@ -395,12 +395,15 @@ impl TextLayout {
                         self.bounds.origin + point(left, row.origin.y + row.height - px(2.)),
                         size(right - left, px(1.)),
                     ),
-                    rgb(0x8560d9),
+                    crate::ui::ACCENT.color(),
                 ));
             }
         }
         if focused && selection.is_empty() {
-            window.paint_quad(fill(self.painted_caret_bounds(cursor), rgb(0x8560d9)));
+            window.paint_quad(fill(
+                self.painted_caret_bounds(cursor),
+                crate::ui::ACCENT.color(),
+            ));
         }
     }
 }

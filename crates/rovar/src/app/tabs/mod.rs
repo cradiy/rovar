@@ -1,4 +1,5 @@
 use super::*;
+use crate::ui::theme::Color;
 mod drag;
 mod hover;
 mod state;
@@ -74,9 +75,9 @@ impl Studio {
             .h(px(BAR_HEIGHT))
             .flex_shrink_0()
             .relative()
-            .bg(rgb(0x111216))
+            .bg(Color::Workspace.color())
             .border_b_1()
-            .border_color(gpui::rgba(0xffffff0d))
+            .border_color(Color::Text.color().opacity(0.0510))
             .child(crate::ui::titlebar::drag_region().absolute().inset_0())
             .on_drop(cx.listener(|this, drag: &DragTab, window, cx| {
                 this.dropped_on_strip(drag, window, cx);
@@ -104,17 +105,17 @@ impl Studio {
                             .items_center()
                             .justify_center()
                             .cursor_pointer()
-                            .when(self.active.is_none(), |s| s.bg(rgb(0x282332)))
+                            .when(self.active.is_none(), |s| s.bg(Color::Selected.color()))
                             .when(self.active.is_some(), |el| {
-                                el.hover(|s| s.bg(gpui::rgba(0xffffff08)))
+                                el.hover(|s| s.bg(Color::Text.color().opacity(0.0314)))
                             })
-                            .child(icon(LucideIcons::House, 17.).text_color(rgb(
+                            .child(icon(LucideIcons::House, 17.).text_color(
                                 if self.active.is_none() {
-                                    0xcab8ec
+                                    Color::Accent.color()
                                 } else {
-                                    0x9b97a6
+                                    Color::Muted.color()
                                 },
-                            )))
+                            ))
                             .on_click(
                                 cx.listener(|this, _, window, cx| {
                                     this.select_tab(None, window, cx)
@@ -156,7 +157,7 @@ impl Studio {
                                     .items_center()
                                     .justify_center()
                                     .cursor_pointer()
-                                    .hover(|s| s.bg(rgb(0x353044)))
+                                    .hover(|s| s.bg(Color::Selected.color()))
                                     .child(icon(LucideIcons::Plus, 17.))
                                     .on_click(cx.listener(|this, _, window, cx| {
                                         this.new_document(window, cx)
@@ -210,11 +211,15 @@ impl Studio {
                                                 },
                                                 16.,
                                             )
-                                            .text_color(rgb(if enabled { TEXT } else { 0x52515c })),
+                                            .text_color(if enabled {
+                                                TEXT.color()
+                                            } else {
+                                                Color::Muted.color()
+                                            }),
                                         )
                                         .when(enabled, |el| {
                                             el.cursor_pointer()
-                                                .hover(|style| style.bg(rgb(0x292531)))
+                                                .hover(|style| style.bg(Color::Hover.color()))
                                                 .on_click(cx.listener(
                                                     move |this, _, window, cx| {
                                                         if let Some(editor) = this.active_editor() {
@@ -290,9 +295,19 @@ impl Studio {
             } else {
                 gpui::CursorStyle::OpenHand
             })
-            .bg(rgb(if active { 0x292531 } else { 0x111216 }))
-            .text_color(rgb(if active { TEXT } else { MUTED }))
-            .hover(|s| s.bg(rgb(if active { 0x302a3a } else { 0x202027 })))
+            .bg(if active {
+                Color::Hover.color()
+            } else {
+                Color::Workspace.color()
+            })
+            .text_color(if active { TEXT.color() } else { MUTED.color() })
+            .hover(|s| {
+                s.bg(if active {
+                    Color::Hover.color()
+                } else {
+                    Color::Panel.color()
+                })
+            })
             .on_hover(cx.listener(move |this, hovered, _, cx| {
                 this.hover_tab(token, *hovered, cx);
             }))
@@ -308,11 +323,11 @@ impl Studio {
             .when(tab.saving || tab.error.is_some(), |el| {
                 el.child(
                     div()
-                        .text_color(rgb(if tab.error.is_some() {
-                            0xf08e83
+                        .text_color(if tab.error.is_some() {
+                            Color::Danger.color()
                         } else {
-                            ACCENT
-                        }))
+                            ACCENT.color()
+                        })
                         .child(if tab.error.is_some() { "!" } else { "·" }),
                 )
             })
@@ -326,7 +341,7 @@ impl Studio {
                     .flex()
                     .items_center()
                     .justify_center()
-                    .hover(|s| s.bg(rgb(0x424550)))
+                    .hover(|s| s.bg(Color::Hover.color()))
                     .child(icon(LucideIcons::X, 12.))
                     .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
                     .on_click(cx.listener(move |this, _, window, cx| {

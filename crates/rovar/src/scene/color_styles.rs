@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 pub(crate) type Palette = BTreeMap<String, ColorStyle>;
+pub(crate) const DEFAULT_STYLE_COLOR: u32 = 0xb4a2ee;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub(crate) struct ColorStyle {

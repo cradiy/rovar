@@ -1,4 +1,5 @@
 use super::*;
+use crate::ui::theme::Color;
 
 pub(super) struct OpenError {
     title: String,
@@ -45,9 +46,9 @@ impl Studio {
             .max_w_full()
             .p(px(24.))
             .rounded(px(14.))
-            .bg(rgb(0x202027))
+            .bg(Color::Panel.color())
             .border_1()
-            .border_color(gpui::rgba(0xffffff20))
+            .border_color(Color::Text.color().opacity(0.1255))
             .shadow_xl()
             .flex()
             .flex_col()
@@ -58,7 +59,7 @@ impl Studio {
                     .flex()
                     .items_center()
                     .gap(px(10.))
-                    .child(icon(LucideIcons::CircleAlert, 20.).text_color(rgb(0xf08e83)))
+                    .child(icon(LucideIcons::CircleAlert, 20.).text_color(Color::Danger.color()))
                     .child(div().text_size(px(16.)).child(t("open-error-title"))),
             )
             .child(
@@ -70,7 +71,7 @@ impl Studio {
             .child(
                 div()
                     .text_size(px(12.))
-                    .text_color(rgb(MUTED))
+                    .text_color(MUTED.color())
                     .child(t("open-error-hint")),
             )
             .child(
@@ -80,9 +81,9 @@ impl Studio {
                     .overflow_y_scroll()
                     .p(px(12.))
                     .rounded(px(8.))
-                    .bg(gpui::rgba(0x00000026))
+                    .bg(Color::Input.color())
                     .text_size(px(12.))
-                    .text_color(rgb(MUTED))
+                    .text_color(MUTED.color())
                     .child(error.detail.clone()),
             )
             .child(
@@ -97,8 +98,8 @@ impl Studio {
                         .items_center()
                         .justify_center()
                         .text_size(px(12.))
-                        .bg(rgb(0x393246))
-                        .hover(|style| style.bg(rgb(0x484056)))
+                        .bg(Color::Selected.color())
+                        .hover(|style| style.bg(Color::Hover.color()))
                         .cursor_pointer()
                         .child(t("close"))
                         .on_click(cx.listener(|this, _, window, cx| {
@@ -112,7 +113,7 @@ impl Studio {
                 .absolute()
                 .inset_0()
                 .occlude()
-                .bg(gpui::rgba(0x00000066))
+                .bg(Color::Overlay.color())
                 .flex()
                 .items_center()
                 .justify_center()

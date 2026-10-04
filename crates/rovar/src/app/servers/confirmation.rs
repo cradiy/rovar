@@ -1,4 +1,5 @@
 use super::*;
+use crate::ui::theme::Color;
 
 pub(in crate::app) enum PendingAction {
     Remove(String),
@@ -54,9 +55,9 @@ impl Studio {
             .max_w_full()
             .p(px(20.))
             .rounded(px(14.))
-            .bg(rgb(PANEL))
+            .bg(PANEL.color())
             .border_1()
-            .border_color(rgb(BORDER))
+            .border_color(BORDER.color())
             .shadow_xl()
             .flex()
             .flex_col()
@@ -67,14 +68,14 @@ impl Studio {
                     .flex()
                     .items_center()
                     .gap(px(10.))
-                    .child(icon(symbol, 18.).text_color(rgb(0xf08e83)))
+                    .child(icon(symbol, 18.).text_color(Color::Danger.color()))
                     .child(div().text_size(px(16.)).child(t(label))),
             )
             .child(div().text_size(px(13.)).truncate().child(target))
             .child(
                 div()
                     .text_size(px(12.))
-                    .text_color(rgb(MUTED))
+                    .text_color(MUTED.color())
                     .child(t(hint)),
             )
             .child(
@@ -99,8 +100,18 @@ impl Studio {
                             .h(px(34.))
                             .px(px(14.))
                             .justify_center()
-                            .bg(rgb(if confirm { 0x823f49 } else { 0x2c2c36 }))
-                            .hover(move |s| s.bg(rgb(if confirm { 0x984b56 } else { 0x373741 })))
+                            .bg(if confirm {
+                                Color::DangerSurface.color()
+                            } else {
+                                Color::Input.color()
+                            })
+                            .hover(move |s| {
+                                s.bg(if confirm {
+                                    Color::DangerSurface.color()
+                                } else {
+                                    Color::Hover.color()
+                                })
+                            })
                             .on_click(cx.listener(move |this, _, window, cx| {
                                 this.finish_server_action(confirm, window, cx);
                                 cx.stop_propagation();
@@ -112,7 +123,7 @@ impl Studio {
                 .absolute()
                 .inset_0()
                 .occlude()
-                .bg(rgba(0x00000066))
+                .bg(Color::Overlay.color())
                 .flex()
                 .items_center()
                 .justify_center()

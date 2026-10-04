@@ -1,5 +1,6 @@
 use super::*;
-const CARD: u32 = 0x24232e;
+use crate::ui::theme::Color;
+const CARD: Color = Color::Surface;
 
 enum Action {
     Load,
@@ -188,7 +189,7 @@ impl Studio {
             .child(
                 div()
                     .text_size(px(12.))
-                    .text_color(rgb(MUTED))
+                    .text_color(MUTED.color())
                     .child(t("account-password-hint")),
             )
             .child(
@@ -251,7 +252,7 @@ impl Studio {
                         div()
                             .p(px(12.))
                             .rounded(px(9.))
-                            .bg(rgb(CARD))
+                            .bg(CARD.color())
                             .flex()
                             .items_center()
                             .gap(px(12.))
@@ -267,7 +268,7 @@ impl Studio {
                                     },
                                     18.,
                                 )
-                                .text_color(rgb(MUTED)),
+                                .text_color(MUTED.color()),
                             )
                             .child(
                                 div()
@@ -285,7 +286,7 @@ impl Studio {
                                         el.child(
                                             div()
                                                 .text_size(px(11.))
-                                                .text_color(rgb(ACCENT))
+                                                .text_color(ACCENT.color())
                                                 .child(t("account-current-session")),
                                         )
                                     })
@@ -294,14 +295,14 @@ impl Studio {
                                             div()
                                                 .truncate()
                                                 .text_size(px(12.))
-                                                .text_color(rgb(MUTED))
+                                                .text_color(MUTED.color())
                                                 .child(details),
                                         )
                                     })
                                     .child(
                                         div()
                                             .text_size(px(11.))
-                                            .text_color(rgb(MUTED))
+                                            .text_color(MUTED.color())
                                             .child(created),
                                     ),
                             )
@@ -323,7 +324,7 @@ impl Studio {
             .when(panel.sessions.iter().any(|s| !s.current), |el| {
                 el.child(
                     button("account-revoke-others", t("account-revoke-others"))
-                        .text_color(rgb(ACCENT))
+                        .text_color(ACCENT.color())
                         .on_click(cx.listener(|this, _, window, cx| {
                             this.account_action(Action::Revoke(None), window, cx)
                         })),
@@ -338,7 +339,7 @@ impl Studio {
                     .flex()
                     .items_center()
                     .gap(px(10.))
-                    .child(icon(LucideIcons::User, 18.).text_color(rgb(ACCENT)))
+                    .child(icon(LucideIcons::User, 18.).text_color(ACCENT.color()))
                     .child(div().flex_1().min_w_0().truncate().child(username)),
             )
             .child(
@@ -347,7 +348,7 @@ impl Studio {
                     .gap(px(4.))
                     .p(px(4.))
                     .rounded(px(9.))
-                    .bg(rgb(0x17171f))
+                    .bg(Color::Workspace.color())
                     .children(
                         [
                             ("password", "account-change-password"),
@@ -358,12 +359,16 @@ impl Studio {
                             button(tab, t(label))
                                 .flex_1()
                                 .justify_center()
-                                .bg(rgb(if panel.mode == tab {
-                                    0x352e45
+                                .bg(if panel.mode == tab {
+                                    Color::Selected.color()
                                 } else {
-                                    0x17171f
-                                }))
-                                .text_color(rgb(if panel.mode == tab { ACCENT } else { MUTED }))
+                                    Color::Workspace.color()
+                                })
+                                .text_color(if panel.mode == tab {
+                                    ACCENT.color()
+                                } else {
+                                    MUTED.color()
+                                })
                                 .on_click(cx.listener(move |this, _, _, cx| {
                                     if let Some(panel) = this.servers.as_mut().filter(|p| !p.busy) {
                                         panel.mode = tab;
@@ -380,8 +385,8 @@ impl Studio {
                     div()
                         .p(px(12.))
                         .rounded(px(8.))
-                        .bg(rgba(0x98c6ad15))
-                        .text_color(rgb(0x98c6ad))
+                        .bg(Color::Success.color().opacity(0.0824))
+                        .text_color(Color::Success.color())
                         .child(message),
                 )
             })

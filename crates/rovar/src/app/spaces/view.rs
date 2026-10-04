@@ -1,10 +1,11 @@
 use super::*;
 use crate::app::servers::button;
-use gpui::{ClipboardItem, Focusable, FontWeight, SharedString, rgba};
-use uic::components::input::{Input, InputAppearance};
+use crate::ui::theme::Color;
+use gpui::{ClipboardItem, Focusable, FontWeight, SharedString};
+use uic::components::input::Input;
 
-const CARD: u32 = 0x22222c;
-const LINE: u32 = 0x34323f;
+const CARD: Color = Color::Surface;
+const LINE: Color = Color::Border;
 
 fn primary(id: &'static str, label: &'static str, busy: bool) -> gpui::Stateful<gpui::Div> {
     div()
@@ -18,9 +19,9 @@ fn primary(id: &'static str, label: &'static str, busy: bool) -> gpui::Stateful<
         .px(px(16.))
         .justify_center()
         .font_weight(FontWeight::SEMIBOLD)
-        .bg(rgb(ACCENT))
-        .text_color(rgb(0x21182f))
-        .hover(|s| s.bg(rgb(0xc4b3f5)))
+        .bg(ACCENT.color())
+        .text_color(Color::OnAccent.color())
+        .hover(|s| s.bg(Color::Accent.color()))
         .opacity(if busy { 0.5 } else { 1. })
 }
 fn avatar(label: &str, size: f32) -> gpui::Div {
@@ -28,11 +29,11 @@ fn avatar(label: &str, size: f32) -> gpui::Div {
         .size(px(size))
         .flex_shrink_0()
         .rounded(px(10.))
-        .bg(rgb(0x393047))
+        .bg(Color::Selected.color())
         .flex()
         .items_center()
         .justify_center()
-        .text_color(rgb(0xd1bdf7))
+        .text_color(Color::Accent.color())
         .font_weight(FontWeight::SEMIBOLD)
         .child(
             label
@@ -72,23 +73,18 @@ impl Studio {
                 .font_family(crate::ui::font::family(cx))
                 .text_size(px(14.))
                 .line_height(px(20.))
-                .bg(rgb(0x16161e))
-                .text_color(rgb(TEXT))
-                .border_color(rgb(LINE))
+                .bg(Color::Workspace.color())
+                .text_color(TEXT.color())
+                .border_color(LINE.color())
                 .rounded(px(9.))
-                .appearance(InputAppearance {
-                    focus_border: rgb(ACCENT).into(),
-                    caret: rgb(ACCENT).into(),
-                    selection: rgba(0xb4a2ee44).into(),
-                    ..Default::default()
-                })
+                .appearance(crate::ui::theme::input_appearance())
         };
         let navigation =
             div()
                 .flex()
                 .gap(px(4.))
                 .p(px(4.))
-                .bg(rgb(0x15151c))
+                .bg(Color::Workspace.color())
                 .rounded(px(10.))
                 .children(
                     [
@@ -113,8 +109,12 @@ impl Studio {
                             .flex_1()
                             .justify_center()
                             .h(px(34.))
-                            .text_color(rgb(if panel.view == view { TEXT } else { MUTED }))
-                            .when(panel.view == view, |el| el.bg(rgb(0x322b42)))
+                            .text_color(if panel.view == view {
+                                TEXT.color()
+                            } else {
+                                MUTED.color()
+                            })
+                            .when(panel.view == view, |el| el.bg(Color::Selected.color()))
                             .on_click(cx.listener(move |this, _, window, cx| {
                                 this.space_view(view, window, cx)
                             }))
@@ -144,12 +144,14 @@ impl Studio {
                                             .font_weight(FontWeight::SEMIBOLD)
                                             .child(panel.connection.space.name.clone()),
                                     )
-                                    .child(div().text_size(px(12.)).text_color(rgb(MUTED)).child(
-                                        crate::i18n::count(
-                                            "space-member-count",
-                                            panel.members.len(),
+                                    .child(
+                                        div().text_size(px(12.)).text_color(MUTED.color()).child(
+                                            crate::i18n::count(
+                                                "space-member-count",
+                                                panel.members.len(),
+                                            ),
                                         ),
-                                    )),
+                                    ),
                             ),
                     )
                     .child(
@@ -158,9 +160,9 @@ impl Studio {
                             .max_h(px(200.))
                             .overflow_y_scroll()
                             .border_1()
-                            .border_color(rgb(LINE))
+                            .border_color(LINE.color())
                             .rounded(px(12.))
-                            .bg(rgb(CARD))
+                            .bg(CARD.color())
                             .children(panel.members.iter().enumerate().map(|(index, member)| {
                                 let user = member.user_id.clone();
                                 let is_self = user == panel.connection.identity.user_id;
@@ -172,7 +174,9 @@ impl Studio {
                                     .flex()
                                     .items_center()
                                     .gap(px(12.))
-                                    .when(index > 0, |el| el.border_t_1().border_color(rgb(LINE)))
+                                    .when(index > 0, |el| {
+                                        el.border_t_1().border_color(LINE.color())
+                                    })
                                     .child(avatar(&member.username, 32.))
                                     .child(
                                         div()
@@ -187,8 +191,8 @@ impl Studio {
                                             .py(px(3.))
                                             .rounded(px(5.))
                                             .text_size(px(11.))
-                                            .bg(rgb(0x302b3b))
-                                            .text_color(rgb(0xb6a4d3))
+                                            .bg(Color::Selected.color())
+                                            .text_color(Color::Muted.color())
                                             .child(t(if member.role == "owner" {
                                                 "space-owner"
                                             } else {
@@ -206,7 +210,7 @@ impl Studio {
                                                 }),
                                             )
                                             .text_size(px(12.))
-                                            .text_color(rgb(0xeb9eac))
+                                            .text_color(Color::Danger.color())
                                             .on_click(
                                                 cx.listener(move |this, _, window, cx| {
                                                     this.space_action(
@@ -227,8 +231,8 @@ impl Studio {
                             .p(px(16.))
                             .rounded(px(12.))
                             .border_1()
-                            .border_color(rgb(0x40354f))
-                            .bg(rgb(0x282231))
+                            .border_color(Color::Border.color())
+                            .bg(Color::Surface.color())
                             .flex()
                             .flex_col()
                             .gap(px(12.))
@@ -237,7 +241,7 @@ impl Studio {
                                     .flex()
                                     .items_center()
                                     .gap(px(12.))
-                                    .child(icon(LucideIcons::Link, 20.).text_color(rgb(ACCENT)))
+                                    .child(icon(LucideIcons::Link, 20.).text_color(ACCENT.color()))
                                     .child(
                                         div()
                                             .flex_1()
@@ -253,7 +257,7 @@ impl Studio {
                                             .child(
                                                 div()
                                                     .text_size(px(12.))
-                                                    .text_color(rgb(MUTED))
+                                                    .text_color(MUTED.color())
                                                     .child(t("space-invite-description")),
                                             ),
                                     )
@@ -281,20 +285,20 @@ impl Studio {
                                         .gap(px(8.))
                                         .p(px(8.))
                                         .rounded(px(8.))
-                                        .bg(rgb(0x19171f))
+                                        .bg(Color::Workspace.color())
                                         .child(
                                             div()
                                                 .flex_1()
                                                 .min_w_0()
                                                 .truncate()
                                                 .text_size(px(12.))
-                                                .text_color(rgb(0xd3c7e5))
+                                                .text_color(Color::Text.color())
                                                 .child(code),
                                         )
                                         .child(
                                             button("copy-invite", t("space-copy"))
-                                                .bg(rgb(0x3d324e))
-                                                .text_color(rgb(ACCENT))
+                                                .bg(Color::Selected.color())
+                                                .text_color(ACCENT.color())
                                                 .child(icon(LucideIcons::Copy, 14.))
                                                 .on_click(move |_, _, cx| {
                                                     cx.write_to_clipboard(
@@ -311,13 +315,13 @@ impl Studio {
                                         .child(
                                             div()
                                                 .text_size(px(11.))
-                                                .text_color(rgb(MUTED))
+                                                .text_color(MUTED.color())
                                                 .child(t("space-invite-expiry")),
                                         )
                                         .child(
                                             button("replace-invite", t("space-invite-replace"))
                                                 .text_size(px(11.))
-                                                .text_color(rgb(ACCENT))
+                                                .text_color(ACCENT.color())
                                                 .on_click(cx.listener(|this, _, window, cx| {
                                                     this.space_action(Action::Invite, window, cx)
                                                 })),
@@ -344,7 +348,7 @@ impl Studio {
                 content = content.child(
                     div()
                         .text_size(px(13.))
-                        .text_color(rgb(MUTED))
+                        .text_color(MUTED.color())
                         .child(t("space-personal-note")),
                 );
                 if teams.is_empty() {
@@ -356,7 +360,7 @@ impl Studio {
                             .items_center()
                             .gap(px(12.))
                             .child(avatar("+", 44.))
-                            .child(div().text_color(rgb(MUTED)).child(t("space-no-teams"))),
+                            .child(div().text_color(MUTED.color()).child(t("space-no-teams"))),
                     );
                 } else {
                     content = content.child(
@@ -373,14 +377,14 @@ impl Studio {
                                     .id(SharedString::from(format!("team-{id}")))
                                     .p(px(12.))
                                     .rounded(px(10.))
-                                    .bg(rgb(CARD))
+                                    .bg(CARD.color())
                                     .border_1()
-                                    .border_color(rgb(LINE))
+                                    .border_color(LINE.color())
                                     .flex()
                                     .items_center()
                                     .gap(px(12.))
                                     .cursor_pointer()
-                                    .hover(|s| s.bg(rgb(0x302a3d)))
+                                    .hover(|s| s.bg(Color::Hover.color()))
                                     .child(avatar(&connection.space.name, 36.))
                                     .child(
                                         div()
@@ -390,7 +394,8 @@ impl Studio {
                                             .child(connection.space.name),
                                     )
                                     .child(
-                                        icon(LucideIcons::ArrowRight, 16.).text_color(rgb(MUTED)),
+                                        icon(LucideIcons::ArrowRight, 16.)
+                                            .text_color(MUTED.color()),
                                     )
                                     .on_click(cx.listener(move |this, _, window, cx| {
                                         this.select_source(Some(id.clone()), window, cx);
@@ -418,20 +423,23 @@ impl Studio {
                                         "space-join-title"
                                     })),
                             )
-                            .child(div().text_color(rgb(MUTED)).line_height(px(20.)).child(t(
-                                if create {
-                                    "space-create-description"
-                                } else {
-                                    "space-join-description"
-                                },
-                            ))),
+                            .child(
+                                div()
+                                    .text_color(MUTED.color())
+                                    .line_height(px(20.))
+                                    .child(t(if create {
+                                        "space-create-description"
+                                    } else {
+                                        "space-join-description"
+                                    })),
+                            ),
                     )
                     .child(
                         div()
                             .flex()
                             .flex_col()
                             .gap(px(8.))
-                            .child(div().text_size(px(12.)).text_color(rgb(MUTED)).child(t(
+                            .child(div().text_size(px(12.)).text_color(MUTED.color()).child(t(
                                 if create {
                                     "space-team-name"
                                 } else {
@@ -476,11 +484,11 @@ impl Studio {
             .overflow_y_scroll()
             .rounded(px(18.))
             .border_1()
-            .border_color(rgb(0x45404f))
-            .bg(rgb(0x1b1b24))
+            .border_color(Color::Border.color())
+            .bg(Color::Panel.color())
             .shadow_xl()
             .font_family(crate::ui::font::family(cx))
-            .text_color(rgb(TEXT))
+            .text_color(TEXT.color())
             .text_size(px(13.))
             .flex()
             .flex_col()
@@ -510,14 +518,14 @@ impl Studio {
                                     .child(
                                         div()
                                             .text_size(px(12.))
-                                            .text_color(rgb(MUTED))
+                                            .text_color(MUTED.color())
                                             .child(panel.connection.identity.username.clone()),
                                     ),
                             )
                             .child(
                                 button("space-close-icon", "")
                                     .child(icon(LucideIcons::X, 18.))
-                                    .text_color(rgb(MUTED))
+                                    .text_color(MUTED.color())
                                     .on_click(cx.listener(|this, _, window, cx| {
                                         this.spaces = None;
                                         this.focus.focus(window, cx);
@@ -532,8 +540,8 @@ impl Studio {
                             div()
                                 .p(px(12.))
                                 .rounded(px(8.))
-                                .bg(rgb(0x38262c))
-                                .text_color(rgb(0xf3a6ad))
+                                .bg(Color::DangerSurface.color())
+                                .text_color(Color::Danger.color())
                                 .child(error),
                         )
                     }),
@@ -543,11 +551,11 @@ impl Studio {
                     .px(px(24.))
                     .py(px(14.))
                     .border_t_1()
-                    .border_color(rgb(LINE))
+                    .border_color(LINE.color())
                     .flex()
                     .items_center()
                     .justify_between()
-                    .child(div().text_size(px(12.)).text_color(rgb(MUTED)).child(t(
+                    .child(div().text_size(px(12.)).text_color(MUTED.color()).child(t(
                         if panel.busy {
                             "server-connecting"
                         } else {
@@ -556,7 +564,7 @@ impl Studio {
                     )))
                     .child(
                         button("spaces-close", t("close"))
-                            .bg(rgb(0x2c2a36))
+                            .bg(Color::Surface.color())
                             .px(px(16.))
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.spaces = None;
@@ -570,7 +578,7 @@ impl Studio {
                 .absolute()
                 .inset_0()
                 .occlude()
-                .bg(rgba(0x08080d99))
+                .bg(Color::Overlay.color())
                 .p(px(24.))
                 .flex()
                 .items_center()

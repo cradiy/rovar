@@ -1,4 +1,5 @@
 use super::*;
+use crate::ui::theme::Color;
 pub(super) mod silk;
 
 impl Studio {
@@ -82,8 +83,8 @@ impl Studio {
             .size_full()
             .relative()
             .overflow_hidden()
-            .bg(rgb(0x111217))
-            .text_color(rgb(TEXT))
+            .bg(Color::Workspace.color())
+            .text_color(TEXT.color())
             .font_family(crate::ui::font::family(cx))
             .text_size(px(14.))
             .child(silk::background(panel.motion.clone()))
@@ -107,11 +108,17 @@ impl Studio {
                             .overflow_hidden()
                             .rounded(px(20.))
                             .border_1()
-                            .border_color(rgba(0xb5a4df33))
+                            .border_color(Color::Accent.color().opacity(0.2000))
                             .bg(gpui::linear_gradient(
                                 160. + sheen,
-                                gpui::linear_color_stop(rgba(0x302939f5), 0.),
-                                gpui::linear_color_stop(rgba(0x1b1c24fa), 0.6),
+                                gpui::linear_color_stop(
+                                    Color::Selected.color().opacity(0.9608),
+                                    0.,
+                                ),
+                                gpui::linear_color_stop(
+                                    Color::Workspace.color().opacity(0.9804),
+                                    0.6,
+                                ),
                             ))
                             .shadow_xl()
                             .flex()
@@ -169,7 +176,7 @@ impl Studio {
                                             .child(
                                                 div()
                                                     .text_size(px(13.))
-                                                    .text_color(rgb(MUTED))
+                                                    .text_color(MUTED.color())
                                                     .child(t(if panel.mode == "login" {
                                                         "server-welcome-subtitle"
                                                     } else {
@@ -182,7 +189,7 @@ impl Studio {
                                         el.child(
                                             div()
                                                 .text_size(px(13.))
-                                                .text_color(rgb(0xf08e83))
+                                                .text_color(Color::Danger.color())
                                                 .child(error),
                                         )
                                     })

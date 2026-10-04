@@ -1,4 +1,5 @@
 use super::*;
+use crate::ui::theme::Color;
 use gpui::{FontWeight, SharedString};
 use uic::components::dropdown::{DropdownPlacement, dropdown};
 
@@ -18,12 +19,20 @@ fn row(
         .items_center()
         .gap(px(10.))
         .cursor_pointer()
-        .bg(rgb(if selected { 0x322a43 } else { 0x1c1c25 }))
-        .hover(|s| s.bg(rgb(0x302b3d)))
-        .child(icon(symbol, 16.).text_color(rgb(if selected { ACCENT } else { MUTED })))
+        .bg(if selected {
+            Color::Selected.color()
+        } else {
+            Color::Panel.color()
+        })
+        .hover(|s| s.bg(Color::Hover.color()))
+        .child(icon(symbol, 16.).text_color(if selected {
+            ACCENT.color()
+        } else {
+            MUTED.color()
+        }))
         .child(div().flex_1().min_w_0().truncate().child(label.into()))
         .when(selected, |el| {
-            el.child(icon(LucideIcons::Check, 14.).text_color(rgb(ACCENT)))
+            el.child(icon(LucideIcons::Check, 14.).text_color(ACCENT.color()))
         })
 }
 
@@ -71,8 +80,8 @@ impl Studio {
                 div()
                     .size(px(32.))
                     .rounded(px(9.))
-                    .bg(rgb(0x393047))
-                    .text_color(rgb(0xd1bdf7))
+                    .bg(Color::Selected.color())
+                    .text_color(Color::Accent.color())
                     .flex()
                     .items_center()
                     .justify_center()
@@ -102,7 +111,7 @@ impl Studio {
                     .child(
                         div()
                             .text_size(px(11.))
-                            .text_color(rgb(MUTED))
+                            .text_color(MUTED.color())
                             .child(t("space-switch")),
                     ),
             );
@@ -157,7 +166,7 @@ impl Studio {
                             .max_w(px(120.))
                             .truncate()
                             .text_size(px(10.))
-                            .text_color(rgb(MUTED))
+                            .text_color(MUTED.color())
                             .child(secondary),
                     )
                 })
@@ -171,7 +180,7 @@ impl Studio {
             .pt(px(6.))
             .pb(px(6.))
             .border_t_1()
-            .border_color(rgb(0x34303e))
+            .border_color(Color::Border.color())
             .flex()
             .flex_col()
             .gap(px(2.))
@@ -228,7 +237,7 @@ impl Studio {
                         t("server-sign-out"),
                         false,
                     )
-                    .text_color(rgb(MUTED))
+                    .text_color(MUTED.color())
                     .on_click(cx.listener(|this, _, window, cx| {
                         this.source_menu
                             .update(cx, |menu, cx| menu.close(window, cx));
@@ -245,16 +254,16 @@ impl Studio {
             .px(px(12.))
             .rounded(px(9.))
             .border_1()
-            .border_color(rgb(0x3d374b))
-            .bg(rgb(0x262230))
+            .border_color(Color::Border.color())
+            .bg(Color::Surface.color())
             .flex()
             .items_center()
             .gap(px(9.))
             .cursor_pointer()
-            .hover(|s| s.bg(rgb(0x322b40)))
-            .child(icon(symbol, 16.).text_color(rgb(ACCENT)))
+            .hover(|s| s.bg(Color::Hover.color()))
+            .child(icon(symbol, 16.).text_color(ACCENT.color()))
             .child(div().min_w_0().truncate().child(label))
-            .child(icon(LucideIcons::ChevronDown, 13.).text_color(rgb(MUTED)));
+            .child(icon(LucideIcons::ChevronDown, 13.).text_color(MUTED.color()));
         div()
             .flex()
             .items_center()
@@ -267,10 +276,10 @@ impl Studio {
                     .max_h(px(450.))
                     .p_0()
                     .rounded(px(12.))
-                    .bg(rgb(0x1c1c25))
-                    .border_color(rgb(0x45404f))
+                    .bg(Color::Panel.color())
+                    .border_color(Color::Border.color())
                     .shadow_xl()
-                    .text_color(rgb(TEXT))
+                    .text_color(TEXT.color())
                     .font_family(crate::ui::font::family(cx))
                     .text_size(px(13.))
                     .trigger(trigger)
@@ -290,13 +299,13 @@ impl Studio {
                         .size(px(36.))
                         .rounded(px(9.))
                         .border_1()
-                        .border_color(rgb(BORDER))
+                        .border_color(BORDER.color())
                         .flex()
                         .items_center()
                         .justify_center()
-                        .text_color(rgb(MUTED))
+                        .text_color(MUTED.color())
                         .cursor_pointer()
-                        .hover(|s| s.bg(rgb(0x26232f)).text_color(rgb(TEXT)))
+                        .hover(|s| s.bg(Color::Hover.color()).text_color(TEXT.color()))
                         .child(icon(LucideIcons::RefreshCw, 16.))
                         .on_click(cx.listener(|this, _, _, cx| this.refresh_server(cx))),
                 )

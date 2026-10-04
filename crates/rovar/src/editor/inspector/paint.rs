@@ -1,6 +1,7 @@
 //! Fill and gradient editor presentation and mutations.
 
 use super::*;
+use crate::ui::theme::Color;
 
 impl Workspace {
     pub(in crate::editor) fn field_edits_stroke(&self, index: usize) -> bool {
@@ -101,10 +102,10 @@ impl Workspace {
                 .p(px(4.))
                 .rounded(px(8.))
                 .shadow_lg()
-                .bg(rgb(0x282b33))
-                .border_color(rgb(BORDER))
+                .bg(Color::Input.color())
+                .border_color(BORDER.color())
                 .text_size(px(12.))
-                .text_color(rgb(TEXT))
+                .text_color(TEXT.color())
                 .trigger(
                     div()
                         .id("gradient-kind")
@@ -113,7 +114,7 @@ impl Workspace {
                         .h(px(30.))
                         .px(px(10.))
                         .rounded(px(6.))
-                        .bg(rgb(0x282b33))
+                        .bg(Color::Input.color())
                         .flex()
                         .items_center()
                         .justify_between()
@@ -137,7 +138,7 @@ impl Workspace {
                                 .items_center()
                                 .gap(px(8.))
                                 .cursor_pointer()
-                                .hover(|s| s.bg(rgb(0x353044)))
+                                .hover(|s| s.bg(Color::Selected.color()))
                                 .child(icon(LucideIcons::Check, 13.).opacity(if selected == kind {
                                     1.
                                 } else {
@@ -224,7 +225,7 @@ impl Workspace {
                     .gap(px(4.))
                     .pb(px(8.))
                     .border_b_1()
-                    .border_color(rgb(BORDER))
+                    .border_color(BORDER.color())
                     .children(
                         modes
                             .into_iter()
@@ -338,7 +339,7 @@ impl Workspace {
                         .child(
                             div()
                                 .text_size(px(11.))
-                                .text_color(rgb(MUTED))
+                                .text_color(MUTED.color())
                                 .child(t("stops")),
                         )
                         .child(
@@ -378,7 +379,11 @@ impl Workspace {
                                 .flex()
                                 .items_center()
                                 .gap(px(4.))
-                                .bg(rgb(if active { 0x353044 } else { 0x22252d }))
+                                .bg(if active {
+                                    Color::Selected.color()
+                                } else {
+                                    Color::Input.color()
+                                })
                                 .text_size(px(12.))
                                 .on_mouse_down(
                                     MouseButton::Left,
@@ -418,7 +423,7 @@ impl Workspace {
                                                     .w(px(28.))
                                                     .text_center()
                                                     .text_size(px(11.))
-                                                    .text_color(rgb(MUTED))
+                                                    .text_color(MUTED.color())
                                                     .child("%"),
                                             )
                                             .child(
@@ -436,17 +441,22 @@ impl Workspace {
                                             .items_center()
                                             .child(
                                                 div().px(px(7.)).child(
-                                                    div().size(px(18.)).bg(rgb(0xffffff)).child(
-                                                        div()
-                                                            .size_full()
-                                                            .bg(gpui::checkerboard(
-                                                                rgb(0xd9dce2),
-                                                                4.,
-                                                            ))
-                                                            .child(
-                                                                div().size_full().bg(stop.color),
-                                                            ),
-                                                    ),
+                                                    div()
+                                                        .size(px(18.))
+                                                        .bg(Color::Handle.color())
+                                                        .child(
+                                                            div()
+                                                                .size_full()
+                                                                .bg(gpui::checkerboard(
+                                                                    Color::Checker.color(),
+                                                                    4.,
+                                                                ))
+                                                                .child(
+                                                                    div()
+                                                                        .size_full()
+                                                                        .bg(stop.color),
+                                                                ),
+                                                        ),
                                                 ),
                                             )
                                             .child(div().pl(px(5.)).child(hex(stop.color))),
@@ -462,7 +472,7 @@ impl Workspace {
                                                     .w(px(28.))
                                                     .text_center()
                                                     .text_size(px(11.))
-                                                    .text_color(rgb(MUTED))
+                                                    .text_color(MUTED.color())
                                                     .child("%"),
                                             )
                                             .child(
@@ -545,9 +555,9 @@ impl Workspace {
             .p(px(14.))
             .rounded(px(12.))
             .border_1()
-            .border_color(rgb(BORDER))
+            .border_color(BORDER.color())
             .shadow_lg()
-            .text_color(rgb(TEXT))
+            .text_color(TEXT.color())
             .text_size(px(12.))
             .flex()
             .flex_col()

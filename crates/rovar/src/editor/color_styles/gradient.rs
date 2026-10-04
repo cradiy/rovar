@@ -252,7 +252,7 @@ impl Workspace {
     }
 
     pub(super) fn set_style_gradient(&mut self, enabled: bool, cx: &mut Context<Self>) {
-        let color = parse_color(&self.colors.value.read(cx).value()).unwrap_or(rgb(ACCENT));
+        let color = parse_color(&self.colors.value.read(cx).value()).unwrap_or(ACCENT.color());
         let Some(dialog) = &mut self.colors.dialog else {
             return;
         };

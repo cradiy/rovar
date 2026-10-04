@@ -1,6 +1,7 @@
 use super::*;
 use crate::i18n::t;
 use crate::scene::image_fill::{ImageFill, ImageFit};
+use crate::ui::theme::Color;
 
 impl Workspace {
     pub(in crate::editor) fn current_image_fill(&self) -> Option<&ImageFill> {
@@ -185,7 +186,11 @@ impl Workspace {
                             .items_center()
                             .justify_center()
                             .cursor_pointer()
-                            .bg(rgb(if fill.fit == fit { 0x353044 } else { 0x282b33 }))
+                            .bg(if fill.fit == fit {
+                                Color::Selected.color()
+                            } else {
+                                Color::Input.color()
+                            })
                             .child(label)
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 this.history.borrow_mut().break_group();
@@ -205,12 +210,12 @@ impl Workspace {
                     .h(px(190.))
                     .rounded(px(8.))
                     .overflow_hidden()
-                    .bg(rgb(0xffffff))
+                    .bg(Color::Handle.color())
                     .child(
                         div()
                             .absolute()
                             .inset_0()
-                            .bg(gpui::checkerboard(rgb(0xd9dce2), 8.)),
+                            .bg(gpui::checkerboard(Color::Checker.color(), 8.)),
                     )
                     .child(fill.element().absolute().inset_0()),
             )
@@ -220,7 +225,7 @@ impl Workspace {
                     .debug_selector(|| "image-fill-import".into())
                     .h(px(32.))
                     .rounded(px(6.))
-                    .bg(rgb(0x353044))
+                    .bg(Color::Selected.color())
                     .flex()
                     .items_center()
                     .justify_center()

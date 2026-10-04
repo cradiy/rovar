@@ -1,4 +1,5 @@
 use super::*;
+use crate::ui::theme::Color;
 use uic::components::input::{Input, InputAppearance};
 
 impl Workspace {
@@ -40,20 +41,23 @@ impl Workspace {
                     .top(px(p.y - 9.))
                     .size(px(18.))
                     .rounded(px(5.))
-                    .bg(gpui::rgba(0x302333cc))
+                    .bg(Color::Selected.color().opacity(0.8000))
                     .border_1()
-                    .border_color(gpui::rgba(0xf28bd955))
+                    .border_color(Color::Component.color().opacity(0.3333))
                     .flex()
                     .items_center()
                     .justify_center()
                     .cursor(cursor)
-                    .hover(|s| s.bg(rgb(0x51344b)).border_color(rgb(0xf28bd9)))
+                    .hover(|s| {
+                        s.bg(Color::Hover.color())
+                            .border_color(Color::Component.color())
+                    })
                     .child(
                         div()
                             .w(px(if horizontal { 2. } else { 10. }))
                             .h(px(if horizontal { 10. } else { 2. }))
                             .rounded(px(1.))
-                            .bg(rgb(0xf28bd9)),
+                            .bg(Color::Component.color()),
                     )
                     .on_mouse_down(
                         MouseButton::Left,
@@ -85,24 +89,24 @@ impl Workspace {
                                 .px(px(5.))
                                 .py_0()
                                 .text_size(px(11.))
-                                .text_color(rgb(TEXT))
-                                .bg(rgb(0x302333))
+                                .text_color(TEXT.color())
+                                .bg(Color::Selected.color())
                                 .rounded(px(5.))
-                                .border_color(rgb(if self.spacing.invalid {
-                                    0xff7f79
+                                .border_color(if self.spacing.invalid {
+                                    Color::Danger.color()
                                 } else {
-                                    0xf28bd9
-                                }))
+                                    Color::Component.color()
+                                })
                                 .appearance(InputAppearance {
-                                    focus_border: rgb(if self.spacing.invalid {
-                                        0xff7f79
+                                    focus_border: if self.spacing.invalid {
+                                        Color::Danger.color()
                                     } else {
-                                        0xf28bd9
-                                    })
+                                        Color::Component.color()
+                                    }
                                     .into(),
-                                    caret: rgb(0xf28bd9).into(),
-                                    selection: gpui::rgba(0xf28bd944).into(),
-                                    ..Default::default()
+                                    caret: Color::Component.color().into(),
+                                    selection: Color::Component.color().opacity(0.2667).into(),
+                                    ..crate::ui::theme::input_appearance()
                                 }),
                         )
                     })
@@ -115,14 +119,14 @@ impl Workspace {
                                 .h(px(24.))
                                 .px(px(5.))
                                 .rounded(px(5.))
-                                .bg(rgb(0x302333))
+                                .bg(Color::Selected.color())
                                 .flex()
                                 .items_center()
                                 .justify_center()
                                 .text_size(px(11.))
-                                .text_color(rgb(0xf28bd9))
+                                .text_color(Color::Component.color())
                                 .cursor_text()
-                                .hover(|s| s.bg(rgb(0x51344b)))
+                                .hover(|s| s.bg(Color::Hover.color()))
                                 .child(label(plan.gap(index)))
                                 .on_mouse_down(
                                     MouseButton::Left,

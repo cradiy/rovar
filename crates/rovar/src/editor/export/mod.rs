@@ -1,4 +1,5 @@
 use super::*;
+use crate::ui::theme::Color;
 use crate::{
     document::export::Format,
     i18n::t,
@@ -366,14 +367,14 @@ impl Workspace {
             .gap(px(10.))
             .p(px(14.))
             .border_t_1()
-            .border_color(rgb(BORDER))
+            .border_color(BORDER.color())
             .text_size(px(12.))
-            .text_color(rgb(TEXT))
+            .text_color(TEXT.color())
             .when(busy, |el| {
                 el.child(
                     div()
                         .text_size(px(11.))
-                        .text_color(rgb(MUTED))
+                        .text_color(MUTED.color())
                         .child(t("export-progress")),
                 )
             })
@@ -388,7 +389,7 @@ impl Workspace {
                                 .flex_1()
                                 .min_w_0()
                                 .text_size(px(11.))
-                                .text_color(rgb(MUTED))
+                                .text_color(MUTED.color())
                                 .child(status),
                         )
                         .child(
@@ -402,7 +403,7 @@ impl Workspace {
                                 .justify_center()
                                 .rounded(px(5.))
                                 .cursor_pointer()
-                                .hover(|el| el.bg(rgb(BORDER)))
+                                .hover(|el| el.bg(BORDER.color()))
                                 .child(icon(LucideIcons::X, 13.))
                                 .on_click(cx.listener(|this, _, _, cx| {
                                     this.export.status = None;
@@ -424,10 +425,10 @@ fn export_menu(state: &Entity<DropdownState>) -> Dropdown {
         .p(px(4.))
         .rounded(px(8.))
         .shadow_lg()
-        .bg(rgb(0x252730))
-        .border_color(rgb(BORDER))
+        .bg(Color::Input.color())
+        .border_color(BORDER.color())
         .text_size(px(12.))
-        .text_color(rgb(TEXT))
+        .text_color(TEXT.color())
 }
 
 fn export_trigger(id: String, label: impl Into<gpui::SharedString>) -> gpui::Stateful<Div> {
@@ -442,9 +443,9 @@ fn export_trigger(id: String, label: impl Into<gpui::SharedString>) -> gpui::Sta
         .gap(px(8.))
         .rounded(px(5.))
         .cursor_pointer()
-        .hover(|s| s.bg(gpui::rgba(0xffffff08)))
+        .hover(|s| s.bg(Color::Text.color().opacity(0.0314)))
         .child(label.into())
-        .child(icon(LucideIcons::ChevronDown, 11.).text_color(rgb(MUTED)))
+        .child(icon(LucideIcons::ChevronDown, 11.).text_color(MUTED.color()))
 }
 
 fn export_choice(
@@ -461,11 +462,11 @@ fn export_choice(
         .justify_between()
         .rounded(px(4.))
         .cursor_pointer()
-        .hover(|s| s.bg(gpui::rgba(0xb4a2ee18)))
+        .hover(|s| s.bg(Color::Accent.color().opacity(0.0941)))
         .child(label.into())
         .child(
             icon(LucideIcons::Check, 12.)
-                .text_color(rgb(ACCENT))
+                .text_color(ACCENT.color())
                 .opacity(if selected { 1. } else { 0. }),
         )
 }

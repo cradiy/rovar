@@ -1,6 +1,7 @@
 //! Selection-specific inspector layout.
 
 use super::*;
+use crate::ui::theme::Color;
 
 impl Workspace {
     pub(in crate::editor) fn properties(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
@@ -69,7 +70,7 @@ impl Workspace {
             .flex_shrink_0()
             .rounded(px(16.))
             .border_1()
-            .border_color(gpui::rgba(0xb4a2ee30))
+            .border_color(Color::Accent.color().opacity(0.1882))
             .shadow_lg()
             .occlude()
             .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
@@ -83,7 +84,7 @@ impl Workspace {
             .flex()
             .flex_col()
             .child(self.inspector_modes(toggle, cx))
-            .child(div().h(px(1.)).flex_shrink_0().bg(rgb(BORDER)))
+            .child(div().h(px(1.)).flex_shrink_0().bg(BORDER.color()))
             .when(selected || !self.multi_selection.is_empty(), |el| {
                 el.child(
                     div()
@@ -100,7 +101,7 @@ impl Workspace {
                                 .flex()
                                 .items_center()
                                 .justify_center()
-                                .child(icon(glyph, 16.).text_color(rgb(MUTED))),
+                                .child(icon(glyph, 16.).text_color(MUTED.color())),
                         )
                         .child(
                             div()
@@ -125,7 +126,7 @@ impl Workspace {
                             el.child(
                                 div()
                                     .text_size(px(10.))
-                                    .text_color(rgb(MUTED))
+                                    .text_color(MUTED.color())
                                     .child(self.multi_selection.len().to_string()),
                             )
                         })
@@ -147,7 +148,7 @@ impl Workspace {
                             },
                         )),
                 )
-                .child(div().h(px(1.)).flex_shrink_0().bg(rgb(BORDER)))
+                .child(div().h(px(1.)).flex_shrink_0().bg(BORDER.color()))
             })
             .when(self.selected_text.is_some(), |el| {
                 el.child(self.text_properties(cx))
@@ -257,11 +258,11 @@ impl Workspace {
                         .justify_center()
                         .text_center()
                         .gap(px(12.))
-                        .child(icon(LucideIcons::SlidersHorizontal, 24.).text_color(rgb(MUTED)))
+                        .child(icon(LucideIcons::SlidersHorizontal, 24.).text_color(MUTED.color()))
                         .child(
                             div()
                                 .text_size(px(12.))
-                                .text_color(rgb(MUTED))
+                                .text_color(MUTED.color())
                                 .child(t("inspector-empty")),
                         ),
                 )

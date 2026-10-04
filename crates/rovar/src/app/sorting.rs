@@ -1,5 +1,5 @@
 use super::*;
-use gpui::rgba;
+use crate::ui::theme::Color;
 use uic::components::dropdown::{DropdownPlacement, dropdown};
 use web_time::{SystemTime, UNIX_EPOCH};
 
@@ -57,9 +57,9 @@ impl Studio {
             .w(px(232.))
             .p(px(4.))
             .rounded(px(9.))
-            .bg(rgb(0x202027))
-            .border_color(rgba(0xffffff16))
-            .text_color(rgb(TEXT))
+            .bg(Color::Panel.color())
+            .border_color(Color::Text.color().opacity(0.0863))
+            .text_color(TEXT.color())
             .text_size(px(12.))
             .trigger(
                 div()
@@ -73,9 +73,13 @@ impl Studio {
                     .items_center()
                     .gap(px(8.))
                     .text_size(px(12.))
-                    .text_color(rgb(MUTED))
+                    .text_color(MUTED.color())
                     .cursor_pointer()
-                    .hover(|style| style.bg(rgba(0xffffff08)).text_color(rgb(TEXT)))
+                    .hover(|style| {
+                        style
+                            .bg(Color::Text.color().opacity(0.0314))
+                            .text_color(TEXT.color())
+                    })
                     .child(t(self.file_sort.label()))
                     .child(icon(LucideIcons::ChevronDown, 12.)),
             )
@@ -98,9 +102,9 @@ impl Studio {
                             .items_center()
                             .gap(px(8.))
                             .cursor_pointer()
-                            .hover(|style| style.bg(rgba(0xb4a2ee28)))
+                            .hover(|style| style.bg(Color::Accent.color().opacity(0.1569)))
                             .child(div().w(px(16.)).when(self.file_sort == sort, |el| {
-                                el.child(icon(LucideIcons::Check, 14.).text_color(rgb(ACCENT)))
+                                el.child(icon(LucideIcons::Check, 14.).text_color(ACCENT.color()))
                             }))
                             .child(t(sort.label()))
                             .on_click(cx.listener(move |this, _, window, cx| {

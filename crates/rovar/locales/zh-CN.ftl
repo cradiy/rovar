@@ -525,3 +525,7 @@ effects-mixed = 多种效果
 effect-drop-shadow = 外阴影
 effect-blur = 模糊
 effect-spread = 扩展
+settings-theme = 主题
+theme-system = 跟随系统
+theme-light = 浅色
+theme-dark = 深色

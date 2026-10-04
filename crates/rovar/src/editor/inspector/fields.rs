@@ -1,6 +1,7 @@
 //! Reusable inspector input controls.
 
 use super::*;
+use crate::ui::theme::Color;
 
 impl Workspace {
     pub(in crate::editor) fn property_field(
@@ -117,15 +118,16 @@ impl Workspace {
             .flex_shrink_0()
             .h(px(32.))
             .rounded(px(6.))
-            .bg(rgb(0x282b33))
+            .bg(Color::Input.color())
             .border_1()
-            .border_color(rgb(if self.inspector.invalid[slot] {
-                0xdd7272
+            .border_color(if self.inspector.invalid[slot] {
+                Color::Danger.color()
             } else {
-                0x30333d
-            }))
+                Color::Hover.color()
+            })
             .when(!popup, |el| {
-                el.bg(gpui::rgba(0)).border_color(gpui::rgba(0))
+                el.bg(Color::Transparent.color())
+                    .border_color(Color::Transparent.color())
             })
             .flex()
             .items_center()
@@ -141,10 +143,10 @@ impl Workspace {
                     .items_center()
                     .justify_center()
                     .text_size(px(11.))
-                    .text_color(rgb(MUTED))
+                    .text_color(MUTED.color())
                     .when(draggable, |el| {
                         el.cursor(gpui::CursorStyle::ResizeLeftRight)
-                            .hover(|s| s.text_color(rgb(ACCENT)))
+                            .hover(|s| s.text_color(ACCENT.color()))
                     })
                     .tooltip(move |_, cx| {
                         cx.new(|_| {
@@ -165,7 +167,7 @@ impl Workspace {
                                 .rounded(px(3.))
                                 .overflow_hidden()
                                 .relative()
-                                .bg(gpui::checkerboard(rgb(0xd9dce2), 4.))
+                                .bg(gpui::checkerboard(Color::Checker.color(), 4.))
                                 .when_some(swatch, |el, paint| {
                                     el.child(div().absolute().inset_0().bg(paint))
                                 })
@@ -181,7 +183,7 @@ impl Workspace {
                         )
                     })
                     .when(!is_color, |el| match label_icon {
-                        Some(glyph) => el.child(icon(glyph, 15.).text_color(rgb(MUTED))),
+                        Some(glyph) => el.child(icon(glyph, 15.).text_color(MUTED.color())),
                         None => el.child(short_label),
                     })
                     .on_mouse_down(
@@ -203,7 +205,7 @@ impl Workspace {
                         .gap(px(20.))
                         .p_0()
                         .border_0()
-                        .bg(gpui::rgba(0))
+                        .bg(Color::Transparent.color())
                         .trigger(prefix)
                         .content(move |window, cx| {
                             div().children(
@@ -245,10 +247,11 @@ impl Workspace {
                                 .h(px(30.))
                                 .px(px(4.))
                                 .rounded(px(4.))
-                                .bg(rgb(0x282b33))
-                                .border_color(rgb(0x282b33))
+                                .bg(Color::Input.color())
+                                .border_color(Color::Input.color())
                                 .when(!popup, |el| {
-                                    el.bg(gpui::rgba(0)).border_color(gpui::rgba(0))
+                                    el.bg(Color::Transparent.color())
+                                        .border_color(Color::Transparent.color())
                                 }),
                         )
                     }),
@@ -279,9 +282,15 @@ impl Workspace {
             .flex()
             .items_center()
             .rounded(px(6.))
-            .bg(rgb(0x282b33))
+            .bg(Color::Input.color())
             .child(self.property_field(if stroke { 16 } else { 5 }, t("color-hex"), cx))
-            .child(div().w(px(1.)).h(px(20.)).flex_shrink_0().bg(rgb(BORDER)))
+            .child(
+                div()
+                    .w(px(1.))
+                    .h(px(20.))
+                    .flex_shrink_0()
+                    .bg(BORDER.color()),
+            )
             .child(div().w(px(76.)).flex_shrink_0().child(self.property_field(
                 if stroke { 17 } else { 6 },
                 t("opacity"),

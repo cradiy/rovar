@@ -544,3 +544,7 @@ effects-mixed = Mixed effects
 effect-drop-shadow = Drop shadow
 effect-blur = Blur
 effect-spread = Spread
+settings-theme = Theme
+theme-system = Follow system
+theme-light = Light
+theme-dark = Dark

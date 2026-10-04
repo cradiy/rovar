@@ -27,6 +27,11 @@ pub(crate) fn start() {
         gpui::Application::with_platform(std::rc::Rc::new(gpui_web::WebPlatform::new(false)));
     application.with_assets(assets::Assets).run(|cx| {
         uic::init(cx);
+        if let Err(error) = crate::ui::theme::init(cx) {
+            eprintln!("Could not initialize theme settings: {error}");
+            cx.quit();
+            return;
+        }
         #[cfg(target_family = "wasm")]
         web::load_fonts(cx);
         if let Err(error) = titlebar::init(cx) {

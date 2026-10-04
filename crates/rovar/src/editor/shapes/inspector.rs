@@ -2,6 +2,7 @@ use super::*;
 use crate::editor::inspector::icon_button;
 use crate::i18n::t;
 use crate::scene::shape::StrokeAlign;
+use crate::ui::theme::Color;
 
 impl Workspace {
     pub(in crate::editor) fn shape_field_visible(&self, index: usize) -> bool {
@@ -61,13 +62,13 @@ impl Workspace {
                                 .pl(px(10.))
                                 .pr(px(3.))
                                 .rounded(px(6.))
-                                .bg(rgb(0x282b33))
+                                .bg(Color::Input.color())
                                 .border_1()
-                                .border_color(rgb(0x30333d))
+                                .border_color(Color::Hover.color())
                                 .flex()
                                 .items_center()
                                 .text_size(px(11.))
-                                .text_color(rgb(MUTED))
+                                .text_color(MUTED.color())
                                 .child(div().flex_1().child(t("corner-radius")))
                                 .child(self.full_corner_button(full, cx)),
                         )
@@ -78,7 +79,7 @@ impl Workspace {
                             .p(px(3.))
                             .flex_shrink_0()
                             .rounded(px(6.))
-                            .bg(rgb(0x14151b))
+                            .bg(Color::Workspace.color())
                             .flex()
                             .items_center()
                             .gap(px(2.))
@@ -148,9 +149,12 @@ impl Workspace {
             .justify_center()
             .text_size(px(10.))
             .font_weight(gpui::FontWeight::MEDIUM)
-            .text_color(rgb(if full { ACCENT } else { MUTED }))
-            .when(full, |el| el.bg(gpui::rgba(0xb4a2ee18)))
-            .hover(|s| s.bg(gpui::rgba(0xffffff0a)).text_color(rgb(ACCENT)))
+            .text_color(if full { ACCENT.color() } else { MUTED.color() })
+            .when(full, |el| el.bg(Color::Accent.color().opacity(0.0941)))
+            .hover(|s| {
+                s.bg(Color::Text.color().opacity(0.0392))
+                    .text_color(ACCENT.color())
+            })
             .cursor_pointer()
             .child(t("corners-full"))
             .tooltip(|_, cx| {
@@ -256,7 +260,7 @@ impl Workspace {
                         .gap(px(8.))
                         .flex_shrink_0()
                         .border_b_1()
-                        .border_color(rgb(BORDER))
+                        .border_color(BORDER.color())
                         .child(
                             div()
                                 .flex()

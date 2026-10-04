@@ -1,5 +1,6 @@
 use super::*;
 use crate::scene::effects::{MAX_OFFSET, MAX_RADIUS, MAX_SHADOWS, Shadow};
+use crate::ui::theme::Color;
 use std::collections::BTreeSet;
 use uic::components::popover::PopoverState;
 
@@ -336,7 +337,7 @@ impl Workspace {
             .px(px(14.))
             .py(px(10.))
             .border_b_1()
-            .border_color(rgb(BORDER))
+            .border_color(BORDER.color())
             .flex()
             .flex_col()
             .gap(px(6.))
@@ -374,7 +375,7 @@ impl Workspace {
                 el.child(
                     div()
                         .text_size(px(12.))
-                        .text_color(rgb(MUTED))
+                        .text_color(MUTED.color())
                         .child(t("effects-mixed")),
                 )
             })
@@ -409,7 +410,7 @@ impl Workspace {
                             .px(px(6.))
                             .rounded(px(5.))
                             .cursor_pointer()
-                            .hover(|s| s.bg(rgb(BORDER)))
+                            .hover(|s| s.bg(BORDER.color()))
                             .flex()
                             .items_center()
                             .gap(px(8.))
@@ -422,7 +423,7 @@ impl Workspace {
                                     },
                                     14.,
                                 )
-                                .text_color(rgb(MUTED)),
+                                .text_color(MUTED.color()),
                             )
                             .child(div().text_size(px(12.)).child(t("effect-drop-shadow")))
                             .on_click(cx.listener(move |this, _, _, cx| {
@@ -493,14 +494,14 @@ impl Workspace {
                                 .gap(px(20.))
                                 .p_0()
                                 .border_0()
-                                .bg(gpui::rgba(0))
+                                .bg(Color::Transparent.color())
                                 .trigger(
                                     div()
                                         .id(format!("shadow-color-{index}"))
                                         .size(px(28.))
                                         .rounded(px(5.))
                                         .border_1()
-                                        .border_color(rgb(BORDER))
+                                        .border_color(BORDER.color())
                                         .bg(shadow.color)
                                         .cursor_pointer(),
                                 )
@@ -510,9 +511,9 @@ impl Workspace {
                                         .p(px(14.))
                                         .rounded(px(12.))
                                         .border_1()
-                                        .border_color(rgb(BORDER))
+                                        .border_color(BORDER.color())
                                         .shadow_lg()
-                                        .text_color(rgb(TEXT))
+                                        .text_color(TEXT.color())
                                         .child(inspector_color_picker(&picker))
                                 }),
                         )
@@ -536,7 +537,7 @@ impl Workspace {
             .h(px(30.))
             .px(px(8.))
             .rounded(px(5.))
-            .bg(rgb(0x282b33))
+            .bg(Color::Input.color())
             .flex()
             .items_center()
             .gap(px(6.))
@@ -548,7 +549,7 @@ impl Workspace {
                     .flex()
                     .items_center()
                     .text_size(px(11.))
-                    .text_color(rgb(MUTED))
+                    .text_color(MUTED.color())
                     .child(label)
                     .when(field != 4, |el| {
                         el.cursor(gpui::CursorStyle::ResizeLeftRight).on_mouse_down(
@@ -566,8 +567,8 @@ impl Workspace {
                     .h(px(28.))
                     .px_0()
                     .py_0()
-                    .border_color(gpui::rgba(0))
-                    .bg(gpui::rgba(0))
+                    .border_color(Color::Transparent.color())
+                    .bg(Color::Transparent.color())
                     .rounded(px(4.)),
             )
     }
@@ -585,6 +586,6 @@ fn button(id: impl Into<gpui::SharedString>, glyph: LucideIcons) -> gpui::Statef
         .items_center()
         .justify_center()
         .cursor_pointer()
-        .hover(|s| s.bg(rgb(BORDER)))
-        .child(icon(glyph, 15.).text_color(rgb(MUTED)))
+        .hover(|s| s.bg(BORDER.color()))
+        .child(icon(glyph, 15.).text_color(MUTED.color()))
 }

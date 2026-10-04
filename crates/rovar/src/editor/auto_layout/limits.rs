@@ -1,5 +1,6 @@
 use super::*;
 use crate::scene::auto_layout::Limits;
+use crate::ui::theme::Color;
 
 pub(super) struct State {
     pub expanded: bool,
@@ -152,7 +153,7 @@ impl Workspace {
             .px(px(14.))
             .py(px(10.))
             .border_b_1()
-            .border_color(rgb(BORDER))
+            .border_color(BORDER.color())
             .flex()
             .flex_col()
             .gap(px(8.))
@@ -174,7 +175,11 @@ impl Workspace {
                             .items_center()
                             .gap(px(8.))
                             .cursor_pointer()
-                            .text_color(rgb(if has_limits { TEXT } else { MUTED }))
+                            .text_color(if has_limits {
+                                TEXT.color()
+                            } else {
+                                MUTED.color()
+                            })
                             .child(icon(
                                 if expanded {
                                     LucideIcons::ChevronDown
@@ -200,8 +205,8 @@ impl Workspace {
                                 .justify_center()
                                 .rounded(px(5.))
                                 .cursor_pointer()
-                                .text_color(rgb(MUTED))
-                                .hover(|s| s.bg(rgb(0x282b33)))
+                                .text_color(MUTED.color())
+                                .hover(|s| s.bg(Color::Input.color()))
                                 .child(icon(LucideIcons::Minus, 13.))
                                 .on_click(cx.listener(move |this, _, _, cx| {
                                     this.set_size_limits(id, Limits::default(), cx)
@@ -216,7 +221,7 @@ impl Workspace {
             ["layout-minimum", "layout-maximum"].map(|label| {
                 div()
                     .flex_1()
-                    .text_color(rgb(MUTED))
+                    .text_color(MUTED.color())
                     .text_size(px(10.))
                     .child(t(label))
             }),
@@ -227,7 +232,7 @@ impl Workspace {
                     .flex()
                     .items_center()
                     .gap(px(8.))
-                    .child(div().w(px(18.)).text_color(rgb(MUTED)).child(label))
+                    .child(div().w(px(18.)).text_color(MUTED.color()).child(label))
                     .children((axis * 2..axis * 2 + 2).map(|index| {
                         let invalid = self.auto_layout.limits.invalid[index];
                         div()
@@ -243,16 +248,22 @@ impl Workspace {
                                     .py_0()
                                     .rounded(px(6.))
                                     .text_size(px(12.))
-                                    .text_color(rgb(TEXT))
-                                    .bg(rgb(0x282b33))
+                                    .text_color(TEXT.color())
+                                    .bg(Color::Input.color())
                                     .border_1()
-                                    .border_color(rgb(if invalid { 0xff877b } else { BORDER }))
+                                    .border_color(if invalid {
+                                        Color::Danger.color()
+                                    } else {
+                                        BORDER.color()
+                                    })
                                     .appearance(InputAppearance {
-                                        focus_border: rgb(if invalid { 0xff877b } else { ACCENT })
-                                            .into(),
-                                        caret: rgb(ACCENT).into(),
-                                        selection: gpui::rgba(0xb4a2ee44).into(),
-                                        ..Default::default()
+                                        focus_border: if invalid {
+                                            Color::Danger.color()
+                                        } else {
+                                            ACCENT.color()
+                                        }
+                                        .into(),
+                                        ..crate::ui::theme::input_appearance()
                                     }),
                             )
                     })),
@@ -268,7 +279,7 @@ impl Workspace {
                 el.child(
                     div()
                         .text_size(px(10.))
-                        .text_color(rgb(0xff877b))
+                        .text_color(Color::Danger.color())
                         .child(t("layout-invalid-limits")),
                 )
             },

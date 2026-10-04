@@ -1,5 +1,6 @@
 use super::*;
-use gpui::{color_svg, rgba};
+use crate::ui::theme::Color;
+use gpui::color_svg;
 use uic::components::dropdown::dropdown;
 
 impl Studio {
@@ -13,12 +14,13 @@ impl Studio {
             .w(px(264.))
             .p(px(5.))
             .rounded(px(12.))
-            .bg(rgb(0x202027))
-            .text_color(rgb(TEXT))
+            .bg(Color::Panel.color())
+            .text_color(TEXT.color())
             .text_size(px(12.))
-            .border_color(rgba(0xffffff16))
+            .border_color(Color::Text.color().opacity(0.0863))
             .shadow(vec![
-                gpui::BoxShadow::new(px(0.), px(8.), rgba(0x00000050).into()).blur_radius(px(24.)),
+                gpui::BoxShadow::new(px(0.), px(8.), Color::Shadow.color().into())
+                    .blur_radius(px(24.)),
             ])
             .trigger(
                 div()
@@ -31,7 +33,7 @@ impl Studio {
                     .justify_center()
                     .rounded(px(8.))
                     .cursor_pointer()
-                    .hover(|style| style.bg(rgba(0xffffff08)))
+                    .hover(|style| style.bg(Color::Text.color().opacity(0.0314)))
                     .child(
                         color_svg()
                             .path("rovar-mark.svg")
@@ -66,7 +68,13 @@ impl Studio {
                         };
                         div()
                             .when(matches!(id, "save-document" | "settings"), |el| {
-                                el.child(div().h(px(1.)).mx(px(8.)).my(px(5.)).bg(rgba(0xffffff12)))
+                                el.child(
+                                    div()
+                                        .h(px(1.))
+                                        .mx(px(8.))
+                                        .my(px(5.))
+                                        .bg(Color::Text.color().opacity(0.0706)),
+                                )
                             })
                             .child(
                                 div()
@@ -78,22 +86,23 @@ impl Studio {
                                     .flex()
                                     .items_center()
                                     .gap(px(10.))
-                                    .text_color(rgb(if enabled { 0xe0dbe9 } else { 0x686371 }))
+                                    .text_color(if enabled {
+                                        Color::Text.color()
+                                    } else {
+                                        Color::Muted.color()
+                                    })
                                     .child(icon(glyph, 15.))
                                     .child(div().flex_1().child(t(id)))
                                     .child(
                                         div()
                                             .text_size(px(10.))
-                                            .text_color(rgb(if enabled {
-                                                0x8d859e
-                                            } else {
-                                                0x514d58
-                                            }))
+                                            .text_color(Color::Muted.color())
                                             .child(crate::ui::shortcuts::label(shortcut)),
                                     )
                                     .when(enabled, |el| {
-                                        el.cursor_pointer().hover(|s| s.bg(rgb(0x353042))).on_click(
-                                            cx.listener(move |this, _, window, cx| {
+                                        el.cursor_pointer()
+                                            .hover(|s| s.bg(Color::Hover.color()))
+                                            .on_click(cx.listener(move |this, _, window, cx| {
                                                 this.menu.update(cx, |state, cx| {
                                                     state.close(window, cx)
                                                 });
@@ -114,8 +123,7 @@ impl Studio {
                                                     }
                                                     _ => this.save_command(window, cx),
                                                 }
-                                            }),
-                                        )
+                                            }))
                                     }),
                             )
                     }),

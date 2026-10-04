@@ -4,6 +4,19 @@ use super::*;
 
 impl Render for Workspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        crate::ui::theme::activate(window, cx);
+        if self.inspector.theme_dark != crate::ui::theme::is_dark() {
+            self.inspector.theme_dark = crate::ui::theme::is_dark();
+            self.inspector.fields[0].update(cx, |input, cx| {
+                input.set_appearance(
+                    uic::components::input::InputAppearance {
+                        caret_height: px(16.),
+                        ..crate::ui::theme::input_appearance()
+                    },
+                    cx,
+                )
+            });
+        }
         self.reflow_layout(cx);
         self.sync_components(window, cx);
         self.sync_layout_inputs(cx);
@@ -197,8 +210,8 @@ impl Render for Workspace {
             }))
             .size_full()
             .overflow_hidden()
-            .bg(rgb(PANEL))
-            .text_color(rgb(TEXT))
+            .bg(PANEL.color())
+            .text_color(TEXT.color())
             .font_family(crate::ui::font::family(cx))
             .flex()
             .flex_col()

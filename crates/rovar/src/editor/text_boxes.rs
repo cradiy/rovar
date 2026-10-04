@@ -2,6 +2,7 @@ use super::inspector::{icon_button, inspector_section};
 use super::*;
 use crate::i18n::t;
 use crate::scene::text::VerticalAlign;
+use crate::ui::theme::Color;
 use gpui::{CursorStyle, TextAlign};
 
 impl Workspace {
@@ -231,7 +232,7 @@ impl Workspace {
                         .absolute()
                         .inset_0()
                         .border_1()
-                        .border_color(rgb(ACCENT)),
+                        .border_color(ACCENT.color()),
                 )
                 .children(Handle::ALL.into_iter().enumerate().map(|(index, handle)| {
                     let x = (handle.0 as f32 + 1.) * 0.5 * width;
@@ -251,9 +252,9 @@ impl Workspace {
                         .child(
                             div()
                                 .size(px(7.))
-                                .bg(rgb(0xffffff))
+                                .bg(Color::Handle.color())
                                 .border_1()
-                                .border_color(rgb(ACCENT)),
+                                .border_color(ACCENT.color()),
                         )
                         .on_mouse_down(
                             MouseButton::Left,
@@ -316,7 +317,7 @@ impl Workspace {
                     .child(
                         div()
                             .text_size(px(11.))
-                            .text_color(rgb(MUTED))
+                            .text_color(MUTED.color())
                             .child(if scope {
                                 t("apply-selection")
                             } else {
@@ -378,7 +379,7 @@ impl Workspace {
                             .flex()
                             .flex_col()
                             .gap(px(7.))
-                            .child(div().text_size(px(11.)).text_color(rgb(MUTED)).child(
+                            .child(div().text_size(px(11.)).text_color(MUTED.color()).child(
                                 if vertical_align.is_some() {
                                     t("inline-alignment")
                                 } else {

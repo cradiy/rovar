@@ -1,7 +1,6 @@
 use super::*;
+use crate::ui::theme::Color;
 use gpui::{TextRun, canvas, fill, outline, size};
-
-const GUIDE_COLOR: u32 = 0xf28bd9;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) struct Dimension {
@@ -154,7 +153,7 @@ pub(super) fn dimension_overlay(
         |_, _, _| (),
         move |bounds, _, window, cx| {
             let screen = |p| bounds.origin + view.screen(p).map(px);
-            let color = rgb(GUIDE_COLOR);
+            let color = Color::Guide.color();
             if let Some(rect) = target {
                 window.paint_quad(outline(
                     Bounds::new(
@@ -214,7 +213,8 @@ pub(super) fn dimension_overlay(
                     center + point(px(5.), -label_size.height / 2.)
                 };
                 window.paint_quad(
-                    fill(Bounds::new(origin, label_size), rgb(0x302333)).corner_radii(px(4.)),
+                    fill(Bounds::new(origin, label_size), Color::Selected.color())
+                        .corner_radii(px(4.)),
                 );
                 let _ = text.paint(
                     origin + point(px(5.), px(1.)),

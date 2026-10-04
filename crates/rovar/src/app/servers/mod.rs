@@ -1,6 +1,7 @@
 use super::*;
 use crate::remote::Client;
-use gpui::{Focusable, SharedString, rgba};
+use crate::ui::theme::Color;
+use gpui::{Focusable, SharedString};
 mod account;
 mod authentication;
 mod confirmation;
@@ -658,7 +659,7 @@ pub(super) fn button(
         .items_center()
         .gap(px(8.))
         .cursor_pointer()
-        .hover(|s| s.bg(rgba(0xb4a2ee22)))
+        .hover(|s| s.bg(Color::Accent.color().opacity(0.1333)))
         .when(label.is_empty(), |el| {
             el.size(px(30.))
                 .p_0()

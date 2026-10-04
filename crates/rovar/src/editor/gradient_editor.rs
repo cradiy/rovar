@@ -1,4 +1,5 @@
 use super::*;
+use crate::ui::theme::Color;
 use crate::{i18n::t, scene::artboard::LinearGradient};
 use std::{cell::Cell, rc::Rc};
 
@@ -45,7 +46,7 @@ impl Workspace {
                     .right_0()
                     .h(px(22.))
                     .rounded(px(5.))
-                    .bg(gpui::checkerboard(rgb(0x50515b), 5.))
+                    .bg(gpui::checkerboard(Color::Checker.color(), 5.))
                     .cursor(gpui::CursorStyle::Crosshair)
                     .tooltip(|_, cx| cx.new(|_| toolbar::ToolTip(t("stop-add").into())).into())
                     .child(div().size_full().rounded(px(5.)).bg(ramp.background()))
@@ -91,17 +92,21 @@ impl Workspace {
                             .h(px(22.))
                             .rounded(px(5.))
                             .border_2()
-                            .border_color(rgb(if id == active { ACCENT } else { 0x595563 }))
-                            .bg(rgb(0x1d1e25))
+                            .border_color(if id == active {
+                                ACCENT.color()
+                            } else {
+                                Color::Border.color()
+                            })
+                            .bg(Color::Panel.color())
                             .p(px(2.))
                             .cursor(gpui::CursorStyle::ResizeLeftRight)
-                            .hover(|s| s.border_color(rgb(TEXT)))
+                            .hover(|s| s.border_color(TEXT.color()))
                             .child(
                                 div()
                                     .size_full()
                                     .rounded(px(2.))
                                     .overflow_hidden()
-                                    .bg(gpui::checkerboard(rgb(0x50515b), 4.))
+                                    .bg(gpui::checkerboard(Color::Checker.color(), 4.))
                                     .child(div().size_full().bg(stop.color)),
                             )
                             .tooltip(move |_, cx| cx.new(|_| toolbar::ToolTip(hint.clone())).into())
@@ -278,8 +283,8 @@ impl Workspace {
                     .h(px(18.))
                     .flex().items_center().justify_center()
                     .cursor(gpui::CursorStyle::ResizeLeftRight)
-                    .text_color(rgb(if active { ACCENT } else { MUTED }))
-                    .hover(|s| s.text_color(rgb(TEXT)))
+                    .text_color(if active { ACCENT.color() } else { MUTED.color() })
+                    .hover(|s| s.text_color(TEXT.color()))
                     .child(icon(LucideIcons::Diamond, 10.))
                     .tooltip(move |_, cx| cx.new(|_| toolbar::ToolTip(hint.clone())).into())
                     .on_mouse_down(MouseButton::Left, cx.listener(move |this, event: &gpui::MouseDownEvent, window, cx| {
@@ -347,15 +352,15 @@ impl Workspace {
             .items_center()
             .gap(px(6.))
             .justify_between()
-            .bg(rgb(0x22252d))
+            .bg(Color::Input.color())
             .text_size(px(11.))
-            .text_color(rgb(MUTED))
-            .hover(|s| s.bg(rgb(0x302a40)).text_color(rgb(TEXT)))
+            .text_color(MUTED.color())
+            .hover(|s| s.bg(Color::Selected.color()).text_color(TEXT.color()))
             .cursor(gpui::CursorStyle::ResizeLeftRight)
             .child(t("gradient-seam-width"))
             .child(
                 div()
-                    .text_color(rgb(TEXT))
+                    .text_color(TEXT.color())
                     .child(format!("{}%", inspector::number(original * 100.))),
             )
             .tooltip(|_, cx| {

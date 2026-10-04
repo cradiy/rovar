@@ -1,4 +1,5 @@
 use super::*;
+use crate::ui::theme::Color;
 use crate::{
     document::library::{Entry, Library},
     i18n::t,
@@ -402,15 +403,15 @@ impl Render for AssetDrag {
             .w(px(112.))
             .p(px(7.))
             .rounded(px(10.))
-            .bg(rgb(0x282630))
+            .bg(Color::Surface.color())
             .border_1()
-            .border_color(rgb(ACCENT))
+            .border_color(ACCENT.color())
             .shadow_lg()
             .child(view::thumbnail(&self.entry, 76.))
             .child(
                 div()
                     .text_size(px(11.))
-                    .text_color(rgb(TEXT))
+                    .text_color(TEXT.color())
                     .truncate()
                     .child(self.entry.name.clone()),
             )

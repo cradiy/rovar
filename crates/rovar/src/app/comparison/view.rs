@@ -1,4 +1,5 @@
 use super::*;
+use crate::ui::theme::Color;
 
 impl Studio {
     fn navigate_comparison(
@@ -51,7 +52,7 @@ impl Studio {
                 .p(px(3.))
                 .gap(px(2.))
                 .rounded(px(9.))
-                .bg(rgb(0x22212b))
+                .bg(Color::Surface.color())
         };
         let switch = |cx: &mut Context<Self>| {
             tabs().children([(false, "compare-local"), (true, "compare-server")].map(
@@ -59,7 +60,7 @@ impl Studio {
                     action(key, t(key))
                         .px(px(16.))
                         .when(panel.server_visible == server, |el| {
-                            el.bg(rgb(0x393047)).text_color(rgb(ACCENT))
+                            el.bg(Color::Selected.color()).text_color(ACCENT.color())
                         })
                         .on_click(cx.listener(move |this, _, window, cx| {
                             this.navigate_comparison(server, page, window, cx)
@@ -71,7 +72,7 @@ impl Studio {
             .absolute()
             .inset_0()
             .occlude()
-            .bg(rgb(0x15151c))
+            .bg(Color::Workspace.color())
             .flex()
             .flex_col()
             .text_size(px(12.))
@@ -101,7 +102,7 @@ impl Studio {
                                     .items_center()
                                     .justify_center()
                                     .cursor_pointer()
-                                    .hover(|s| s.bg(rgb(0x292631)))
+                                    .hover(|s| s.bg(Color::Hover.color()))
                                     .child(icon(LucideIcons::ArrowLeft, 16.))
                                     .on_click(cx.listener(|this, _, window, cx| {
                                         this.close_comparison(window, cx)
@@ -122,12 +123,13 @@ impl Studio {
                                     .px(px(14.))
                                     .rounded(px(8.))
                                     .border_1()
-                                    .border_color(rgb(0x302d3b))
-                                    .bg(rgb(0x201e29))
-                                    .text_color(rgb(0xc5bfd3))
+                                    .border_color(Color::Border.color())
+                                    .bg(Color::Panel.color())
+                                    .text_color(Color::Text.color())
                                     .when(!busy, |el| {
                                         el.hover(|s| {
-                                            s.bg(rgb(0x2b2737)).border_color(rgb(0x494158))
+                                            s.bg(Color::Hover.color())
+                                                .border_color(Color::Border.color())
                                         })
                                         .on_click(
                                             cx.listener(move |this, _, window, cx| {
@@ -153,14 +155,21 @@ impl Studio {
                                 .px(px(16.))
                                 .rounded(px(8.))
                                 .font_weight(gpui::FontWeight::MEDIUM)
-                                .bg(rgb(if can_resolve { ACCENT } else { 0x2b2638 }))
-                                .text_color(rgb(if can_resolve { 0x21182f } else { 0xaaa0bb }))
+                                .bg(if can_resolve {
+                                    ACCENT.color()
+                                } else {
+                                    Color::Selected.color()
+                                })
+                                .text_color(if can_resolve {
+                                    Color::OnAccent.color()
+                                } else {
+                                    Color::Muted.color()
+                                })
                                 .when(can_resolve, |el| {
-                                    el.hover(|s| s.bg(rgb(0xc9b6f2))).on_click(cx.listener(
-                                        |this, _, window, cx| {
+                                    el.hover(|s| s.bg(Color::Accent.color()))
+                                        .on_click(cx.listener(|this, _, window, cx| {
                                             this.resolve_comparison(window, cx);
-                                        },
-                                    ))
+                                        }))
                                 }),
                             ),
                     ),
@@ -176,14 +185,14 @@ impl Studio {
                     .px(px(20.))
                     .pb(px(9.))
                     .border_b_1()
-                    .border_color(rgb(BORDER))
+                    .border_color(BORDER.color())
                     .child(
                         div()
                             .flex()
                             .items_center()
                             .gap(px(6.))
                             .flex_shrink_0()
-                            .text_color(rgb(MUTED))
+                            .text_color(MUTED.color())
                             .text_size(px(11.))
                             .child(icon(
                                 if server {
@@ -205,7 +214,7 @@ impl Studio {
                             .min_w_0()
                             .truncate()
                             .text_size(px(11.))
-                            .text_color(rgb(MUTED))
+                            .text_color(MUTED.color())
                             .child(metadata),
                     )
                     .when(panel.pages.len() > 1, |el| {
@@ -252,7 +261,7 @@ impl Studio {
                     div()
                         .px(px(20.))
                         .py(px(8.))
-                        .text_color(rgb(0xee998f))
+                        .text_color(Color::Danger.color())
                         .child(error),
                 )
             })
@@ -272,7 +281,7 @@ impl Studio {
                                 .items_center()
                                 .justify_center()
                                 .gap(px(16.))
-                                .text_color(rgb(MUTED))
+                                .text_color(MUTED.color())
                                 .child(t(if panel.loading {
                                     "compare-loading"
                                 } else if panel.failed {
@@ -296,7 +305,7 @@ impl Studio {
 }
 
 fn action(id: &'static str, label: &'static str) -> gpui::Stateful<gpui::Div> {
-    button(id, label).hover(|style| style.bg(rgb(0x34313f)))
+    button(id, label).hover(|style| style.bg(Color::Hover.color()))
 }
 
 fn button(id: &'static str, label: &'static str) -> gpui::Stateful<gpui::Div> {

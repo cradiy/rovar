@@ -1,6 +1,7 @@
 use super::*;
 use crate::i18n::t;
 use crate::scene::layer::LayerState;
+use crate::ui::theme::Color;
 
 impl Workspace {
     pub(in crate::editor) fn layer_info(&self, id: usize) -> Option<(LayerState, Option<usize>)> {
@@ -151,14 +152,15 @@ impl Workspace {
                     .items_center()
                     .justify_center()
                     .when(!disabled, |el| {
-                        el.cursor_pointer().hover(|s| s.bg(rgba(0xffffff18)))
+                        el.cursor_pointer()
+                            .hover(|s| s.bg(Color::Text.color().opacity(0.0941)))
                     })
                     .tooltip(move |_, cx| cx.new(|_| toolbar::ToolTip(label.into())).into())
-                    .child(icon(glyph, 14.).text_color(rgb(if active && !disabled {
-                        ACCENT
+                    .child(icon(glyph, 14.).text_color(if active && !disabled {
+                        ACCENT.color()
                     } else {
-                        MUTED
-                    })))
+                        MUTED.color()
+                    }))
                     .on_click(cx.listener(move |this, _, window, cx| {
                         cx.stop_propagation();
                         this.toggle_layer(id, visibility, window, cx);

@@ -1,13 +1,14 @@
 use super::{ACCENT, BORDER, MUTED, PANEL, TEXT, icon};
 use crate::i18n::t;
+use crate::ui::theme::Color;
 use gpui::{
     Context, Entity, EventEmitter, Focusable, IntoElement, Render, ScrollStrategy, SharedString,
-    Subscription, Task, UniformListScrollHandle, Window, div, prelude::*, px, rgb, uniform_list,
+    Subscription, Task, UniformListScrollHandle, Window, div, prelude::*, px, uniform_list,
 };
 use uic::{
     assets::LucideIcons,
     components::{
-        input::{Input, InputAppearance, InputEvent, TextInput},
+        input::{Input, InputEvent, TextInput},
         popover::{Popover, PopoverEvent, PopoverPlacement, PopoverState},
     },
 };
@@ -215,15 +216,10 @@ impl FontPicker {
                             .px(px(9.))
                             .text_size(px(12.))
                             .rounded(px(5.))
-                            .bg(rgb(0x252830))
-                            .border_color(rgb(BORDER))
-                            .text_color(rgb(TEXT))
-                            .appearance(InputAppearance {
-                                focus_border: rgb(ACCENT).into(),
-                                caret: rgb(ACCENT).into(),
-                                selection: gpui::rgba(0xb4a2ee44).into(),
-                                ..Default::default()
-                            }),
+                            .bg(Color::Input.color())
+                            .border_color(BORDER.color())
+                            .text_color(TEXT.color())
+                            .appearance(crate::ui::theme::input_appearance()),
                     ),
             )
             .when(
@@ -251,11 +247,12 @@ impl FontPicker {
                                             .rounded(px(4.))
                                             .cursor_pointer()
                                             .text_size(px(12.))
-                                            .text_color(rgb(TEXT))
+                                            .text_color(TEXT.color())
                                             .when(selected, |el| {
-                                                el.bg(rgb(0x353044)).text_color(rgb(ACCENT))
+                                                el.bg(Color::Selected.color())
+                                                    .text_color(ACCENT.color())
                                             })
-                                            .hover(|s| s.bg(rgb(BORDER)))
+                                            .hover(|s| s.bg(BORDER.color()))
                                             .child(
                                                 div()
                                                     .flex_1()
@@ -288,7 +285,7 @@ impl FontPicker {
                         div()
                             .py(px(18.))
                             .text_size(px(12.))
-                            .text_color(rgb(MUTED))
+                            .text_color(MUTED.color())
                             .child(message),
                     )
                 },
@@ -296,18 +293,18 @@ impl FontPicker {
             .child(
                 div()
                     .border_t_1()
-                    .border_color(rgb(BORDER))
+                    .border_color(BORDER.color())
                     .pt(px(8.))
                     .flex()
                     .justify_between()
                     .text_size(px(11.))
-                    .text_color(rgb(MUTED))
+                    .text_color(MUTED.color())
                     .child(crate::i18n::count("font-count", self.fonts.len()))
                     .child(
                         div()
                             .id("refresh-fonts")
                             .cursor_pointer()
-                            .text_color(rgb(ACCENT))
+                            .text_color(ACCENT.color())
                             .child(t("font-rescan"))
                             .on_click(cx.listener(|this, _, _, cx| {
                                 if !this.loading {
@@ -331,7 +328,7 @@ impl Render for FontPicker {
                 el.child(
                     div()
                         .text_size(px(11.))
-                        .text_color(rgb(MUTED))
+                        .text_color(MUTED.color())
                         .child(t("font")),
                 )
             })
@@ -339,8 +336,8 @@ impl Render for FontPicker {
                 Popover::new(&self.popover)
                     .label(t("font-choose"))
                     .placement(PopoverPlacement::BottomEnd)
-                    .bg(rgb(PANEL))
-                    .border_color(rgb(BORDER))
+                    .bg(PANEL.color())
+                    .border_color(BORDER.color())
                     .p(px(8.))
                     .trigger(
                         div()
@@ -349,14 +346,14 @@ impl Render for FontPicker {
                             .h(px(32.))
                             .px(px(9.))
                             .rounded(px(5.))
-                            .bg(rgb(0x252830))
+                            .bg(Color::Input.color())
                             .border_1()
-                            .border_color(rgb(BORDER))
+                            .border_color(BORDER.color())
                             .flex()
                             .items_center()
                             .gap(px(8.))
                             .text_size(px(12.))
-                            .text_color(rgb(TEXT))
+                            .text_color(TEXT.color())
                             .child(
                                 div()
                                     .flex_1()
@@ -371,7 +368,7 @@ impl Render for FontPicker {
                                         self.selected.clone()
                                     }),
                             )
-                            .child(icon(LucideIcons::ChevronDown, 14.).text_color(rgb(MUTED))),
+                            .child(icon(LucideIcons::ChevronDown, 14.).text_color(MUTED.color())),
                     )
                     .content(move |_, cx| {
                         div().children(weak.update(cx, |this, cx| this.menu(cx)).ok())

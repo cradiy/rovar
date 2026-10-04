@@ -1,4 +1,5 @@
 use super::*;
+use crate::ui::theme::Color;
 use gpui_media::{
     MediaBackendEvent, MediaOutput, MediaPlaybackSession, PlaybackTimeline, SeekMode, VideoSurface,
 };
@@ -199,7 +200,7 @@ impl Render for VideoControls {
                             .items_center()
                             .justify_center()
                             .rounded(px(6.))
-                            .bg(rgb(0x353044))
+                            .bg(Color::Selected.color())
                             .cursor_pointer()
                             .child(icon(
                                 if playing {
@@ -265,7 +266,7 @@ impl Render for VideoControls {
                             .h(px(6.))
                             .w_full()
                             .rounded(px(3.))
-                            .bg(rgb(BORDER)),
+                            .bg(BORDER.color()),
                     )
                     .child(
                         div()
@@ -274,7 +275,7 @@ impl Render for VideoControls {
                             .h(px(6.))
                             .w(gpui::relative(timeline.progress().unwrap_or(0.) as f32))
                             .rounded(px(3.))
-                            .bg(rgb(ACCENT)),
+                            .bg(ACCENT.color()),
                     )
                     .on_mouse_down(
                         MouseButton::Left,
@@ -288,7 +289,7 @@ impl Render for VideoControls {
                     ),
             )
             .when_some(error, |el, error| {
-                el.child(div().text_color(rgb(0xf0a4a4)).child(error))
+                el.child(div().text_color(Color::Danger.color()).child(error))
             })
     }
 }

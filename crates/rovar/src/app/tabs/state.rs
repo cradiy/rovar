@@ -1,4 +1,5 @@
 use super::*;
+use crate::ui::theme::Color;
 use std::collections::BTreeMap;
 use web_time::Instant;
 
@@ -192,12 +193,12 @@ impl Render for DragPreview {
             .overflow_hidden()
             .rounded(px(12.))
             .border_1()
-            .border_color(gpui::rgba(0xffffff2b))
-            .bg(rgb(0x17171f))
+            .border_color(Color::Text.color().opacity(0.1686))
+            .bg(Color::Workspace.color())
             .shadow_xl()
             .flex()
             .flex_col()
-            .text_color(rgb(TEXT))
+            .text_color(TEXT.color())
             .font_family(crate::ui::font::family(cx))
             .child(
                 div()
@@ -223,7 +224,7 @@ impl Render for DragPreview {
                     .flex()
                     .items_center()
                     .justify_center()
-                    .bg(rgb(0x121419))
+                    .bg(Color::Workspace.color())
                     .when_some(self.thumbnail.clone(), |el, path| {
                         el.child(
                             gpui::img(crate::platform::preview_image(path))
@@ -235,7 +236,7 @@ impl Render for DragPreview {
                     .when(self.thumbnail.is_none(), |el| {
                         el.child(
                             div()
-                                .text_color(rgb(ACCENT))
+                                .text_color(ACCENT.color())
                                 .child(icon(LucideIcons::Frame, 36.)),
                         )
                     }),
@@ -250,8 +251,8 @@ pub(in crate::app) fn tab_face(title: &str, cx: &gpui::App) -> gpui::Div {
         .flex()
         .items_center()
         .gap(px(8.))
-        .bg(rgb(0x292531))
-        .text_color(rgb(TEXT))
+        .bg(Color::Hover.color())
+        .text_color(TEXT.color())
         .text_size(px(12.))
         .font_family(crate::ui::font::family(cx))
         .child(icon(LucideIcons::PenTool, 13.))

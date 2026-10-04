@@ -3,6 +3,7 @@
 use super::*;
 
 pub(in crate::editor) struct State {
+    pub theme_dark: bool,
     pub shadows: super::effects::Controls,
     pub gradient_menu: Entity<uic::components::dropdown::DropdownState>,
     pub stroke_editing: bool,
@@ -29,10 +30,8 @@ impl State {
         fields[0].update(cx, |input, cx| {
             input.set_appearance(
                 uic::components::input::InputAppearance {
-                    caret: rgb(ACCENT).into(),
-                    selection: gpui::rgba(0xb4a2ee44).into(),
                     caret_height: px(16.),
-                    ..Default::default()
+                    ..crate::ui::theme::input_appearance()
                 },
                 cx,
             )
@@ -173,6 +172,7 @@ impl State {
             ));
         }
         Self {
+            theme_dark: crate::ui::theme::is_dark(),
             shadows: Default::default(),
             gradient_menu: cx.new(|cx| uic::components::dropdown::DropdownState::new(window, cx)),
             name_scroll: Rc::new(Cell::new(px(0.))),

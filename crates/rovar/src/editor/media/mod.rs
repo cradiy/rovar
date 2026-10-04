@@ -1,6 +1,7 @@
 use super::*;
 use crate::i18n::t;
 use crate::media::{MediaAsset, MediaContent};
+use crate::ui::theme::Color;
 use gpui::AnimationExt as _;
 use gpui_media::{MediaBackend, MediaOutputSink, MediaPlaybackRequest};
 use std::{sync::Arc, time::Duration};
@@ -282,9 +283,9 @@ impl Workspace {
                         .size_full(),
                 ),
                 Some(MediaContent::Video(frame)) => content
-                    .bg(rgb(0x101216))
+                    .bg(Color::Workspace.color())
                     .child(gpui::surface(frame.clone()).absolute().size_full()),
-                None => content.bg(gpui::rgba(0xb4a2ee12)),
+                None => content.bg(Color::Accent.color().opacity(0.0706)),
             };
             if let Some(runtime) = self.media.videos.get(&shape.id) {
                 content = content.child(runtime.view.clone());
@@ -327,7 +328,7 @@ impl Workspace {
                         .flex_shrink_0()
                         .rounded(px(6.))
                         .overflow_hidden()
-                        .bg(gpui::checkerboard(rgb(0x30343d), 4.))
+                        .bg(gpui::checkerboard(Color::Border.color(), 4.))
                         .flex()
                         .items_center()
                         .justify_center()
@@ -348,7 +349,7 @@ impl Workspace {
                                 },
                                 18.,
                             )
-                            .text_color(rgb(MUTED))
+                            .text_color(MUTED.color())
                             .into_any_element(),
                         }),
                 )
@@ -364,7 +365,7 @@ impl Workspace {
                         .child(
                             div()
                                 .text_size(px(11.))
-                                .text_color(rgb(MUTED))
+                                .text_color(MUTED.color())
                                 .child(format!("{} × {} px", asset.width, asset.height)),
                         )
                         .tooltip(move |_, cx| cx.new(|_| toolbar::ToolTip(name.clone())).into()),
@@ -390,11 +391,11 @@ impl Workspace {
                                     },
                                     16.,
                                 )
-                                .text_color(rgb(if loading {
-                                    ACCENT
+                                .text_color(if loading {
+                                    ACCENT.color()
                                 } else {
-                                    MUTED
-                                })),
+                                    MUTED.color()
+                                }),
                             )
                             .tooltip(move |_, cx| {
                                 cx.new(|_| {
@@ -405,11 +406,11 @@ impl Workspace {
                                 .into()
                             })
                             .when(!loading, |el| {
-                                el.cursor_pointer().hover(|el| el.bg(rgb(BORDER))).on_click(
-                                    cx.listener(move |this, _, window, cx| {
+                                el.cursor_pointer()
+                                    .hover(|el| el.bg(BORDER.color()))
+                                    .on_click(cx.listener(move |this, _, window, cx| {
                                         this.play_video(id, window, cx)
-                                    }),
-                                )
+                                    }))
                             }),
                     )
                 }),
@@ -425,11 +426,11 @@ impl Workspace {
         let failed = self.media.error.is_some();
         let indicator = if failed {
             icon(LucideIcons::CircleAlert, 15.)
-                .text_color(rgb(0xe4aa91))
+                .text_color(Color::Danger.color())
                 .into_any_element()
         } else {
             icon(LucideIcons::Loader, 15.)
-                .text_color(rgb(ACCENT))
+                .text_color(ACCENT.color())
                 .with_animation(
                     ("media-loading-spinner", self.media.import_request as usize),
                     gpui::Animation::new(Duration::from_millis(900)).repeat(),
@@ -449,10 +450,10 @@ impl Workspace {
             .py(px(8.))
             .rounded(px(8.))
             .border_1()
-            .border_color(gpui::rgba(0xb4a2ee28))
+            .border_color(Color::Accent.color().opacity(0.1569))
             .shadow_md()
             .text_size(px(12.))
-            .text_color(rgb(TEXT))
+            .text_color(TEXT.color())
             .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
             .child(
                 div()
@@ -486,8 +487,8 @@ impl Workspace {
                             .justify_center()
                             .rounded(px(5.))
                             .cursor_pointer()
-                            .hover(|s| s.bg(gpui::rgba(0xffffff0c)))
-                            .child(icon(LucideIcons::X, 13.).text_color(rgb(MUTED)))
+                            .hover(|s| s.bg(Color::Text.color().opacity(0.0471)))
+                            .child(icon(LucideIcons::X, 13.).text_color(MUTED.color()))
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.media.error = None;
                                 if this.media.importing {

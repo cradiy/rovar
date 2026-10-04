@@ -1,7 +1,7 @@
 use crate::{i18n::t, ui::MUTED};
 use gpui::{
     Animation, AnimationExt, IntoElement, Transformation, color_svg, div, point, prelude::*, px,
-    radians, rgb, size,
+    radians, size,
 };
 use serde::Deserialize;
 use std::{f32::consts::TAU, sync::OnceLock, time::Duration};
@@ -94,7 +94,7 @@ pub(super) fn view(token: usize) -> impl IntoElement {
         .child(
             div()
                 .text_size(px(12.))
-                .text_color(rgb(MUTED))
+                .text_color(MUTED.color())
                 .child(t("loading")),
         )
 }

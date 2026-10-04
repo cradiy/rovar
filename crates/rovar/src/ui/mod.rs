@@ -4,18 +4,19 @@ pub(crate) mod assets;
 pub(crate) mod font;
 pub(crate) mod font_picker;
 pub(crate) mod shortcuts;
+pub(crate) mod theme;
 pub(crate) mod titlebar;
 
-use gpui::{Styled, px, rgb, svg};
+use gpui::{Styled, px, svg};
 use uic::assets::LucideIcons;
 
-pub(crate) const PANEL: u32 = 0x1d2026;
-pub(crate) const WORKSPACE: u32 = 0x15171c;
-pub(crate) const BORDER: u32 = 0x30343d;
-pub(crate) const TEXT: u32 = 0xdde0e8;
-pub(crate) const MUTED: u32 = 0x959ba9;
-pub(crate) const ACCENT: u32 = 0xb4a2ee;
+pub(crate) const PANEL: theme::Color = theme::Color::Panel;
+pub(crate) const WORKSPACE: theme::Color = theme::Color::Workspace;
+pub(crate) const BORDER: theme::Color = theme::Color::Border;
+pub(crate) const TEXT: theme::Color = theme::Color::Text;
+pub(crate) const MUTED: theme::Color = theme::Color::Muted;
+pub(crate) const ACCENT: theme::Color = theme::Color::Accent;
 
 pub(crate) fn icon(glyph: LucideIcons, size: f32) -> gpui::Svg {
-    svg().path(glyph).size(px(size)).text_color(rgb(TEXT))
+    svg().path(glyph).size(px(size)).text_color(TEXT.color())
 }

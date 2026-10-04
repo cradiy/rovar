@@ -1,8 +1,7 @@
 use super::*;
 use crate::i18n::t;
-#[cfg(not(target_family = "wasm"))]
-use gpui::hsla;
-use gpui::{AnyElement, rgba, uniform_list};
+use crate::ui::theme::Color;
+use gpui::{AnyElement, uniform_list};
 #[cfg(not(target_family = "wasm"))]
 use gpui_effects::{LiquidGlass, LiquidGlassAppearance};
 use std::collections::HashSet;
@@ -22,13 +21,17 @@ pub(super) fn glass_surface() -> LiquidGlass {
     LiquidGlass::with_appearance(LiquidGlassAppearance {
         blur_radius: px(16.),
         clarity: 0.12,
-        tint: hsla(0.66, 0.16, 0.14, 0.78),
+        tint: Color::Glass.color().into(),
         refraction: px(3.),
         thickness: px(12.),
         highlight: 0.24,
         edge_shadow: 0.12,
         dispersion: 0.,
-        ..LiquidGlassAppearance::dark()
+        ..if crate::ui::theme::is_dark() {
+            LiquidGlassAppearance::dark()
+        } else {
+            LiquidGlassAppearance::regular()
+        }
     })
 }
 
@@ -36,7 +39,7 @@ pub(super) fn glass_surface() -> LiquidGlass {
 // Keep the same panel layout with an opaque material until GPUI fixes it.
 #[cfg(target_family = "wasm")]
 pub(super) fn glass_surface() -> Div {
-    div().bg(rgb(PANEL))
+    div().bg(PANEL.color())
 }
 
 #[derive(Clone, Copy)]
@@ -163,7 +166,11 @@ impl Workspace {
             .px(px(6.))
             .rounded(px(7.))
             .border_1()
-            .border_color(if active { rgba(0xb4a2ee44) } else { rgba(0) })
+            .border_color(if active {
+                Color::Accent.color().opacity(0.2667)
+            } else {
+                Color::Transparent.color()
+            })
             .flex()
             .items_center()
             .gap(px(7.))
@@ -172,8 +179,11 @@ impl Workspace {
             .when(!effective.editable(), |el| {
                 el.cursor(gpui::CursorStyle::Arrow)
             })
-            .hover(|s| s.bg(rgba(0xb4a2ee16)))
-            .when(active, |el| el.bg(rgba(0xb4a2ee2a)).text_color(rgb(ACCENT)))
+            .hover(|s| s.bg(Color::Accent.color().opacity(0.0863)))
+            .when(active, |el| {
+                el.bg(Color::Accent.color().opacity(0.1647))
+                    .text_color(ACCENT.color())
+            })
             .pl(px(6. + layer.depth as f32 * 16.))
             .child(
                 div()
@@ -190,7 +200,7 @@ impl Workspace {
                                 .flex()
                                 .items_center()
                                 .justify_center()
-                                .hover(|s| s.bg(rgba(0xffffff18)))
+                                .hover(|s| s.bg(Color::Text.color().opacity(0.0941)))
                                 .child(
                                     icon(
                                         if folded {
@@ -200,7 +210,7 @@ impl Workspace {
                                         },
                                         13.,
                                     )
-                                    .text_color(rgb(MUTED)),
+                                    .text_color(MUTED.color()),
                                 )
                                 .on_click(cx.listener(move |this, _, _, cx| {
                                     if !this.sidebar.folded.remove(&id) {
@@ -212,18 +222,18 @@ impl Workspace {
                         )
                     }),
             )
-            .child(icon(glyph, 16.).flex_shrink_0().text_color(rgb(if active {
-                ACCENT
+            .child(icon(glyph, 16.).flex_shrink_0().text_color(if active {
+                ACCENT.color()
             } else {
-                MUTED
-            })))
+                MUTED.color()
+            }))
             .child(
                 div()
                     .flex_1()
                     .min_w_0()
                     .truncate()
                     .when(effective.hidden, |el| el.opacity(0.45))
-                    .when(effective.locked, |el| el.text_color(rgb(MUTED)))
+                    .when(effective.locked, |el| el.text_color(MUTED.color()))
                     .when(self.sidebar.renaming != Some(id), |el| el.child(label))
                     .when(self.sidebar.renaming == Some(id), |el| {
                         el.child(
@@ -249,15 +259,12 @@ impl Workspace {
                                         .py_0()
                                         .rounded(px(4.))
                                         .text_size(px(12.))
-                                        .text_color(rgb(TEXT))
-                                        .bg(rgb(0x2c3038))
-                                        .border_color(rgb(0x2c3038))
+                                        .text_color(TEXT.color())
+                                        .bg(Color::Input.color())
+                                        .border_color(Color::Input.color())
                                         .appearance(uic::components::input::InputAppearance {
-                                            focus_border: rgb(ACCENT).into(),
-                                            caret: rgb(ACCENT).into(),
-                                            selection: gpui::rgba(0xb4a2ee44).into(),
                                             caret_height: px(16.),
-                                            ..Default::default()
+                                            ..crate::ui::theme::input_appearance()
                                         }),
                                 ),
                         )
@@ -271,7 +278,7 @@ impl Workspace {
                         .left_0()
                         .right_0()
                         .h(px(2.))
-                        .bg(rgb(ACCENT))
+                        .bg(ACCENT.color())
                         .when(above, |el| el.top_0())
                         .when(!above, |el| el.bottom_0()),
                 )
@@ -301,7 +308,7 @@ impl Workspace {
             .top(px(panels::PANEL_TOP))
             .rounded(px(16.))
             .border_1()
-            .border_color(rgba(0xb4a2ee30))
+            .border_color(Color::Accent.color().opacity(0.1882))
             .shadow_lg()
             .occlude()
             .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
@@ -317,7 +324,7 @@ impl Workspace {
             .items_center()
             .justify_center()
             .cursor_pointer()
-            .hover(|s| s.bg(rgba(0xb4a2ee22)))
+            .hover(|s| s.bg(Color::Accent.color().opacity(0.1333)))
             .tooltip(move |_, cx| {
                 cx.new(|_| {
                     toolbar::ToolTip(
@@ -340,7 +347,7 @@ impl Workspace {
                     },
                     17.,
                 )
-                .text_color(rgb(MUTED)),
+                .text_color(MUTED.color()),
             )
             .on_click(cx.listener(|this, _, _, cx| {
                 this.sidebar.collapsed = !this.sidebar.collapsed;
@@ -375,11 +382,19 @@ impl Workspace {
                     .gap(px(7.))
                     .text_size(px(12.))
                     .font_weight(FontWeight::MEDIUM)
-                    .text_color(rgb(if active { ACCENT } else { MUTED }))
+                    .text_color(if active {
+                        ACCENT.color()
+                    } else {
+                        MUTED.color()
+                    })
                     .cursor_pointer()
-                    .hover(|s| s.bg(rgba(0xb4a2ee16)))
-                    .when(active, |el| el.bg(rgba(0xb4a2ee22)))
-                    .child(icon(glyph, 17.).text_color(rgb(if active { ACCENT } else { MUTED })))
+                    .hover(|s| s.bg(Color::Accent.color().opacity(0.0863)))
+                    .when(active, |el| el.bg(Color::Accent.color().opacity(0.1333)))
+                    .child(icon(glyph, 17.).text_color(if active {
+                        ACCENT.color()
+                    } else {
+                        MUTED.color()
+                    }))
                     .child(label)
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.sidebar.resources = resources;
@@ -394,7 +409,12 @@ impl Workspace {
             .flex()
             .flex_col()
             .child(tabs.child(toggle))
-            .child(div().h(px(1.)).flex_shrink_0().bg(rgba(0xb4a2ee20)))
+            .child(
+                div()
+                    .h(px(1.))
+                    .flex_shrink_0()
+                    .bg(Color::Accent.color().opacity(0.1255)),
+            )
             .when(!self.sidebar.resources, |el| {
                 let el = el
                     .child(self.pages_panel(cx))
@@ -408,11 +428,11 @@ impl Workspace {
                             .flex_col()
                             .items_center()
                             .gap(px(10.))
-                            .child(icon(LucideIcons::Layers, 24.).text_color(rgb(0x626776)))
+                            .child(icon(LucideIcons::Layers, 24.).text_color(Color::Muted.color()))
                             .child(
                                 div()
                                     .text_size(px(12.))
-                                    .text_color(rgb(MUTED))
+                                    .text_color(MUTED.color())
                                     .child(t("layers-empty")),
                             ),
                     )

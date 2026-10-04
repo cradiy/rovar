@@ -1,4 +1,5 @@
 use super::*;
+use crate::ui::theme::Color;
 use gpui::FontWeight;
 use uic::components::dropdown::{DropdownPlacement, dropdown};
 
@@ -16,9 +17,9 @@ fn status_action(id: &'static str, label: &'static str) -> gpui::Stateful<gpui::
         .py_0()
         .justify_center()
         .text_size(px(12.))
-        .text_color(rgb(ACCENT))
-        .bg(rgb(0x322b42))
-        .hover(|s| s.bg(rgb(0x403550)))
+        .text_color(ACCENT.color())
+        .bg(Color::Selected.color())
+        .hover(|s| s.bg(Color::Hover.color()))
 }
 
 impl Studio {
@@ -35,17 +36,29 @@ impl Studio {
         let failed = link.error.is_some() || remote.download_failed(link);
         let pending = link.dirty || remote.download_pending(link);
         let (status, mark, color) = if !connection.authenticated {
-            ("server-session-expired", LucideIcons::LogOut, 0xd5b777)
+            (
+                "server-session-expired",
+                LucideIcons::LogOut,
+                Color::Warning,
+            )
         } else if link.conflict {
-            ("server-conflict-title", LucideIcons::CircleAlert, 0xd5b777)
+            (
+                "server-conflict-title",
+                LucideIcons::CircleAlert,
+                Color::Warning,
+            )
         } else if failed {
-            ("server-sync-paused", LucideIcons::CircleAlert, 0xd5b777)
+            (
+                "server-sync-paused",
+                LucideIcons::CircleAlert,
+                Color::Warning,
+            )
         } else if tab.saving || (pending && remote.connection_busy(&connection.id)) {
             ("server-syncing", LucideIcons::RefreshCw, ACCENT)
         } else if pending || tab.saved_revision != Some(editor.read(cx).document_revision()) {
-            ("server-pending", LucideIcons::Clock, 0xd5b777)
+            ("server-pending", LucideIcons::Clock, Color::Warning)
         } else {
-            ("server-synced", LucideIcons::Check, 0x98c6ad)
+            ("server-synced", LucideIcons::Check, Color::Success)
         };
         let trigger = div()
             .id("server-badge")
@@ -53,18 +66,23 @@ impl Studio {
             .size(px(32.))
             .relative()
             .rounded(px(10.))
-            .bg(rgb(0x292533))
+            .bg(Color::Surface.color())
             .border_1()
-            .border_color(rgba(0xb4a2ee40))
+            .border_color(Color::Accent.color().opacity(0.2510))
             .shadow(vec![
-                gpui::BoxShadow::new(px(0.), px(3.), rgba(0x00000030).into()).blur_radius(px(10.)),
+                gpui::BoxShadow::new(px(0.), px(3.), Color::Shadow.color().into())
+                    .blur_radius(px(10.)),
             ])
             .flex()
             .items_center()
             .justify_center()
             .cursor_pointer()
-            .hover(|style| style.bg(rgb(0x363044)).border_color(rgba(0xb4a2ee88)))
-            .child(icon(LucideIcons::Cloud, 19.).text_color(rgb(0xc5b5e8)))
+            .hover(|style| {
+                style
+                    .bg(Color::Hover.color())
+                    .border_color(Color::Accent.color().opacity(0.5333))
+            })
+            .child(icon(LucideIcons::Cloud, 19.).text_color(Color::Accent.color()))
             .child(
                 div()
                     .absolute()
@@ -72,11 +90,11 @@ impl Studio {
                     .bottom(px(3.))
                     .size(px(12.))
                     .rounded_full()
-                    .bg(rgb(0x292533))
+                    .bg(Color::Surface.color())
                     .flex()
                     .items_center()
                     .justify_center()
-                    .child(icon(mark, 9.).text_color(rgb(color))),
+                    .child(icon(mark, 9.).text_color(color.color())),
             );
         let connection_id = connection.id.clone();
         let authenticated = connection.authenticated;
@@ -95,11 +113,11 @@ impl Studio {
                         div()
                             .size(px(32.))
                             .rounded(px(9.))
-                            .bg(rgb(0x322b42))
+                            .bg(Color::Selected.color())
                             .flex()
                             .items_center()
                             .justify_center()
-                            .child(icon(LucideIcons::Server, 17.).text_color(rgb(ACCENT))),
+                            .child(icon(LucideIcons::Server, 17.).text_color(ACCENT.color())),
                     )
                     .child(
                         div()
@@ -118,7 +136,7 @@ impl Studio {
                             .child(
                                 div()
                                     .text_size(px(11.))
-                                    .text_color(rgb(MUTED))
+                                    .text_color(MUTED.color())
                                     .truncate()
                                     .child(format!(
                                         "{} · {}",
@@ -139,7 +157,7 @@ impl Studio {
                         icon(mark, 14.)
                             .mt(px(2.))
                             .flex_shrink_0()
-                            .text_color(rgb(color)),
+                            .text_color(color.color()),
                     )
                     .child(
                         div()
@@ -149,13 +167,13 @@ impl Studio {
                             .flex_col()
                             .gap(px(5.))
                             .text_size(px(12.))
-                            .text_color(rgb(color))
+                            .text_color(color.color())
                             .child(t(status))
                             .when(link.conflict || failed, |el| {
                                 el.child(
                                     div()
                                         .text_size(px(11.))
-                                        .text_color(rgb(MUTED))
+                                        .text_color(MUTED.color())
                                         .child(t("server-local-copy")),
                                 )
                             }),
@@ -212,10 +230,10 @@ impl Studio {
                         .w(px(284.))
                         .p_0()
                         .rounded(px(14.))
-                        .bg(rgb(0x1c1c25))
-                        .border_color(rgb(0x45404f))
+                        .bg(Color::Panel.color())
+                        .border_color(Color::Border.color())
                         .shadow_xl()
-                        .text_color(rgb(TEXT))
+                        .text_color(TEXT.color())
                         .font_family(crate::ui::font::family(cx))
                         .trigger(trigger)
                         .menu(panel),

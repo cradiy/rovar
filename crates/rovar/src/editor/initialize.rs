@@ -4,6 +4,7 @@ use super::*;
 
 impl Workspace {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        crate::ui::theme::activate(window, cx);
         let rename_input = cx.new(TextInput::new);
         let mut subscriptions = Vec::new();
         let inspector = inspector::State::new(window, cx);

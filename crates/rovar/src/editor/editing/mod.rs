@@ -1,6 +1,7 @@
 use super::*;
 use crate::i18n::t;
 use crate::scene::artboard::{MAX_SIZE, MIN_SIZE};
+use crate::ui::theme::Color;
 use std::sync::Arc;
 
 pub(super) fn set_dimension(rect: &mut Rect, property: Property, value: f32, locked: bool) -> bool {
@@ -134,8 +135,8 @@ impl Workspace {
                 .items_center()
                 .justify_center()
                 .cursor_pointer()
-                .when(locked, |el| el.bg(gpui::rgba(0xb4a2ee28)))
-                .hover(|s| s.bg(gpui::rgba(0xb4a2ee33)))
+                .when(locked, |el| el.bg(Color::Accent.color().opacity(0.1569)))
+                .hover(|s| s.bg(Color::Accent.color().opacity(0.2000)))
                 .tooltip(move |_, cx| {
                     cx.new(|_| {
                         toolbar::ToolTip(

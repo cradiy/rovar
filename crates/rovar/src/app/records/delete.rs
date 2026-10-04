@@ -1,4 +1,5 @@
 use super::*;
+use crate::ui::theme::Color;
 
 impl Studio {
     pub(super) fn begin_document_delete(
@@ -65,9 +66,9 @@ impl Studio {
             .max_w_full()
             .p(px(20.))
             .rounded(px(14.))
-            .bg(rgb(0x202027))
+            .bg(Color::Panel.color())
             .border_1()
-            .border_color(gpui::rgba(0xffffff20))
+            .border_color(Color::Text.color().opacity(0.1255))
             .shadow_xl()
             .flex()
             .flex_col()
@@ -78,14 +79,14 @@ impl Studio {
                     .flex()
                     .items_center()
                     .gap(px(10.))
-                    .child(icon(LucideIcons::Trash2, 18.).text_color(rgb(0xf08e83)))
+                    .child(icon(LucideIcons::Trash2, 18.).text_color(Color::Danger.color()))
                     .child(div().text_size(px(15.)).child(t("delete-document-title"))),
             )
             .child(div().text_size(px(13.)).truncate().child(title))
             .child(
                 div()
                     .text_size(px(12.))
-                    .text_color(rgb(MUTED))
+                    .text_color(MUTED.color())
                     .child(t("delete-document-hint")),
             )
             .child(
@@ -110,9 +111,17 @@ impl Studio {
                             .justify_center()
                             .text_size(px(12.))
                             .cursor_pointer()
-                            .bg(rgb(if confirm { 0x823f49 } else { 0x2c2c36 }))
+                            .bg(if confirm {
+                                Color::DangerSurface.color()
+                            } else {
+                                Color::Input.color()
+                            })
                             .hover(move |style| {
-                                style.bg(rgb(if confirm { 0x984b56 } else { 0x373741 }))
+                                style.bg(if confirm {
+                                    Color::DangerSurface.color()
+                                } else {
+                                    Color::Hover.color()
+                                })
                             })
                             .child(t(if confirm { "delete-document" } else { "cancel" }))
                             .on_click(cx.listener(move |this, _, window, cx| {
@@ -126,7 +135,7 @@ impl Studio {
                 .absolute()
                 .inset_0()
                 .occlude()
-                .bg(gpui::rgba(0x00000066))
+                .bg(Color::Overlay.color())
                 .flex()
                 .items_center()
                 .justify_center()

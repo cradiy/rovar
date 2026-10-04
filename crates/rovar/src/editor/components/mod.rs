@@ -1,6 +1,7 @@
 use super::*;
 use crate::document::{Document, Page};
 use crate::scene::components::{self as model, Binding, Definition, Definitions};
+use crate::ui::theme::Color;
 use std::collections::BTreeSet;
 
 #[cfg(test)]
@@ -20,9 +21,9 @@ impl Render for ComponentDrag {
             .w(px(112.))
             .p(px(7.))
             .rounded(px(10.))
-            .bg(rgb(0x282630))
+            .bg(Color::Surface.color())
             .border_1()
-            .border_color(rgb(ACCENT))
+            .border_color(ACCENT.color())
             .shadow_lg()
             .when_some(self.preview.clone(), |el, preview| {
                 el.child(
@@ -35,7 +36,7 @@ impl Render for ComponentDrag {
             .child(
                 div()
                     .text_size(px(11.))
-                    .text_color(rgb(TEXT))
+                    .text_color(TEXT.color())
                     .truncate()
                     .child(self.name.clone()),
             )

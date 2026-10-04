@@ -1,5 +1,6 @@
 use super::*;
 use crate::i18n::t;
+use crate::ui::theme::Color;
 use layout::LayoutAction;
 use shapes::NodeAction;
 use std::collections::BTreeSet;
@@ -11,14 +12,14 @@ pub(super) fn menu(width: f32, selector: &'static str) -> ContextMenu {
         .max_h(px(500.))
         .bg(gpui::transparent_black())
         .border_0()
-        .text_color(rgb(TEXT))
+        .text_color(TEXT.color())
         .text_size(px(12.))
         .appearance(ContextMenuAppearance {
-            muted_foreground: rgb(MUTED).into(),
-            danger_foreground: rgb(0xff8c87).into(),
-            selected_background: gpui::rgba(0xb4a2ee28).into(),
-            selected_foreground: rgb(TEXT).into(),
-            separator: gpui::rgba(0xb4a2ee28).into(),
+            muted_foreground: MUTED.color().into(),
+            danger_foreground: Color::Danger.color().into(),
+            selected_background: Color::Accent.color().opacity(0.1569).into(),
+            selected_foreground: TEXT.color().into(),
+            separator: Color::Accent.color().opacity(0.1569).into(),
             item_height: px(28.),
             ..Default::default()
         })
@@ -27,7 +28,7 @@ pub(super) fn menu(width: f32, selector: &'static str) -> ContextMenu {
                 .debug_selector(move || format!("{selector}-{}", state.depth))
                 .rounded(px(12.))
                 .border_1()
-                .border_color(gpui::rgba(0xb4a2ee45))
+                .border_color(Color::Accent.color().opacity(0.2706))
                 .shadow_lg()
                 .child(content)
         })

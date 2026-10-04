@@ -1,5 +1,6 @@
 use super::*;
 use crate::scene::auto_layout::{Constraint, Constraints};
+use crate::ui::theme::Color;
 
 impl Workspace {
     fn constraint_geometry(&self, id: usize) -> Option<(Rect, [f32; 2])> {
@@ -106,11 +107,16 @@ impl Workspace {
                     .flex()
                     .items_center()
                     .gap(px(8.))
-                    .child(div().flex_1().text_color(rgb(MUTED)).child(t(if axis == 0 {
-                        "layout-horizontal"
-                    } else {
-                        "layout-vertical"
-                    })))
+                    .child(
+                        div()
+                            .flex_1()
+                            .text_color(MUTED.color())
+                            .child(t(if axis == 0 {
+                                "layout-horizontal"
+                            } else {
+                                "layout-vertical"
+                            })),
+                    )
                     .child(
                         div()
                             .id(("layout-constraint", axis))
@@ -122,12 +128,12 @@ impl Workspace {
                             .flex()
                             .items_center()
                             .justify_between()
-                            .bg(rgb(0x282b33))
+                            .bg(Color::Input.color())
                             .text_size(px(12.))
-                            .text_color(rgb(TEXT))
+                            .text_color(TEXT.color())
                             .cursor_pointer()
                             .child(t(constraint_label(mode, axis)))
-                            .child(icon(LucideIcons::ChevronDown, 12.).text_color(rgb(MUTED)))
+                            .child(icon(LucideIcons::ChevronDown, 12.).text_color(MUTED.color()))
                             .on_click(cx.listener(move |this, _, window, cx| {
                                 this.constraint_menu(id, axis, window, cx)
                             })),

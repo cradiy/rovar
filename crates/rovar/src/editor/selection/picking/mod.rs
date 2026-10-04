@@ -120,7 +120,7 @@ impl Workspace {
                                                 .truncate()
                                                 .text_size(px(10.))
                                                 .line_height(px(11.))
-                                                .text_color(rgb(MUTED))
+                                                .text_color(MUTED.color())
                                                 .child(path.clone()),
                                         )
                                     }),
@@ -222,7 +222,7 @@ impl Workspace {
                         path.line_to(screen(point(rect.x, rect.y + rect.height)));
                         path.close();
                         if let Ok(path) = path.build() {
-                            window.paint_path(path, rgb(ACCENT));
+                            window.paint_path(path, ACCENT.color());
                         }
                     },
                 )

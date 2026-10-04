@@ -1,5 +1,6 @@
 use super::*;
 use crate::i18n::t;
+use crate::ui::theme::Color;
 use uic::components::{
     input::{Input, InputAppearance},
     popover::{Popover, PopoverEvent, PopoverPlacement, PopoverState},
@@ -123,8 +124,8 @@ impl Workspace {
                             .h(px(28.))
                             .px(px(10.))
                             .rounded(px(6.))
-                            .bg(gpui::rgba(0xb4a2ee20))
-                            .text_color(rgb(ACCENT))
+                            .bg(Color::Accent.color().opacity(0.1255))
+                            .text_color(ACCENT.color())
                             .text_size(px(12.))
                             .font_weight(FontWeight::MEDIUM)
                             .flex()
@@ -144,9 +145,9 @@ impl Workspace {
             .gap(px(8.))
             .p(px(6.))
             .rounded(px(10.))
-            .bg(rgb(PANEL))
+            .bg(PANEL.color())
             .border_1()
-            .border_color(rgb(BORDER))
+            .border_color(BORDER.color())
             .shadow_lg()
             .trigger(
                 div()
@@ -156,17 +157,17 @@ impl Workspace {
                     .px(px(7.))
                     .rounded(px(6.))
                     .text_size(px(12.))
-                    .text_color(rgb(TEXT))
+                    .text_color(TEXT.color())
                     .flex()
                     .items_center()
                     .gap(px(5.))
                     .cursor_pointer()
-                    .hover(|s| s.bg(rgb(BORDER)))
+                    .hover(|s| s.bg(BORDER.color()))
                     .when(self.zoom_menu.popover.read(cx).is_open(), |el| {
-                        el.bg(rgb(BORDER))
+                        el.bg(BORDER.color())
                     })
                     .child(format!("{:.0}%", self.view.zoom * 100.))
-                    .child(icon(LucideIcons::ChevronDown, 12.).text_color(rgb(MUTED))),
+                    .child(icon(LucideIcons::ChevronDown, 12.).text_color(MUTED.color())),
             )
             .content(move |_, cx| {
                 div().children(weak.update(cx, |this, cx| this.zoom_options(cx)).ok())
@@ -184,11 +185,11 @@ impl Workspace {
                 .flex()
                 .items_center()
                 .text_size(px(12.))
-                .text_color(rgb(if enabled { TEXT } else { MUTED }))
+                .text_color(if enabled { TEXT.color() } else { MUTED.color() })
                 .child(label)
                 .when(enabled, |el| {
                     el.cursor_pointer()
-                        .hover(|s| s.bg(rgb(BORDER)))
+                        .hover(|s| s.bg(BORDER.color()))
                         .on_click(cx.listener(move |this, _, window, cx| {
                             match action {
                                 ZoomAction::In => this.zoom_center(1.25, cx),
@@ -222,20 +223,18 @@ impl Workspace {
                             .px(px(9.))
                             .rounded(px(6.))
                             .text_size(px(12.))
-                            .text_color(rgb(TEXT))
-                            .bg(rgb(WORKSPACE))
-                            .border_color(rgb(BORDER))
+                            .text_color(TEXT.color())
+                            .bg(WORKSPACE.color())
+                            .border_color(BORDER.color())
                             .appearance(InputAppearance {
-                                focus_border: rgb(if self.zoom_menu.invalid {
-                                    0xff8070
+                                focus_border: if self.zoom_menu.invalid {
+                                    Color::Danger.color()
                                 } else {
-                                    ACCENT
-                                })
+                                    ACCENT.color()
+                                }
                                 .into(),
-                                caret: rgb(ACCENT).into(),
-                                selection: gpui::rgba(0xb4a2ee44).into(),
                                 caret_height: px(16.),
-                                ..Default::default()
+                                ..crate::ui::theme::input_appearance()
                             }),
                     ),
             )
@@ -245,11 +244,11 @@ impl Workspace {
                         .px(px(10.))
                         .pb(px(8.))
                         .text_size(px(11.))
-                        .text_color(rgb(0xff8070))
+                        .text_color(Color::Danger.color())
                         .child(t("zoom-invalid")),
                 )
             })
-            .child(div().h(px(1.)).mb(px(4.)).bg(rgb(BORDER)))
+            .child(div().h(px(1.)).mb(px(4.)).bg(BORDER.color()))
             .child(row(
                 "zoom-in",
                 t("zoom-in").into(),
@@ -274,7 +273,7 @@ impl Workspace {
                 ZoomAction::FitSelection,
                 !self.selection_ids().is_empty(),
             ))
-            .child(div().h(px(1.)).my(px(4.)).bg(rgb(BORDER)))
+            .child(div().h(px(1.)).my(px(4.)).bg(BORDER.color()))
             .child(row("zoom-50", "50%".into(), ZoomAction::Scale(0.5), true))
             .child(row(
                 "zoom-reset",

@@ -1,4 +1,5 @@
 use super::*;
+use crate::ui::theme::Color;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum DrawTool {
@@ -167,9 +168,9 @@ impl Workspace {
                 .w(px(draft.rect.width * self.view.zoom))
                 .h(px(draft.rect.height * self.view.zoom))
                 .border_1()
-                .border_color(rgb(ACCENT))
+                .border_color(ACCENT.color())
                 .when(draft.kind == DrawTool::Board, |el| {
-                    el.bg(rgb(0xffffff).opacity(0.85))
+                    el.bg(Color::Handle.color().opacity(0.85))
                 }),
         )
     }

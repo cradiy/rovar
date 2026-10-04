@@ -1,15 +1,17 @@
 use super::*;
+use crate::ui::theme::Color;
 use crate::{
     i18n::{self, Language},
     ui::font_picker::{FontChosen, FontPicker},
 };
-use gpui::{SharedString, rgba};
+use gpui::SharedString;
 use uic::{components::dropdown::dropdown, desktop::TitleBarMode};
 
 pub(super) struct Panel {
     font: Option<Entity<FontPicker>>,
     language: Entity<DropdownState>,
     titlebar: Entity<DropdownState>,
+    theme: Entity<DropdownState>,
     mode: TitleBarMode,
     focus: FocusHandle,
     pub error: Option<String>,
@@ -58,6 +60,7 @@ impl Studio {
             font,
             language: cx.new(|cx| DropdownState::new(window, cx)),
             titlebar: cx.new(|cx| DropdownState::new(window, cx)),
+            theme: cx.new(|cx| DropdownState::new(window, cx)),
             mode,
             focus: focus.clone(),
             error,
@@ -76,6 +79,7 @@ impl Studio {
             }
             panel.language.update(cx, |menu, cx| menu.close(window, cx));
             panel.titlebar.update(cx, |menu, cx| menu.close(window, cx));
+            panel.theme.update(cx, |menu, cx| menu.close(window, cx));
         }
         self.focus.focus(window, cx);
         if let Some(editor) = self.active_editor() {
@@ -96,6 +100,8 @@ impl Studio {
             panel.language.update(cx, |menu, cx| menu.close(window, cx));
         } else if panel.titlebar.read(cx).is_open() {
             panel.titlebar.update(cx, |menu, cx| menu.close(window, cx));
+        } else if panel.theme.read(cx).is_open() {
+            panel.theme.update(cx, |menu, cx| menu.close(window, cx));
         } else {
             self.close_settings(window, cx);
         }
@@ -158,13 +164,45 @@ impl Studio {
 
     pub(super) fn settings_dialog(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let panel = self.preferences.as_ref().unwrap();
+        let mode = crate::ui::theme::preference(cx);
+        let theme = dropdown(&panel.theme)
+            .w(px(230.))
+            .p(px(5.))
+            .rounded(px(8.))
+            .bg(Color::Surface.color())
+            .border_color(BORDER.color())
+            .text_color(TEXT.color())
+            .text_size(px(12.))
+            .trigger(choice("settings-theme", mode.label()))
+            .menu(
+                div().flex().flex_col().children(
+                    [
+                        crate::ui::theme::Mode::System,
+                        crate::ui::theme::Mode::Light,
+                        crate::ui::theme::Mode::Dark,
+                    ]
+                    .into_iter()
+                    .map(|choice_mode| {
+                        choice_item(choice_mode.id(), choice_mode.label(), mode == choice_mode)
+                            .debug_selector(move || format!("theme-{}", choice_mode.id()))
+                            .on_click(cx.listener(move |this, _, window, cx| {
+                                let result = crate::ui::theme::set(choice_mode, window, cx);
+                                if let Some(panel) = &mut this.preferences {
+                                    panel.error = result.err().map(|error| error.to_string());
+                                    panel.theme.update(cx, |menu, cx| menu.close(window, cx));
+                                }
+                                cx.notify();
+                            }))
+                    }),
+                ),
+            );
         let language = dropdown(&panel.language)
             .w(px(230.))
             .p(px(5.))
             .rounded(px(8.))
-            .bg(rgb(0x25252e))
-            .border_color(rgb(BORDER))
-            .text_color(rgb(TEXT))
+            .bg(Color::Surface.color())
+            .border_color(BORDER.color())
+            .text_color(TEXT.color())
             .text_size(px(12.))
             .trigger(choice("settings-language", i18n::preference().label()))
             .menu(
@@ -192,9 +230,9 @@ impl Studio {
             .w(px(230.))
             .p(px(5.))
             .rounded(px(8.))
-            .bg(rgb(0x25252e))
-            .border_color(rgb(BORDER))
-            .text_color(rgb(TEXT))
+            .bg(Color::Surface.color())
+            .border_color(BORDER.color())
+            .text_color(TEXT.color())
             .text_size(px(12.))
             .trigger(choice("settings-titlebar", mode_label(chrome)))
             .menu(
@@ -224,8 +262,8 @@ impl Studio {
             .overflow_y_scroll()
             .rounded(px(16.))
             .border_1()
-            .border_color(rgba(0xffffff1a))
-            .bg(rgb(0x1e1e26))
+            .border_color(Color::Text.color().opacity(0.1020))
+            .bg(Color::Panel.color())
             .shadow_xl()
             .flex()
             .flex_col()
@@ -242,11 +280,11 @@ impl Studio {
                         div()
                             .size(px(36.))
                             .rounded(px(10.))
-                            .bg(rgba(0xb6a2eb18))
+                            .bg(Color::Accent.color().opacity(0.0941))
                             .flex()
                             .items_center()
                             .justify_center()
-                            .text_color(rgb(ACCENT))
+                            .text_color(ACCENT.color())
                             .child(icon(LucideIcons::Settings, 19.)),
                     )
                     .child(div().flex_1().text_size(px(18.)).child(t("settings")))
@@ -259,16 +297,16 @@ impl Studio {
                             .flex()
                             .items_center()
                             .justify_center()
-                            .text_color(rgb(MUTED))
+                            .text_color(MUTED.color())
                             .cursor_pointer()
-                            .hover(|s| s.bg(rgba(0xffffff0c)))
+                            .hover(|s| s.bg(Color::Text.color().opacity(0.0471)))
                             .child(icon(LucideIcons::X, 16.))
                             .on_click(
                                 cx.listener(|this, _, window, cx| this.close_settings(window, cx)),
                             ),
                     ),
             )
-            .child(div().h(px(1.)).bg(rgba(0xffffff0c)))
+            .child(div().h(px(1.)).bg(Color::Text.color().opacity(0.0471)))
             .child(
                 div()
                     .p(px(24.))
@@ -283,6 +321,15 @@ impl Studio {
                             .gap(px(20.))
                             .child(t("language"))
                             .child(div().w(px(230.)).child(language)),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .justify_between()
+                            .gap(px(20.))
+                            .child(t("settings-theme"))
+                            .child(div().w(px(230.)).child(theme)),
                     )
                     .when(cfg!(target_os = "linux"), |el| {
                         el.child(
@@ -304,11 +351,11 @@ impl Studio {
                                                         "settings-system-font".into()
                                                     })
                                                     .text_size(px(11.))
-                                                    .text_color(rgb(if panel.detecting {
-                                                        MUTED
+                                                    .text_color(if panel.detecting {
+                                                        MUTED.color()
                                                     } else {
-                                                        ACCENT
-                                                    }))
+                                                        ACCENT.color()
+                                                    })
                                                     .child(t("settings-use-system-font"))
                                                     .when(!panel.detecting, |el| {
                                                         el.cursor_pointer().on_click(cx.listener(
@@ -325,52 +372,53 @@ impl Studio {
                                     div()
                                         .p(px(14.))
                                         .rounded(px(8.))
-                                        .bg(rgba(0x00000020))
+                                        .bg(Color::Input.color())
                                         .border_1()
-                                        .border_color(rgba(0xffffff08))
+                                        .border_color(Color::Text.color().opacity(0.0314))
                                         .text_size(px(16.))
                                         .child(t("settings-font-preview")),
                                 ),
                         )
                     })
                     .when(cfg!(target_os = "linux"), |el| {
-                        el.child(div().h(px(1.)).bg(rgba(0xffffff0c))).child(
-                            div()
-                                .flex()
-                                .flex_col()
-                                .gap(px(8.))
-                                .child(
-                                    div()
-                                        .flex()
-                                        .items_center()
-                                        .justify_between()
-                                        .gap(px(20.))
-                                        .child(t("settings-titlebar"))
-                                        .child(div().w(px(230.)).child(titlebar)),
-                                )
-                                .child(
-                                    div()
-                                        .text_size(px(11.))
-                                        .text_color(rgb(if chrome != self.chrome.mode {
-                                            ACCENT
-                                        } else {
-                                            MUTED
-                                        }))
-                                        .child(t(if chrome != self.chrome.mode {
-                                            "settings-restart-pending"
-                                        } else {
-                                            "settings-titlebar-hint"
-                                        })),
-                                ),
-                        )
+                        el.child(div().h(px(1.)).bg(Color::Text.color().opacity(0.0471)))
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_col()
+                                    .gap(px(8.))
+                                    .child(
+                                        div()
+                                            .flex()
+                                            .items_center()
+                                            .justify_between()
+                                            .gap(px(20.))
+                                            .child(t("settings-titlebar"))
+                                            .child(div().w(px(230.)).child(titlebar)),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_size(px(11.))
+                                            .text_color(if chrome != self.chrome.mode {
+                                                ACCENT.color()
+                                            } else {
+                                                MUTED.color()
+                                            })
+                                            .child(t(if chrome != self.chrome.mode {
+                                                "settings-restart-pending"
+                                            } else {
+                                                "settings-titlebar-hint"
+                                            })),
+                                    ),
+                            )
                     })
                     .when_some(panel.error.clone(), |el, error| {
                         el.child(
                             div()
                                 .rounded(px(8.))
                                 .p(px(12.))
-                                .bg(rgba(0xf08e8310))
-                                .text_color(rgb(0xf08e83))
+                                .bg(Color::Danger.color().opacity(0.0627))
+                                .text_color(Color::Danger.color())
                                 .text_size(px(12.))
                                 .child(i18n::message("settings-save-error", &[("error", error)])),
                         )
@@ -381,7 +429,7 @@ impl Studio {
                     .px(px(24.))
                     .py(px(16.))
                     .border_t_1()
-                    .border_color(rgba(0xffffff0c))
+                    .border_color(Color::Text.color().opacity(0.0471))
                     .flex()
                     .items_center()
                     .justify_between()
@@ -389,7 +437,7 @@ impl Studio {
                     .child(
                         div()
                             .text_size(px(11.))
-                            .text_color(rgb(MUTED))
+                            .text_color(MUTED.color())
                             .child(t("settings-auto-save")),
                     )
                     .child(
@@ -399,12 +447,12 @@ impl Studio {
                             .px(px(20.))
                             .h(px(32.))
                             .rounded(px(7.))
-                            .bg(rgb(0x393246))
+                            .bg(Color::Selected.color())
                             .flex()
                             .items_center()
                             .justify_center()
                             .cursor_pointer()
-                            .hover(|s| s.bg(rgb(0x484056)))
+                            .hover(|s| s.bg(Color::Hover.color()))
                             .child(t("close"))
                             .on_click(
                                 cx.listener(|this, _, window, cx| this.close_settings(window, cx)),
@@ -416,7 +464,7 @@ impl Studio {
                 .absolute()
                 .inset_0()
                 .occlude()
-                .bg(rgba(0x00000088))
+                .bg(Color::Overlay.color())
                 .flex()
                 .items_center()
                 .justify_center()
@@ -436,16 +484,16 @@ fn choice(id: &'static str, label: &'static str) -> gpui::Stateful<gpui::Div> {
         .h(px(34.))
         .px(px(10.))
         .rounded(px(7.))
-        .bg(rgb(0x282831))
+        .bg(Color::Input.color())
         .border_1()
-        .border_color(rgba(0xffffff10))
+        .border_color(Color::Text.color().opacity(0.0627))
         .flex()
         .items_center()
         .gap(px(10.))
         .cursor_pointer()
-        .hover(|s| s.bg(rgb(0x30303b)))
+        .hover(|s| s.bg(Color::Hover.color()))
         .child(div().flex_1().child(label))
-        .child(icon(LucideIcons::ChevronDown, 12.).text_color(rgb(MUTED)))
+        .child(icon(LucideIcons::ChevronDown, 12.).text_color(MUTED.color()))
 }
 
 fn choice_item(id: &'static str, label: &'static str, selected: bool) -> gpui::Stateful<gpui::Div> {
@@ -459,7 +507,7 @@ fn choice_item(id: &'static str, label: &'static str, selected: bool) -> gpui::S
         .items_center()
         .gap(px(8.))
         .cursor_pointer()
-        .hover(|s| s.bg(rgb(0x353044)))
+        .hover(|s| s.bg(Color::Selected.color()))
         .child(
             div()
                 .w(px(16.))
@@ -525,6 +573,15 @@ mod tests {
         visual.simulate_keystrokes("escape");
         draw(&mut visual);
         assert!(visual.debug_bounds("settings-option-en-US").is_none());
+        assert!(visual.debug_bounds("settings-dialog").is_some());
+
+        click(&mut visual, "settings-theme");
+        assert!(visual.debug_bounds("theme-system").is_some());
+        assert!(visual.debug_bounds("theme-light").is_some());
+        assert!(visual.debug_bounds("theme-dark").is_some());
+        visual.simulate_keystrokes("escape");
+        draw(&mut visual);
+        assert!(visual.debug_bounds("theme-light").is_none());
         assert!(visual.debug_bounds("settings-dialog").is_some());
 
         if cfg!(target_os = "linux") {

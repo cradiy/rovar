@@ -1,4 +1,5 @@
 use super::*;
+use crate::ui::theme::Color;
 use crate::{scene::bezier::Node, scene::shape::StrokeAlign};
 
 pub(in crate::editor) struct BezierDraft {
@@ -82,7 +83,7 @@ impl Workspace {
                     canvas(
                         move |_, _, _| path.clone(),
                         |bounds, path, window, _| {
-                            paint_path(&path, bounds.origin, rgb(ACCENT).into(), window);
+                            paint_path(&path, bounds.origin, ACCENT.color().into(), window);
                         },
                     )
                     .size_full(),
@@ -381,7 +382,7 @@ impl Workspace {
                         move |_, _, _| path.clone(),
                         |bounds, path, window, _| {
                             if let Some(path) = path {
-                                paint_path(&path, bounds.origin, rgb(ACCENT).into(), window);
+                                paint_path(&path, bounds.origin, ACCENT.color().into(), window);
                             }
                         },
                     )
@@ -416,13 +417,13 @@ impl Workspace {
                             div()
                                 .size(px(if part == 0 { 8. } else { 6. }))
                                 .when(part != 0 || node.smooth, |el| el.rounded_full())
-                                .bg(rgb(if active && part == 0 {
-                                    ACCENT
+                                .bg(if active && part == 0 {
+                                    ACCENT.color()
                                 } else {
-                                    0xffffff
-                                }))
+                                    Color::Handle.color()
+                                })
                                 .border_1()
-                                .border_color(rgb(ACCENT)),
+                                .border_color(ACCENT.color()),
                         )
                         .on_mouse_down(
                             MouseButton::Left,

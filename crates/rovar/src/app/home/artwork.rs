@@ -1,4 +1,5 @@
 use super::*;
+use crate::ui::theme::Color;
 use gpui::{Bounds, PathBuilder, canvas, point, quad, size};
 
 pub(super) fn start_art(primary: bool) -> impl IntoElement {
@@ -18,8 +19,8 @@ pub(super) fn start_art(primary: bool) -> impl IntoElement {
                         path,
                         linear_gradient(
                             140.,
-                            linear_color_stop(rgba(0xd3c1ff32), 0.),
-                            linear_color_stop(rgba(0xb89aff08), 1.),
+                            linear_color_stop(Color::Accent.color().opacity(0.1961), 0.),
+                            linear_color_stop(Color::Accent.color().opacity(0.0314), 1.),
                         ),
                     );
                 }
@@ -27,7 +28,7 @@ pub(super) fn start_art(primary: bool) -> impl IntoElement {
                 curve.move_to(p(30., 77.));
                 curve.cubic_bezier_to(p(209., 29.), p(98., -30.), p(161., 143.));
                 if let Ok(path) = curve.build() {
-                    window.paint_path(path, rgba(0xd8c5ffbb));
+                    window.paint_path(path, Color::Accent.color().opacity(0.7333));
                 }
                 let mut guides = PathBuilder::stroke(px(1.));
                 guides.move_to(p(76., 3.));
@@ -35,15 +36,15 @@ pub(super) fn start_art(primary: bool) -> impl IntoElement {
                 guides.move_to(p(173., 100.));
                 guides.line_to(p(209., 29.));
                 if let Ok(path) = guides.build() {
-                    window.paint_path(path, rgba(0xc5aaff55));
+                    window.paint_path(path, Color::Accent.color().opacity(0.3333));
                 }
                 for (x, y) in [(30., 77.), (209., 29.)] {
                     window.paint_quad(quad(
                         Bounds::new(p(x - 3., y - 3.), size(px(6.), px(6.))),
                         px(1.),
-                        rgb(0xd7c7ff),
+                        Color::Accent.color(),
                         px(1.),
-                        gpui::Hsla::from(rgb(0xf0e7ff)),
+                        gpui::Hsla::from(Color::Accent.color()),
                         gpui::BorderStyle::Solid,
                     ));
                 }
@@ -51,9 +52,9 @@ pub(super) fn start_art(primary: bool) -> impl IntoElement {
                     window.paint_quad(quad(
                         Bounds::new(p(x - 2.5, y - 2.5), size(px(5.), px(5.))),
                         px(3.),
-                        rgb(0x574571),
+                        Color::Selected.color(),
                         px(1.),
-                        gpui::Hsla::from(rgba(0xd8c5ff99)),
+                        gpui::Hsla::from(Color::Accent.color().opacity(0.6000)),
                         gpui::BorderStyle::Solid,
                     ));
                 }
@@ -68,11 +69,11 @@ pub(super) fn start_art(primary: bool) -> impl IntoElement {
                         px(8.),
                         linear_gradient(
                             140.,
-                            linear_color_stop(rgb(0x383741), 0.),
-                            linear_color_stop(rgb(0x2a2a34), 1.),
+                            linear_color_stop(Color::Surface.color(), 0.),
+                            linear_color_stop(Color::Surface.color(), 1.),
                         ),
                         px(1.),
-                        gpui::Hsla::from(rgba(0xd4c9ef24)),
+                        gpui::Hsla::from(Color::Accent.color().opacity(0.1412)),
                         gpui::BorderStyle::Solid,
                     ));
                 }
@@ -82,7 +83,7 @@ pub(super) fn start_art(primary: bool) -> impl IntoElement {
                 mark.move_to(p(114., 75.));
                 mark.line_to(p(114., 99.));
                 if let Ok(path) = mark.build() {
-                    window.paint_path(path, rgba(0xd0c6e88a));
+                    window.paint_path(path, Color::Accent.color().opacity(0.5412));
                 }
             }
         },
@@ -103,7 +104,7 @@ pub(super) fn preview_grid() -> impl IntoElement {
                             bounds.origin + point(px(x as f32), px(y as f32)),
                             size(px(1.), px(1.)),
                         ),
-                        rgba(0xd1c4f51c),
+                        Color::Accent.color().opacity(0.1098),
                     ));
                 }
             }
@@ -118,23 +119,23 @@ pub(super) fn blank_canvas() -> impl IntoElement {
         .w(px(124.))
         .h(px(88.))
         .relative()
-        .bg(rgb(0x2b2934))
+        .bg(Color::Surface.color())
         .border_1()
-        .border_color(rgba(0xc7b7ec66))
+        .border_color(Color::Accent.color().opacity(0.4000))
         .shadow(vec![
-            gpui::BoxShadow::new(px(0.), px(8.), rgba(0x00000030).into()).blur_radius(px(20.)),
+            gpui::BoxShadow::new(px(0.), px(8.), Color::Shadow.color().into()).blur_radius(px(20.)),
         ])
         .flex()
         .items_center()
         .justify_center()
-        .text_color(rgba(0xc9b8ef80))
+        .text_color(Color::Accent.color().opacity(0.5020))
         .child(icon(LucideIcons::Frame, 22.))
         .children(
             [(false, false), (true, false), (false, true), (true, true)].map(|(right, bottom)| {
                 div()
                     .absolute()
                     .size(px(5.))
-                    .bg(rgb(0xc7b7ec))
+                    .bg(Color::Accent.color())
                     .when(right, |el| el.right(px(-3.)))
                     .when(!right, |el| el.left(px(-3.)))
                     .when(bottom, |el| el.bottom(px(-3.)))

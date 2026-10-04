@@ -1,5 +1,6 @@
 //! Application windows, document tabs, session lifecycle, and account UI.
 
+use crate::ui::theme::Color;
 mod comparison;
 mod export;
 mod files;
@@ -37,7 +38,7 @@ use crate::ui::{ACCENT, BORDER, MUTED, PANEL, TEXT, icon};
 use crate::{editor::Workspace, i18n::t};
 use gpui::{
     AppContext, Context, Entity, FocusHandle, IntoElement, Render, Subscription, Task, Window, div,
-    prelude::*, px, rgb,
+    prelude::*, px,
 };
 use serde::{Deserialize, Serialize};
 use std::{cell::RefCell, path::PathBuf, rc::Rc};
@@ -139,6 +140,14 @@ pub(crate) struct Studio {
 
 impl Studio {
     pub(crate) fn new(directory: PathBuf, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        crate::ui::theme::activate(window, cx);
+        cx.observe_window_appearance(window, |_, window, cx| {
+            if crate::ui::theme::preference(cx) == crate::ui::theme::Mode::System {
+                crate::ui::theme::activate(window, cx);
+                cx.refresh_windows();
+            }
+        })
+        .detach();
         window.set_window_title("Rovar");
         let directory = rovar_storage::fs::canonicalize(&directory).unwrap_or(directory);
         let remote = crate::remote::Remote::shared(&directory, cx);
@@ -445,6 +454,7 @@ impl Studio {
 
 impl Render for Studio {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        crate::ui::theme::activate(window, cx);
         #[cfg(target_family = "wasm")]
         crate::web::set_unsaved(self.tabs.iter().any(|tab| {
             tab.saving
@@ -462,8 +472,8 @@ impl Render for Studio {
                 .flex()
                 .items_center()
                 .justify_center()
-                .bg(rgb(PANEL))
-                .text_color(rgb(MUTED))
+                .bg(PANEL.color())
+                .text_color(MUTED.color())
                 .child(
                     self.error
                         .clone()
@@ -477,8 +487,8 @@ impl Render for Studio {
             .flex()
             .flex_col()
             .overflow_hidden()
-            .bg(rgb(PANEL))
-            .text_color(rgb(TEXT))
+            .bg(PANEL.color())
+            .text_color(TEXT.color())
             .font_family(crate::ui::font::family(cx))
             .on_drag_move::<tabs::DragTab>(cx.listener(Self::tab_drag_moved))
             .on_mouse_exit(cx.listener(Self::tab_drag_exited))
@@ -616,7 +626,7 @@ impl Render for Studio {
                         .px(px(24.))
                         .py(px(6.))
                         .text_size(px(12.))
-                        .text_color(rgb(MUTED))
+                        .text_color(MUTED.color())
                         .flex()
                         .items_center()
                         .gap(px(12.))
@@ -626,7 +636,7 @@ impl Render for Studio {
                                 div()
                                     .id("server-save-copy")
                                     .cursor_pointer()
-                                    .text_color(rgb(ACCENT))
+                                    .text_color(ACCENT.color())
                                     .child(t("compare-versions"))
                                     .on_click(cx.listener(move |this, _, window, cx| {
                                         this.open_comparison(&path, window, cx);
@@ -640,7 +650,7 @@ impl Render for Studio {
                     div()
                         .px(px(24.))
                         .py(px(8.))
-                        .bg(rgb(0x4a3034))
+                        .bg(Color::DangerSurface.color())
                         .text_size(px(12.))
                         .flex()
                         .items_center()
@@ -679,7 +689,7 @@ impl Render for Studio {
                                     .flex()
                                     .items_center()
                                     .justify_center()
-                                    .text_color(rgb(MUTED))
+                                    .text_color(MUTED.color())
                                     .child(loading::view(self.active.unwrap())),
                             )
                         },

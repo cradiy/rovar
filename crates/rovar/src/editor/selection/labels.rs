@@ -32,7 +32,7 @@ impl Workspace {
                         .max_w(px((rect.width * self.view.zoom).clamp(100., 240.)))
                         .truncate()
                         .text_size(px(11.))
-                        .text_color(rgb(ACCENT))
+                        .text_color(ACCENT.color())
                         .child(self.layer_name(id, cx)),
                 )
             }))

@@ -1,5 +1,6 @@
 use super::*;
 use crate::scene::shape::{Shape, ShapeKind};
+use crate::ui::theme::Color;
 use gpui::{AnyElement, CursorStyle, Path, canvas};
 mod bezier_tool;
 mod corners;
@@ -232,7 +233,7 @@ impl Workspace {
                                     gpui::SubtreeInput::First => paint_path(
                                         &geometry.fill,
                                         bounds.origin,
-                                        rgb(0xffffff).into(),
+                                        Color::Handle.color().into(),
                                         window,
                                     ),
                                     gpui::SubtreeInput::Second => {
@@ -255,7 +256,7 @@ impl Workspace {
                     paint_path(
                         &geometry.fill,
                         bounds.origin,
-                        gpui::pattern_slash(rgb(ACCENT).opacity(0.65), 1.5 * scale, 14. * scale),
+                        gpui::pattern_slash(ACCENT.color().opacity(0.65), 1.5 * scale, 14. * scale),
                         window,
                     );
                 }
@@ -371,7 +372,7 @@ impl Workspace {
                             .w(px(width))
                             .h(px(height))
                             .border_1()
-                            .border_color(rgb(ACCENT)),
+                            .border_color(ACCENT.color()),
                     )
                     .children(Handle::ALL.into_iter().enumerate().map(|(index, handle)| {
                         let x = (handle.0 as f32 + 1.) * 0.5 * width + outset;
@@ -404,9 +405,9 @@ impl Workspace {
                                     div()
                                         .debug_selector(move || format!("shape-corner-{index}"))
                                         .size(px(7.))
-                                        .bg(rgb(0xffffff))
+                                        .bg(Color::Handle.color())
                                         .border_1()
-                                        .border_color(rgb(ACCENT)),
+                                        .border_color(ACCENT.color()),
                                 )
                             })
                             .on_mouse_down(

@@ -1,6 +1,7 @@
 use super::*;
 pub(super) use crate::scene::bezier::distance_to_segment as segment_distance;
 use crate::scene::shape::StrokeAlign;
+use crate::ui::theme::Color;
 
 pub(in crate::editor) struct Draft {
     pub shape: Shape,
@@ -282,9 +283,9 @@ impl Workspace {
                         div()
                             .size(px(8.))
                             .rounded_full()
-                            .bg(rgb(0xffffff))
+                            .bg(Color::Handle.color())
                             .border_1()
-                            .border_color(rgb(ACCENT)),
+                            .border_color(ACCENT.color()),
                     )
                     .on_mouse_down(
                         MouseButton::Left,

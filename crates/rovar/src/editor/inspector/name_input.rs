@@ -1,4 +1,5 @@
 use super::*;
+use crate::ui::theme::Color;
 use gpui::{AvailableSpace, ContentMask, EntityInputHandler, TextRun, size};
 
 impl Workspace {
@@ -14,12 +15,12 @@ impl Workspace {
             .px(px(5.))
             .rounded(px(4.))
             .border_1()
-            .border_color(rgb(0x282b33))
+            .border_color(Color::Input.color())
             .track_focus(&focus)
-            .focus(|el| el.border_color(rgb(ACCENT)))
+            .focus(|el| el.border_color(ACCENT.color()))
             .text_size(px(12.))
             .line_height(px(24.))
-            .text_color(rgb(TEXT))
+            .text_color(TEXT.color())
             .flex()
             .items_center()
             .overflow_hidden()

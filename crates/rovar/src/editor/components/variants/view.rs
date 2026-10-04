@@ -1,4 +1,5 @@
 use super::*;
+use crate::ui::theme::Color;
 use uic::components::{
     context_menu::{ContextMenu, ContextMenuItem, ContextMenuTrigger},
     input::{Input, InputAppearance},
@@ -15,8 +16,8 @@ fn icon_action(id: &'static str, glyph: LucideIcons) -> gpui::Stateful<Div> {
         .items_center()
         .justify_center()
         .cursor_pointer()
-        .text_color(rgb(MUTED))
-        .hover(|s| s.bg(rgb(BORDER)).text_color(rgb(TEXT)))
+        .text_color(MUTED.color())
+        .hover(|s| s.bg(BORDER.color()).text_color(TEXT.color()))
         .child(icon(glyph, 14.))
 }
 
@@ -32,8 +33,8 @@ fn text_action(id: &'static str, label: &'static str) -> gpui::Stateful<Div> {
         .gap(px(6.))
         .cursor_pointer()
         .text_size(px(12.))
-        .text_color(rgb(ACCENT))
-        .hover(|s| s.bg(rgb(0x302c40)))
+        .text_color(ACCENT.color())
+        .hover(|s| s.bg(Color::Selected.color()))
         .child(icon(LucideIcons::Plus, 14.))
         .child(label)
 }
@@ -46,13 +47,21 @@ fn rename_input(rename: &Rename) -> Input {
         .py_0()
         .rounded(px(5.))
         .text_size(px(12.))
-        .text_color(rgb(TEXT))
-        .bg(rgb(0x282b33))
-        .border_color(rgb(if rename.error { 0xff9988 } else { BORDER }))
+        .text_color(TEXT.color())
+        .bg(Color::Input.color())
+        .border_color(if rename.error {
+            Color::Danger.color()
+        } else {
+            BORDER.color()
+        })
         .appearance(InputAppearance {
-            focus_border: rgb(if rename.error { 0xff9988 } else { ACCENT }).into(),
-            caret: rgb(ACCENT).into(),
-            ..Default::default()
+            focus_border: if rename.error {
+                Color::Danger.color()
+            } else {
+                ACCENT.color()
+            }
+            .into(),
+            ..crate::ui::theme::input_appearance()
         })
 }
 
@@ -85,7 +94,7 @@ impl Workspace {
             .px(px(14.))
             .py(px(12.))
             .border_b_1()
-            .border_color(rgb(BORDER))
+            .border_color(BORDER.color())
             .flex()
             .flex_col()
             .gap(px(8.))
@@ -115,7 +124,7 @@ impl Workspace {
                     .flex()
                     .items_center()
                     .gap(px(7.))
-                    .child(icon(LucideIcons::Component, 14.).text_color(rgb(ACCENT)))
+                    .child(icon(LucideIcons::Component, 14.).text_color(ACCENT.color()))
                     .child(
                         div()
                             .id("variant-set-name")
@@ -138,7 +147,7 @@ impl Workspace {
                     .child(
                         div()
                             .text_size(px(11.))
-                            .text_color(rgb(MUTED))
+                            .text_color(MUTED.color())
                             .child(set.variants.len().to_string()),
                     )
             };
@@ -153,7 +162,7 @@ impl Workspace {
                     .h(px(28.))
                     .px(px(8.))
                     .rounded(px(5.))
-                    .bg(rgb(0x282b33))
+                    .bg(Color::Input.color())
                     .flex()
                     .items_center()
                     .gap(px(6.))
@@ -171,8 +180,8 @@ impl Workspace {
                     ContextMenuTrigger::new(
                         value
                             .cursor_pointer()
-                            .hover(|s| s.bg(rgb(BORDER)))
-                            .child(icon(LucideIcons::ChevronDown, 12.).text_color(rgb(MUTED))),
+                            .hover(|s| s.bg(BORDER.color()))
+                            .child(icon(LucideIcons::ChevronDown, 12.).text_color(MUTED.color())),
                         move |_, cx| {
                             weak.update(cx, |this, cx| this.variant_menu(root, &page, cx))
                                 .unwrap_or_default()

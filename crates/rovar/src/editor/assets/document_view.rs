@@ -1,4 +1,5 @@
 use super::*;
+use crate::ui::theme::Color;
 use gpui::AnyElement;
 use uic::components::{
     context_menu::{self, ContextMenuItem},
@@ -33,11 +34,15 @@ impl Workspace {
                             .text_size(px(11.))
                             .cursor_pointer()
                             .bg(if active {
-                                rgb(0x302c40).into()
+                                Color::Selected.color().into()
                             } else {
                                 gpui::transparent_black()
                             })
-                            .text_color(rgb(if active { ACCENT } else { MUTED }))
+                            .text_color(if active {
+                                ACCENT.color()
+                            } else {
+                                MUTED.color()
+                            })
                             .child(t(label))
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 this.assets.scope = scope;
@@ -75,8 +80,8 @@ impl Workspace {
                     .w_full()
                     .h(px(32.))
                     .text_size(px(12.))
-                    .bg(rgb(0x24262f))
-                    .border_color(gpui::rgba(0xffffff10)),
+                    .bg(Color::Input.color())
+                    .border_color(Color::Text.color().opacity(0.0627)),
             )
             .child(self.color_assets(cx))
             .child(
@@ -88,7 +93,7 @@ impl Workspace {
                     .child(
                         div()
                             .text_size(px(11.))
-                            .text_color(rgb(MUTED))
+                            .text_color(MUTED.color())
                             .child(t("assets-components")),
                     )
                     .when(enabled, |row| {
@@ -103,11 +108,11 @@ impl Workspace {
                                 .items_center()
                                 .gap(px(5.))
                                 .text_size(px(11.))
-                                .text_color(rgb(ACCENT))
+                                .text_color(ACCENT.color())
                                 .child(icon(LucideIcons::Plus, 13.))
                                 .child(t("component-create-selection"))
                                 .cursor_pointer()
-                                .hover(|s| s.bg(gpui::rgba(0xb4a2ee18)))
+                                .hover(|s| s.bg(Color::Accent.color().opacity(0.0941)))
                                 .on_click(cx.listener(|this, _, window, cx| {
                                     this.create_component(window, cx)
                                 })),
@@ -129,7 +134,7 @@ impl Workspace {
                                 .py(px(32.))
                                 .text_center()
                                 .text_size(px(12.))
-                                .text_color(rgb(MUTED))
+                                .text_color(MUTED.color())
                                 .child(t(if query.is_empty() {
                                     "components-document-empty"
                                 } else {
@@ -160,15 +165,15 @@ impl Workspace {
                             .min_w_0()
                             .rounded(px(8.))
                             .p(px(10.))
-                            .bg(rgb(0x22232c))
+                            .bg(Color::Surface.color())
                             .border_1()
-                            .border_color(gpui::rgba(0xffffff0b))
+                            .border_color(Color::Text.color().opacity(0.0431))
                             .flex()
                             .items_center()
                             .gap(px(10.))
                             .cursor_pointer()
                             .on_drag(drag, |drag, _, _, cx| cx.new(|_| drag.clone()))
-                            .hover(|s| s.border_color(gpui::rgba(0xb4a2ee77)))
+                            .hover(|s| s.border_color(Color::Accent.color().opacity(0.4667)))
                             .child(
                                 div()
                                     .w(px(64.))
@@ -176,7 +181,7 @@ impl Workspace {
                                     .flex_shrink_0()
                                     .rounded(px(5.))
                                     .overflow_hidden()
-                                    .bg(rgb(0x15161c))
+                                    .bg(Color::Workspace.color())
                                     .flex()
                                     .items_center()
                                     .justify_center()
@@ -195,7 +200,7 @@ impl Workspace {
                                         } else {
                                             el.child(
                                                 icon(LucideIcons::Component, 22.)
-                                                    .text_color(rgb(ACCENT)),
+                                                    .text_color(ACCENT.color()),
                                             )
                                         }
                                     }),
@@ -215,7 +220,7 @@ impl Workspace {
                                     .flex()
                                     .items_center()
                                     .justify_center()
-                                    .text_color(rgb(MUTED))
+                                    .text_color(MUTED.color())
                                     .child(icon(LucideIcons::Pencil, 14.))
                                     .on_click(cx.listener(move |this, _, window, cx| {
                                         this.edit_document_component(&edit, window, cx);

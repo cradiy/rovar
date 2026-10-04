@@ -1,5 +1,6 @@
 use super::*;
 use crate::i18n::t;
+use crate::ui::theme::Color;
 use gpui::{CursorStyle, DispatchPhase, HitboxBehavior, MouseMoveEvent, MouseUpEvent, canvas};
 
 // During a sidebar drag only the chrome changes. Reuse this subtree's layout,
@@ -14,6 +15,7 @@ impl CanvasScene {
 }
 impl Render for CanvasScene {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        crate::ui::theme::activate(window, cx);
         self.workspace
             .update(cx, |workspace, cx| {
                 workspace.scene_content(window, cx).into_any_element()
@@ -54,7 +56,7 @@ impl Workspace {
             .min_w_0()
             .h_full()
             .overflow_hidden()
-            .bg(rgb(WORKSPACE))
+            .bg(WORKSPACE.color())
             .when(self.space_down, |el| el.cursor(CursorStyle::OpenHand))
             .on_mouse_down(
                 MouseButton::Left,
@@ -352,6 +354,12 @@ impl Workspace {
                 );
                 // One primitive regardless of the number of visible grid cells.
                 let scale = window.raster_scale_factor();
+                let color = if pixels {
+                    Color::PixelGrid
+                } else {
+                    Color::CanvasGrid
+                }
+                .color();
                 let _ = window.paint_effect(
                     gpui::PaintEffect::new(
                         bounds,
@@ -371,7 +379,8 @@ impl Workspace {
                                     0.,
                                     0.,
                                 ],
-                            ),
+                            )
+                            .with_slot(2, [color.r, color.g, color.b, color.a]),
                     ),
                 );
             },
@@ -420,11 +429,11 @@ impl Workspace {
                             .items_center()
                             .justify_center()
                             .gap(px(14.))
-                            .child(icon(LucideIcons::Frame, 32.).text_color(rgb(0x555b69)))
+                            .child(icon(LucideIcons::Frame, 32.).text_color(Color::Muted.color()))
                             .child(
                                 div()
                                     .text_size(px(13.))
-                                    .text_color(rgb(MUTED))
+                                    .text_color(MUTED.color())
                                     .child(t("canvas-empty")),
                             ),
                     )
@@ -543,7 +552,11 @@ impl Workspace {
                     .max_w(px(width.max(100.)))
                     .overflow_hidden()
                     .text_size(px(11.))
-                    .text_color(rgb(if selected { ACCENT } else { MUTED }))
+                    .text_color(if selected {
+                        ACCENT.color()
+                    } else {
+                        MUTED.color()
+                    })
                     .child(board.name.clone()),
             )
             .when(selected && self.image_crop.is_none(), |el| {
@@ -552,7 +565,7 @@ impl Workspace {
                         .absolute()
                         .inset_0()
                         .border_1()
-                        .border_color(rgb(ACCENT)),
+                        .border_color(ACCENT.color()),
                 )
                 .children(Handle::ALL.into_iter().enumerate().map(|(index, handle)| {
                     let x = (handle.0 as f32 + 1.) * 0.5 * width;
@@ -583,9 +596,9 @@ impl Workspace {
                                 div()
                                     .debug_selector(move || format!("board-corner-{index}"))
                                     .size(px(7.))
-                                    .bg(rgb(0xffffff))
+                                    .bg(Color::Handle.color())
                                     .border_1()
-                                    .border_color(rgb(ACCENT)),
+                                    .border_color(ACCENT.color()),
                             )
                         })
                         .on_mouse_down(
@@ -629,7 +642,7 @@ impl Workspace {
                 .px(px(10.))
                 .rounded(px(5.))
                 .cursor_pointer()
-                .hover(|s| s.bg(rgb(BORDER)))
+                .hover(|s| s.bg(BORDER.color()))
                 .flex()
                 .items_center()
                 .child(label)
@@ -644,9 +657,9 @@ impl Workspace {
             }))
             .p(px(4.))
             .rounded(px(8.))
-            .bg(rgb(PANEL))
+            .bg(PANEL.color())
             .border_1()
-            .border_color(rgb(BORDER))
+            .border_color(BORDER.color())
             .text_size(px(11.))
             .flex()
             .items_center()

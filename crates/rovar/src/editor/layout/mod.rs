@@ -1,5 +1,6 @@
 use super::*;
 use crate::i18n::t;
+use crate::ui::theme::Color;
 use std::collections::BTreeSet;
 mod measurement;
 mod snapping;
@@ -226,7 +227,8 @@ impl Workspace {
                     .justify_center()
                     .opacity(if enabled { 1. } else { 0.28 })
                     .when(enabled, |el| {
-                        el.cursor_pointer().hover(|s| s.bg(gpui::rgba(0xb4a2ee22)))
+                        el.cursor_pointer()
+                            .hover(|s| s.bg(Color::Accent.color().opacity(0.1333)))
                     })
                     .tooltip(move |_, cx| cx.new(|_| toolbar::ToolTip(label.into())).into())
                     .child(icon(glyph, 15.))

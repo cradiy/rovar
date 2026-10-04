@@ -1,4 +1,5 @@
 use super::*;
+use crate::ui::theme::Color;
 use std::collections::BTreeSet;
 mod clipboard;
 mod labels;
@@ -514,7 +515,7 @@ impl Workspace {
                 .w(px((r.width * self.view.zoom).max(1.)))
                 .h(px((r.height * self.view.zoom).max(1.)))
                 .border_1()
-                .border_color(rgb(ACCENT))
+                .border_color(ACCENT.color())
         };
         if !self.multi_selection.is_empty() {
             let mut union: Option<Rect> = None;
@@ -549,7 +550,7 @@ impl Workspace {
         if let Some(m) = &self.marquee {
             overlay = overlay.child(
                 outline(m.rect)
-                    .bg(gpui::rgba(0xb4a2ee18))
+                    .bg(Color::Accent.color().opacity(0.0941))
                     .debug_selector(|| "selection-marquee".into()),
             );
         }

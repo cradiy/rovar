@@ -1,4 +1,5 @@
 use super::*;
+use crate::ui::theme::Color;
 mod delete;
 use gpui::Focusable;
 use std::{collections::BTreeSet, path::Path};
@@ -213,13 +214,13 @@ impl Studio {
         let mut menu = ContextMenu::new()
             .w(px(206.))
             .text_size(px(12.))
-            .text_color(rgb(TEXT))
-            .bg(rgb(0x202027))
+            .text_color(TEXT.color())
+            .bg(Color::Panel.color())
             .rounded(px(10.))
-            .border_color(gpui::rgba(0xffffff20))
+            .border_color(Color::Text.color().opacity(0.1255))
             .appearance(ContextMenuAppearance {
-                selected_background: gpui::rgba(0xb4a2ee28).into(),
-                selected_foreground: rgb(TEXT).into(),
+                selected_background: Color::Accent.color().opacity(0.1569).into(),
+                selected_foreground: TEXT.color().into(),
                 item_height: px(32.),
                 ..Default::default()
             })
@@ -236,7 +237,11 @@ impl Studio {
                             .items_center()
                             .gap(px(10.))
                             .opacity(if enabled { 1. } else { 0.4 })
-                            .text_color(rgb(if delete { 0xf08e83 } else { TEXT }))
+                            .text_color(if delete {
+                                Color::Danger.color()
+                            } else {
+                                TEXT.color()
+                            })
                             .child(icon(
                                 if delete {
                                     LucideIcons::Trash2
@@ -366,7 +371,7 @@ impl Studio {
                 .absolute()
                 .inset_0()
                 .occlude()
-                .bg(gpui::rgba(0x00000066))
+                .bg(Color::Overlay.color())
                 .flex()
                 .items_center()
                 .justify_center()
@@ -383,9 +388,9 @@ impl Studio {
                         .w(px(340.))
                         .p(px(20.))
                         .rounded(px(14.))
-                        .bg(rgb(0x202027))
+                        .bg(Color::Panel.color())
                         .border_1()
-                        .border_color(gpui::rgba(0xffffff20))
+                        .border_color(Color::Text.color().opacity(0.1255))
                         .shadow_xl()
                         .flex()
                         .flex_col()
@@ -398,15 +403,10 @@ impl Studio {
                                     .w_full()
                                     .h(px(36.))
                                     .text_size(px(13.))
-                                    .bg(rgb(0x17181f))
-                                    .text_color(rgb(TEXT))
-                                    .border_color(rgb(BORDER))
-                                    .appearance(uic::components::input::InputAppearance {
-                                        focus_border: rgb(ACCENT).into(),
-                                        caret: rgb(ACCENT).into(),
-                                        selection: gpui::rgba(0xb4a2ee44).into(),
-                                        ..Default::default()
-                                    }),
+                                    .bg(Color::Workspace.color())
+                                    .text_color(TEXT.color())
+                                    .border_color(BORDER.color())
+                                    .appearance(crate::ui::theme::input_appearance()),
                             ),
                         )
                         .child(
@@ -436,7 +436,16 @@ impl Studio {
                                         .justify_center()
                                         .text_size(px(12.))
                                         .cursor_pointer()
-                                        .bg(rgb(if commit { 0x785fb4 } else { 0x2c2c36 }))
+                                        .bg(if commit {
+                                            Color::Accent.color()
+                                        } else {
+                                            Color::Input.color()
+                                        })
+                                        .text_color(if commit {
+                                            Color::OnAccent.color()
+                                        } else {
+                                            Color::Text.color()
+                                        })
                                         .child(t(if commit { "rename" } else { "cancel" }))
                                         .on_click(cx.listener(move |this, _, window, cx| {
                                             this.finish_document_rename(commit, window, cx)

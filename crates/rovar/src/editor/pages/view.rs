@@ -1,5 +1,6 @@
 use super::*;
-use gpui::{AnyElement, rgba};
+use crate::ui::theme::Color;
+use gpui::AnyElement;
 use uic::components::{
     context_menu::{self, ContextMenuItem},
     input::{Input, InputAppearance},
@@ -17,8 +18,8 @@ impl Render for PageDrag {
             .px(px(12.))
             .py(px(8.))
             .rounded(px(8.))
-            .bg(rgb(0x302b40))
-            .text_color(rgb(TEXT))
+            .bg(Color::Selected.color())
+            .text_color(TEXT.color())
             .text_size(px(12.))
             .shadow_lg()
             .child(self.name.clone())
@@ -147,7 +148,7 @@ impl Workspace {
             .flex()
             .flex_col()
             .border_b_1()
-            .border_color(rgba(0xb4a2ee20))
+            .border_color(Color::Accent.color().opacity(0.1255))
             .child(
                 div()
                     .h(px(36.))
@@ -166,7 +167,7 @@ impl Workspace {
                             .gap(px(7.))
                             .cursor_pointer()
                             .text_size(px(12.))
-                            .text_color(rgb(MUTED))
+                            .text_color(MUTED.color())
                             .child(icon(
                                 if self.pages.expanded {
                                     LucideIcons::ChevronDown
@@ -196,8 +197,11 @@ impl Workspace {
                             .items_center()
                             .justify_center()
                             .cursor_pointer()
-                            .text_color(rgb(MUTED))
-                            .hover(|s| s.bg(rgba(0xb4a2ee22)).text_color(rgb(ACCENT)))
+                            .text_color(MUTED.color())
+                            .hover(|s| {
+                                s.bg(Color::Accent.color().opacity(0.1333))
+                                    .text_color(ACCENT.color())
+                            })
                             .tooltip(|_, cx| {
                                 cx.new(|_| toolbar::ToolTip(t("page-new").into())).into()
                             })
@@ -244,17 +248,17 @@ impl Workspace {
                         .items_center()
                         .gap(px(8.))
                         .text_size(px(12.))
-                        .text_color(rgb(if active { ACCENT } else { TEXT }))
+                        .text_color(if active { ACCENT.color() } else { TEXT.color() })
                         .cursor_pointer()
-                        .hover(|s| s.bg(rgba(0xb4a2ee14)))
-                        .when(active, |el| el.bg(rgba(0xb4a2ee18)))
+                        .hover(|s| s.bg(Color::Accent.color().opacity(0.0784)))
+                        .when(active, |el| el.bg(Color::Accent.color().opacity(0.0941)))
                         .child(
                             div()
                                 .w(px(3.))
                                 .h(px(12.))
                                 .rounded(px(2.))
                                 .flex_shrink_0()
-                                .when(active, |el| el.bg(rgb(ACCENT))),
+                                .when(active, |el| el.bg(ACCENT.color())),
                         )
                         .when_else(
                             editing,
@@ -268,15 +272,12 @@ impl Workspace {
                                         .py_0()
                                         .rounded(px(4.))
                                         .text_size(px(12.))
-                                        .text_color(rgb(TEXT))
-                                        .bg(rgb(0x2c3038))
-                                        .border_color(rgb(0x2c3038))
+                                        .text_color(TEXT.color())
+                                        .bg(Color::Input.color())
+                                        .border_color(Color::Input.color())
                                         .appearance(InputAppearance {
-                                            focus_border: rgb(ACCENT).into(),
-                                            caret: rgb(ACCENT).into(),
-                                            selection: rgba(0xb4a2ee44).into(),
                                             caret_height: px(16.),
-                                            ..Default::default()
+                                            ..crate::ui::theme::input_appearance()
                                         }),
                                 )
                             },
@@ -313,9 +314,9 @@ impl Workspace {
                                 .get(&drag_bounds_id)
                                 .is_some_and(|b| window.mouse_position().y > b.center().y);
                             if after {
-                                style.border_b_2().border_color(rgb(ACCENT))
+                                style.border_b_2().border_color(ACCENT.color())
                             } else {
-                                style.border_t_2().border_color(rgb(ACCENT))
+                                style.border_t_2().border_color(ACCENT.color())
                             }
                         })
                         .on_drop(cx.listener(move |this, drag: &PageDrag, window, cx| {
@@ -384,9 +385,9 @@ impl Workspace {
             .max_w_full()
             .p(px(20.))
             .rounded(px(14.))
-            .bg(rgb(0x202027))
+            .bg(Color::Panel.color())
             .border_1()
-            .border_color(rgb(BORDER))
+            .border_color(BORDER.color())
             .shadow_xl()
             .flex()
             .flex_col()
@@ -397,7 +398,7 @@ impl Workspace {
             .child(
                 div()
                     .text_size(px(12.))
-                    .text_color(rgb(MUTED))
+                    .text_color(MUTED.color())
                     .child(t("page-delete-hint")),
             )
             .child(
@@ -423,7 +424,11 @@ impl Workspace {
                             .justify_center()
                             .text_size(px(12.))
                             .cursor_pointer()
-                            .bg(rgb(if confirm { 0x823f49 } else { 0x2b2c35 }))
+                            .bg(if confirm {
+                                Color::DangerSurface.color()
+                            } else {
+                                Color::Input.color()
+                            })
                             .child(t(if confirm { "delete" } else { "cancel" }))
                             .on_click(cx.listener(move |this, _, window, cx| {
                                 if confirm {
@@ -440,7 +445,7 @@ impl Workspace {
                 .absolute()
                 .inset_0()
                 .occlude()
-                .bg(rgba(0x00000066))
+                .bg(Color::Overlay.color())
                 .flex()
                 .items_center()
                 .justify_center()

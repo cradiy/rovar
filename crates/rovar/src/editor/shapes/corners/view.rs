@@ -1,4 +1,5 @@
 use super::*;
+use crate::ui::theme::Color;
 use uic::components::input::{Input, InputAppearance};
 
 impl Workspace {
@@ -37,9 +38,9 @@ impl Workspace {
                             .size(px(7.))
                             .rounded_full()
                             .border_1()
-                            .border_color(rgb(ACCENT))
-                            .bg(rgb(0xffffff))
-                            .when(dragging || editing, |el| el.bg(rgb(ACCENT))),
+                            .border_color(ACCENT.color())
+                            .bg(Color::Handle.color())
+                            .when(dragging || editing, |el| el.bg(ACCENT.color())),
                     )
                     .on_mouse_down(
                         MouseButton::Left,
@@ -62,19 +63,17 @@ impl Workspace {
                                     .px(px(5.))
                                     .py_0()
                                     .text_size(px(11.))
-                                    .bg(rgb(PANEL))
-                                    .text_color(rgb(TEXT))
+                                    .bg(PANEL.color())
+                                    .text_color(TEXT.color())
                                     .rounded(px(5.))
                                     .appearance(InputAppearance {
-                                        focus_border: rgb(if self.corner_editor.invalid {
-                                            0xff7f79
+                                        focus_border: if self.corner_editor.invalid {
+                                            Color::Danger.color()
                                         } else {
-                                            ACCENT
-                                        })
+                                            ACCENT.color()
+                                        }
                                         .into(),
-                                        caret: rgb(ACCENT).into(),
-                                        selection: gpui::rgba(0xb4a2ee44).into(),
-                                        ..Default::default()
+                                        ..crate::ui::theme::input_appearance()
                                     }),
                             )
                         })
@@ -86,14 +85,14 @@ impl Workspace {
                                     .h(px(20.))
                                     .px(px(5.))
                                     .rounded(px(4.))
-                                    .bg(rgb(PANEL))
-                                    .text_color(rgb(TEXT))
+                                    .bg(PANEL.color())
+                                    .text_color(TEXT.color())
                                     .text_size(px(11.))
                                     .flex()
                                     .items_center()
                                     .justify_center()
                                     .gap(px(4.))
-                                    .child(div().text_color(rgb(MUTED)).child("R"))
+                                    .child(div().text_color(MUTED.color()).child("R"))
                                     .child(crate::editor::inspector::number(
                                         shape.displayed_radii()[target.corner],
                                     )),

@@ -1,5 +1,6 @@
 //! Property controls, bindings, and paint editors for the current selection.
 
+use crate::ui::theme::Color;
 mod bindings;
 mod effects;
 mod fields;
@@ -33,13 +34,10 @@ pub(super) const PROPERTY_SURFACES: usize = 4;
 fn inspector_input(state: &Entity<TextInput>) -> Input {
     Input::new(state)
         .text_size(px(12.))
-        .text_color(rgb(TEXT))
+        .text_color(TEXT.color())
         .appearance(InputAppearance {
-            focus_border: rgb(ACCENT).into(),
-            caret: rgb(ACCENT).into(),
-            selection: gpui::rgba(0xb4a2ee44).into(),
             caret_height: px(16.),
-            ..Default::default()
+            ..crate::ui::theme::input_appearance()
         })
 }
 
@@ -49,12 +47,12 @@ fn inspector_color_picker(state: &Entity<ColorPickerState>) -> ColorPicker {
         .gap(px(10.))
         .p_0()
         .border_0()
-        .bg(gpui::rgba(0))
+        .bg(Color::Transparent.color())
         .appearance(ColorPickerAppearance {
             area_height: px(152.),
             hue_width: px(14.),
             marker_size: px(12.),
-            accent: rgb(ACCENT).into(),
+            accent: ACCENT.color().into(),
             ..Default::default()
         })
 }
@@ -65,7 +63,7 @@ pub(super) fn inspector_section(title: &'static str) -> Div {
         .px(px(14.))
         .py(px(14.))
         .border_b_1()
-        .border_color(rgb(BORDER))
+        .border_color(BORDER.color())
         .flex()
         .flex_col()
         .gap(px(10.))
@@ -73,14 +71,17 @@ pub(super) fn inspector_section(title: &'static str) -> Div {
             div()
                 .text_size(px(12.))
                 .font_weight(FontWeight::SEMIBOLD)
-                .text_color(rgb(TEXT))
+                .text_color(TEXT.color())
                 .line_height(px(16.))
                 .child(title),
         )
 }
 
 pub(super) fn property_caption(label: &'static str) -> Div {
-    div().text_size(px(10.)).text_color(rgb(MUTED)).child(label)
+    div()
+        .text_size(px(10.))
+        .text_color(MUTED.color())
+        .child(label)
 }
 
 pub(super) fn hex(color: gpui::Rgba) -> String {
@@ -109,10 +110,14 @@ pub(super) fn icon_button(
         .items_center()
         .justify_center()
         .cursor_pointer()
-        .when(active, |el| el.bg(rgb(0x353044)))
-        .hover(|s| s.bg(rgb(BORDER)))
+        .when(active, |el| el.bg(Color::Selected.color()))
+        .hover(|s| s.bg(BORDER.color()))
         .tooltip(move |_, cx| cx.new(|_| toolbar::ToolTip(label.into())).into())
-        .child(icon(glyph, 17.).text_color(rgb(if active { ACCENT } else { MUTED })))
+        .child(icon(glyph, 17.).text_color(if active {
+            ACCENT.color()
+        } else {
+            MUTED.color()
+        }))
 }
 
 pub(super) fn number(value: f32) -> String {

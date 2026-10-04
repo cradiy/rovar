@@ -3,6 +3,7 @@ use super::*;
 use crate::i18n::t;
 use crate::scene::artboard::{MAX_SIZE, MIN_SIZE};
 use crate::scene::property::Property::*;
+use crate::ui::theme::Color;
 
 impl Workspace {
     pub(in crate::editor) fn batch_color_supported(&self, cx: &gpui::App) -> bool {
@@ -363,7 +364,7 @@ impl Workspace {
                     .items_center()
                     .justify_center()
                     .cursor_pointer()
-                    .hover(|s| s.bg(gpui::rgba(0xb4a2ee22)))
+                    .hover(|s| s.bg(Color::Accent.color().opacity(0.1333)))
                     .tooltip(move |_, cx| cx.new(|_| toolbar::ToolTip(label.into())).into())
                     .child(icon(glyph, 15.))
                     .on_click(cx.listener(move |this, _, window, cx| {

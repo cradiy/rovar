@@ -1,5 +1,6 @@
 use super::*;
 use crate::i18n::t;
+use crate::ui::theme::Color;
 
 impl Workspace {
     pub(in crate::editor) fn begin_rename(
@@ -189,7 +190,7 @@ impl Workspace {
             .items_center()
             .gap(px(3.))
             .border_b_1()
-            .border_color(rgb(BORDER));
+            .border_color(BORDER.color());
         for (id, label, glyph, action, enabled) in [
             (
                 "group-selection",
@@ -238,7 +239,8 @@ impl Workspace {
                     .justify_center()
                     .opacity(if enabled { 1. } else { 0.3 })
                     .when(enabled, |el| {
-                        el.cursor_pointer().hover(|s| s.bg(gpui::rgba(0xb4a2ee22)))
+                        el.cursor_pointer()
+                            .hover(|s| s.bg(Color::Accent.color().opacity(0.1333)))
                     })
                     .tooltip(move |_, cx| cx.new(|_| toolbar::ToolTip(label.into())).into())
                     .child(icon(glyph, 15.))

@@ -1,4 +1,5 @@
 use super::*;
+use crate::ui::theme::Color;
 use crate::{
     i18n::t,
     scene::auto_layout::{Align, Axis, Container, Mode, Sizing},
@@ -660,8 +661,15 @@ impl Workspace {
                 .justify_center()
                 .rounded(px(5.))
                 .cursor_pointer()
-                .text_color(rgb(if mode == Mode::Fixed { MUTED } else { ACCENT }))
-                .hover(|s| s.bg(gpui::rgba(0xb4a2ee18)).text_color(rgb(TEXT)))
+                .text_color(if mode == Mode::Fixed {
+                    MUTED.color()
+                } else {
+                    ACCENT.color()
+                })
+                .hover(|s| {
+                    s.bg(Color::Accent.color().opacity(0.0941))
+                        .text_color(TEXT.color())
+                })
                 .tooltip(move |_, cx| cx.new(|_| toolbar::ToolTip(label.into())).into())
                 .child(icon(LucideIcons::ChevronDown, 12.))
                 .on_click(cx.listener(move |this, _, window, cx| {
@@ -689,8 +697,12 @@ impl Workspace {
                 .gap(px(6.))
                 .text_size(px(11.))
                 .cursor_pointer()
-                .text_color(rgb(if absolute { ACCENT } else { MUTED }))
-                .hover(|s| s.text_color(rgb(TEXT)))
+                .text_color(if absolute {
+                    ACCENT.color()
+                } else {
+                    MUTED.color()
+                })
+                .hover(|s| s.text_color(TEXT.color()))
                 .child(icon(
                     if absolute {
                         LucideIcons::Check
@@ -718,9 +730,9 @@ impl Workspace {
             .items_center()
             .gap(px(6.))
             .text_size(px(11.))
-            .text_color(rgb(MUTED))
+            .text_color(MUTED.color())
             .cursor_pointer()
-            .hover(|s| s.text_color(rgb(ACCENT)))
+            .hover(|s| s.text_color(ACCENT.color()))
             .child(icon(
                 if layout.is_some() {
                     LucideIcons::Minus
@@ -766,8 +778,12 @@ impl Workspace {
                                 .justify_center()
                                 .gap(px(6.))
                                 .cursor_pointer()
-                                .bg(rgb(if active { 0x383044 } else { 0x282b33 }))
-                                .text_color(rgb(if active { ACCENT } else { TEXT }))
+                                .bg(if active {
+                                    Color::Selected.color()
+                                } else {
+                                    Color::Input.color()
+                                })
+                                .text_color(if active { ACCENT.color() } else { TEXT.color() })
                                 .child(icon(glyph, 14.))
                                 .child(t(label))
                                 .on_click(cx.listener(move |this, _, _, cx| {
@@ -790,8 +806,16 @@ impl Workspace {
                         .items_center()
                         .justify_between()
                         .cursor_pointer()
-                        .bg(rgb(if layout.wrap { 0x383044 } else { 0x282b33 }))
-                        .text_color(rgb(if layout.wrap { ACCENT } else { TEXT }))
+                        .bg(if layout.wrap {
+                            Color::Selected.color()
+                        } else {
+                            Color::Input.color()
+                        })
+                        .text_color(if layout.wrap {
+                            ACCENT.color()
+                        } else {
+                            TEXT.color()
+                        })
                         .child(t("layout-wrap"))
                         .child(icon(
                             if layout.wrap {
@@ -810,7 +834,7 @@ impl Workspace {
                         .flex()
                         .items_center()
                         .gap(px(6.))
-                        .child(div().flex_1().text_color(rgb(MUTED)).child(t(
+                        .child(div().flex_1().text_color(MUTED.color()).child(t(
                             if layout.axis == Axis::Grid {
                                 if cross {
                                     "layout-align-vertical"
@@ -841,8 +865,16 @@ impl Workspace {
                                         .items_center()
                                         .justify_center()
                                         .cursor_pointer()
-                                        .bg(rgb(if active { 0x383044 } else { 0x282b33 }))
-                                        .text_color(rgb(if active { ACCENT } else { MUTED }))
+                                        .bg(if active {
+                                            Color::Selected.color()
+                                        } else {
+                                            Color::Input.color()
+                                        })
+                                        .text_color(if active {
+                                            ACCENT.color()
+                                        } else {
+                                            MUTED.color()
+                                        })
                                         .child(icon(
                                             if (layout.axis != Axis::Vertical) != cross {
                                                 [
@@ -1005,10 +1037,10 @@ impl Workspace {
                     .h(px(26.))
                     .flex()
                     .items_center()
-                    .text_color(rgb(MUTED))
+                    .text_color(MUTED.color())
                     .when(editable, |el| {
                         el.cursor(gpui::CursorStyle::ResizeLeftRight)
-                            .hover(|s| s.text_color(rgb(TEXT)))
+                            .hover(|s| s.text_color(TEXT.color()))
                             .on_mouse_down(
                                 MouseButton::Left,
                                 cx.listener(move |this, event, window, cx| {
@@ -1026,15 +1058,10 @@ impl Workspace {
                     .py_0()
                     .rounded(px(5.))
                     .text_size(px(12.))
-                    .text_color(rgb(TEXT))
-                    .bg(rgb(0x282b33))
-                    .border_color(rgb(BORDER))
-                    .appearance(InputAppearance {
-                        focus_border: rgb(ACCENT).into(),
-                        caret: rgb(ACCENT).into(),
-                        selection: gpui::rgba(0xb4a2ee44).into(),
-                        ..Default::default()
-                    }),
+                    .text_color(TEXT.color())
+                    .bg(Color::Input.color())
+                    .border_color(BORDER.color())
+                    .appearance(crate::ui::theme::input_appearance()),
             )
     }
 }

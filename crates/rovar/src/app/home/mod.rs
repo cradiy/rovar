@@ -1,5 +1,6 @@
 use super::*;
-use gpui::{FontWeight, linear_color_stop, linear_gradient, rgba};
+use crate::ui::theme::Color;
+use gpui::{FontWeight, linear_color_stop, linear_gradient};
 use uic::components::input::Input;
 
 mod artwork;
@@ -45,7 +46,7 @@ impl Studio {
             .min_h_0()
             .overflow_y_scroll()
             .track_scroll(&self.home_scroll)
-            .bg(rgb(0x14151a))
+            .bg(Color::Workspace.color())
             .flex()
             .flex_col()
             .items_center()
@@ -67,7 +68,7 @@ impl Studio {
                                 div()
                                     .text_size(px(28.))
                                     .font_weight(FontWeight::BOLD)
-                                    .text_color(rgb(0xf0edf6))
+                                    .text_color(Color::Text.color())
                                     .child(t("home-title")),
                             )
                             .child(self.source_control(cx)),
@@ -92,7 +93,7 @@ impl Studio {
                                     .items_center()
                                     .gap(px(24.))
                                     .border_b_1()
-                                    .border_color(rgba(0xffffff0c))
+                                    .border_color(Color::Text.color().opacity(0.0471))
                                     .children(
                                         [
                                             (false, "home-recent", "recent-files"),
@@ -110,19 +111,19 @@ impl Studio {
                                                     .gap(px(8.))
                                                     .border_b_2()
                                                     .border_color(if active {
-                                                        rgb(ACCENT)
+                                                        ACCENT.color()
                                                     } else {
-                                                        rgba(0)
+                                                        Color::Transparent.color()
                                                     })
                                                     .text_size(px(13.))
                                                     .font_weight(FontWeight::MEDIUM)
-                                                    .text_color(rgb(if active {
-                                                        0xe5dff5
+                                                    .text_color(if active {
+                                                        Color::Text.color()
                                                     } else {
-                                                        0x858391
-                                                    }))
+                                                        Color::Muted.color()
+                                                    })
                                                     .cursor_pointer()
-                                                    .hover(|s| s.text_color(rgb(0xf0edf6)))
+                                                    .hover(|s| s.text_color(Color::Text.color()))
                                                     .child(t(label))
                                                     .when(active, |el| {
                                                         el.child(
@@ -131,8 +132,10 @@ impl Studio {
                                                                 .py(px(1.))
                                                                 .rounded(px(5.))
                                                                 .text_size(px(10.))
-                                                                .bg(rgba(0xb4a2ee18))
-                                                                .text_color(rgb(ACCENT))
+                                                                .bg(Color::Accent
+                                                                    .color()
+                                                                    .opacity(0.0941))
+                                                                .text_color(ACCENT.color())
                                                                 .child(files.len().to_string()),
                                                         )
                                                     })
@@ -156,9 +159,9 @@ impl Studio {
                                             .gap(px(8.))
                                             .rounded(px(8.))
                                             .border_1()
-                                            .border_color(rgba(0xffffff0d))
-                                            .bg(rgba(0xffffff04))
-                                            .text_color(rgb(0x787582))
+                                            .border_color(Color::Text.color().opacity(0.0510))
+                                            .bg(Color::Text.color().opacity(0.0157))
+                                            .text_color(Color::Muted.color())
                                             .child(icon(LucideIcons::Search, 14.))
                                             .child(
                                                 Input::new(&self.search)
@@ -166,15 +169,15 @@ impl Studio {
                                                     .h(px(30.))
                                                     .px(px(0.))
                                                     .text_size(px(12.))
-                                                    .bg(rgba(0))
+                                                    .bg(Color::Transparent.color())
                                                     .border_0()
-                                                    .text_color(rgb(TEXT))
+                                                    .text_color(TEXT.color())
                                                     .appearance(
                                                         uic::components::input::InputAppearance {
-                                                            focus_border: rgba(0).into(),
-                                                            caret: rgb(ACCENT).into(),
-                                                            selection: rgba(0xb4a2ee44).into(),
-                                                            ..Default::default()
+                                                            focus_border: Color::Transparent
+                                                                .color()
+                                                                .into(),
+                                                            ..crate::ui::theme::input_appearance()
                                                         },
                                                     ),
                                             ),
@@ -189,12 +192,12 @@ impl Studio {
                                         .items_center()
                                         .justify_center()
                                         .gap(px(16.))
-                                        .text_color(rgb(0x8d899a))
+                                        .text_color(Color::Muted.color())
                                         .child(
                                             div()
                                                 .size(px(48.))
                                                 .rounded(px(14.))
-                                                .bg(rgba(0xb4a2ee0a))
+                                                .bg(Color::Accent.color().opacity(0.0392))
                                                 .flex()
                                                 .items_center()
                                                 .justify_center()
@@ -227,7 +230,7 @@ impl Studio {
             .size_full()
             .flex()
             .flex_col()
-            .bg(rgb(0x14151a))
+            .bg(Color::Workspace.color())
             .child(content)
             .when(total > 0, |el| {
                 el.child(self.home_pagination(total, width, cx))
@@ -246,13 +249,37 @@ impl Studio {
             .overflow_hidden()
             .rounded(px(16.))
             .border_1()
-            .border_color(rgba(if primary { 0xc3b3ff32 } else { 0xffffff13 }))
+            .border_color(if primary {
+                Color::Accent.color().opacity(0.1961)
+            } else {
+                Color::Text.color().opacity(0.0745)
+            })
             .bg(linear_gradient(
                 110.,
-                linear_color_stop(rgb(if primary { 0x292335 } else { 0x202128 }), 0.),
-                linear_color_stop(rgb(if primary { 0x3b3159 } else { 0x252630 }), 1.),
+                linear_color_stop(
+                    if primary {
+                        Color::Selected.color()
+                    } else {
+                        Color::Surface.color()
+                    },
+                    0.,
+                ),
+                linear_color_stop(
+                    if primary {
+                        Color::Selected.color()
+                    } else {
+                        Color::Input.color()
+                    },
+                    1.,
+                ),
             ))
-            .hover(|s| s.border_color(rgba(if primary { 0xc3b3ff88 } else { 0xffffff35 })))
+            .hover(|s| {
+                s.border_color(if primary {
+                    Color::Accent.color().opacity(0.5333)
+                } else {
+                    Color::Text.color().opacity(0.2078)
+                })
+            })
             .cursor_pointer()
             .child(
                 div()
@@ -276,12 +303,16 @@ impl Studio {
                             .size(px(32.))
                             .rounded(px(9.))
                             .border_1()
-                            .border_color(rgba(0xffffff15))
-                            .bg(rgba(0xffffff0a))
+                            .border_color(Color::Text.color().opacity(0.0824))
+                            .bg(Color::Text.color().opacity(0.0392))
                             .flex()
                             .items_center()
                             .justify_center()
-                            .text_color(rgb(if primary { 0xd2c0ff } else { 0xbab7c6 }))
+                            .text_color(if primary {
+                                Color::Accent.color()
+                            } else {
+                                Color::Muted.color()
+                            })
                             .child(icon(
                                 if primary {
                                     LucideIcons::Plus
@@ -305,7 +336,7 @@ impl Studio {
                                         div()
                                             .text_size(px(19.))
                                             .font_weight(FontWeight::BOLD)
-                                            .text_color(rgb(0xf1edf8))
+                                            .text_color(Color::Text.color())
                                             .child(t(if primary {
                                                 "new-document"
                                             } else {
@@ -315,11 +346,7 @@ impl Studio {
                                     .child(
                                         div()
                                             .text_size(px(12.))
-                                            .text_color(rgb(if primary {
-                                                0xb9accf
-                                            } else {
-                                                0x9b98a8
-                                            }))
+                                            .text_color(Color::Muted.color())
                                             .child(t(if primary {
                                                 "home-new-detail"
                                             } else {
@@ -327,13 +354,16 @@ impl Studio {
                                             })),
                                     ),
                             )
-                            .child(div().text_size(px(10.)).text_color(rgba(0xe7ddff70)).child(
-                                crate::ui::shortcuts::label(if primary {
-                                    "Mod+N"
-                                } else {
-                                    "Mod+O"
-                                }),
-                            )),
+                            .child(
+                                div()
+                                    .text_size(px(10.))
+                                    .text_color(Color::Accent.color().opacity(0.4392))
+                                    .child(crate::ui::shortcuts::label(if primary {
+                                        "Mod+N"
+                                    } else {
+                                        "Mod+O"
+                                    })),
+                            ),
                     ),
             )
             .on_click(cx.listener(move |this, _, window, cx| {
@@ -368,10 +398,13 @@ impl Studio {
             .rounded(px(13.))
             .overflow_hidden()
             .border_1()
-            .border_color(rgba(0xffffff12))
-            .bg(rgb(0x1c1d24))
+            .border_color(Color::Text.color().opacity(0.0706))
+            .bg(Color::Panel.color())
             .cursor_pointer()
-            .hover(|s| s.border_color(rgba(0xb4a2ee88)).bg(rgb(0x24232d)))
+            .hover(|s| {
+                s.border_color(Color::Accent.color().opacity(0.5333))
+                    .bg(Color::Hover.color())
+            })
             .child(
                 div()
                     .h(px(width * 0.57))
@@ -379,7 +412,7 @@ impl Studio {
                     .rounded_tr(px(12.))
                     .relative()
                     .overflow_hidden()
-                    .bg(rgb(0x202029))
+                    .bg(Color::Panel.color())
                     .child(artwork::preview_grid())
                     .when(preview.is_none(), |el| {
                         el.child(
@@ -400,7 +433,7 @@ impl Studio {
                                 .rounded(px(5.))
                                 .overflow_hidden()
                                 .border_1()
-                                .border_color(rgba(0xffffff15))
+                                .border_color(Color::Text.color().opacity(0.0824))
                                 .flex()
                                 .items_center()
                                 .justify_center()
@@ -425,8 +458,8 @@ impl Studio {
                             .size(px(34.))
                             .flex_shrink_0()
                             .rounded(px(9.))
-                            .bg(rgba(0xb4a2ee0f))
-                            .text_color(rgb(0xb7a5db))
+                            .bg(Color::Accent.color().opacity(0.0588))
+                            .text_color(Color::Accent.color())
                             .flex()
                             .items_center()
                             .justify_center()
@@ -443,14 +476,14 @@ impl Studio {
                                 div()
                                     .text_size(px(13.))
                                     .font_weight(FontWeight::MEDIUM)
-                                    .text_color(rgb(0xe6e2ee))
+                                    .text_color(Color::Text.color())
                                     .truncate()
                                     .child(file.title),
                             )
                             .child(
                                 div()
                                     .text_size(px(11.))
-                                    .text_color(rgb(0x898592))
+                                    .text_color(Color::Muted.color())
                                     .text_ellipsis()
                                     .child(edited_time(file.modified)),
                             ),

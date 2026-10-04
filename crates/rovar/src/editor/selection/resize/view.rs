@@ -1,4 +1,5 @@
 use super::*;
+use crate::ui::theme::Color;
 
 impl Workspace {
     pub(in crate::editor) fn selection_resize_controls(&self, cx: &mut Context<Self>) -> Div {
@@ -45,9 +46,9 @@ impl Workspace {
                     el.child(
                         div()
                             .size(px(7.))
-                            .bg(rgb(0xffffff))
+                            .bg(Color::Handle.color())
                             .border_1()
-                            .border_color(rgb(ACCENT)),
+                            .border_color(ACCENT.color()),
                     )
                 })
                 .on_mouse_down(

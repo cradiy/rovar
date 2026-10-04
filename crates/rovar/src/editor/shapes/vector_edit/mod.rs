@@ -1,6 +1,7 @@
 use super::*;
 use crate::i18n::t;
 use crate::scene::bezier;
+use crate::ui::theme::Color;
 use std::sync::Arc;
 #[cfg(test)]
 mod tests;
@@ -124,9 +125,9 @@ impl Workspace {
                     div()
                         .size(px(8.))
                         .rounded_full()
-                        .bg(rgb(0xffffff))
+                        .bg(Color::Handle.color())
                         .border_1()
-                        .border_color(rgb(ACCENT)),
+                        .border_color(ACCENT.color()),
                 )
                 .tooltip(|_, cx| {
                     cx.new(|_| toolbar::ToolTip(t("insert-midpoint").into()))
@@ -230,7 +231,7 @@ impl Workspace {
                     .p(px(6.))
                     .rounded(px(12.))
                     .border_1()
-                    .border_color(rgb(BORDER))
+                    .border_color(BORDER.color())
                     .shadow_lg()
                     .flex()
                     .items_center()
@@ -254,7 +255,9 @@ impl Workspace {
                                 .gap(px(6.))
                                 .text_size(px(12.))
                                 .cursor_pointer()
-                                .when(self.vector_bend == bend, |el| el.bg(rgb(0x353044)))
+                                .when(self.vector_bend == bend, |el| {
+                                    el.bg(Color::Selected.color())
+                                })
                                 .child(icon(glyph, 16.))
                                 .child(title)
                                 .tooltip(move |_, cx| {
@@ -278,7 +281,7 @@ impl Workspace {
                                 }))
                         }),
                     )
-                    .child(div().w(px(1.)).h(px(20.)).bg(rgb(BORDER)))
+                    .child(div().w(px(1.)).h(px(20.)).bg(BORDER.color()))
                     .child(
                         div()
                             .id("vector-done")

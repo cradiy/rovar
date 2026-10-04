@@ -1,5 +1,6 @@
 use super::*;
 use crate::scene::auto_layout::MAX_GRID_TRACKS;
+use crate::ui::theme::Color;
 use std::{cell::RefCell, collections::BTreeMap};
 
 mod guides;
@@ -224,14 +225,14 @@ impl Workspace {
                     .h(px(26.))
                     .flex()
                     .items_center()
-                    .text_color(rgb(MUTED))
+                    .text_color(MUTED.color())
                     .child(t(label))
                     .when(
                         self.layout_target()
                             .is_some_and(|id| self.layer_editable(id)),
                         |el| {
                             el.cursor(gpui::CursorStyle::ResizeLeftRight)
-                                .hover(|s| s.text_color(rgb(TEXT)))
+                                .hover(|s| s.text_color(TEXT.color()))
                                 .on_mouse_down(
                                     MouseButton::Left,
                                     cx.listener(move |this, event, window, cx| {
@@ -249,15 +250,10 @@ impl Workspace {
                     .py_0()
                     .rounded(px(5.))
                     .text_size(px(12.))
-                    .text_color(rgb(TEXT))
-                    .bg(rgb(0x282b33))
-                    .border_color(rgb(BORDER))
-                    .appearance(InputAppearance {
-                        focus_border: rgb(ACCENT).into(),
-                        caret: rgb(ACCENT).into(),
-                        selection: gpui::rgba(0xb4a2ee44).into(),
-                        ..Default::default()
-                    }),
+                    .text_color(TEXT.color())
+                    .bg(Color::Input.color())
+                    .border_color(BORDER.color())
+                    .appearance(crate::ui::theme::input_appearance()),
             )
     }
 
@@ -279,7 +275,7 @@ impl Workspace {
                     .child(
                         div()
                             .flex_1()
-                            .text_color(rgb(MUTED))
+                            .text_color(MUTED.color())
                             .child(t("layout-column-width")),
                     )
                     .children(
@@ -295,8 +291,12 @@ impl Workspace {
                                     .flex()
                                     .items_center()
                                     .cursor_pointer()
-                                    .bg(rgb(if active { 0x383044 } else { 0x282b33 }))
-                                    .text_color(rgb(if active { ACCENT } else { TEXT }))
+                                    .bg(if active {
+                                        Color::Selected.color()
+                                    } else {
+                                        Color::Input.color()
+                                    })
+                                    .text_color(if active { ACCENT.color() } else { TEXT.color() })
                                     .child(t(label))
                                     .on_click(cx.listener(move |this, _, _, cx| {
                                         let width = this
@@ -344,11 +344,11 @@ impl Workspace {
                     .gap(px(6.))
                     .h(px(26.))
                     .cursor_pointer()
-                    .text_color(rgb(if self.auto_layout.grid.show_guides {
-                        ACCENT
+                    .text_color(if self.auto_layout.grid.show_guides {
+                        ACCENT.color()
                     } else {
-                        MUTED
-                    }))
+                        MUTED.color()
+                    })
                     .child(icon(
                         if self.auto_layout.grid.show_guides {
                             LucideIcons::Eye

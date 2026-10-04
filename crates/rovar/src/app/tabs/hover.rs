@@ -1,4 +1,5 @@
 use super::*;
+use crate::ui::theme::Color;
 
 impl Studio {
     pub(in crate::app) fn dismiss_tab_preview(&mut self, cx: &mut Context<Self>) {
@@ -87,8 +88,8 @@ impl Studio {
                 .p(px(10.))
                 .rounded(px(12.))
                 .border_1()
-                .border_color(rgb(0x393441))
-                .bg(rgb(0x222029))
+                .border_color(Color::Border.color())
+                .bg(Color::Surface.color())
                 .shadow_xl()
                 .flex()
                 .flex_col()
@@ -99,7 +100,7 @@ impl Studio {
                         .max_h(px(56.))
                         .overflow_hidden()
                         .text_size(px(13.))
-                        .text_color(rgb(TEXT))
+                        .text_color(TEXT.color())
                         .child(tab.file.title.clone()),
                 )
                 .when_some(account, |el, (username, space, team)| {
@@ -111,10 +112,15 @@ impl Studio {
                             .items_center()
                             .gap(px(7.))
                             .text_size(px(11.))
-                            .text_color(rgb(MUTED))
+                            .text_color(MUTED.color())
                             .child(icon(LucideIcons::User, 12.).flex_shrink_0())
                             .child(div().max_w(px(90.)).min_w_0().truncate().child(username))
-                            .child(div().flex_shrink_0().text_color(rgb(0x625b70)).child("·"))
+                            .child(
+                                div()
+                                    .flex_shrink_0()
+                                    .text_color(Color::Muted.color())
+                                    .child("·"),
+                            )
                             .child(
                                 icon(
                                     if team {
@@ -135,12 +141,12 @@ impl Studio {
                         .h(px(168.))
                         .rounded(px(7.))
                         .overflow_hidden()
-                        .bg(rgb(0x121317))
+                        .bg(Color::Workspace.color())
                         .flex()
                         .items_center()
                         .justify_center()
                         .when(preview.is_none(), |el| {
-                            el.child(icon(LucideIcons::Frame, 30.).text_color(rgb(0x797184)))
+                            el.child(icon(LucideIcons::Frame, 30.).text_color(Color::Muted.color()))
                         })
                         .when_some(preview, |el, path| {
                             el.child(

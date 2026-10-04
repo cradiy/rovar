@@ -1,4 +1,5 @@
 use super::*;
+use crate::ui::theme::Color;
 use gpui::{PathBuilder, TextRun, canvas};
 
 impl Workspace {
@@ -68,7 +69,7 @@ impl Workspace {
                             &[TextRun {
                                 len: label.len(),
                                 font: window.text_style().font(),
-                                color: rgb(ACCENT).into(),
+                                color: ACCENT.color().into(),
                                 background_color: None,
                                 underline: None,
                                 strikethrough: None,
@@ -85,7 +86,7 @@ impl Workspace {
                     }
                 }
                 if let Ok(path) = path.build() {
-                    window.paint_path(path, gpui::rgba(0xb4a2ee66));
+                    window.paint_path(path, Color::Accent.color().opacity(0.4000));
                 }
             },
         )

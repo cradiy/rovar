@@ -1,5 +1,6 @@
 use super::*;
 use crate::document::export::Preset;
+use crate::ui::theme::Color;
 use uic::components::{
     input::{Input, InputAppearance},
     popover::{Popover, PopoverPlacement, PopoverState},
@@ -198,7 +199,7 @@ impl Workspace {
             .flex_shrink_0()
             .p(px(14.))
             .border_b_1()
-            .border_color(rgb(BORDER))
+            .border_color(BORDER.color())
             .flex()
             .flex_col()
             .gap(px(8.))
@@ -227,7 +228,7 @@ impl Workspace {
                     ),
             )
             .when(presets.is_none(), |el| {
-                el.child(div().text_color(rgb(MUTED)).child(t("export-mixed")))
+                el.child(div().text_color(MUTED.color()).child(t("export-mixed")))
             })
             .children(
                 presets
@@ -247,15 +248,15 @@ impl Workspace {
                         .px(px(10.))
                         .rounded(px(6.))
                         .border_1()
-                        .border_color(rgb(BORDER))
+                        .border_color(BORDER.color())
                         .flex()
                         .items_center()
                         .justify_center()
-                        .text_color(rgb(TEXT))
+                        .text_color(TEXT.color())
                         .child(div().min_w_0().truncate().child(label))
                         .when(!self.export.busy, |el| {
                             el.cursor_pointer()
-                                .hover(|s| s.bg(rgb(BORDER)))
+                                .hover(|s| s.bg(BORDER.color()))
                                 .on_click(cx.listener(|this, _, window, cx| {
                                     this.export_selection(None, window, cx)
                                 }))
@@ -265,7 +266,7 @@ impl Workspace {
                     el.child(
                         div()
                             .text_size(px(11.))
-                            .text_color(rgb(MUTED))
+                            .text_color(MUTED.color())
                             .child(t("export-video-original-note")),
                     )
                 })
@@ -347,7 +348,7 @@ impl Workspace {
                         .w(px(66.))
                         .flex_shrink_0()
                         .rounded(px(5.))
-                        .bg(rgb(0x282b33))
+                        .bg(Color::Input.color())
                         .child(scale),
                 )
             })
@@ -356,7 +357,7 @@ impl Workspace {
                     .flex_1()
                     .min_w_0()
                     .rounded(px(5.))
-                    .bg(rgb(0x282b33))
+                    .bg(Color::Input.color())
                     .when(!video, |el| el.child(format))
                     .when(video, |el| {
                         el.child(
@@ -377,9 +378,9 @@ impl Workspace {
                     .gap(px(12.))
                     .p(px(14.))
                     .rounded(px(10.))
-                    .bg(rgb(PANEL))
+                    .bg(PANEL.color())
                     .border_1()
-                    .border_color(rgb(BORDER))
+                    .border_color(BORDER.color())
                     .shadow_lg()
                     .trigger(export_icon(
                         gpui::SharedString::from(row_id("export-options", index)),
@@ -393,7 +394,7 @@ impl Workspace {
                             .flex_col()
                             .gap(px(12.))
                             .text_size(px(12.))
-                            .text_color(rgb(TEXT))
+                            .text_color(TEXT.color())
                             .child(
                                 div()
                                     .font_weight(FontWeight::SEMIBOLD)
@@ -407,7 +408,7 @@ impl Workspace {
                                     .child(
                                         div()
                                             .flex_shrink_0()
-                                            .text_color(rgb(MUTED))
+                                            .text_color(MUTED.color())
                                             .child(t("export-suffix")),
                                     )
                                     .child(
@@ -421,16 +422,13 @@ impl Workspace {
                                                     .h(px(30.))
                                                     .px(px(8.))
                                                     .rounded(px(5.))
-                                                    .bg(rgb(WORKSPACE))
-                                                    .border_color(rgb(BORDER))
+                                                    .bg(WORKSPACE.color())
+                                                    .border_color(BORDER.color())
                                                     .text_size(px(12.))
-                                                    .text_color(rgb(TEXT))
+                                                    .text_color(TEXT.color())
                                                     .appearance(InputAppearance {
-                                                        focus_border: rgb(ACCENT).into(),
-                                                        caret: rgb(ACCENT).into(),
-                                                        selection: gpui::rgba(0xb4a2ee44).into(),
                                                         caret_height: px(16.),
-                                                        ..Default::default()
+                                                        ..crate::ui::theme::input_appearance()
                                                     }),
                                             ),
                                     ),
@@ -479,7 +477,7 @@ impl Workspace {
                             },
                             12.,
                         )
-                        .text_color(rgb(MUTED)),
+                        .text_color(MUTED.color()),
                     )
                     .child(t("export-preview"))
                     .on_click(cx.listener(|this, _, _, cx| {
@@ -498,7 +496,7 @@ impl Workspace {
                         .w_full()
                         .rounded(px(6.))
                         .overflow_hidden()
-                        .bg(gpui::checkerboard(rgb(0x30343d), 6.))
+                        .bg(gpui::checkerboard(Color::Border.color(), 6.))
                         .flex()
                         .items_center()
                         .justify_center()
@@ -510,7 +508,7 @@ impl Workspace {
                             )
                         })
                         .when(self.export.controls.preview.is_none(), |el| {
-                            el.child(div().text_size(px(11.)).text_color(rgb(MUTED)).child(t(
+                            el.child(div().text_size(px(11.)).text_color(MUTED.color()).child(t(
                                 if self.export.controls.preview_error {
                                     "export-preview-failed"
                                 } else {
@@ -603,8 +601,8 @@ fn export_icon(
         .items_center()
         .justify_center()
         .cursor_pointer()
-        .hover(|s| s.bg(rgb(BORDER)))
-        .child(icon(glyph, 17.).text_color(rgb(MUTED)))
+        .hover(|s| s.bg(BORDER.color()))
+        .child(icon(glyph, 17.).text_color(MUTED.color()))
 }
 
 fn row_id(prefix: &str, index: usize) -> String {

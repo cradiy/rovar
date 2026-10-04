@@ -1,8 +1,9 @@
 use super::*;
+use crate::ui::theme::Color;
 use gpui::{FontWeight, MouseButton};
-use uic::components::input::{Input, InputAppearance};
+use uic::components::input::Input;
 
-const CARD: u32 = 0x24232e;
+const CARD: Color = Color::Surface;
 
 pub(super) fn primary(
     id: &'static str,
@@ -20,9 +21,9 @@ pub(super) fn primary(
         .px(px(16.))
         .justify_center()
         .font_weight(FontWeight::SEMIBOLD)
-        .bg(rgb(ACCENT))
-        .text_color(rgb(0x21182f))
-        .hover(|s| s.bg(rgb(0xc4b3f5)))
+        .bg(ACCENT.color())
+        .text_color(Color::OnAccent.color())
+        .hover(|s| s.bg(Color::Accent.color()))
         .opacity(if busy { 0.5 } else { 1. })
 }
 
@@ -31,11 +32,11 @@ fn tile(symbol: LucideIcons) -> gpui::Div {
         .size(px(38.))
         .flex_shrink_0()
         .rounded(px(10.))
-        .bg(rgb(0x352e45))
+        .bg(Color::Selected.color())
         .flex()
         .items_center()
         .justify_center()
-        .child(icon(symbol, 19.).text_color(rgb(ACCENT)))
+        .child(icon(symbol, 19.).text_color(ACCENT.color()))
 }
 
 pub(super) fn field(
@@ -62,7 +63,7 @@ fn field_with_suffix(
             div()
                 .text_size(px(12.))
                 .font_weight(FontWeight::MEDIUM)
-                .text_color(rgb(0xbab5c8))
+                .text_color(Color::Text.color())
                 .child(label),
         )
         .child(
@@ -74,16 +75,11 @@ fn field_with_suffix(
                     .font_family(crate::ui::font::family(cx))
                     .text_size(px(14.))
                     .line_height(px(20.))
-                    .bg(rgb(0x22232c))
-                    .text_color(rgb(TEXT))
-                    .border_color(rgb(BORDER))
+                    .bg(Color::Surface.color())
+                    .text_color(TEXT.color())
+                    .border_color(BORDER.color())
                     .rounded(px(9.))
-                    .appearance(InputAppearance {
-                        focus_border: rgb(ACCENT).into(),
-                        caret: rgb(ACCENT).into(),
-                        selection: rgba(0xb4a2ee44).into(),
-                        ..Default::default()
-                    }),
+                    .appearance(crate::ui::theme::input_appearance()),
             ),
         )
 }
@@ -113,7 +109,7 @@ impl Studio {
             .justify_center()
             .rounded(px(6.))
             .cursor_pointer()
-            .hover(|s| s.bg(rgba(0xffffff0d)))
+            .hover(|s| s.bg(Color::Text.color().opacity(0.0510)))
             .child(
                 icon(
                     if visible {
@@ -123,7 +119,11 @@ impl Studio {
                     },
                     17.,
                 )
-                .text_color(rgb(if visible { ACCENT } else { MUTED })),
+                .text_color(if visible {
+                    ACCENT.color()
+                } else {
+                    MUTED.color()
+                }),
             )
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .on_click(cx.listener(move |this, _, _, cx| {
@@ -204,7 +204,7 @@ impl Studio {
                     .child(
                         div()
                             .text_size(px(12.))
-                            .text_color(rgb(MUTED))
+                            .text_color(MUTED.color())
                             .truncate()
                             .child(if panel.view == View::Servers {
                                 SharedString::from(t("server-address-first"))
@@ -261,14 +261,14 @@ impl Studio {
                                             .p(px(12.))
                                             .rounded(px(11.))
                                             .border_1()
-                                            .border_color(rgb(if active {
-                                                0x655580
+                                            .border_color(if active {
+                                                Color::Muted.color()
                                             } else {
-                                                BORDER
-                                            }))
-                                            .bg(rgb(CARD))
+                                                BORDER.color()
+                                            })
+                                            .bg(CARD.color())
                                             .cursor_pointer()
-                                            .hover(|s| s.bg(rgb(0x2e2a3c)))
+                                            .hover(|s| s.bg(Color::Hover.color()))
                                             .child(tile(LucideIcons::Server))
                                             .child(
                                                 div()
@@ -286,7 +286,7 @@ impl Studio {
                                                     .child(
                                                         div()
                                                             .text_size(px(12.))
-                                                            .text_color(rgb(MUTED))
+                                                            .text_color(MUTED.color())
                                                             .truncate()
                                                             .child(url.clone()),
                                                     ),
@@ -294,12 +294,12 @@ impl Studio {
                                             .when(active, |el| {
                                                 el.child(
                                                     icon(LucideIcons::Check, 15.)
-                                                        .text_color(rgb(ACCENT)),
+                                                        .text_color(ACCENT.color()),
                                                 )
                                             })
                                             .child(
                                                 div().flex().items_center().gap(px(2.))
-                                                .pl(px(8.)).border_l_1().border_color(rgb(BORDER))
+                                                .pl(px(8.)).border_l_1().border_color(BORDER.color())
                                                 .child(
                                                 button(("rename-server", index), "")
                                                     .debug_selector(move || format!("rename-server-{index}"))
@@ -308,7 +308,7 @@ impl Studio {
                                                     .justify_center()
                                                     .child(
                                                         icon(LucideIcons::Pencil, 15.)
-                                                            .text_color(rgb(MUTED)),
+                                                            .text_color(MUTED.color()),
                                                     )
                                                     .on_click(cx.listener(
                                                         move |this, _, window, cx| {
@@ -326,7 +326,7 @@ impl Studio {
                                                     .debug_selector(move || format!("remove-server-{index}"))
                                                     .child(
                                                         icon(LucideIcons::Trash2, 15.)
-                                                            .text_color(rgb(MUTED)),
+                                                            .text_color(MUTED.color()),
                                                     )
                                                     .on_click(cx.listener(
                                                         move |this, _, window, cx| {
@@ -340,7 +340,7 @@ impl Studio {
                                             )
                                             .child(
                                                 icon(LucideIcons::ChevronRight, 16.)
-                                                    .text_color(rgb(MUTED)),
+                                                    .text_color(MUTED.color()),
                                             )
                                             .on_click(cx.listener(move |this, _, window, cx| {
                                                 this.select_server(address.clone(), window, cx)
@@ -352,8 +352,8 @@ impl Studio {
                     .when(!remote.servers().is_empty() && !panel.adding_server, |el| {
                         el.child(button("server-add", "")
                             .debug_selector(|| "server-add".into())
-                            .w_full().h(px(38.)).gap(px(8.)).justify_center().border_1().border_color(rgb(BORDER))
-                            .child(icon(LucideIcons::Plus, 16.).text_color(rgb(ACCENT)))
+                            .w_full().h(px(38.)).gap(px(8.)).justify_center().border_1().border_color(BORDER.color())
+                            .child(icon(LucideIcons::Plus, 16.).text_color(ACCENT.color()))
                             .child(t("server-add"))
                             .on_click(cx.listener(|this, _, window, cx| {
                                 if let Some(panel) = &mut this.servers {
@@ -370,7 +370,7 @@ impl Studio {
                             .flex_col()
                             .gap(px(12.))
                             .when(!remote.servers().is_empty(), |el| {
-                                el.pt(px(18.)).border_t_1().border_color(rgb(BORDER))
+                                el.pt(px(18.)).border_t_1().border_color(BORDER.color())
                             })
                             .child(field("server-name", t("server-name"), &panel.name))
                             .child(field("server-url", t("server-address"), &panel.url))
@@ -395,7 +395,7 @@ impl Studio {
                             .items_center()
                             .gap(px(8.))
                             .text_size(px(12.))
-                            .text_color(rgb(MUTED))
+                            .text_color(MUTED.color())
                             .child(icon(LucideIcons::Laptop, 15.))
                             .child(t("server-local-available")),
                     )
@@ -408,7 +408,7 @@ impl Studio {
                 .child(
                     div()
                         .text_size(px(12.))
-                        .text_color(rgb(MUTED))
+                        .text_color(MUTED.color())
                         .truncate()
                         .child(selected.to_owned()),
                 )
@@ -440,7 +440,7 @@ impl Studio {
                                 .child(
                                     div()
                                         .text_size(px(12.))
-                                        .text_color(rgb(MUTED))
+                                        .text_color(MUTED.color())
                                         .child(t("server-account-hint")),
                                 ),
                         )
@@ -476,7 +476,7 @@ impl Studio {
                                     .gap(px(8.))
                                     .p(px(8.))
                                     .rounded(px(11.))
-                                    .bg(rgb(CARD))
+                                    .bg(CARD.color())
                                     .child(
                                         div()
                                             .id(("server-account", index))
@@ -491,7 +491,7 @@ impl Studio {
                                             .p(px(6.))
                                             .rounded(px(8.))
                                             .cursor_pointer()
-                                            .hover(|s| s.bg(rgb(0x302b3d)))
+                                            .hover(|s| s.bg(Color::Hover.color()))
                                             .child(tile(LucideIcons::User))
                                             .child(
                                                 div()
@@ -509,11 +509,11 @@ impl Studio {
                                                     .child(
                                                         div()
                                                             .text_size(px(12.))
-                                                            .text_color(rgb(if authenticated {
-                                                                ACCENT
+                                                            .text_color(if authenticated {
+                                                                ACCENT.color()
                                                             } else {
-                                                                MUTED
-                                                            }))
+                                                                MUTED.color()
+                                                            })
                                                             .child(t(if authenticated {
                                                                 "server-workspaces"
                                                             } else {
@@ -523,7 +523,7 @@ impl Studio {
                                             )
                                             .child(
                                                 icon(if expanded { LucideIcons::ChevronDown } else { LucideIcons::ChevronRight }, 16.)
-                                                    .text_color(rgb(MUTED)),
+                                                    .text_color(MUTED.color()),
                                             )
                                             .on_click(cx.listener(move |this, _, window, cx| {
                                                 if this.signing_out {
@@ -565,7 +565,7 @@ impl Studio {
                                         .child(
                                             button(("account-logout", index), t("server-sign-out"))
                                                 .text_size(px(12.))
-                                                .text_color(rgb(MUTED))
+                                                .text_color(MUTED.color())
                                                 .opacity(if self.signing_out { 0.5 } else { 1. })
                                                 .on_click(cx.listener(
                                                     move |this, _, window, cx| {
@@ -583,7 +583,7 @@ impl Studio {
                                     .flex_col()
                                     .flex_shrink_0()
                                     .rounded(px(11.))
-                                    .bg(rgb(CARD))
+                                    .bg(CARD.color())
                                     .child(header)
                                     .when(expanded, |el| {
                                         el.child(
@@ -605,10 +605,10 @@ impl Studio {
                                                         .items_center()
                                                         .gap(px(10.))
                                                         .cursor_pointer()
-                                                        .hover(|s| s.bg(rgb(0x302b3d)))
-                                                        .child(icon(if connection.space.kind == "team" { LucideIcons::Users } else { LucideIcons::House }, 16.).text_color(rgb(MUTED)))
+                                                        .hover(|s| s.bg(Color::Hover.color()))
+                                                        .child(icon(if connection.space.kind == "team" { LucideIcons::Users } else { LucideIcons::House }, 16.).text_color(MUTED.color()))
                                                         .child(div().flex_1().min_w_0().truncate().child(connection.space_label()))
-                                                        .when(selected, |el| el.child(icon(LucideIcons::Check, 14.).text_color(rgb(ACCENT))))
+                                                        .when(selected, |el| el.child(icon(LucideIcons::Check, 14.).text_color(ACCENT.color())))
                                                         .on_click(cx.listener(move |this, _, window, cx| {
                                                             if this.signing_out { return; }
                                                             this.servers = None;
@@ -635,7 +635,7 @@ impl Studio {
                 .absolute()
                 .inset_0()
                 .occlude()
-                .bg(rgba(0x00000077))
+                .bg(Color::Overlay.color())
                 .p(px(20.))
                 .flex()
                 .items_center()
@@ -651,14 +651,14 @@ impl Studio {
                         .p(px(24.))
                         .rounded(px(16.))
                         .border_1()
-                        .border_color(rgb(BORDER))
-                        .bg(rgb(PANEL))
+                        .border_color(BORDER.color())
+                        .bg(PANEL.color())
                         .shadow_xl()
                         .flex()
                         .flex_col()
                         .gap(px(24.))
                         .text_size(px(13.))
-                        .text_color(rgb(TEXT))
+                        .text_color(TEXT.color())
                         .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
                         .child(header)
                         .child(content)
@@ -667,8 +667,8 @@ impl Studio {
                                 div()
                                     .p(px(12.))
                                     .rounded(px(8.))
-                                    .bg(rgba(0xf08e8311))
-                                    .text_color(rgb(0xf08e83))
+                                    .bg(Color::Danger.color().opacity(0.0667))
+                                    .text_color(Color::Danger.color())
                                     .child(error),
                             )
                         }),
@@ -699,7 +699,7 @@ impl Studio {
                             .gap(px(4.))
                             .p(px(4.))
                             .rounded(px(9.))
-                            .bg(rgb(0x16161e))
+                            .bg(Color::Workspace.color())
                             .children(
                                 [
                                     ("personal", "server-register-personal"),
@@ -711,7 +711,8 @@ impl Studio {
                                         .flex_1()
                                         .justify_center()
                                         .when(panel.mode == mode, |el| {
-                                            el.bg(rgb(0x352e45)).text_color(rgb(ACCENT))
+                                            el.bg(Color::Selected.color())
+                                                .text_color(ACCENT.color())
                                         })
                                         .on_click(cx.listener(move |this, _, _, cx| {
                                             if let Some(panel) = &mut this.servers
@@ -759,14 +760,14 @@ impl Studio {
                         div()
                             .pt(px(18.))
                             .border_t_1()
-                            .border_color(rgb(BORDER))
+                            .border_color(BORDER.color())
                             .flex()
                             .flex_wrap()
                             .items_center()
                             .justify_center()
                             .gap(px(4.))
                             .text_size(px(12.))
-                            .child(div().text_color(rgb(MUTED)).child(t(
+                            .child(div().text_color(MUTED.color()).child(t(
                                 if panel.mode == "login" {
                                     "server-new-account"
                                 } else {
@@ -786,7 +787,7 @@ impl Studio {
                                 .px(px(4.))
                                 .py(px(2.))
                                 .rounded(px(5.))
-                                .text_color(rgb(ACCENT))
+                                .text_color(ACCENT.color())
                                 .on_click(cx.listener(
                                     |this, _, window, cx| this.registration_options(window, cx),
                                 )),

@@ -1,5 +1,6 @@
 use super::*;
-use gpui::{WindowControlArea, rgba};
+use crate::ui::theme::Color;
+use gpui::WindowControlArea;
 
 impl Studio {
     pub(super) fn window_controls(
@@ -46,7 +47,7 @@ impl Studio {
                         .flex()
                         .items_center()
                         .justify_center()
-                        .text_color(rgb(MUTED))
+                        .text_color(MUTED.color())
                         .when(windows, |el| {
                             el.w(px(46.))
                                 .h_full()
@@ -54,25 +55,26 @@ impl Studio {
                                 .hover(move |style| {
                                     style
                                         .bg(if area == WindowControlArea::Close {
-                                            rgba(0xc42b1cff)
+                                            Color::Danger.color()
                                         } else {
-                                            rgba(0xffffff18)
+                                            Color::Text.color().opacity(0.0941)
                                         })
-                                        .text_color(rgb(0xffffff))
+                                        .text_color(Color::Handle.color())
                                 })
                         })
                         .when(!windows, |el| {
-                            el.size(px(24.)).rounded_full().bg(rgba(0xffffff0e)).hover(
-                                move |style| {
+                            el.size(px(24.))
+                                .rounded_full()
+                                .bg(Color::Text.color().opacity(0.0549))
+                                .hover(move |style| {
                                     style
                                         .bg(if area == WindowControlArea::Close {
-                                            rgba(0xc42b1ccc)
+                                            Color::Danger.color().opacity(0.8000)
                                         } else {
-                                            rgba(0xffffff22)
+                                            Color::Text.color().opacity(0.1333)
                                         })
-                                        .text_color(rgb(TEXT))
-                                },
-                            )
+                                        .text_color(TEXT.color())
+                                })
                         });
                     #[cfg(not(target_os = "windows"))]
                     let button = button.on_click(_cx.listener(move |this, _, window, cx| {

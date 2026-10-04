@@ -1,5 +1,6 @@
 use super::*;
-use gpui::{ObjectFit, img, rgba};
+use crate::ui::theme::Color;
+use gpui::{ObjectFit, img};
 use uic::components::{
     context_menu::{self, ContextMenuItem},
     input::Input,
@@ -11,7 +12,7 @@ pub(super) fn thumbnail(entry: &Entry, height: f32) -> impl IntoElement {
         .w_full()
         .overflow_hidden()
         .rounded(px(6.))
-        .bg(rgb(0x15161c))
+        .bg(Color::Workspace.color())
         .flex()
         .items_center()
         .justify_center()
@@ -19,13 +20,13 @@ pub(super) fn thumbnail(entry: &Entry, height: f32) -> impl IntoElement {
             if entry.error.is_some() {
                 el.flex_col()
                     .gap(px(8.))
-                    .child(icon(LucideIcons::CircleAlert, 22.).text_color(rgb(0xe9a69a)))
+                    .child(icon(LucideIcons::CircleAlert, 22.).text_color(Color::Danger.color()))
                     .child(
                         div()
                             .px(px(4.))
                             .text_center()
                             .text_size(px(11.))
-                            .text_color(rgb(MUTED))
+                            .text_color(MUTED.color())
                             .child(t(if entry.name.is_empty() {
                                 "assets-unreadable-component"
                             } else {
@@ -39,7 +40,7 @@ pub(super) fn thumbnail(entry: &Entry, height: f32) -> impl IntoElement {
                             .size_full()
                             .object_fit(ObjectFit::Contain),
                     ),
-                    None => el.child(icon(LucideIcons::Component, 25.).text_color(rgb(ACCENT))),
+                    None => el.child(icon(LucideIcons::Component, 25.).text_color(ACCENT.color())),
                 }
             }
         })
@@ -82,8 +83,8 @@ impl Workspace {
                     .w_full()
                     .h(px(32.))
                     .text_size(px(12.))
-                    .bg(rgb(0x24262f))
-                    .border_color(rgba(0xffffff10)),
+                    .bg(Color::Input.color())
+                    .border_color(Color::Text.color().opacity(0.0627)),
             )
             .child(self.color_assets(cx))
             .child(
@@ -95,7 +96,7 @@ impl Workspace {
                         div()
                             .flex_1()
                             .text_size(px(11.))
-                            .text_color(rgb(MUTED))
+                            .text_color(MUTED.color())
                             .child(t("assets-components")),
                     )
                     .child(
@@ -109,13 +110,13 @@ impl Workspace {
                             .items_center()
                             .gap(px(5.))
                             .text_size(px(11.))
-                            .text_color(rgb(ACCENT))
+                            .text_color(ACCENT.color())
                             .opacity(if enabled { 1. } else { 0.35 })
-                            .child(icon(LucideIcons::Plus, 13.).text_color(rgb(ACCENT)))
+                            .child(icon(LucideIcons::Plus, 13.).text_color(ACCENT.color()))
                             .child(t("assets-save-selection"))
                             .when(enabled, |el| {
                                 el.cursor_pointer()
-                                    .hover(|s| s.bg(rgba(0xb4a2ee18)))
+                                    .hover(|s| s.bg(Color::Accent.color().opacity(0.0941)))
                                     .on_click(cx.listener(|this, _, window, cx| {
                                         this.begin_save_asset(window, cx)
                                     }))
@@ -126,7 +127,7 @@ impl Workspace {
                 el.child(
                     div()
                         .text_size(px(11.))
-                        .text_color(rgb(MUTED))
+                        .text_color(MUTED.color())
                         .child(t("assets-working")),
                 )
             })
@@ -134,14 +135,14 @@ impl Workspace {
                 el.child(
                     div()
                         .text_size(px(11.))
-                        .text_color(rgb(0xe9a69a))
+                        .text_color(Color::Danger.color())
                         .child(error)
                         .child(
                             div()
                                 .id("retry-assets")
                                 .mt(px(6.))
                                 .cursor_pointer()
-                                .text_color(rgb(ACCENT))
+                                .text_color(ACCENT.color())
                                 .child(t("assets-retry"))
                                 .on_click(cx.listener(|this, _, _, cx| {
                                     this.assets.error = None;
@@ -164,7 +165,7 @@ impl Workspace {
                     .gap(px(10.))
                     .px(px(8.))
                     .pb(px(48.))
-                    .child(icon(LucideIcons::Component, 30.).text_color(rgb(0x77678f)))
+                    .child(icon(LucideIcons::Component, 30.).text_color(Color::Muted.color()))
                     .child(div().text_size(px(13.)).child(t(if query.is_empty() {
                         "assets-empty"
                     } else {
@@ -173,7 +174,7 @@ impl Workspace {
                     .child(
                         div()
                             .text_size(px(11.))
-                            .text_color(rgb(MUTED))
+                            .text_color(MUTED.color())
                             .text_center()
                             .child(t(if query.is_empty() {
                                 "assets-empty-hint"
@@ -243,9 +244,12 @@ impl Workspace {
             .p(px(5.))
             .rounded(px(9.))
             .border_1()
-            .border_color(rgba(0xffffff0b))
-            .bg(rgb(0x22232c))
-            .hover(|s| s.border_color(rgba(0xb4a2ee77)).bg(rgb(0x292734)))
+            .border_color(Color::Text.color().opacity(0.0431))
+            .bg(Color::Surface.color())
+            .hover(|s| {
+                s.border_color(Color::Accent.color().opacity(0.4667))
+                    .bg(Color::Hover.color())
+            })
             .child(thumbnail(&entry, 84.))
             .child(
                 div()
@@ -277,7 +281,7 @@ impl Workspace {
                                 .flex_shrink_0()
                                 .ml(px(4.))
                                 .px(px(4.))
-                                .text_color(rgb(ACCENT))
+                                .text_color(ACCENT.color())
                                 .opacity(if available { 1. } else { 0.35 })
                                 .child(t("assets-remove"))
                                 .when(available, |el| {
@@ -285,7 +289,7 @@ impl Workspace {
                                         .on_mouse_down(MouseButton::Left, |_, _, cx| {
                                             cx.stop_propagation()
                                         })
-                                        .hover(|s| s.bg(rgba(0xb4a2ee18)))
+                                        .hover(|s| s.bg(Color::Accent.color().opacity(0.0941)))
                                         .on_click(cx.listener(move |this, _, _, cx| {
                                             if let Some(library) = this.assets.library.clone() {
                                                 library.update(cx, |library, cx| {
@@ -383,9 +387,9 @@ impl Workspace {
             .w(px(340.))
             .p(px(20.))
             .rounded(px(14.))
-            .bg(rgb(0x202027))
+            .bg(Color::Panel.color())
             .border_1()
-            .border_color(rgba(0xffffff20))
+            .border_color(Color::Text.color().opacity(0.1255))
             .shadow_xl()
             .flex()
             .flex_col()
@@ -404,7 +408,7 @@ impl Workspace {
                 _ => String::new(),
             };
             body = body.child(div().text_size(px(13.)).child(name)).child(
-                div().text_size(px(12.)).text_color(rgb(MUTED)).child(t(
+                div().text_size(px(12.)).text_color(MUTED.color()).child(t(
                     if matches!(self.assets.dialog, Some(Dialog::DocumentDelete(_))) {
                         "component-delete-hint"
                     } else {
@@ -418,9 +422,9 @@ impl Workspace {
                     .w_full()
                     .h(px(36.))
                     .text_size(px(13.))
-                    .bg(rgb(0x17181f))
-                    .text_color(rgb(TEXT))
-                    .border_color(rgb(BORDER)),
+                    .bg(Color::Workspace.color())
+                    .text_color(TEXT.color())
+                    .border_color(BORDER.color()),
             );
         }
         body = body.child(
@@ -449,11 +453,15 @@ impl Workspace {
                         .items_center()
                         .justify_center()
                         .text_size(px(12.))
-                        .bg(rgb(if commit {
-                            if delete { 0x823f49 } else { 0x7862b6 }
+                        .bg(if commit {
+                            if delete {
+                                Color::DangerSurface.color()
+                            } else {
+                                Color::Accent.color()
+                            }
                         } else {
-                            0x2b2c35
-                        }))
+                            Color::Input.color()
+                        })
                         .opacity(if commit && !valid { 0.4 } else { 1. })
                         .child(t(if commit {
                             if delete { "delete" } else { "save-document" }
@@ -477,7 +485,7 @@ impl Workspace {
                 .absolute()
                 .inset_0()
                 .occlude()
-                .bg(rgba(0x00000066))
+                .bg(Color::Overlay.color())
                 .flex()
                 .items_center()
                 .justify_center()

@@ -1,6 +1,6 @@
 use super::*;
 use crate::i18n::t;
-use crate::scene::color_styles::{ColorStyle, Palette};
+use crate::scene::color_styles::{ColorStyle, DEFAULT_STYLE_COLOR, Palette};
 use assets::Scope;
 use gpui::Focusable;
 use uic::components::dropdown::DropdownState;
@@ -47,7 +47,7 @@ impl State {
         let value = cx.new(TextInput::new);
         let angle = cx.new(TextInput::new);
         let position = cx.new(TextInput::new);
-        let picker = cx.new(|cx| ColorPickerState::new(rgb(ACCENT), cx));
+        let picker = cx.new(|cx| ColorPickerState::new(rgb(DEFAULT_STYLE_COLOR), cx));
         let mut subscriptions: Vec<_> = [&name, &value, &angle, &position]
             .into_iter()
             .enumerate()
@@ -305,7 +305,9 @@ impl Workspace {
             .and_then(|id| self.color_palette(scope, cx).get(id).cloned());
         let style = existing.clone().unwrap_or_else(|| ColorStyle {
             name: t("color-style-default").into(),
-            color: self.color_source(stroke, cx).map_or(rgb(ACCENT), |s| s.0),
+            color: self
+                .color_source(stroke, cx)
+                .map_or(rgb(DEFAULT_STYLE_COLOR), |s| s.0),
             gradient: self.selected_gradient(stroke, cx),
         });
         for menu in &self.colors.menu {
