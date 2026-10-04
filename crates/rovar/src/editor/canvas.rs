@@ -520,12 +520,16 @@ impl Workspace {
                 let zoom = self.view.zoom;
                 let background = board.background();
                 let image = (board.fill_mode == FillMode::Image).then(|| board.image_fill.clone());
+                let inner_shadows = shadows.clone();
+                let inner_background = background.clone();
+                let inner_image = image.clone();
                 board
                     .surface(zoom)
                     .on_paint_before_children(move |bounds, _, window, _| {
                         crate::scene::effects::paint_shadows(
                             bounds,
                             &shadows,
+                            crate::scene::effects::ShadowKind::Drop,
                             zoom,
                             window,
                             |window| {
@@ -542,6 +546,37 @@ impl Workspace {
                             },
                         );
                     })
+                    .child(
+                        canvas(
+                            |_, _, _| (),
+                            move |bounds, _, window, _| {
+                                crate::scene::effects::paint_shadows(
+                                    bounds,
+                                    &inner_shadows,
+                                    crate::scene::effects::ShadowKind::Inner,
+                                    zoom,
+                                    window,
+                                    |window| {
+                                        if let Some(image) = &inner_image {
+                                            window.with_subtree_effect_chain(
+                                                bounds,
+                                                &[],
+                                                image.opacity,
+                                                |window| image.paint(bounds, window),
+                                            );
+                                        } else {
+                                            window.paint_quad(gpui::fill(
+                                                bounds,
+                                                inner_background.clone(),
+                                            ));
+                                        }
+                                    },
+                                );
+                            },
+                        )
+                        .absolute()
+                        .size_full(),
+                    )
             })
             .child(
                 div()

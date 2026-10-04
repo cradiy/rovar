@@ -8,8 +8,17 @@ pub(crate) const MAX_SHADOWS: usize = 8;
 pub(crate) const MAX_RADIUS: f32 = 256.;
 pub(crate) const MAX_OFFSET: f32 = 4096.;
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum ShadowKind {
+    #[default]
+    Drop,
+    Inner,
+}
+
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub(crate) struct Shadow {
+    pub kind: ShadowKind,
     pub enabled: bool,
     pub x: f32,
     pub y: f32,
@@ -23,6 +32,7 @@ pub(crate) struct Shadow {
 impl Default for Shadow {
     fn default() -> Self {
         Self {
+            kind: ShadowKind::Drop,
             enabled: true,
             x: 0.,
             y: 4.,
@@ -50,19 +60,26 @@ impl Shadow {
                 && [self.color.r, self.color.g, self.color.b, self.color.a]
                     .into_iter()
                     .all(|v| v.is_finite() && (0. ..=1.).contains(&v)),
-            "Invalid drop shadow"
+            "Invalid shadow"
         );
         Ok(())
     }
 
     pub fn padding(&self) -> f32 {
-        self.x.abs().max(self.y.abs()) + self.spread.max(0.) + self.blur * 1.5 + 2.
+        let spread = match self.kind {
+            ShadowKind::Drop => self.spread,
+            ShadowKind::Inner => -self.spread,
+        };
+        self.x.abs().max(self.y.abs()) + spread.max(0.) + self.blur * 1.5 + 2.
     }
 }
 
 pub(crate) fn bounds(rect: Rect, shadows: &[Shadow]) -> Rect {
     let (mut l, mut t, mut r, mut b) = (rect.x, rect.y, rect.x + rect.width, rect.y + rect.height);
-    for shadow in shadows.iter().filter(|s| s.visible()) {
+    for shadow in shadows
+        .iter()
+        .filter(|s| s.visible() && s.kind == ShadowKind::Drop)
+    {
         let pad = shadow.spread.max(0.) + shadow.blur * 1.5 + 1.;
         l = l.min(rect.x + shadow.x - pad);
         t = t.min(rect.y + shadow.y - pad);

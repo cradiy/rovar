@@ -75,6 +75,9 @@ impl Page {
                 uid
             }
         });
+        for binding in self.hierarchy.components.values_mut() {
+            upgrade_json_node_ids(&mut binding.baseline);
+        }
     }
 
     pub(crate) fn renew_node_ids(&mut self) {
@@ -104,14 +107,19 @@ pub(crate) fn upgrade_json_node_ids(value: &mut serde_json::Value) {
         return;
     };
     let upgrade = |node: &mut serde_json::Value, id: u64| {
-        if let Some(node) = node.as_object_mut() {
-            node.entry("uid").or_insert_with(|| {
+        if let Some(node) = node.as_object_mut()
+            && node
+                .get("uid")
+                .is_none_or(|uid| uid.as_str() == Some("00000000-0000-0000-0000-000000000000"))
+        {
+            node.insert(
+                "uid".into(),
                 serde_json::json!(derived(
                     b"rovar/legacy-node/v1",
                     namespace.as_bytes(),
                     &id.to_le_bytes()
-                ))
-            });
+                )),
+            );
         }
     };
     for field in ["boards", "shapes", "texts"] {

@@ -686,19 +686,39 @@ pub fn element(
                     crate::scene::effects::paint_shadows(
                         bounds,
                         &shadows,
+                        crate::scene::effects::ShadowKind::Drop,
                         zoom,
                         window,
                         |window| {
                             window.with_content_mask(
                                 Some(gpui::ContentMask { bounds }),
                                 |window| {
-                                    layout.paint(0..0, 0, None, false, window, cx);
+                                    layout.paint_artwork(window, cx);
                                 },
                             );
                         },
                     );
                     window.with_content_mask(Some(gpui::ContentMask { bounds }), |window| {
-                        layout.paint(selection, cursor, marked, focused, window, cx)
+                        layout.paint_selection(selection.clone(), window);
+                        layout.paint_artwork(window, cx);
+                    });
+                    crate::scene::effects::paint_shadows(
+                        bounds,
+                        &shadows,
+                        crate::scene::effects::ShadowKind::Inner,
+                        zoom,
+                        window,
+                        |window| {
+                            window.with_content_mask(
+                                Some(gpui::ContentMask { bounds }),
+                                |window| {
+                                    layout.paint_artwork(window, cx);
+                                },
+                            );
+                        },
+                    );
+                    window.with_content_mask(Some(gpui::ContentMask { bounds }), |window| {
+                        layout.paint_editing(selection, cursor, marked, focused, window);
                     });
                     window.handle_input(
                         &focus,

@@ -55,7 +55,7 @@ fn disjoint_properties_merge_but_divergent_edits_and_delete_edit_do_not() {
 
 #[test]
 fn shadows_merge_with_geometry_and_follow_remapped_object_ids() {
-    use crate::scene::effects::Shadow;
+    use crate::scene::effects::{Shadow, ShadowKind};
     let base = document();
     let mut local = base.clone();
     let mut remote = base.clone();
@@ -79,6 +79,7 @@ fn shadows_merge_with_geometry_and_follow_remapped_object_ids() {
     local.pages[0].hierarchy.shadows.insert(
         3,
         vec![Shadow {
+            kind: ShadowKind::Inner,
             x: 24.,
             ..Default::default()
         }],
@@ -94,6 +95,10 @@ fn shadows_merge_with_geometry_and_follow_remapped_object_ids() {
     let page = &result.pages[0];
     let id = |uid| page.shapes.iter().find(|s| s.uid == uid).unwrap().id;
     assert_eq!(page.hierarchy.shadows[&id(a.uid)][0].x, 24.);
+    assert_eq!(
+        page.hierarchy.shadows[&id(a.uid)][0].kind,
+        ShadowKind::Inner
+    );
     assert_eq!(page.hierarchy.shadows[&id(b.uid)][0].x, -40.);
     let mut invalid = result.clone();
     invalid.pages[0].hierarchy.shadows.get_mut(&1).unwrap()[0].blur = -1.;

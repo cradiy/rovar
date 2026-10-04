@@ -37,6 +37,19 @@ fn shadow_controls_preserve_undo_storage_clipboard_and_component_updates(cx: &mu
     input(&mut visual, 2, "16");
     input(&mut visual, 4, "FF0000");
     input(&mut visual, 5, "50");
+    click(&mut visual, "shadow-kind-0");
+    click(&mut visual, "effect-inner-shadow");
+    handle
+        .update(&mut visual.cx, |this, window, cx| {
+            assert_eq!(this.hierarchy.shadows[&1][0].kind, ShadowKind::Inner);
+            assert_eq!(this.hierarchy.shadows[&1][0].blur, 16.);
+            this.undo_redo(false, window, cx);
+            assert_eq!(this.hierarchy.shadows[&1][0].kind, ShadowKind::Drop);
+            this.undo_redo(true, window, cx);
+            assert_eq!(this.hierarchy.shadows[&1][0].kind, ShadowKind::Inner);
+        })
+        .unwrap();
+    draw(&mut visual);
     click(&mut visual, "shadow-add");
     click(&mut visual, "shadow-toggle-0");
     click(&mut visual, "shadow-remove-1");
@@ -51,6 +64,7 @@ fn shadow_controls_preserve_undo_storage_clipboard_and_component_updates(cx: &mu
         .update(&mut visual.cx, |this, window, cx| {
             let shadows = this.hierarchy.shadows[&1].clone();
             assert_eq!(shadows.len(), 2);
+            assert_eq!(shadows[0].kind, ShadowKind::Inner);
             assert_eq!(shadows[0].x, -20.);
             assert_eq!(shadows[0].blur, 16.);
             assert_eq!(
@@ -137,6 +151,15 @@ fn shadow_exports_preserve_silhouettes_stack_order_and_expanded_bounds(cx: &mut 
                         color: rgb(0x0000ff),
                         ..Default::default()
                     },
+                    Shadow {
+                        kind: ShadowKind::Inner,
+                        x: 8.,
+                        y: 0.,
+                        blur: 0.,
+                        spread: 0.,
+                        color: rgb(0x00ff00),
+                        ..Default::default()
+                    },
                 ],
             );
             let job = this.component_export_jobs(window, cx).unwrap().remove(0);
@@ -151,6 +174,11 @@ fn shadow_exports_preserve_silhouettes_stack_order_and_expanded_bounds(cx: &mut 
                     .0
             };
             assert_eq!(at(80., 20.), [255, 0, 0, 255], "First shadow is on top");
+            assert_eq!(
+                at(2., 20.),
+                [0, 255, 0, 255],
+                "Inner shadows paint above the original artwork"
+            );
             assert_eq!(
                 at(61., 1.)[3],
                 0,
@@ -188,6 +216,118 @@ fn shadow_exports_preserve_silhouettes_stack_order_and_expanded_bounds(cx: &mut 
             this.hierarchy.shadows.get_mut(&1).unwrap()[1].enabled = false;
             let job = this.component_export_jobs(window, cx).unwrap().remove(0);
             assert_eq!(job.bounds.width, 40.);
+        })
+        .unwrap();
+}
+
+#[gpui::test]
+fn inner_shadow_exports_clip_to_the_contour_and_keep_signed_spread(cx: &mut TestAppContext) {
+    let handle = open(cx);
+    handle
+        .update(cx, |this, window, cx| {
+            let rect = Rect {
+                x: 0.,
+                y: 0.,
+                width: 40.,
+                height: 40.,
+            };
+            let mut shape = Shape::new(1, None, ShapeKind::Ellipse, rect);
+            shape.color = rgb(0xffffff);
+            this.shapes.push(shape);
+            this.next_id = 2;
+            this.select_shape(1, cx);
+            let inner = Shadow {
+                kind: ShadowKind::Inner,
+                x: 8.,
+                y: 0.,
+                blur: 0.,
+                spread: 0.,
+                color: rgb(0xff0000),
+                ..Default::default()
+            };
+            this.hierarchy.shadows.insert(
+                1,
+                vec![
+                    inner.clone(),
+                    Shadow {
+                        color: rgb(0x0000ff),
+                        ..inner
+                    },
+                ],
+            );
+            let options = crate::render::raster::Options::default();
+            let render = |this: &Workspace, window: &mut Window, cx: &mut Context<Workspace>| {
+                let job = this.component_export_jobs(window, cx).unwrap().remove(0);
+                assert_eq!(job.bounds, rect, "Inner shadows must not enlarge exports");
+                let bytes = job
+                    .render(crate::document::export::Format::Png, 1, &options)
+                    .unwrap();
+                let png = image::load_from_memory(&bytes).unwrap().into_rgba8();
+                let svg = job
+                    .render(crate::document::export::Format::Svg, 1, &options)
+                    .unwrap();
+                let tree = resvg::usvg::Tree::from_data(&svg, &options).unwrap();
+                let mut raster = resvg::tiny_skia::Pixmap::new(40, 40).unwrap();
+                resvg::render(&tree, Default::default(), &mut raster.as_mut());
+                for (x, y) in [(2, 20), (20, 20), (1, 1), (6, 20), (10, 20), (5, 20)] {
+                    let svg = raster.pixel(x, y).unwrap().demultiply();
+                    let svg = [svg.red(), svg.green(), svg.blue(), svg.alpha()];
+                    let png = png.get_pixel(x, y).0;
+                    assert!(
+                        png.into_iter().zip(svg).all(|(a, b)| a.abs_diff(b) <= 1),
+                        "PNG/SVG mismatch at ({x}, {y}): {png:?} vs {svg:?}"
+                    );
+                }
+                png
+            };
+            let png = render(this, window, cx);
+            assert_eq!(
+                png.get_pixel(2, 20).0,
+                [255, 0, 0, 255],
+                "First inner shadow is on top"
+            );
+            assert_eq!(png.get_pixel(20, 20).0, [255, 255, 255, 255]);
+            assert_eq!(
+                png.get_pixel(1, 1).0[3],
+                0,
+                "Do not fill bounding-box corners"
+            );
+            this.hierarchy.shadows.get_mut(&1).unwrap().truncate(1);
+            this.shapes[0].fill_enabled = false;
+            this.shapes[0].stroke.enabled = true;
+            this.shapes[0].stroke.width = 8.;
+            this.shapes[0].stroke.color = rgb(0xffffff);
+            let png = render(this, window, cx);
+            assert_eq!(
+                png.get_pixel(20, 20).0[3],
+                0,
+                "The inner shadow must leave holes transparent"
+            );
+            assert_eq!(png.get_pixel(2, 20).0, [255, 0, 0, 255]);
+            this.shapes[0].fill_enabled = true;
+            this.shapes[0].stroke.enabled = false;
+            this.shapes[0].kind = ShapeKind::Rectangle;
+            let shadow = &mut this.hierarchy.shadows.get_mut(&1).unwrap()[0];
+            shadow.x = 12.;
+            shadow.spread = -4.;
+            let png = render(this, window, cx);
+            assert_eq!(png.get_pixel(6, 20).0, [255, 0, 0, 255]);
+            assert_eq!(
+                png.get_pixel(10, 20).0,
+                [255, 255, 255, 255],
+                "Negative spread contracts the inner shadow before offset"
+            );
+            let shadow = &mut this.hierarchy.shadows.get_mut(&1).unwrap()[0];
+            shadow.x = 0.;
+            shadow.spread = 5.;
+            shadow.blur = 4.;
+            let png = render(this, window, cx);
+            let edge = png.get_pixel(5, 20).0;
+            assert_eq!(edge[0], 255);
+            assert!(edge[1] > 0 && edge[1] < 255, "Blur softens the inner edge");
+            this.hierarchy.shadows.get_mut(&1).unwrap()[0].enabled = false;
+            let png = render(this, window, cx);
+            assert_eq!(png.get_pixel(2, 20).0, [255, 255, 255, 255]);
         })
         .unwrap();
 }

@@ -334,16 +334,7 @@ impl TextLayout {
             }
         }
     }
-    pub fn paint(
-        &self,
-        selection: Range<usize>,
-        cursor: usize,
-        marked: Option<Range<usize>>,
-        focused: bool,
-        window: &mut Window,
-        cx: &mut App,
-    ) {
-        // Rows are ordered vertically; clipped overflow needs no paint traversal.
+    pub fn paint_selection(&self, selection: Range<usize>, window: &mut Window) {
         for row in self
             .rows
             .iter()
@@ -360,6 +351,16 @@ impl TextLayout {
                     crate::ui::theme::Color::Selection.color(),
                 ));
             }
+        }
+    }
+
+    pub fn paint_artwork(&self, window: &mut Window, cx: &mut App) {
+        // Rows are ordered vertically; clipped overflow needs no paint traversal.
+        for row in self
+            .rows
+            .iter()
+            .take_while(|r| r.origin.y < self.bounds.size.height)
+        {
             for fragment in &row.fragments {
                 let mut paint = |window: &mut Window| {
                     fragment.line.paint(
@@ -384,6 +385,22 @@ impl TextLayout {
                     eprintln!("Could not render text: {error}");
                 }
             }
+        }
+    }
+
+    pub fn paint_editing(
+        &self,
+        selection: Range<usize>,
+        cursor: usize,
+        marked: Option<Range<usize>>,
+        focused: bool,
+        window: &mut Window,
+    ) {
+        for row in self
+            .rows
+            .iter()
+            .take_while(|r| r.origin.y < self.bounds.size.height)
+        {
             if let Some(marked) = &marked
                 && marked.start < row.range.end
                 && marked.end > row.range.start

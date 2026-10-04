@@ -1,7 +1,8 @@
 use super::*;
-use crate::scene::effects::{MAX_OFFSET, MAX_RADIUS, MAX_SHADOWS, Shadow};
+use crate::scene::effects::{MAX_OFFSET, MAX_RADIUS, MAX_SHADOWS, Shadow, ShadowKind};
 use crate::ui::theme::Color;
 use std::collections::BTreeSet;
+use uic::components::context_menu::{ContextMenuItem, ContextMenuTrigger};
 use uic::components::popover::PopoverState;
 
 #[cfg(test)]
@@ -142,7 +143,7 @@ impl Workspace {
             .get(&id)
             .into_iter()
             .flatten()
-            .filter(|s| s.visible())
+            .filter(|s| s.visible() && s.kind == ShadowKind::Drop)
             .map(Shadow::padding)
             .fold(0., f32::max)
             * self.view.zoom
@@ -404,8 +405,7 @@ impl Workspace {
                     .child(
                         div()
                             .id(format!("shadow-edit-{index}"))
-                            .flex_1()
-                            .min_w_0()
+                            .w(px(26.))
                             .h(px(30.))
                             .px(px(6.))
                             .rounded(px(5.))
@@ -425,12 +425,12 @@ impl Workspace {
                                 )
                                 .text_color(MUTED.color()),
                             )
-                            .child(div().text_size(px(12.)).child(t("effect-drop-shadow")))
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 this.inspector.shadows.expanded = (!expanded).then_some(index);
                                 cx.notify();
                             })),
                     )
+                    .child(self.shadow_kind_control(index, shadow, cx))
                     .child(
                         button(
                             format!("shadow-toggle-{index}"),
@@ -521,6 +521,88 @@ impl Workspace {
                         .child(self.shadow_input(index, 5, "%", cx)),
                 )
             })
+    }
+
+    fn shadow_kind_control(
+        &self,
+        index: usize,
+        shadow: &Shadow,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement + use<> {
+        let weak = cx.entity().downgrade();
+        let target = (self.pages.active.clone(), self.shadow_targets());
+        let current = shadow.kind;
+        let enabled = target.1.iter().any(|id| self.layer_editable(*id));
+        let trigger = div()
+            .id(format!("shadow-kind-{index}"))
+            .debug_selector(move || format!("shadow-kind-{index}"))
+            .h(px(30.))
+            .px(px(6.))
+            .rounded(px(5.))
+            .flex()
+            .items_center()
+            .gap(px(6.))
+            .cursor_pointer()
+            .hover(|s| s.bg(BORDER.color()))
+            .text_size(px(12.))
+            .child(t(if current == ShadowKind::Inner {
+                "effect-inner-shadow"
+            } else {
+                "effect-drop-shadow"
+            }))
+            .child(icon(LucideIcons::ChevronDown, 12.).text_color(MUTED.color()));
+        div().flex_1().min_w_0().child(
+            ContextMenuTrigger::new(trigger, move |_, _| {
+                let mut menu = super::super::context_menu::menu(180., "shadow-kind-menu");
+                for (kind, label) in [
+                    (ShadowKind::Drop, "effect-drop-shadow"),
+                    (ShadowKind::Inner, "effect-inner-shadow"),
+                ] {
+                    let weak = weak.clone();
+                    let target = target.clone();
+                    menu = menu.item(
+                        ContextMenuItem::action_with(
+                            move |_, _| {
+                                div()
+                                    .debug_selector(move || label.into())
+                                    .h(px(28.))
+                                    .flex()
+                                    .items_center()
+                                    .gap(px(8.))
+                                    .child(div().w(px(14.)).when(kind == current, |el| {
+                                        el.child(icon(LucideIcons::Check, 13.))
+                                    }))
+                                    .child(t(label))
+                            },
+                            move |_, cx| {
+                                let _ = weak.update(cx, |this, cx| {
+                                    if target != (this.pages.active.clone(), this.shadow_targets())
+                                        || this
+                                            .common_shadows()
+                                            .and_then(|s| s.get(index).map(|s| s.kind))
+                                            != Some(current)
+                                    {
+                                        return;
+                                    }
+                                    this.edit_shadows(
+                                        None,
+                                        |shadows| {
+                                            if let Some(shadow) = shadows.get_mut(index) {
+                                                shadow.kind = kind;
+                                            }
+                                        },
+                                        cx,
+                                    );
+                                });
+                            },
+                        )
+                        .disabled(!enabled),
+                    );
+                }
+                menu
+            })
+            .id(format!("shadow-kind-trigger-{index}")),
+        )
     }
 
     fn shadow_input(

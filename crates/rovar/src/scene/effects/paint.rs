@@ -1,12 +1,14 @@
-use super::Shadow;
+use super::{Shadow, ShadowKind};
 use gpui::{Bounds, EffectShader, EffectUniforms, Pixels, SubtreeEffectPass, Window, px};
 
 /// Paint callbacks contain artwork primitives only, never interactive elements.
 /// Each shadow starts with the same source alpha, so stacked shadows do not cast
-/// shadows on each other. The caller paints the original artwork afterwards.
+/// shadows on each other. Drop shadows are painted before the original artwork;
+/// inner shadows are painted after it.
 pub(crate) fn paint_shadows(
     bounds: Bounds<Pixels>,
     shadows: &[Shadow],
+    kind: ShadowKind,
     zoom: f32,
     window: &mut Window,
     mut source: impl FnMut(&mut Window),
@@ -15,8 +17,14 @@ pub(crate) fn paint_shadows(
         return;
     }
     let scale = zoom * window.raster_scale_factor();
-    for shadow in shadows.iter().rev().filter(|s| s.visible()) {
-        let mut passes = Vec::with_capacity(5);
+    for shadow in shadows
+        .iter()
+        .rev()
+        .filter(|s| s.visible() && s.kind == kind)
+    {
+        let inner = kind == ShadowKind::Inner;
+        let channel = if inner { 1. } else { 0. };
+        let mut passes = Vec::with_capacity(6);
         let mut pass = |shader: &'static str, slots: &[[f32; 4]]| {
             let mut uniforms = EffectUniforms::default();
             for (i, slot) in slots.iter().enumerate() {
@@ -34,11 +42,19 @@ pub(crate) fn paint_shadows(
                 particle_transition: None,
             });
         };
+        if inner {
+            pass(include_str!("mask.wgsl"), &[]);
+        }
         if shadow.spread != 0. {
             for axis in [[1., 0.], [0., 1.]] {
                 pass(
                     include_str!("spread.wgsl"),
-                    &[[axis[0], axis[1], shadow.spread * scale, 0.]],
+                    &[[
+                        axis[0],
+                        axis[1],
+                        shadow.spread * scale * if inner { -1. } else { 1. },
+                        channel,
+                    ]],
                 );
             }
         }
@@ -46,14 +62,14 @@ pub(crate) fn paint_shadows(
             for axis in [[1., 0.], [0., 1.]] {
                 pass(
                     include_str!("blur.wgsl"),
-                    &[[axis[0], axis[1], shadow.blur * 0.5 * scale, 0.]],
+                    &[[axis[0], axis[1], shadow.blur * 0.5 * scale, channel]],
                 );
             }
         }
         pass(
             include_str!("color.wgsl"),
             &[
-                [shadow.x * scale, shadow.y * scale, 0., 0.],
+                [shadow.x * scale, shadow.y * scale, 0., channel],
                 [
                     shadow.color.r,
                     shadow.color.g,
@@ -79,6 +95,7 @@ mod tests {
             include_str!("spread.wgsl"),
             include_str!("blur.wgsl"),
             include_str!("color.wgsl"),
+            include_str!("mask.wgsl"),
         ] {
             let source = gpui::compose_subtree_effect_wgsl(&gpui::EffectShader::wgsl_image(source));
             let module = naga::front::wgsl::parse_str(&source)

@@ -247,8 +247,23 @@ impl Workspace {
                         paint_path(path, bounds.origin, stroke.clone(), window);
                     }
                 };
-                crate::scene::effects::paint_shadows(bounds, &shadows, zoom, window, &mut paint);
+                crate::scene::effects::paint_shadows(
+                    bounds,
+                    &shadows,
+                    crate::scene::effects::ShadowKind::Drop,
+                    zoom,
+                    window,
+                    &mut paint,
+                );
                 paint(window);
+                crate::scene::effects::paint_shadows(
+                    bounds,
+                    &shadows,
+                    crate::scene::effects::ShadowKind::Inner,
+                    zoom,
+                    window,
+                    &mut paint,
+                );
                 if edit_hatch {
                     // Reuse the actual filled contour, including holes and curves.
                     // This is only a paint overlay; document fills and hitboxes stay intact.

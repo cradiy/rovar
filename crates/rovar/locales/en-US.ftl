@@ -542,6 +542,7 @@ color-style-invalid-gradient = Enter a valid angle and a stop position from 0 to
 effects = Effects
 effects-mixed = Mixed effects
 effect-drop-shadow = Drop shadow
+effect-inner-shadow = Inner shadow
 effect-blur = Blur
 effect-spread = Spread
 settings-theme = Theme
