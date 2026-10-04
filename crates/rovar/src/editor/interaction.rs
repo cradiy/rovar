@@ -51,7 +51,7 @@ pub(super) enum GestureKind {
         index: usize,
         original: f32,
     },
-    ShadowProperty {
+    EffectProperty {
         index: usize,
         field: usize,
         original: f32,
@@ -137,7 +137,7 @@ impl Workspace {
             GestureKind::Panel { .. }
             | GestureKind::Property { .. }
             | GestureKind::LayoutProperty { .. }
-            | GestureKind::ShadowProperty { .. }
+            | GestureKind::EffectProperty { .. }
             | GestureKind::ColorStyleProperty { .. }
             | GestureKind::ColorStyleStop { .. }
             | GestureKind::FillGradientStop { .. }
@@ -293,11 +293,11 @@ impl Workspace {
             GestureKind::LayoutProperty { index, original } => {
                 self.scrub_layout_number(index, original, delta.x, shift, cx)
             }
-            GestureKind::ShadowProperty {
+            GestureKind::EffectProperty {
                 index,
                 field,
                 original,
-            } => self.scrub_shadow_number(index, field, original, delta.x, shift, cx),
+            } => self.scrub_effect_number(index, field, original, delta.x, shift, cx),
             GestureKind::ColorStyleProperty { angle, .. } => {
                 self.scrub_style_number(angle, delta.x, shift, self.snapping.bypass, cx)
             }
@@ -421,7 +421,7 @@ impl Workspace {
                 GestureKind::Property { .. } => self.finish_property_scrub(false, cx),
                 GestureKind::FillGradientStop { .. } => self.finish_property_scrub(false, cx),
                 GestureKind::LayoutProperty { .. } => self.finish_layout_scrub(false, cx),
-                GestureKind::ShadowProperty { .. } => self.finish_property_scrub(false, cx),
+                GestureKind::EffectProperty { .. } => self.finish_property_scrub(false, cx),
                 GestureKind::ColorStyleProperty { angle, original } => {
                     self.set_style_number(angle, original, cx);
                 }

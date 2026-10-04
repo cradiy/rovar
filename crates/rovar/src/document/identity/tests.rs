@@ -219,3 +219,97 @@ fn component_baseline_upgrade_preserves_existing_ids_and_rejects_invalid_ids() {
         assert!(Page::decode(&serde_json::to_vec(&page).unwrap()).is_err());
     }
 }
+
+#[gpui::test]
+fn published_shadow_lists_load_and_save_as_effects_without_losing_snapshots(
+    cx: &mut gpui::TestAppContext,
+) {
+    use crate::scene::effects::{Effect, Shadow};
+    let mut page = Page::empty("Design".into());
+    page.shapes.push(shape(1));
+    page.next_id = 2;
+    page.hierarchy.effects.insert(1, vec![Effect::default()]);
+    let mut snapshot = serde_json::to_value(&page).unwrap();
+    let hierarchy = snapshot["hierarchy"].as_object_mut().unwrap();
+    let mut shadows = hierarchy.remove("effects").unwrap();
+    let shadow = shadows["1"][0].as_object_mut().unwrap();
+    shadow.remove("kind");
+    shadow.remove("type");
+    shadow.insert("x".into(), 17.into());
+    hierarchy.insert("shadows".into(), shadows);
+    let expected = vec![Effect::Shadow(Shadow {
+        x: 17.,
+        ..Default::default()
+    })];
+    let migrated = Page::decode(&serde_json::to_vec(&snapshot).unwrap()).unwrap();
+    assert_eq!(migrated.hierarchy.effects[&1], expected);
+    let component = Uuid::new_v4().to_string();
+    page.hierarchy.components.insert(
+        1,
+        crate::scene::components::Binding {
+            component: component.clone(),
+            master: false,
+            nodes: BTreeMap::from([(1, 1)]),
+            baseline: snapshot.clone(),
+        },
+    );
+    let mut document = Document::single(page);
+    document.components.insert(
+        component,
+        crate::scene::components::Definition {
+            name: "Component".into(),
+            source: None,
+            root: 1,
+            page: migrated,
+        },
+    );
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("published.rovar");
+    let text_system = cx.update(|cx| cx.text_system().clone());
+    crate::document::save_as(
+        &path,
+        &serde_json::to_vec(&document).unwrap(),
+        &[],
+        &text_system,
+    )
+    .unwrap();
+    let mut writer = rovar_format::Writer::open(&path).unwrap();
+    let mut legacy = snapshot["hierarchy"].clone();
+    legacy["components"] = serde_json::to_value(&document.pages[0].hierarchy.components).unwrap();
+    writer
+        .put_bytes(
+            &format!("page/{}/hierarchy", document.pages[0].id),
+            "json",
+            &serde_json::to_vec(&legacy).unwrap(),
+        )
+        .unwrap();
+    writer.commit().unwrap();
+    drop(writer);
+    let original = std::fs::read(&path).unwrap();
+    let loaded = crate::document::load(&path).unwrap();
+    let migrated = Document::decode(&loaded.json).unwrap();
+    assert_eq!(migrated.pages[0].hierarchy.effects[&1], expected);
+    let baseline: Page =
+        serde_json::from_value(migrated.pages[0].hierarchy.components[&1].baseline.clone())
+            .unwrap();
+    assert_eq!(baseline.hierarchy.effects[&1], expected);
+    assert!(
+        migrated.pages[0].hierarchy.components[&1].baseline["hierarchy"]
+            .get("shadows")
+            .is_none()
+    );
+    assert_eq!(std::fs::read(&path).unwrap(), original);
+    crate::document::save(
+        &path,
+        &serde_json::to_vec(&migrated).unwrap(),
+        &[],
+        &loaded.json,
+        &text_system,
+    )
+    .unwrap();
+    let saved = crate::document::load(&path)
+        .unwrap()
+        .into_document()
+        .unwrap();
+    assert_eq!(saved.pages[0].hierarchy.effects[&1], expected);
+}

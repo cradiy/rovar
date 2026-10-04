@@ -88,8 +88,8 @@ pub(crate) fn render(
             rect.height += outset * 2.;
         }
         let original_center = crate::scene::rotation::center(rect);
-        if let Some(shadows) = doc.hierarchy.shadows.get(id) {
-            rect = crate::scene::effects::bounds(rect, shadows);
+        if let Some(effects) = doc.hierarchy.effects.get(id) {
+            rect = crate::scene::effects::bounds(rect, effects);
         }
         let center = crate::scene::rotation::around(
             crate::scene::rotation::center(rect),

@@ -77,6 +77,7 @@ impl Page {
         });
         for binding in self.hierarchy.components.values_mut() {
             upgrade_json_node_ids(&mut binding.baseline);
+            crate::scene::effects::upgrade_json_effects(&mut binding.baseline);
         }
     }
 

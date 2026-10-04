@@ -103,7 +103,7 @@ impl Scene<'_> {
             }
             let has_shadow = doc
                 .hierarchy
-                .shadows
+                .effects
                 .get(id)
                 .is_some_and(|shadows| effects::filter(&mut defs, *id, effect_rect, shadows));
             if has_shadow {

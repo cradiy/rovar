@@ -171,13 +171,13 @@ impl Workspace {
                     self.finish_layout_scrub(changed, cx);
                     None
                 }
-                GestureKind::ShadowProperty {
+                GestureKind::EffectProperty {
                     index,
                     field,
                     original,
                 } => {
                     let changed = self
-                        .shadow_number(index, field)
+                        .effect_number(index, field)
                         .is_some_and(|v| v != original);
                     self.finish_property_scrub(changed, cx);
                     None

@@ -1,20 +1,23 @@
 use crate::scene::{
     artboard::Rect,
-    effects::{Shadow, ShadowKind},
+    effects::{Effect, Shadow, ShadowKind},
 };
 use std::fmt::Write;
 
-pub(super) fn filter(defs: &mut String, id: usize, rect: Rect, shadows: &[Shadow]) -> bool {
-    if !shadows.iter().any(Shadow::visible) {
+pub(super) fn filter(defs: &mut String, id: usize, rect: Rect, effects: &[Effect]) -> bool {
+    if !effects.iter().any(Effect::visible) {
         return false;
     }
+    let shadows: Vec<_> = effects.iter().filter_map(Effect::shadow).collect();
+    let blur = crate::scene::effects::blur_radius(effects);
     // Intermediate dilation and blur must survive outside the original contour
     // before offsetting. Inner shadows are clipped back by SourceAlpha.
     let padding = shadows
         .iter()
         .filter(|s| s.visible())
-        .map(Shadow::padding)
-        .fold(0., f32::max);
+        .map(|s| Shadow::padding(s))
+        .fold(0., f32::max)
+        + blur * 1.5;
     let bounds = Rect {
         x: rect.x - padding,
         y: rect.y - padding,
@@ -60,6 +63,10 @@ pub(super) fn filter(defs: &mut String, id: usize, rect: Rect, shadows: &[Shadow
     {
         write!(defs, "<feMergeNode in=\"shadow-{i}\"/>").unwrap();
     }
-    defs.push_str("</feMerge></filter>");
+    defs.push_str("</feMerge>");
+    if blur > 0. {
+        write!(defs, "<feGaussianBlur stdDeviation=\"{}\"/>", blur / 2.).unwrap();
+    }
+    defs.push_str("</filter>");
     true
 }

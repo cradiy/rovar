@@ -421,7 +421,7 @@ impl Workspace {
             .when(self.batch_color_supported(cx), |el| {
                 el.child(section(t("color")).child(self.paint_value_row(cx)))
             })
-            .child(self.shadow_controls(cx))
+            .child(self.effect_controls(cx))
             .child(self.export_properties(cx))
     }
 }

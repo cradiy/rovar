@@ -2,7 +2,7 @@ use super::*;
 use crate::editor::tests::{click, create, draw, open};
 use gpui::{TestAppContext, VisualTestContext};
 
-fn input(visual: &mut VisualTestContext, field: usize, value: &str) {
+pub(super) fn input(visual: &mut VisualTestContext, field: usize, value: &str) {
     let bounds = visual
         .debug_bounds(
             [
@@ -41,12 +41,21 @@ fn shadow_controls_preserve_undo_storage_clipboard_and_component_updates(cx: &mu
     click(&mut visual, "effect-inner-shadow");
     handle
         .update(&mut visual.cx, |this, window, cx| {
-            assert_eq!(this.hierarchy.shadows[&1][0].kind, ShadowKind::Inner);
-            assert_eq!(this.hierarchy.shadows[&1][0].blur, 16.);
+            assert_eq!(
+                this.hierarchy.effects[&1][0].shadow().unwrap().kind,
+                ShadowKind::Inner
+            );
+            assert_eq!(this.hierarchy.effects[&1][0].shadow().unwrap().blur, 16.);
             this.undo_redo(false, window, cx);
-            assert_eq!(this.hierarchy.shadows[&1][0].kind, ShadowKind::Drop);
+            assert_eq!(
+                this.hierarchy.effects[&1][0].shadow().unwrap().kind,
+                ShadowKind::Drop
+            );
             this.undo_redo(true, window, cx);
-            assert_eq!(this.hierarchy.shadows[&1][0].kind, ShadowKind::Inner);
+            assert_eq!(
+                this.hierarchy.effects[&1][0].shadow().unwrap().kind,
+                ShadowKind::Inner
+            );
         })
         .unwrap();
     draw(&mut visual);
@@ -62,13 +71,13 @@ fn shadow_controls_preserve_undo_storage_clipboard_and_component_updates(cx: &mu
     draw(&mut visual);
     handle
         .update(&mut visual.cx, |this, window, cx| {
-            let shadows = this.hierarchy.shadows[&1].clone();
+            let shadows = this.hierarchy.effects[&1].clone();
             assert_eq!(shadows.len(), 2);
-            assert_eq!(shadows[0].kind, ShadowKind::Inner);
-            assert_eq!(shadows[0].x, -20.);
-            assert_eq!(shadows[0].blur, 16.);
+            assert_eq!(shadows[0].shadow().unwrap().kind, ShadowKind::Inner);
+            assert_eq!(shadows[0].shadow().unwrap().x, -20.);
+            assert_eq!(shadows[0].shadow().unwrap().blur, 16.);
             assert_eq!(
-                shadows[0].color,
+                shadows[0].shadow().unwrap().color,
                 gpui::Rgba {
                     r: 1.,
                     g: 0.,
@@ -76,7 +85,7 @@ fn shadow_controls_preserve_undo_storage_clipboard_and_component_updates(cx: &mu
                     a: 0.5
                 }
             );
-            assert!(!shadows[0].enabled);
+            assert!(!shadows[0].enabled());
             let (json, sources) = this
                 .snapshot_document(&uuid::Uuid::new_v4().to_string(), cx)
                 .unwrap();
@@ -86,28 +95,43 @@ fn shadow_controls_preserve_undo_storage_clipboard_and_component_updates(cx: &mu
             let saved =
                 crate::document::Document::decode(&crate::document::load(&path).unwrap().json)
                     .unwrap();
-            assert_eq!(saved.pages[0].hierarchy.shadows[&1], shadows);
+            assert_eq!(saved.pages[0].hierarchy.effects[&1], shadows);
             this.duplicate_selection(window, cx);
             let copy = this.selected_shape.unwrap();
-            assert_eq!(this.hierarchy.shadows[&copy], shadows);
+            assert_eq!(this.hierarchy.effects[&copy], shadows);
             this.delete_selected(cx);
-            assert!(!this.hierarchy.shadows.contains_key(&copy));
+            assert!(!this.hierarchy.effects.contains_key(&copy));
             this.select_shape(1, cx);
             this.create_component(window, cx);
             this.sync_components(window, cx);
             let component = this.components.definitions.keys().next().unwrap().clone();
             this.insert_document_component(&component, false, Some(point(700., 200.)), window, cx);
             let instance = *this.selection_ids().first().unwrap();
-            assert_eq!(this.hierarchy.shadows[&instance], shadows);
+            assert_eq!(this.hierarchy.effects[&instance], shadows);
             this.insert_document_component(&component, false, Some(point(900., 200.)), window, cx);
             let clean = *this.selection_ids().first().unwrap();
-            this.hierarchy.shadows.get_mut(&instance).unwrap()[0].x = 80.;
-            this.hierarchy.shadows.get_mut(&1).unwrap()[1].blur = 42.;
+            this.hierarchy.effects.get_mut(&instance).unwrap()[0]
+                .shadow_mut()
+                .unwrap()
+                .x = 80.;
+            this.hierarchy.effects.get_mut(&1).unwrap()[1]
+                .shadow_mut()
+                .unwrap()
+                .blur = 42.;
             this.history.borrow_mut().mark_changed();
             this.sync_components(window, cx);
-            assert_eq!(this.hierarchy.shadows[&instance][0].x, 80.);
-            assert_eq!(this.hierarchy.shadows[&instance][1].blur, shadows[1].blur);
-            assert_eq!(this.hierarchy.shadows[&clean][1].blur, 42.);
+            assert_eq!(
+                this.hierarchy.effects[&instance][0].shadow().unwrap().x,
+                80.
+            );
+            assert_eq!(
+                this.hierarchy.effects[&instance][1].shadow().unwrap().blur,
+                shadows[1].shadow().unwrap().blur
+            );
+            assert_eq!(
+                this.hierarchy.effects[&clean][1].shadow().unwrap().blur,
+                42.
+            );
         })
         .unwrap();
 }
@@ -132,26 +156,26 @@ fn shadow_exports_preserve_silhouettes_stack_order_and_expanded_bounds(cx: &mut 
             this.shapes.push(shape);
             this.next_id = 2;
             this.select_shape(1, cx);
-            this.hierarchy.shadows.insert(
+            this.hierarchy.effects.insert(
                 1,
                 vec![
-                    Shadow {
+                    Effect::Shadow(Shadow {
                         x: 60.,
                         y: 0.,
                         blur: 0.,
                         spread: 0.,
                         color: rgb(0xff0000),
                         ..Default::default()
-                    },
-                    Shadow {
+                    }),
+                    Effect::Shadow(Shadow {
                         x: 60.,
                         y: 0.,
                         blur: 0.,
                         spread: 0.,
                         color: rgb(0x0000ff),
                         ..Default::default()
-                    },
-                    Shadow {
+                    }),
+                    Effect::Shadow(Shadow {
                         kind: ShadowKind::Inner,
                         x: 8.,
                         y: 0.,
@@ -159,7 +183,7 @@ fn shadow_exports_preserve_silhouettes_stack_order_and_expanded_bounds(cx: &mut 
                         spread: 0.,
                         color: rgb(0x00ff00),
                         ..Default::default()
-                    },
+                    }),
                 ],
             );
             let job = this.component_export_jobs(window, cx).unwrap().remove(0);
@@ -191,9 +215,15 @@ fn shadow_exports_preserve_silhouettes_stack_order_and_expanded_bounds(cx: &mut 
             let mut raster = resvg::tiny_skia::Pixmap::new(png.width(), png.height()).unwrap();
             resvg::render(&tree, Default::default(), &mut raster.as_mut());
             assert_eq!(raster.pixel(81, 21).unwrap().red(), 255);
-            this.hierarchy.shadows.get_mut(&1).unwrap()[0].blur = 8.;
-            this.hierarchy.shadows.get_mut(&1).unwrap()[0].spread = 4.;
-            this.hierarchy.shadows.get_mut(&1).unwrap()[1].enabled = false;
+            this.hierarchy.effects.get_mut(&1).unwrap()[0]
+                .shadow_mut()
+                .unwrap()
+                .blur = 8.;
+            this.hierarchy.effects.get_mut(&1).unwrap()[0]
+                .shadow_mut()
+                .unwrap()
+                .spread = 4.;
+            this.hierarchy.effects.get_mut(&1).unwrap()[1].toggle();
             let blurred = this.component_export_jobs(window, cx).unwrap().remove(0);
             let png = image::load_from_memory(
                 &blurred
@@ -212,8 +242,7 @@ fn shadow_exports_preserve_silhouettes_stack_order_and_expanded_bounds(cx: &mut 
                 alpha > 0 && alpha < 255,
                 "Blur must produce a soft edge beyond the spread contour"
             );
-            this.hierarchy.shadows.get_mut(&1).unwrap()[0].enabled = false;
-            this.hierarchy.shadows.get_mut(&1).unwrap()[1].enabled = false;
+            this.hierarchy.effects.get_mut(&1).unwrap()[0].toggle();
             let job = this.component_export_jobs(window, cx).unwrap().remove(0);
             assert_eq!(job.bounds.width, 40.);
         })
@@ -245,14 +274,14 @@ fn inner_shadow_exports_clip_to_the_contour_and_keep_signed_spread(cx: &mut Test
                 color: rgb(0xff0000),
                 ..Default::default()
             };
-            this.hierarchy.shadows.insert(
+            this.hierarchy.effects.insert(
                 1,
                 vec![
-                    inner.clone(),
-                    Shadow {
+                    Effect::Shadow(inner.clone()),
+                    Effect::Shadow(Shadow {
                         color: rgb(0x0000ff),
                         ..inner
-                    },
+                    }),
                 ],
             );
             let options = crate::render::raster::Options::default();
@@ -292,7 +321,7 @@ fn inner_shadow_exports_clip_to_the_contour_and_keep_signed_spread(cx: &mut Test
                 0,
                 "Do not fill bounding-box corners"
             );
-            this.hierarchy.shadows.get_mut(&1).unwrap().truncate(1);
+            this.hierarchy.effects.get_mut(&1).unwrap().truncate(1);
             this.shapes[0].fill_enabled = false;
             this.shapes[0].stroke.enabled = true;
             this.shapes[0].stroke.width = 8.;
@@ -307,7 +336,9 @@ fn inner_shadow_exports_clip_to_the_contour_and_keep_signed_spread(cx: &mut Test
             this.shapes[0].fill_enabled = true;
             this.shapes[0].stroke.enabled = false;
             this.shapes[0].kind = ShapeKind::Rectangle;
-            let shadow = &mut this.hierarchy.shadows.get_mut(&1).unwrap()[0];
+            let shadow = this.hierarchy.effects.get_mut(&1).unwrap()[0]
+                .shadow_mut()
+                .unwrap();
             shadow.x = 12.;
             shadow.spread = -4.;
             let png = render(this, window, cx);
@@ -317,7 +348,9 @@ fn inner_shadow_exports_clip_to_the_contour_and_keep_signed_spread(cx: &mut Test
                 [255, 255, 255, 255],
                 "Negative spread contracts the inner shadow before offset"
             );
-            let shadow = &mut this.hierarchy.shadows.get_mut(&1).unwrap()[0];
+            let shadow = this.hierarchy.effects.get_mut(&1).unwrap()[0]
+                .shadow_mut()
+                .unwrap();
             shadow.x = 0.;
             shadow.spread = 5.;
             shadow.blur = 4.;
@@ -325,7 +358,7 @@ fn inner_shadow_exports_clip_to_the_contour_and_keep_signed_spread(cx: &mut Test
             let edge = png.get_pixel(5, 20).0;
             assert_eq!(edge[0], 255);
             assert!(edge[1] > 0 && edge[1] < 255, "Blur softens the inner edge");
-            this.hierarchy.shadows.get_mut(&1).unwrap()[0].enabled = false;
+            this.hierarchy.effects.get_mut(&1).unwrap()[0].toggle();
             let png = render(this, window, cx);
             assert_eq!(png.get_pixel(2, 20).0, [255, 255, 255, 255]);
         })
@@ -351,7 +384,7 @@ fn shadow_scrubbing_is_one_undo_step_and_escape_restores_values(cx: &mut TestApp
     draw(&mut visual);
     handle
         .update(&mut visual.cx, |this, _, _| {
-            assert_eq!(this.hierarchy.shadows[&1][0].blur, 28.);
+            assert_eq!(this.hierarchy.effects[&1][0].shadow().unwrap().blur, 28.);
             assert_eq!(this.history.borrow().undo_len(), depth);
         })
         .unwrap();
@@ -359,7 +392,7 @@ fn shadow_scrubbing_is_one_undo_step_and_escape_restores_values(cx: &mut TestApp
     draw(&mut visual);
     handle
         .update(&mut visual.cx, |this, _, _| {
-            assert_eq!(this.hierarchy.shadows[&1][0].blur, 8.);
+            assert_eq!(this.hierarchy.effects[&1][0].shadow().unwrap().blur, 8.);
             assert_eq!(this.history.borrow().undo_len(), depth);
         })
         .unwrap();
@@ -377,7 +410,7 @@ fn shadow_scrubbing_is_one_undo_step_and_escape_restores_values(cx: &mut TestApp
     draw(&mut visual);
     handle
         .update(&mut visual.cx, |this, _, _| {
-            assert_eq!(this.hierarchy.shadows[&1][0].blur, 8.)
+            assert_eq!(this.hierarchy.effects[&1][0].shadow().unwrap().blur, 8.)
         })
         .unwrap();
 }

@@ -638,7 +638,7 @@ pub fn element(
     editor: &Entity<TextEditor>,
     zoom: f32,
     exit_focus: FocusHandle,
-    shadows: Vec<crate::scene::effects::Shadow>,
+    effects: Vec<crate::scene::effects::Effect>,
     cx: &App,
 ) -> impl IntoElement + use<> {
     let focus = editor.read(cx).focus.clone();
@@ -683,29 +683,12 @@ pub fn element(
                     let selection = if text.editing { text.selection() } else { 0..0 };
                     let cursor = text.cursor;
                     let marked = text.marked.clone();
-                    crate::scene::effects::paint_shadows(
-                        bounds,
-                        &shadows,
-                        crate::scene::effects::ShadowKind::Drop,
-                        zoom,
-                        window,
-                        |window| {
-                            window.with_content_mask(
-                                Some(gpui::ContentMask { bounds }),
-                                |window| {
-                                    layout.paint_artwork(window, cx);
-                                },
-                            );
-                        },
-                    );
                     window.with_content_mask(Some(gpui::ContentMask { bounds }), |window| {
                         layout.paint_selection(selection.clone(), window);
-                        layout.paint_artwork(window, cx);
                     });
-                    crate::scene::effects::paint_shadows(
+                    crate::scene::effects::paint_effects(
                         bounds,
-                        &shadows,
-                        crate::scene::effects::ShadowKind::Inner,
+                        &effects,
                         zoom,
                         window,
                         |window| {

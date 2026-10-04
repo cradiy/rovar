@@ -100,7 +100,7 @@ impl Workspace {
     pub(super) fn toggle_properties(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.cancel_gesture(window, cx);
         self.close_export_menus(window, cx);
-        self.close_shadow_menus(window, cx);
+        self.close_effect_menus(window, cx);
         for popover in &self.inspector.paint_popovers {
             popover.update(cx, |state, cx| state.close(window, cx));
         }

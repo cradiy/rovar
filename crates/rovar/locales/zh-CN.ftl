@@ -524,6 +524,7 @@ effects = 效果
 effects-mixed = 多种效果
 effect-drop-shadow = 外阴影
 effect-inner-shadow = 内阴影
+effect-layer-blur = 图层模糊
 effect-blur = 模糊
 effect-spread = 扩展
 settings-theme = 主题

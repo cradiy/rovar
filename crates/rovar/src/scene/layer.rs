@@ -25,8 +25,13 @@ pub(crate) struct LayerGroup {
 /// Group membership is independent of the board coordinate system.
 #[derive(Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub(crate) struct Hierarchy {
-    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
-    pub shadows: std::collections::BTreeMap<usize, Vec<crate::scene::effects::Shadow>>,
+    #[serde(
+        default,
+        alias = "shadows",
+        deserialize_with = "crate::scene::effects::deserialize_list",
+        skip_serializing_if = "std::collections::BTreeMap::is_empty"
+    )]
+    pub effects: std::collections::BTreeMap<usize, Vec<crate::scene::effects::Effect>>,
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub exports: std::collections::BTreeMap<usize, Vec<crate::document::export::Preset>>,
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]

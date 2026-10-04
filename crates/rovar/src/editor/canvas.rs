@@ -516,7 +516,7 @@ impl Workspace {
             .child({
                 let mut board = board.clone();
                 board.image_fill = self.cropped_fill(id, &board.image_fill);
-                let shadows = self.hierarchy.shadows.get(&id).cloned().unwrap_or_default();
+                let shadows = self.hierarchy.effects.get(&id).cloned().unwrap_or_default();
                 let zoom = self.view.zoom;
                 let background = board.background();
                 let image = (board.fill_mode == FillMode::Image).then(|| board.image_fill.clone());

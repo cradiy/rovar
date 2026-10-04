@@ -49,6 +49,7 @@ pub(super) fn content(path: &Path, deleted: bool) -> Result<Vec<u8>> {
 
 fn normalize(value: &mut serde_json::Value) {
     crate::document::identity::upgrade_json_node_ids(value);
+    crate::scene::effects::upgrade_json_effects(value);
     match value {
         serde_json::Value::Object(fields) => {
             // Allocation watermarks can advance after an undone insertion.

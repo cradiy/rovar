@@ -1,4 +1,4 @@
-use super::{Shadow, ShadowKind};
+use super::{Effect, ShadowKind};
 use gpui::{Bounds, EffectShader, EffectUniforms, Pixels, SubtreeEffectPass, Window, px};
 
 /// Paint callbacks contain artwork primitives only, never interactive elements.
@@ -7,7 +7,7 @@ use gpui::{Bounds, EffectShader, EffectUniforms, Pixels, SubtreeEffectPass, Wind
 /// inner shadows are painted after it.
 pub(crate) fn paint_shadows(
     bounds: Bounds<Pixels>,
-    shadows: &[Shadow],
+    effects: &[Effect],
     kind: ShadowKind,
     zoom: f32,
     window: &mut Window,
@@ -17,9 +17,10 @@ pub(crate) fn paint_shadows(
         return;
     }
     let scale = zoom * window.raster_scale_factor();
-    for shadow in shadows
+    for shadow in effects
         .iter()
         .rev()
+        .filter_map(Effect::shadow)
         .filter(|s| s.visible() && s.kind == kind)
     {
         let inner = kind == ShadowKind::Inner;
@@ -87,6 +88,55 @@ pub(crate) fn paint_shadows(
     }
 }
 
+/// Compose shadows around the source, then blur the resulting layer as a whole.
+pub(crate) fn paint_effects(
+    bounds: Bounds<Pixels>,
+    effects: &[Effect],
+    zoom: f32,
+    window: &mut Window,
+    mut source: impl FnMut(&mut Window),
+) {
+    let radius = super::blur_radius(effects);
+    let mut paint = |window: &mut Window| {
+        paint_shadows(bounds, effects, ShadowKind::Drop, zoom, window, &mut source);
+        source(window);
+        paint_shadows(
+            bounds,
+            effects,
+            ShadowKind::Inner,
+            zoom,
+            window,
+            &mut source,
+        );
+    };
+    if radius == 0. || !window.supports_subtree_effects() {
+        paint(window);
+        return;
+    }
+    let sigma = radius * 0.5 * zoom * window.raster_scale_factor();
+    let passes = [[1., 0.], [0., 1.]].map(|axis| {
+        let mut uniforms = EffectUniforms::default();
+        uniforms.set_slot(0, [axis[0], axis[1], sigma, 0.]);
+        SubtreeEffectPass {
+            shader: EffectShader::wgsl_image(include_str!("layer_blur.wgsl")),
+            uniforms,
+            time: 0.,
+            images: Default::default(),
+            bloom: None,
+            feedback: None,
+            distance_field: None,
+            particles: None,
+            particle_transition: None,
+        }
+    });
+    window.with_subtree_effect_chain(
+        bounds.dilate(px((super::padding(effects) + 2.) * zoom)),
+        &passes,
+        1.,
+        paint,
+    );
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -96,6 +146,7 @@ mod tests {
             include_str!("blur.wgsl"),
             include_str!("color.wgsl"),
             include_str!("mask.wgsl"),
+            include_str!("layer_blur.wgsl"),
         ] {
             let source = gpui::compose_subtree_effect_wgsl(&gpui::EffectShader::wgsl_image(source));
             let module = naga::front::wgsl::parse_str(&source)

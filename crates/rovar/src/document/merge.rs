@@ -158,7 +158,7 @@ fn align(page: &mut Page, handles: &BTreeMap<uuid::Uuid, usize>) -> Result<()> {
     remap(&mut h.layouts, &mapping)?;
     remap(&mut h.sizing, &mapping)?;
     remap(&mut h.exports, &mapping)?;
-    remap(&mut h.shadows, &mapping)?;
+    remap(&mut h.effects, &mapping)?;
     remap(&mut h.components, &mapping)?;
     for handle in &mut h.order {
         *handle = id(*handle)?;
@@ -220,7 +220,7 @@ fn canonical(document: Document) -> Result<Value> {
             );
         }
         page["assets"] = assets.into();
-        for field in ["exports", "layouts", "sizing", "components", "shadows"] {
+        for field in ["exports", "layouts", "sizing", "components", "effects"] {
             if page["hierarchy"].get(field).is_none() {
                 page["hierarchy"][field] = Value::Object(Map::new());
             }

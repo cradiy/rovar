@@ -130,7 +130,7 @@ impl Workspace {
             .canvas_layer_order()
             .into_iter()
             .filter_map(|id| {
-                let shadow_margin = self.shadow_padding(id);
+                let shadow_margin = self.effect_padding(id);
                 if let Some(board) = boards.get(&id) {
                     let mut rect = board.rect;
                     rect.width = rect.width.max(100. / self.view.zoom);
@@ -198,7 +198,7 @@ impl Workspace {
             (shape.fill_enabled && shape.can_fill() && shape.fill_mode == FillMode::Image)
                 .then(|| self.cropped_fill(id, &shape.image_fill))
         };
-        let shadows = self.hierarchy.shadows.get(&id).cloned().unwrap_or_default();
+        let effects = self.hierarchy.effects.get(&id).cloned().unwrap_or_default();
         let zoom = self.view.zoom;
         let paths = self.shape_paths.clone();
         let surface = canvas(
@@ -247,23 +247,7 @@ impl Workspace {
                         paint_path(path, bounds.origin, stroke.clone(), window);
                     }
                 };
-                crate::scene::effects::paint_shadows(
-                    bounds,
-                    &shadows,
-                    crate::scene::effects::ShadowKind::Drop,
-                    zoom,
-                    window,
-                    &mut paint,
-                );
-                paint(window);
-                crate::scene::effects::paint_shadows(
-                    bounds,
-                    &shadows,
-                    crate::scene::effects::ShadowKind::Inner,
-                    zoom,
-                    window,
-                    &mut paint,
-                );
+                crate::scene::effects::paint_effects(bounds, &effects, zoom, window, &mut paint);
                 if edit_hatch {
                     // Reuse the actual filled contour, including holes and curves.
                     // This is only a paint overlay; document fills and hitboxes stay intact.
@@ -495,7 +479,7 @@ impl Workspace {
             } else {
                 0.
             })
-            .max(self.shadow_padding(id)),
+            .max(self.effect_padding(id)),
         )
     }
 }

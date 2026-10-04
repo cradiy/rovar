@@ -1,10 +1,12 @@
 use super::*;
-use crate::scene::effects::{MAX_OFFSET, MAX_RADIUS, MAX_SHADOWS, Shadow, ShadowKind};
+use crate::scene::effects::{Effect, MAX_EFFECTS, MAX_OFFSET, MAX_RADIUS, Shadow, ShadowKind};
 use crate::ui::theme::Color;
 use std::collections::BTreeSet;
 use uic::components::context_menu::{ContextMenuItem, ContextMenuTrigger};
 use uic::components::popover::PopoverState;
 
+#[cfg(test)]
+mod layer_blur_tests;
 #[cfg(test)]
 mod tests;
 
@@ -16,6 +18,7 @@ pub(in crate::editor) struct Controls {
 }
 
 struct Row {
+    kind: Kind,
     color: gpui::Rgba,
     inputs: [Entity<TextInput>; 6],
     picker: Entity<ColorPickerState>,
@@ -23,20 +26,94 @@ struct Row {
     _subscriptions: Vec<Subscription>,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Kind {
+    Drop,
+    Inner,
+    Blur,
+}
+
+impl Kind {
+    fn of(effect: &Effect) -> Self {
+        match effect {
+            Effect::Shadow(s) => match s.kind {
+                ShadowKind::Drop => Self::Drop,
+                ShadowKind::Inner => Self::Inner,
+            },
+            Effect::LayerBlur { .. } => Self::Blur,
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Drop => "effect-drop-shadow",
+            Self::Inner => "effect-inner-shadow",
+            Self::Blur => "effect-layer-blur",
+        }
+    }
+
+    fn convert(self, effect: &Effect) -> Effect {
+        let enabled = effect.enabled();
+        match self {
+            Self::Blur => Effect::LayerBlur {
+                enabled,
+                radius: 8.,
+            },
+            Self::Drop | Self::Inner => Effect::Shadow(Shadow {
+                enabled,
+                kind: if self == Self::Drop {
+                    ShadowKind::Drop
+                } else {
+                    ShadowKind::Inner
+                },
+                ..effect.shadow().cloned().unwrap_or_default()
+            }),
+        }
+    }
+}
+
+fn field_values(effect: &Effect) -> [String; 6] {
+    if let Some(s) = effect.shadow() {
+        [
+            number(s.x),
+            number(s.y),
+            number(s.blur),
+            number(s.spread),
+            hex(s.color),
+            number(s.color.a * 100.),
+        ]
+    } else if let Effect::LayerBlur { radius, .. } = effect {
+        [
+            String::new(),
+            String::new(),
+            number(*radius),
+            String::new(),
+            String::new(),
+            String::new(),
+        ]
+    } else {
+        unreachable!()
+    }
+}
+
 impl Workspace {
-    pub(in crate::editor) fn close_shadow_menus(
+    pub(in crate::editor) fn close_effect_menus(
         &mut self,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        for row in &self.inspector.shadows.rows {
+        for row in &self.inspector.effects.rows {
             row.popover.update(cx, |p, cx| p.close(window, cx));
         }
     }
 
-    pub(in crate::editor) fn shadow_number(&self, index: usize, field: usize) -> Option<f32> {
-        let shadows = self.common_shadows()?;
-        let shadow = shadows.get(index)?;
+    pub(in crate::editor) fn effect_number(&self, index: usize, field: usize) -> Option<f32> {
+        let shadows = self.common_effects()?;
+        let effect = shadows.get(index)?;
+        if let Effect::LayerBlur { radius, .. } = effect {
+            return (field == 2).then_some(*radius);
+        }
+        let shadow = effect.shadow()?;
         match field {
             0 => Some(shadow.x),
             1 => Some(shadow.y),
@@ -47,7 +124,7 @@ impl Workspace {
         }
     }
 
-    fn begin_shadow_scrub(
+    fn begin_effect_scrub(
         &mut self,
         index: usize,
         field: usize,
@@ -57,7 +134,7 @@ impl Workspace {
     ) {
         if self.gesture.is_some()
             || !self
-                .shadow_targets()
+                .effect_targets()
                 .iter()
                 .any(|id| self.layer_editable(*id))
         {
@@ -65,7 +142,7 @@ impl Workspace {
         }
         let pending = self
             .inspector
-            .shadows
+            .effects
             .rows
             .iter()
             .enumerate()
@@ -76,14 +153,14 @@ impl Workspace {
                     .map(|field| (index, field))
             });
         if let Some((index, field)) = pending {
-            self.apply_shadow_field(index, field, cx);
+            self.apply_effect_field(index, field, cx);
         }
         self.focus.focus(window, cx);
-        let Some(original) = self.shadow_number(index, field) else {
+        let Some(original) = self.effect_number(index, field) else {
             return;
         };
         self.begin(
-            GestureKind::ShadowProperty {
+            GestureKind::EffectProperty {
                 index,
                 field,
                 original,
@@ -96,7 +173,7 @@ impl Workspace {
         self.history.borrow_mut().begin_preview();
     }
 
-    pub(in crate::editor) fn scrub_shadow_number(
+    pub(in crate::editor) fn scrub_effect_number(
         &mut self,
         index: usize,
         field: usize,
@@ -105,17 +182,17 @@ impl Workspace {
         shift: bool,
         cx: &mut Context<Self>,
     ) {
-        if delta.abs() < 3. && self.shadow_number(index, field) == Some(original) {
+        if delta.abs() < 3. && self.effect_number(index, field) == Some(original) {
             return;
         }
         let value = number(original + (delta * if shift { 10. } else { 1. }).round());
-        let Some(row) = self.inspector.shadows.rows.get(index) else {
+        let Some(row) = self.inspector.effects.rows.get(index) else {
             return;
         };
         row.inputs[field].update(cx, |input, cx| input.set_value(value, cx));
-        self.apply_shadow_field(index, field, cx);
+        self.apply_effect_field(index, field, cx);
     }
-    fn shadow_targets(&self) -> BTreeSet<usize> {
+    fn effect_targets(&self) -> BTreeSet<usize> {
         self.selection_ids()
             .into_iter()
             .filter(|id| {
@@ -128,42 +205,36 @@ impl Workspace {
             .collect()
     }
 
-    fn common_shadows(&self) -> Option<Vec<Shadow>> {
-        let ids = self.shadow_targets();
+    fn common_effects(&self) -> Option<Vec<Effect>> {
+        let ids = self.effect_targets();
         let mut values = ids
             .iter()
-            .map(|id| self.hierarchy.shadows.get(id).cloned().unwrap_or_default());
+            .map(|id| self.hierarchy.effects.get(id).cloned().unwrap_or_default());
         let first = values.next().unwrap_or_default();
         values.all(|value| value == first).then_some(first)
     }
 
-    pub(in crate::editor) fn shadow_padding(&self, id: usize) -> f32 {
-        self.hierarchy
-            .shadows
-            .get(&id)
-            .into_iter()
-            .flatten()
-            .filter(|s| s.visible() && s.kind == ShadowKind::Drop)
-            .map(Shadow::padding)
-            .fold(0., f32::max)
-            * self.view.zoom
+    pub(in crate::editor) fn effect_padding(&self, id: usize) -> f32 {
+        self.hierarchy.effects.get(&id).map_or(0., |effects| {
+            crate::scene::effects::padding(effects) * self.view.zoom
+        })
     }
 
-    fn edit_shadows(
+    fn edit_effects(
         &mut self,
         group: Option<Group>,
-        edit: impl Fn(&mut Vec<Shadow>),
+        edit: impl Fn(&mut Vec<Effect>),
         cx: &mut Context<Self>,
     ) {
         let before = self.snapshot_hierarchy();
-        for id in self.shadow_targets() {
+        for id in self.effect_targets() {
             if !self.layer_editable(id) {
                 continue;
             }
-            let shadows = self.hierarchy.shadows.entry(id).or_default();
+            let shadows = self.hierarchy.effects.entry(id).or_default();
             edit(shadows);
             if shadows.is_empty() {
-                self.hierarchy.shadows.remove(&id);
+                self.hierarchy.effects.remove(&id);
             }
         }
         if let Change::Hierarchy { value, .. } = &before
@@ -177,67 +248,74 @@ impl Workspace {
         }
     }
 
-    fn apply_shadow_field(&mut self, index: usize, field: usize, cx: &mut Context<Self>) {
-        if self.inspector.shadows.target != (self.pages.active.clone(), self.shadow_targets()) {
+    fn apply_effect_field(&mut self, index: usize, field: usize, cx: &mut Context<Self>) {
+        if self.inspector.effects.target != (self.pages.active.clone(), self.effect_targets()) {
             return;
         }
-        let Some(row) = self.inspector.shadows.rows.get(index) else {
+        let Some(row) = self.inspector.effects.rows.get(index) else {
             return;
         };
         let value = row.inputs[field].read(cx).value().to_string();
-        let Some(mut shadow) = self.common_shadows().and_then(|s| s.get(index).cloned()) else {
+        let Some(mut effect) = self.common_effects().and_then(|s| s.get(index).cloned()) else {
             return;
         };
-        if field == 4 {
-            let hex = value.trim().trim_start_matches('#');
-            if hex.len() == 6
-                && let Ok(value) = u32::from_str_radix(hex, 16)
+        if row.kind != Kind::of(&effect) {
+            return;
+        }
+        if let Effect::LayerBlur { radius, .. } = &mut effect {
+            if field == 2
+                && let Ok(value) = value.trim().parse::<f32>()
+                && value.is_finite()
             {
-                let color = rgb(value);
-                shadow.color.r = color.r;
-                shadow.color.g = color.g;
-                shadow.color.b = color.b;
+                *radius = value.clamp(0., MAX_RADIUS);
             }
-        } else if let Ok(value) = value.trim().parse::<f32>()
-            && value.is_finite()
-        {
-            match field {
-                0 => shadow.x = value.clamp(-MAX_OFFSET, MAX_OFFSET),
-                1 => shadow.y = value.clamp(-MAX_OFFSET, MAX_OFFSET),
-                2 => shadow.blur = value.clamp(0., MAX_RADIUS),
-                3 => shadow.spread = value.clamp(-MAX_RADIUS, MAX_RADIUS),
-                5 => shadow.color.a = (value / 100.).clamp(0., 1.),
-                _ => {}
+        } else if let Some(shadow) = effect.shadow_mut() {
+            if field == 4 {
+                let hex = value.trim().trim_start_matches('#');
+                if hex.len() == 6
+                    && let Ok(value) = u32::from_str_radix(hex, 16)
+                {
+                    let color = rgb(value);
+                    shadow.color.r = color.r;
+                    shadow.color.g = color.g;
+                    shadow.color.b = color.b;
+                }
+            } else if let Ok(value) = value.trim().parse::<f32>()
+                && value.is_finite()
+            {
+                match field {
+                    0 => shadow.x = value.clamp(-MAX_OFFSET, MAX_OFFSET),
+                    1 => shadow.y = value.clamp(-MAX_OFFSET, MAX_OFFSET),
+                    2 => shadow.blur = value.clamp(0., MAX_RADIUS),
+                    3 => shadow.spread = value.clamp(-MAX_RADIUS, MAX_RADIUS),
+                    5 => shadow.color.a = (value / 100.).clamp(0., 1.),
+                    _ => {}
+                }
             }
         }
-        self.edit_shadows(
+        self.edit_effects(
             None,
             |shadows| {
                 if let Some(s) = shadows.get_mut(index) {
-                    *s = shadow.clone();
+                    *s = effect.clone();
                 }
             },
             cx,
         );
-        self.refresh_shadow_fields(cx);
+        self.refresh_effect_fields(cx);
     }
 
-    fn refresh_shadow_fields(&mut self, cx: &mut Context<Self>) {
-        let shadows = self.common_shadows().unwrap_or_default();
-        for (row, shadow) in self.inspector.shadows.rows.iter_mut().zip(shadows) {
-            if row.color != shadow.color {
+    fn refresh_effect_fields(&mut self, cx: &mut Context<Self>) {
+        let shadows = self.common_effects().unwrap_or_default();
+        for (row, effect) in self.inspector.effects.rows.iter_mut().zip(shadows) {
+            if let Some(shadow) = effect.shadow()
+                && row.color != shadow.color
+            {
                 row.color = shadow.color;
                 row.picker
                     .update(cx, |picker, cx| picker.set_value(shadow.color, cx));
             }
-            for (input, value) in row.inputs.iter().zip([
-                number(shadow.x),
-                number(shadow.y),
-                number(shadow.blur),
-                number(shadow.spread),
-                hex(shadow.color),
-                number(shadow.color.a * 100.),
-            ]) {
+            for (input, value) in row.inputs.iter().zip(field_values(&effect)) {
                 input.update(cx, |input, cx| {
                     if input.value().as_ref() != value {
                         input.set_value(value, cx);
@@ -247,28 +325,37 @@ impl Workspace {
         }
     }
 
-    pub(in crate::editor) fn sync_shadow_controls(
+    pub(in crate::editor) fn sync_effect_controls(
         &mut self,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let target = (self.pages.active.clone(), self.shadow_targets());
-        let shadows = self.common_shadows().unwrap_or_default();
-        let changed = self.inspector.shadows.target != target
-            || self.inspector.shadows.rows.len() != shadows.len();
+        let target = (self.pages.active.clone(), self.effect_targets());
+        let shadows = self.common_effects().unwrap_or_default();
+        let changed = self.inspector.effects.target != target
+            || self.inspector.effects.rows.len() != shadows.len()
+            || self
+                .inspector
+                .effects
+                .rows
+                .iter()
+                .zip(&shadows)
+                .any(|(row, effect)| row.kind != Kind::of(effect));
         if changed {
-            for row in &self.inspector.shadows.rows {
+            for row in &self.inspector.effects.rows {
                 row.popover.update(cx, |p, cx| p.close(window, cx));
             }
-            let expanded = (self.inspector.shadows.target == target)
-                .then_some(self.inspector.shadows.expanded)
+            let expanded = (self.inspector.effects.target == target)
+                .then_some(self.inspector.effects.expanded)
                 .flatten();
-            self.inspector.shadows = Controls {
+            self.inspector.effects = Controls {
                 target,
                 expanded,
                 ..Default::default()
             };
-            for (index, shadow) in shadows.iter().enumerate() {
+            for (index, effect) in shadows.iter().enumerate() {
+                let kind = Kind::of(effect);
+                let color = effect.shadow().map_or(Shadow::default().color, |s| s.color);
                 let mut subscriptions = Vec::new();
                 let inputs = std::array::from_fn(|field| {
                     let input = cx.new(TextInput::new);
@@ -276,28 +363,35 @@ impl Workspace {
                         &input,
                         move |this, _, event: &InputEvent, cx| {
                             if matches!(event, InputEvent::Submit(_)) {
-                                this.apply_shadow_field(index, field, cx);
+                                this.apply_effect_field(index, field, cx);
                             }
                         },
                     ));
                     subscriptions.push(cx.on_blur(
                         &input.focus_handle(cx),
                         window,
-                        move |this, _, cx| this.apply_shadow_field(index, field, cx),
+                        move |this, _, cx| this.apply_effect_field(index, field, cx),
                     ));
                     input
                 });
-                let picker = cx.new(|cx| ColorPickerState::new(shadow.color, cx));
+                let picker = cx.new(|cx| ColorPickerState::new(color, cx));
+                let picker_target = self.inspector.effects.target.clone();
                 subscriptions.push(cx.subscribe(
                     &picker,
                     move |this, _, event: &ColorPickerEvent, cx| {
                         let (ColorPickerEvent::Preview(color) | ColorPickerEvent::Commit(color)) =
                             *event;
-                        let ids = this.shadow_targets().into_iter().collect();
-                        this.edit_shadows(
-                            Some(Group::Shadow(ids, index, 4)),
+                        if picker_target != (this.pages.active.clone(), this.effect_targets()) {
+                            return;
+                        }
+                        let ids = this.effect_targets().into_iter().collect();
+                        this.edit_effects(
+                            Some(Group::Effect(ids, index, 4)),
                             |shadows| {
-                                if let Some(s) = shadows.get_mut(index) {
+                                if let Some(effect) = shadows.get_mut(index)
+                                    && Kind::of(effect) == kind
+                                    && let Some(s) = effect.shadow_mut()
+                                {
                                     s.color = color;
                                 }
                             },
@@ -306,11 +400,12 @@ impl Workspace {
                         if matches!(event, ColorPickerEvent::Commit(_)) {
                             this.history.borrow_mut().break_group();
                         }
-                        this.refresh_shadow_fields(cx);
+                        this.refresh_effect_fields(cx);
                     },
                 ));
-                self.inspector.shadows.rows.push(Row {
-                    color: shadow.color,
+                self.inspector.effects.rows.push(Row {
+                    kind,
+                    color,
                     inputs,
                     picker,
                     popover: cx.new(|cx| PopoverState::new(window, cx)),
@@ -318,21 +413,21 @@ impl Workspace {
                 });
             }
         }
-        let editing = self.inspector.shadows.rows.iter().any(|row| {
+        let editing = self.inspector.effects.rows.iter().any(|row| {
             row.inputs
                 .iter()
                 .any(|input| input.focus_handle(cx).is_focused(window))
         });
         if changed || !editing {
-            self.refresh_shadow_fields(cx);
+            self.refresh_effect_fields(cx);
         }
     }
 
-    pub(in crate::editor) fn shadow_controls(&self, cx: &mut Context<Self>) -> Div {
-        if self.shadow_targets().is_empty() {
+    pub(in crate::editor) fn effect_controls(&self, cx: &mut Context<Self>) -> Div {
+        if self.effect_targets().is_empty() {
             return div();
         }
-        let shadows = self.common_shadows();
+        let shadows = self.common_effects();
         div()
             .flex_shrink_0()
             .px(px(14.))
@@ -354,20 +449,20 @@ impl Workspace {
                             .child(t("effects")),
                     )
                     .child(button("shadow-add", LucideIcons::Plus).when(
-                        shadows.as_ref().is_some_and(|s| s.len() < MAX_SHADOWS),
+                        shadows.as_ref().is_some_and(|s| s.len() < MAX_EFFECTS),
                         |el| {
                             el.on_click(cx.listener(|this, _, _, cx| {
-                                let index = this.common_shadows().unwrap_or_default().len();
-                                this.edit_shadows(
+                                let index = this.common_effects().unwrap_or_default().len();
+                                this.edit_effects(
                                     None,
                                     |s| {
-                                        if s.len() < MAX_SHADOWS {
-                                            s.push(Shadow::default());
+                                        if s.len() < MAX_EFFECTS {
+                                            s.push(Effect::default());
                                         }
                                     },
                                     cx,
                                 );
-                                this.inspector.shadows.expanded = Some(index);
+                                this.inspector.effects.expanded = Some(index);
                             }))
                         },
                     )),
@@ -385,14 +480,14 @@ impl Workspace {
                     .unwrap_or_default()
                     .iter()
                     .enumerate()
-                    .map(|(index, shadow)| self.shadow_row(index, shadow, cx)),
+                    .map(|(index, effect)| self.effect_row(index, effect, cx)),
             )
     }
 
-    fn shadow_row(&self, index: usize, shadow: &Shadow, cx: &mut Context<Self>) -> Div {
-        let row = &self.inspector.shadows.rows[index];
+    fn effect_row(&self, index: usize, effect: &Effect, cx: &mut Context<Self>) -> Div {
+        let row = &self.inspector.effects.rows[index];
         let picker = row.picker.clone();
-        let expanded = self.inspector.shadows.expanded == Some(index);
+        let expanded = self.inspector.effects.expanded == Some(index);
         div()
             .flex()
             .flex_col()
@@ -426,26 +521,26 @@ impl Workspace {
                                 .text_color(MUTED.color()),
                             )
                             .on_click(cx.listener(move |this, _, _, cx| {
-                                this.inspector.shadows.expanded = (!expanded).then_some(index);
+                                this.inspector.effects.expanded = (!expanded).then_some(index);
                                 cx.notify();
                             })),
                     )
-                    .child(self.shadow_kind_control(index, shadow, cx))
+                    .child(self.effect_kind_control(index, effect, cx))
                     .child(
                         button(
                             format!("shadow-toggle-{index}"),
-                            if shadow.enabled {
+                            if effect.enabled() {
                                 LucideIcons::Eye
                             } else {
                                 LucideIcons::EyeOff
                             },
                         )
                         .on_click(cx.listener(move |this, _, _, cx| {
-                            this.edit_shadows(
+                            this.edit_effects(
                                 None,
                                 |s| {
                                     if let Some(s) = s.get_mut(index) {
-                                        s.enabled = !s.enabled;
+                                        s.toggle();
                                     }
                                 },
                                 cx,
@@ -455,7 +550,7 @@ impl Workspace {
                     .child(
                         button(format!("shadow-remove-{index}"), LucideIcons::Minus).on_click(
                             cx.listener(move |this, _, _, cx| {
-                                this.edit_shadows(
+                                this.edit_effects(
                                     None,
                                     |s| {
                                         if index < s.len() {
@@ -468,7 +563,11 @@ impl Workspace {
                         ),
                     ),
             )
-            .when(expanded, |el| {
+            .when(
+                expanded && matches!(effect, Effect::LayerBlur { .. }),
+                |el| el.child(self.shadow_input(index, 2, t("effect-blur"), cx)),
+            )
+            .when_some(effect.shadow().filter(|_| expanded), |el, shadow| {
                 el.child(
                     div()
                         .flex()
@@ -523,16 +622,20 @@ impl Workspace {
             })
     }
 
-    fn shadow_kind_control(
+    fn effect_kind_control(
         &self,
         index: usize,
-        shadow: &Shadow,
+        effect: &Effect,
         cx: &mut Context<Self>,
     ) -> impl IntoElement + use<> {
         let weak = cx.entity().downgrade();
-        let target = (self.pages.active.clone(), self.shadow_targets());
-        let current = shadow.kind;
+        let target = (self.pages.active.clone(), self.effect_targets());
+        let current = Kind::of(effect);
         let enabled = target.1.iter().any(|id| self.layer_editable(*id));
+        let blur_supported = target
+            .1
+            .iter()
+            .all(|id| !self.boards.iter().any(|b| b.id == *id));
         let trigger = div()
             .id(format!("shadow-kind-{index}"))
             .debug_selector(move || format!("shadow-kind-{index}"))
@@ -545,19 +648,16 @@ impl Workspace {
             .cursor_pointer()
             .hover(|s| s.bg(BORDER.color()))
             .text_size(px(12.))
-            .child(t(if current == ShadowKind::Inner {
-                "effect-inner-shadow"
-            } else {
-                "effect-drop-shadow"
-            }))
+            .child(t(current.label()))
             .child(icon(LucideIcons::ChevronDown, 12.).text_color(MUTED.color()));
         div().flex_1().min_w_0().child(
             ContextMenuTrigger::new(trigger, move |_, _| {
                 let mut menu = super::super::context_menu::menu(180., "shadow-kind-menu");
-                for (kind, label) in [
-                    (ShadowKind::Drop, "effect-drop-shadow"),
-                    (ShadowKind::Inner, "effect-inner-shadow"),
-                ] {
+                for kind in [Kind::Drop, Kind::Inner, Kind::Blur] {
+                    let label = kind.label();
+                    if kind == Kind::Blur && !blur_supported {
+                        continue;
+                    }
                     let weak = weak.clone();
                     let target = target.clone();
                     menu = menu.item(
@@ -576,19 +676,22 @@ impl Workspace {
                             },
                             move |_, cx| {
                                 let _ = weak.update(cx, |this, cx| {
-                                    if target != (this.pages.active.clone(), this.shadow_targets())
+                                    if target != (this.pages.active.clone(), this.effect_targets())
                                         || this
-                                            .common_shadows()
-                                            .and_then(|s| s.get(index).map(|s| s.kind))
+                                            .common_effects()
+                                            .and_then(|s| s.get(index).map(Kind::of))
                                             != Some(current)
                                     {
                                         return;
                                     }
-                                    this.edit_shadows(
+                                    if current == kind {
+                                        return;
+                                    }
+                                    this.edit_effects(
                                         None,
                                         |shadows| {
                                             if let Some(shadow) = shadows.get_mut(index) {
-                                                shadow.kind = kind;
+                                                *shadow = kind.convert(shadow);
                                             }
                                         },
                                         cx,
@@ -637,13 +740,13 @@ impl Workspace {
                         el.cursor(gpui::CursorStyle::ResizeLeftRight).on_mouse_down(
                             MouseButton::Left,
                             cx.listener(move |this, event, window, cx| {
-                                this.begin_shadow_scrub(index, field, event, window, cx)
+                                this.begin_effect_scrub(index, field, event, window, cx)
                             }),
                         )
                     }),
             )
             .child(
-                inspector_input(&self.inspector.shadows.rows[index].inputs[field])
+                inspector_input(&self.inspector.effects.rows[index].inputs[field])
                     .flex_1()
                     .min_w_0()
                     .h(px(28.))

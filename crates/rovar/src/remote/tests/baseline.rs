@@ -77,6 +77,9 @@ fn upgrading_confirmed_legacy_node_ids_is_clean_but_replacing_a_node_is_not(
     shape.uid = uuid::Uuid::nil();
     page.shapes.push(shape);
     page.next_id = 2;
+    page.hierarchy
+        .effects
+        .insert(1, vec![crate::scene::effects::Effect::default()]);
     let document = crate::document::Document::single(page);
     let text_system = cx.update(|cx| cx.text_system().clone());
     crate::document::save_as(
@@ -109,6 +112,12 @@ fn upgrading_confirmed_legacy_node_ids_is_clean_but_replacing_a_node_is_not(
         let mut old: serde_json::Value =
             serde_json::from_slice(&serde_json::to_vec(&document).unwrap()).unwrap();
         old["pages"][0].as_object_mut().unwrap().remove("next_id");
+        let hierarchy = old["pages"][0]["hierarchy"].as_object_mut().unwrap();
+        let mut shadows = hierarchy.remove("effects").unwrap();
+        let shadow = shadows["1"][0].as_object_mut().unwrap();
+        shadow.remove("type");
+        shadow.remove("kind");
+        hierarchy.insert("shadows".into(), shadows);
         let baseline = r
             .store_baseline(&object, &serde_json::to_vec(&old).unwrap())
             .unwrap();
@@ -119,7 +128,7 @@ fn upgrading_confirmed_legacy_node_ids_is_clean_but_replacing_a_node_is_not(
     remote.update(cx, |r, _| {
         assert!(
             !r.link(&path).unwrap().dirty,
-            "Adding deterministic identities must not create a local edit"
+            "Upgrading identities and published effects must not create a local edit"
         );
     });
     let loaded = crate::document::load(&path).unwrap();

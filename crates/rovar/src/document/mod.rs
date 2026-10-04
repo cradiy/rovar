@@ -288,17 +288,26 @@ impl Page {
             "Invalid layer reference"
         );
         crate::scene::auto_layout::validate(self, &ids)?;
-        for (id, shadows) in &self.hierarchy.shadows {
+        for (id, effects) in &self.hierarchy.effects {
             ensure!(
                 ids.contains(id) && !self.hierarchy.groups.contains_key(id),
-                "Invalid shadow object"
+                "Invalid effect object"
             );
             ensure!(
-                shadows.len() <= crate::scene::effects::MAX_SHADOWS,
-                "Too many shadows"
+                effects.len() <= crate::scene::effects::MAX_EFFECTS,
+                "Too many effects"
             );
-            for shadow in shadows {
-                shadow.validate()?;
+            for effect in effects {
+                effect.validate()?;
+                ensure!(
+                    !matches!(effect, crate::scene::effects::Effect::LayerBlur { .. })
+                        || self
+                            .shapes
+                            .iter()
+                            .any(|s| s.id == *id && s.kind != crate::scene::shape::ShapeKind::Video)
+                        || self.texts.iter().any(|t| t.id == *id),
+                    "Layer blur requires a shape, image, or text"
+                );
             }
         }
         for (id, presets) in &self.hierarchy.exports {

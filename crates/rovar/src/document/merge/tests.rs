@@ -55,19 +55,19 @@ fn disjoint_properties_merge_but_divergent_edits_and_delete_edit_do_not() {
 
 #[test]
 fn shadows_merge_with_geometry_and_follow_remapped_object_ids() {
-    use crate::scene::effects::{Shadow, ShadowKind};
+    use crate::scene::effects::{Effect, Shadow, ShadowKind};
     let base = document();
     let mut local = base.clone();
     let mut remote = base.clone();
     local.pages[0]
         .hierarchy
-        .shadows
-        .insert(1, vec![Shadow::default()]);
+        .effects
+        .insert(1, vec![Effect::default()]);
     remote.pages[0].shapes[0].rect.x = 80.;
     let result = merged(&base, &local, &remote).unwrap();
     assert_eq!(
-        result.pages[0].hierarchy.shadows[&1],
-        vec![Shadow::default()]
+        result.pages[0].hierarchy.effects[&1],
+        vec![Effect::default()]
     );
     assert_eq!(result.pages[0].shapes[0].rect.x, 80.);
     let a = shape(3);
@@ -76,32 +76,44 @@ fn shadows_merge_with_geometry_and_follow_remapped_object_ids() {
     remote.pages[0].shapes.push(b.clone());
     local.pages[0].next_id = 4;
     remote.pages[0].next_id = 4;
-    local.pages[0].hierarchy.shadows.insert(
+    local.pages[0].hierarchy.effects.insert(
         3,
-        vec![Shadow {
+        vec![Effect::Shadow(Shadow {
             kind: ShadowKind::Inner,
             x: 24.,
             ..Default::default()
-        }],
+        })],
     );
-    remote.pages[0].hierarchy.shadows.insert(
+    remote.pages[0].hierarchy.effects.insert(
         3,
-        vec![Shadow {
-            x: -40.,
-            ..Default::default()
+        vec![Effect::LayerBlur {
+            enabled: true,
+            radius: 40.,
         }],
     );
     let result = merged(&base, &local, &remote).unwrap();
     let page = &result.pages[0];
     let id = |uid| page.shapes.iter().find(|s| s.uid == uid).unwrap().id;
-    assert_eq!(page.hierarchy.shadows[&id(a.uid)][0].x, 24.);
     assert_eq!(
-        page.hierarchy.shadows[&id(a.uid)][0].kind,
+        page.hierarchy.effects[&id(a.uid)][0].shadow().unwrap().x,
+        24.
+    );
+    assert_eq!(
+        page.hierarchy.effects[&id(a.uid)][0].shadow().unwrap().kind,
         ShadowKind::Inner
     );
-    assert_eq!(page.hierarchy.shadows[&id(b.uid)][0].x, -40.);
+    assert_eq!(
+        page.hierarchy.effects[&id(b.uid)][0],
+        Effect::LayerBlur {
+            enabled: true,
+            radius: 40.
+        }
+    );
     let mut invalid = result.clone();
-    invalid.pages[0].hierarchy.shadows.get_mut(&1).unwrap()[0].blur = -1.;
+    invalid.pages[0].hierarchy.effects.get_mut(&1).unwrap()[0] = Effect::LayerBlur {
+        enabled: true,
+        radius: -1.,
+    };
     assert!(invalid.pages[0].validate().is_err());
 }
 

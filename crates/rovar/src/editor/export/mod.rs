@@ -70,8 +70,8 @@ impl Workspace {
             r.width += 2. * width;
             r.height += 2. * width;
         }
-        if let Some(shadows) = self.hierarchy.shadows.get(&id) {
-            r = crate::scene::effects::bounds(r, shadows);
+        if let Some(effects) = self.hierarchy.effects.get(&id) {
+            r = crate::scene::effects::bounds(r, effects);
         }
         let rotation = self.object_rotation(id);
         let pivot = crate::scene::rotation::center(self.world_rect(id)?);

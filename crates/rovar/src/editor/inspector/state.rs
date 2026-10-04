@@ -4,7 +4,7 @@ use super::*;
 
 pub(in crate::editor) struct State {
     pub theme_dark: bool,
-    pub shadows: super::effects::Controls,
+    pub effects: super::effects::Controls,
     pub gradient_menu: Entity<uic::components::dropdown::DropdownState>,
     pub stroke_editing: bool,
     pub paint_stops: [usize; 2],
@@ -173,7 +173,7 @@ impl State {
         }
         Self {
             theme_dark: crate::ui::theme::is_dark(),
-            shadows: Default::default(),
+            effects: Default::default(),
             gradient_menu: cx.new(|cx| uic::components::dropdown::DropdownState::new(window, cx)),
             name_scroll: Rc::new(Cell::new(px(0.))),
             stroke_editing: false,

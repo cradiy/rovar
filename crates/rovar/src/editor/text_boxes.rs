@@ -223,7 +223,7 @@ impl Workspace {
                 &text.editor,
                 self.view.zoom,
                 self.focus.clone(),
-                self.hierarchy.shadows.get(&id).cloned().unwrap_or_default(),
+                self.hierarchy.effects.get(&id).cloned().unwrap_or_default(),
                 cx,
             ))
             .when(selected, |el| {
@@ -286,7 +286,7 @@ impl Workspace {
             text.layer.rotation,
             width,
             height,
-            self.shadow_padding(id),
+            self.effect_padding(id),
         )
     }
     pub(super) fn text_properties(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -436,7 +436,7 @@ impl Workspace {
             .child(self.auto_layout_controls(cx))
             .child(self.constraint_controls(cx))
             .child(self.size_limit_controls(cx))
-            .child(self.shadow_controls(cx))
+            .child(self.effect_controls(cx))
             .child(self.export_properties(cx))
     }
 }
