@@ -177,7 +177,79 @@ impl Workspace {
                 self.shape_element(&draft.shape, cx).into_any_element(),
             ));
         }
-        elements.into_iter().map(|(_, el)| el).collect()
+        elements
+            .into_iter()
+            .flat_map(|(id, el)| {
+                self.background_blur_element(id)
+                    .into_iter()
+                    .chain(std::iter::once(el))
+            })
+            .collect()
+    }
+
+    fn background_blur_element(&self, id: usize) -> Option<AnyElement> {
+        use crate::scene::effects::backdrop::{self, Region};
+        let radius = backdrop::radius(self.hierarchy.effects.get(&id)?);
+        if radius == 0. {
+            return None;
+        }
+        let rect = self.world_rect(id)?;
+        let (rotation, corners, ellipse, parent) =
+            if let Some(board) = self.boards.iter().find(|b| b.id == id) {
+                (board.layer.rotation, [0.; 4], false, None)
+            } else {
+                let shape = self
+                    .shapes
+                    .iter()
+                    .find(|s| s.id == id && backdrop::supports_shape(s))?;
+                (
+                    shape.layer.rotation,
+                    shape.displayed_radii(),
+                    shape.kind == ShapeKind::Ellipse,
+                    shape.board,
+                )
+            };
+        let region = Region {
+            rect,
+            rotation,
+            corners,
+            ellipse,
+        };
+        let bounds = region.bounds();
+        let position = self.view.screen(point(bounds.x, bounds.y));
+        let zoom = self.view.zoom;
+        let clip = parent
+            .and_then(|id| self.boards.iter().find(|b| b.id == id))
+            .map(|b| {
+                (
+                    self.view.screen(point(b.rect.x, b.rect.y)),
+                    gpui::size(px(b.rect.width * zoom), px(b.rect.height * zoom)),
+                )
+            });
+        Some(
+            canvas(
+                |_, _, _| (),
+                move |bounds, _, window, _| {
+                    let mask = clip.map(|(origin, size)| gpui::ContentMask {
+                        bounds: Bounds::new(
+                            bounds.origin - point(px(position.x), px(position.y))
+                                + point(px(origin.x), px(origin.y)),
+                            size,
+                        )
+                        .intersect(&window.content_mask().bounds),
+                    });
+                    window.with_content_mask(mask, |window| {
+                        region.paint(bounds, radius, zoom, window)
+                    });
+                },
+            )
+            .absolute()
+            .left(px(position.x))
+            .top(px(position.y))
+            .w(px(bounds.width * zoom))
+            .h(px(bounds.height * zoom))
+            .into_any_element(),
+        )
     }
     fn shape_element(&self, shape: &Shape, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let id = shape.id;

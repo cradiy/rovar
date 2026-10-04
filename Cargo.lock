@@ -5994,6 +5994,7 @@ dependencies = [
  "gpui_media_backend",
  "gpui_platform",
  "gpui_web",
+ "gpui_wgpu",
  "hex",
  "image",
  "js-sys",

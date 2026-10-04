@@ -5,7 +5,10 @@ use crate::scene::{
 use std::fmt::Write;
 
 pub(super) fn filter(defs: &mut String, id: usize, rect: Rect, effects: &[Effect]) -> bool {
-    if !effects.iter().any(Effect::visible) {
+    if !effects
+        .iter()
+        .any(|e| e.visible() && !matches!(e, Effect::BackgroundBlur { .. }))
+    {
         return false;
     }
     let shadows: Vec<_> = effects.iter().filter_map(Effect::shadow).collect();

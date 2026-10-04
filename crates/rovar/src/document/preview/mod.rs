@@ -144,7 +144,10 @@ pub(crate) fn render(
         clips: &clips,
         text: &text,
     }
-    .svg(Output::Preview)?;
+    .svg(
+        Output::Preview,
+        (560. / (r - l + pad * 2.).max(1.)).min(336. / (b - t + pad * 2.).max(1.)),
+    )?;
     let options = svg::render_options(!doc.texts.is_empty())?;
     crate::render::raster::render(&svg, [560, 336], 1., true, false, &options)
 }

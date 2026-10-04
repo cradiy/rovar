@@ -455,6 +455,19 @@ pub(crate) fn synchronize(pages: &mut [Page], definitions: &mut Definitions) -> 
                 }
             })*}; }
             maps!(groups, parents, names, layouts, sizing, exports, effects);
+            // A geometry update can invalidate a locally overridden backdrop.
+            // Keep the instance serializable when a primitive becomes a path.
+            for shape in page.shapes.iter().filter(|s| {
+                link.nodes.values().any(|id| *id == s.id)
+                    && !super::effects::backdrop::supports_shape(s)
+            }) {
+                if let Some(effects) = page.hierarchy.effects.get_mut(&shape.id) {
+                    effects.retain(|e| !matches!(e, super::effects::Effect::BackgroundBlur { .. }));
+                    if effects.is_empty() {
+                        page.hierarchy.effects.remove(&shape.id);
+                    }
+                }
+            }
             let removed: BTreeSet<_> = ids(&previous).difference(&ids(&next)).copied().collect();
             page.hierarchy.groups.retain(|id, _| !removed.contains(id));
             let old_assets: BTreeMap<_, _> = previous

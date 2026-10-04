@@ -321,6 +321,11 @@ impl Workspace {
                         .and_then(|(_, after)| self.fix_layout_size(id, before, after))
                 });
                 let mut changes = vec![change];
+                if let GestureKind::BezierEdit { id, .. } = gesture.kind
+                    && let Some(before) = self.remove_unsupported_background_blur(id)
+                {
+                    changes.insert(0, before);
+                }
                 if let Some(before) = resized {
                     changes.insert(0, before);
                 }

@@ -1,6 +1,7 @@
 use super::artboard::Rect;
 use gpui::Rgba;
 
+pub(crate) mod backdrop;
 mod paint;
 pub(crate) use paint::{paint_effects, paint_shadows};
 
@@ -71,6 +72,7 @@ pub(crate) fn upgrade_json_effects(value: &mut serde_json::Value) {
 pub(crate) enum Effect {
     Shadow(Shadow),
     LayerBlur { enabled: bool, radius: f32 },
+    BackgroundBlur { enabled: bool, radius: f32 },
 }
 
 impl Default for Effect {
@@ -83,28 +85,28 @@ impl Effect {
     pub fn shadow(&self) -> Option<&Shadow> {
         match self {
             Self::Shadow(shadow) => Some(shadow),
-            Self::LayerBlur { .. } => None,
+            Self::LayerBlur { .. } | Self::BackgroundBlur { .. } => None,
         }
     }
 
     pub fn shadow_mut(&mut self) -> Option<&mut Shadow> {
         match self {
             Self::Shadow(shadow) => Some(shadow),
-            Self::LayerBlur { .. } => None,
+            Self::LayerBlur { .. } | Self::BackgroundBlur { .. } => None,
         }
     }
 
     pub fn enabled(&self) -> bool {
         match self {
             Self::Shadow(shadow) => shadow.enabled,
-            Self::LayerBlur { enabled, .. } => *enabled,
+            Self::LayerBlur { enabled, .. } | Self::BackgroundBlur { enabled, .. } => *enabled,
         }
     }
 
     pub fn toggle(&mut self) {
         let enabled = match self {
             Self::Shadow(shadow) => &mut shadow.enabled,
-            Self::LayerBlur { enabled, .. } => enabled,
+            Self::LayerBlur { enabled, .. } | Self::BackgroundBlur { enabled, .. } => enabled,
         };
         *enabled = !*enabled;
     }
@@ -112,17 +114,19 @@ impl Effect {
     pub fn visible(&self) -> bool {
         match self {
             Self::Shadow(shadow) => shadow.visible(),
-            Self::LayerBlur { enabled, radius } => *enabled && *radius > 0.,
+            Self::LayerBlur { enabled, radius } | Self::BackgroundBlur { enabled, radius } => {
+                *enabled && *radius > 0.
+            }
         }
     }
 
     pub fn validate(&self) -> anyhow::Result<()> {
         match self {
             Self::Shadow(shadow) => shadow.validate(),
-            Self::LayerBlur { radius, .. } => {
+            Self::LayerBlur { radius, .. } | Self::BackgroundBlur { radius, .. } => {
                 anyhow::ensure!(
                     radius.is_finite() && (0. ..=MAX_RADIUS).contains(radius),
-                    "Invalid layer blur"
+                    "Invalid blur radius"
                 );
                 Ok(())
             }

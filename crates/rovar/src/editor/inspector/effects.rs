@@ -31,6 +31,7 @@ enum Kind {
     Drop,
     Inner,
     Blur,
+    Background,
 }
 
 impl Kind {
@@ -41,6 +42,7 @@ impl Kind {
                 ShadowKind::Inner => Self::Inner,
             },
             Effect::LayerBlur { .. } => Self::Blur,
+            Effect::BackgroundBlur { .. } => Self::Background,
         }
     }
 
@@ -49,6 +51,7 @@ impl Kind {
             Self::Drop => "effect-drop-shadow",
             Self::Inner => "effect-inner-shadow",
             Self::Blur => "effect-layer-blur",
+            Self::Background => "effect-background-blur",
         }
     }
 
@@ -56,6 +59,10 @@ impl Kind {
         let enabled = effect.enabled();
         match self {
             Self::Blur => Effect::LayerBlur {
+                enabled,
+                radius: 8.,
+            },
+            Self::Background => Effect::BackgroundBlur {
                 enabled,
                 radius: 8.,
             },
@@ -82,7 +89,8 @@ fn field_values(effect: &Effect) -> [String; 6] {
             hex(s.color),
             number(s.color.a * 100.),
         ]
-    } else if let Effect::LayerBlur { radius, .. } = effect {
+    } else if let Effect::LayerBlur { radius, .. } | Effect::BackgroundBlur { radius, .. } = effect
+    {
         [
             String::new(),
             String::new(),
@@ -110,7 +118,7 @@ impl Workspace {
     pub(in crate::editor) fn effect_number(&self, index: usize, field: usize) -> Option<f32> {
         let shadows = self.common_effects()?;
         let effect = shadows.get(index)?;
-        if let Effect::LayerBlur { radius, .. } = effect {
+        if let Effect::LayerBlur { radius, .. } | Effect::BackgroundBlur { radius, .. } = effect {
             return (field == 2).then_some(*radius);
         }
         let shadow = effect.shadow()?;
@@ -220,6 +228,34 @@ impl Workspace {
         })
     }
 
+    // Primitive-to-path edits cannot retain a backdrop whose clipping geometry
+    // is unsupported. Record removal alongside the shape edit for one-step undo.
+    pub(in crate::editor) fn remove_unsupported_background_blur(
+        &mut self,
+        id: usize,
+    ) -> Option<Change> {
+        use crate::scene::effects::backdrop;
+        if !self
+            .shapes
+            .iter()
+            .any(|s| s.id == id && !backdrop::supports_shape(s))
+            || !self.hierarchy.effects.get(&id).is_some_and(|effects| {
+                effects
+                    .iter()
+                    .any(|e| matches!(e, Effect::BackgroundBlur { .. }))
+            })
+        {
+            return None;
+        }
+        let before = self.snapshot_hierarchy();
+        let effects = self.hierarchy.effects.get_mut(&id).unwrap();
+        effects.retain(|e| !matches!(e, Effect::BackgroundBlur { .. }));
+        if effects.is_empty() {
+            self.hierarchy.effects.remove(&id);
+        }
+        Some(before)
+    }
+
     fn edit_effects(
         &mut self,
         group: Option<Group>,
@@ -262,7 +298,9 @@ impl Workspace {
         if row.kind != Kind::of(&effect) {
             return;
         }
-        if let Effect::LayerBlur { radius, .. } = &mut effect {
+        if let Effect::LayerBlur { radius, .. } | Effect::BackgroundBlur { radius, .. } =
+            &mut effect
+        {
             if field == 2
                 && let Ok(value) = value.trim().parse::<f32>()
                 && value.is_finite()
@@ -564,7 +602,11 @@ impl Workspace {
                     ),
             )
             .when(
-                expanded && matches!(effect, Effect::LayerBlur { .. }),
+                expanded
+                    && matches!(
+                        effect,
+                        Effect::LayerBlur { .. } | Effect::BackgroundBlur { .. }
+                    ),
                 |el| el.child(self.shadow_input(index, 2, t("effect-blur"), cx)),
             )
             .when_some(effect.shadow().filter(|_| expanded), |el, shadow| {
@@ -636,6 +678,13 @@ impl Workspace {
             .1
             .iter()
             .all(|id| !self.boards.iter().any(|b| b.id == *id));
+        let background_supported = target.1.iter().all(|id| {
+            self.boards.iter().any(|b| b.id == *id)
+                || self
+                    .shapes
+                    .iter()
+                    .any(|s| s.id == *id && crate::scene::effects::backdrop::supports_shape(s))
+        });
         let trigger = div()
             .id(format!("shadow-kind-{index}"))
             .debug_selector(move || format!("shadow-kind-{index}"))
@@ -653,9 +702,11 @@ impl Workspace {
         div().flex_1().min_w_0().child(
             ContextMenuTrigger::new(trigger, move |_, _| {
                 let mut menu = super::super::context_menu::menu(180., "shadow-kind-menu");
-                for kind in [Kind::Drop, Kind::Inner, Kind::Blur] {
+                for kind in [Kind::Drop, Kind::Inner, Kind::Blur, Kind::Background] {
                     let label = kind.label();
-                    if kind == Kind::Blur && !blur_supported {
+                    if (kind == Kind::Blur && !blur_supported)
+                        || (kind == Kind::Background && !background_supported)
+                    {
                         continue;
                     }
                     let weak = weak.clone();

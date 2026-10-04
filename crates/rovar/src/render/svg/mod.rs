@@ -6,6 +6,7 @@ use crate::{
 };
 use anyhow::{Context, Result, ensure};
 use std::{collections::BTreeMap, fmt::Write as _};
+mod backdrop;
 mod effects;
 mod paint;
 mod path;
@@ -55,12 +56,14 @@ fn world(doc: &Page, parent: Option<usize>, mut rect: Rect) -> Rect {
 }
 
 impl Scene<'_> {
-    pub fn svg(&self, output: Output) -> Result<String> {
+    pub fn svg(&self, output: Output, raster_scale: f32) -> Result<String> {
         let doc = self.document;
         let mut defs = String::new();
         let mut body = String::new();
         let mut images = BTreeMap::new();
+        let mut backdrops = backdrop::Renderer::new(self, raster_scale);
         for id in self.order {
+            backdrops.paint(self, *id, &mut defs, &mut body)?;
             let board = doc.boards.iter().find(|item| item.id == *id);
             let shape = doc.shapes.iter().find(|item| item.id == *id);
             let text = doc.texts.iter().find(|item| item.id == *id);

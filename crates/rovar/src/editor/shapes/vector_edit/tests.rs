@@ -318,3 +318,86 @@ fn ellipse_and_independent_rounded_corners_restore_exactly_after_editing(cx: &mu
             .unwrap();
     }
 }
+
+#[gpui::test]
+fn background_blur_is_removed_with_path_conversion_and_restored_by_undo(cx: &mut TestAppContext) {
+    use crate::scene::effects::Effect;
+    for drag in [false, true] {
+        let window = fixture(cx, ShapeKind::Rectangle, 0.);
+        let effect = Effect::BackgroundBlur {
+            enabled: true,
+            radius: 12.,
+        };
+        window
+            .update(cx, |this, _, _| {
+                this.hierarchy.effects.insert(1, vec![effect.clone()]);
+            })
+            .unwrap();
+        let mut visual = VisualTestContext::from_window(window.into(), cx);
+        enter(&mut visual);
+        let start = visual.debug_bounds("bezier-node-0-0").unwrap().center();
+        if drag {
+            let end = start + point(px(15.), px(10.));
+            visual.simulate_mouse_down(start, MouseButton::Left, Default::default());
+            visual.simulate_mouse_move(end, MouseButton::Left, Default::default());
+            visual.simulate_mouse_up(end, MouseButton::Left, Default::default());
+        } else {
+            visual.simulate_click(start, Default::default());
+            visual.simulate_keystrokes("shift-right");
+        }
+        draw(&mut visual);
+        window
+            .update(&mut visual.cx, |this, window, cx| {
+                assert_eq!(this.shapes[0].kind, ShapeKind::Bezier);
+                assert!(!this.hierarchy.effects.contains_key(&1));
+                assert_eq!(this.history.borrow().undo_len(), 1);
+                this.undo_redo(false, window, cx);
+                assert_eq!(this.shapes[0].kind, ShapeKind::Rectangle);
+                assert_eq!(this.hierarchy.effects[&1], std::slice::from_ref(&effect));
+                this.undo_redo(true, window, cx);
+                assert_eq!(this.shapes[0].kind, ShapeKind::Bezier);
+                assert!(!this.hierarchy.effects.contains_key(&1));
+                this.snapshot_document(&uuid::Uuid::new_v4().to_string(), cx)
+                    .unwrap();
+            })
+            .unwrap();
+    }
+}
+
+#[gpui::test]
+fn background_blur_override_is_removed_when_component_geometry_becomes_a_path(
+    cx: &mut TestAppContext,
+) {
+    use crate::scene::effects::Effect;
+    let handle = fixture(cx, ShapeKind::Rectangle, 0.);
+    handle
+        .update(cx, |this, window, cx| {
+            this.hierarchy.effects.insert(
+                1,
+                vec![Effect::BackgroundBlur {
+                    enabled: true,
+                    radius: 12.,
+                }],
+            );
+            this.create_component(window, cx);
+            this.sync_components(window, cx);
+            let component = this.components.definitions.keys().next().unwrap().clone();
+            this.insert_document_component(&component, false, Some(point(700., 200.)), window, cx);
+            let instance = *this.selection_ids().first().unwrap();
+            this.hierarchy.effects.get_mut(&instance).unwrap()[0] = Effect::BackgroundBlur {
+                enabled: true,
+                radius: 24.,
+            };
+            this.enter_vector_edit(1, window, cx);
+            this.insert_bezier_segment(1, 0, 0.5, cx);
+            this.sync_components(window, cx);
+            assert_eq!(
+                this.shapes.iter().find(|s| s.id == instance).unwrap().kind,
+                ShapeKind::Bezier
+            );
+            assert!(!this.hierarchy.effects.contains_key(&instance));
+            this.snapshot_document(&uuid::Uuid::new_v4().to_string(), cx)
+                .unwrap();
+        })
+        .unwrap();
+}

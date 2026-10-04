@@ -53,6 +53,130 @@ fn png(job: &Job, scale: u32) -> image::RgbaImage {
         .into_rgba8()
 }
 
+fn background_blur_scene() -> Page {
+    let mut left = Shape::new(1, None, ShapeKind::Rectangle, rect(0., 0., 50., 100.));
+    left.color = rgb(0xff0000);
+    let mut right = Shape::new(2, None, ShapeKind::Rectangle, rect(50., 0., 50., 100.));
+    right.color = rgb(0x0000ff);
+    let mut glass = Shape::new(3, None, ShapeKind::Rectangle, rect(20., 20., 60., 60.));
+    glass.fill_enabled = false;
+    let mut doc = document(vec![left, right, glass]);
+    doc.hierarchy.effects.insert(
+        3,
+        vec![crate::scene::effects::Effect::BackgroundBlur {
+            enabled: true,
+            radius: 12.,
+        }],
+    );
+    doc
+}
+
+#[test]
+fn background_blur_exports_only_preceding_artwork_and_preserves_vector_foreground() {
+    let mut doc = background_blur_scene();
+    let mut front = Shape::new(4, None, ShapeKind::Rectangle, rect(48., 45., 4., 10.));
+    front.color = rgb(0x00ff00);
+    doc.shapes.push(front);
+    let job = job(&doc, rect(0., 0., 100., 100.));
+    for scale in [1, 2, 4] {
+        let pixels = png(&job, scale);
+        assert_eq!(pixels.get_pixel(49 * scale, 10 * scale).0, [255, 0, 0, 255]);
+        let blurred = pixels.get_pixel(49 * scale, 35 * scale).0;
+        assert!(blurred[0] > 80 && blurred[0] < 180, "{blurred:?}");
+        assert_eq!(blurred[1], 0, "Foreground must not enter the backdrop");
+        assert!(blurred[2] > 80 && blurred[2] < 180);
+        assert_eq!(blurred[3], 255);
+        assert_eq!(pixels.get_pixel(49 * scale, 50 * scale).0, [0, 255, 0, 255]);
+        assert_eq!(pixels.get_pixel(47 * scale, 50 * scale).0[1], 0);
+    }
+    let svg = job.render(Format::Svg, 1, &Default::default()).unwrap();
+    let source = std::str::from_utf8(&svg).unwrap();
+    assert!(source.contains("data:image/png;base64,"));
+    assert!(
+        source.contains("<path"),
+        "Foreground remains vector artwork"
+    );
+    let rendered =
+        crate::render::raster::render(source, [100, 100], 1., false, false, &Default::default())
+            .unwrap();
+    let svg_pixels = image::load_from_memory(&rendered).unwrap().into_rgba8();
+    let pixels = png(&job, 1);
+    for (x, y) in [(49, 10), (49, 35), (49, 50), (80, 50)] {
+        assert_eq!(pixels.get_pixel(x, y), svg_pixels.get_pixel(x, y));
+    }
+}
+
+#[test]
+fn background_blur_respects_rotated_rounded_and_elliptical_contours_and_board_clips() {
+    for kind in [ShapeKind::Rectangle, ShapeKind::Ellipse] {
+        let mut doc = background_blur_scene();
+        doc.shapes[2].kind = kind;
+        doc.shapes[2].layer.rotation = 45.;
+        doc.shapes[2].rect = rect(30., 10., 40., 80.);
+        let pixels = png(&job(&doc, rect(0., 0., 100., 100.)), 1);
+        assert_eq!(pixels.get_pixel(20, 20).0, [255, 0, 0, 255]);
+        let blurred = pixels.get_pixel(49, 40).0;
+        assert!(blurred[0] < 180 && blurred[2] > 80, "{kind:?}: {blurred:?}");
+    }
+    let mut rounded = background_blur_scene();
+    rounded.shapes[2].rect = rect(40., 20., 40., 60.);
+    rounded.shapes[2].radius = 20.;
+    let pixels = png(&job(&rounded, rect(0., 0., 100., 100.)), 1);
+    assert_eq!(pixels.get_pixel(49, 21).0, [255, 0, 0, 255]);
+    assert!(pixels.get_pixel(49, 50).0[2] > 80);
+    let doc = background_blur_scene();
+    let mut job = job(&doc, rect(0., 0., 100., 100.));
+    job.clips.insert(3, rect(0., 40., 100., 60.));
+    let pixels = png(&job, 1);
+    assert_eq!(pixels.get_pixel(49, 30).0, [255, 0, 0, 255]);
+    assert!(pixels.get_pixel(49, 50).0[2] > 80);
+}
+
+#[test]
+fn background_blur_replaces_transparent_backdrop_without_doubling_alpha() {
+    let mut doc = background_blur_scene();
+    doc.shapes[0].color = gpui::rgba(0xff000080);
+    doc.shapes[1].fill_enabled = false;
+    let pixels = png(&job(&doc, rect(0., 0., 100., 100.)), 1);
+    assert_eq!(pixels.get_pixel(49, 10).0[3], 128);
+    let edge = pixels.get_pixel(49, 50).0;
+    assert!(edge[3] > 55 && edge[3] < 80, "{edge:?}");
+    assert_eq!(&edge[..3], &[255, 0, 0]);
+    let mut second = doc.shapes[2].clone();
+    second.id = 4;
+    second.uid = uuid::Uuid::new_v4();
+    doc.shapes.push(second);
+    doc.hierarchy
+        .effects
+        .insert(4, doc.hierarchy.effects[&3].clone());
+    let pixels = png(&job(&doc, rect(0., 0., 100., 100.)), 1);
+    let edge = pixels.get_pixel(49, 50).0;
+    assert!(edge[3] > 55 && edge[3] < 80, "Stacked: {edge:?}");
+    assert_eq!(&edge[..3], &[255, 0, 0]);
+}
+
+#[test]
+fn background_blur_keeps_antialiased_outline_opaque_and_disabled_effect_is_inert() {
+    let mut doc = background_blur_scene();
+    doc.shapes[0].rect.width = 100.;
+    doc.shapes[1].fill_enabled = false;
+    doc.shapes[2].rect = rect(30.5, 30.5, 39., 39.);
+    doc.shapes[2].radius = 10.;
+    doc.shapes[2].layer.rotation = 30.;
+    let bounds = rect(0., 0., 100., 100.);
+    let pixels = png(&job(&doc, bounds), 1);
+    for y in 20..80 {
+        for x in 20..80 {
+            let p = pixels.get_pixel(x, y).0;
+            assert!(p[3] >= 254, "Transparent seam at {x},{y}: {p:?}");
+        }
+    }
+    doc.hierarchy.effects.get_mut(&3).unwrap()[0].toggle();
+    let export = job(&doc, bounds);
+    assert!(!export.svg().unwrap().contains("background-replace"));
+    assert_eq!(png(&export, 1).get_pixel(30, 30).0, [255, 0, 0, 255]);
+}
+
 #[test]
 fn transparent_png_scales_rotated_content_and_svg_stays_vector() {
     let mut shape = Shape::new(1, None, ShapeKind::Rectangle, rect(100., 100., 80., 40.));

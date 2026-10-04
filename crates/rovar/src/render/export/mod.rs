@@ -68,6 +68,10 @@ impl Job {
     }
 
     pub fn svg(&self) -> Result<String> {
+        self.svg_at_scale(1.)
+    }
+
+    fn svg_at_scale(&self, scale: f32) -> Result<String> {
         let document = Page::decode(&self.json)?;
         ensure!(
             !document
@@ -85,7 +89,7 @@ impl Job {
             clips: &self.clips,
             text: &self.text,
         }
-        .svg(crate::render::svg::Output::Export)
+        .svg(crate::render::svg::Output::Export, scale)
     }
     pub fn render(
         &self,
@@ -93,8 +97,8 @@ impl Job {
         scale: u32,
         options: &crate::render::raster::Options,
     ) -> Result<Vec<u8>> {
-        let svg = self.svg()?;
         if format == Format::Svg {
+            let svg = self.svg()?;
             return crate::render::raster::render(&svg, [0, 0], 1., false, true, options);
         }
         let (width, height) = (
@@ -105,6 +109,7 @@ impl Job {
             scale > 0 && width <= 16384. && height <= 16384. && width * height <= 64_000_000.,
             ExportError("export-size-limit")
         );
+        let svg = self.svg_at_scale(scale as f32)?;
         crate::render::raster::render(
             &svg,
             [width as u32, height as u32],

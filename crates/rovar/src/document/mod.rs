@@ -300,6 +300,16 @@ impl Page {
             for effect in effects {
                 effect.validate()?;
                 ensure!(
+                    !matches!(effect, crate::scene::effects::Effect::BackgroundBlur { .. })
+                        || self.boards.iter().any(|b| b.id == *id)
+                        || self
+                            .shapes
+                            .iter()
+                            .any(|s| s.id == *id
+                                && crate::scene::effects::backdrop::supports_shape(s)),
+                    "Background blur requires a frame, rectangle, ellipse, or image"
+                );
+                ensure!(
                     !matches!(effect, crate::scene::effects::Effect::LayerBlur { .. })
                         || self
                             .shapes

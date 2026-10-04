@@ -5,13 +5,32 @@ use gpui::{TestAppContext, VisualTestContext};
 
 #[gpui::test]
 fn layer_blur_controls_preserve_history_storage_and_component_overrides(cx: &mut TestAppContext) {
+    blur_controls(cx, "effect-layer-blur", |radius| Effect::LayerBlur {
+        enabled: true,
+        radius,
+    });
+}
+
+#[gpui::test]
+fn background_blur_controls_preserve_history_storage_and_component_overrides(
+    cx: &mut TestAppContext,
+) {
+    blur_controls(cx, "effect-background-blur", |radius| {
+        Effect::BackgroundBlur {
+            enabled: true,
+            radius,
+        }
+    });
+}
+
+fn blur_controls(cx: &mut TestAppContext, kind: &'static str, effect: fn(f32) -> Effect) {
     let handle = open(cx);
     let mut visual = VisualTestContext::from_window(handle.into(), cx);
     visual.simulate_resize(size(px(1280.), px(1600.)));
     create(&mut visual, "add-rectangle");
     click(&mut visual, "shadow-add");
     click(&mut visual, "shadow-kind-0");
-    click(&mut visual, "effect-layer-blur");
+    click(&mut visual, kind);
     assert!(visual.debug_bounds("shadow-input-0-2").is_some());
     assert!(visual.debug_bounds("shadow-input-0-0").is_none());
     assert!(visual.debug_bounds("shadow-color-0").is_none());
@@ -104,30 +123,12 @@ fn layer_blur_controls_preserve_history_storage_and_component_overrides(cx: &mut
             assert_eq!(this.hierarchy.effects[&instance], effects);
             this.insert_document_component(&component, false, Some(point(900., 200.)), window, cx);
             let clean = *this.selection_ids().first().unwrap();
-            this.hierarchy.effects.get_mut(&instance).unwrap()[0] = Effect::LayerBlur {
-                enabled: true,
-                radius: 24.,
-            };
-            this.hierarchy.effects.get_mut(&1).unwrap()[0] = Effect::LayerBlur {
-                enabled: true,
-                radius: 40.,
-            };
+            this.hierarchy.effects.get_mut(&instance).unwrap()[0] = effect(24.);
+            this.hierarchy.effects.get_mut(&1).unwrap()[0] = effect(40.);
             this.history.borrow_mut().mark_changed();
             this.sync_components(window, cx);
-            assert_eq!(
-                this.hierarchy.effects[&instance][0],
-                Effect::LayerBlur {
-                    enabled: true,
-                    radius: 24.
-                }
-            );
-            assert_eq!(
-                this.hierarchy.effects[&clean][0],
-                Effect::LayerBlur {
-                    enabled: true,
-                    radius: 40.
-                }
-            );
+            assert_eq!(this.hierarchy.effects[&instance][0], effect(24.));
+            assert_eq!(this.hierarchy.effects[&clean][0], effect(40.));
             this.select_shape(1, cx);
         })
         .unwrap();
@@ -137,13 +138,7 @@ fn layer_blur_controls_preserve_history_storage_and_component_overrides(cx: &mut
         .update(&mut visual.cx, |this, window, cx| {
             assert!(!this.hierarchy.effects.contains_key(&1));
             this.undo_redo(false, window, cx);
-            assert_eq!(
-                this.hierarchy.effects[&1][0],
-                Effect::LayerBlur {
-                    enabled: true,
-                    radius: 40.
-                }
-            );
+            assert_eq!(this.hierarchy.effects[&1][0], effect(40.));
         })
         .unwrap();
 }

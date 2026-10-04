@@ -544,6 +544,7 @@ effects-mixed = Mixed effects
 effect-drop-shadow = Drop shadow
 effect-inner-shadow = Inner shadow
 effect-layer-blur = Layer blur
+effect-background-blur = Background blur
 effect-blur = Blur
 effect-spread = Spread
 settings-theme = Theme

@@ -68,17 +68,19 @@ impl Workspace {
         self.selected_node = selected.map(|i| (before.id, i));
         if self.shapes[index] != before {
             self.seal_text_edits(cx);
-            self.history.borrow_mut().record(
-                vec![
-                    Change::NodeSelection { value: node_before },
-                    Change::Shape {
-                        id: before.id,
-                        index,
-                        value: Some(before),
-                    },
-                ],
-                None,
-            );
+            let mut changes: Vec<_> = self
+                .remove_unsupported_background_blur(before.id)
+                .into_iter()
+                .collect();
+            changes.extend([
+                Change::NodeSelection { value: node_before },
+                Change::Shape {
+                    id: before.id,
+                    index,
+                    value: Some(before),
+                },
+            ]);
+            self.history.borrow_mut().record(changes, None);
         }
         if !closed {
             self.inspector.stroke_editing = true;
