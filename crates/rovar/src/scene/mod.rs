@@ -5,6 +5,7 @@ pub(crate) mod auto_layout;
 pub(crate) mod bezier;
 pub(crate) mod color_styles;
 pub(crate) mod components;
+pub(crate) mod effects;
 pub(crate) mod history;
 pub(crate) mod image_fill;
 pub(crate) mod layer;

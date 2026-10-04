@@ -638,6 +638,7 @@ pub fn element(
     editor: &Entity<TextEditor>,
     zoom: f32,
     exit_focus: FocusHandle,
+    shadows: Vec<crate::scene::effects::Shadow>,
     cx: &App,
 ) -> impl IntoElement + use<> {
     let focus = editor.read(cx).focus.clone();
@@ -647,7 +648,6 @@ pub fn element(
     let paint = editor.clone();
     div()
         .size_full()
-        .overflow_hidden()
         .track_focus(&focus)
         .key_context("CanvasText")
         .on_key_down(move |event, window, cx| {
@@ -680,14 +680,26 @@ pub fn element(
                     let selecting = text.selecting;
                     let focus = text.focus.clone();
                     let focused = focus.is_focused(window);
-                    layout.paint(
-                        if text.editing { text.selection() } else { 0..0 },
-                        text.cursor,
-                        text.marked.clone(),
-                        focused,
+                    let selection = if text.editing { text.selection() } else { 0..0 };
+                    let cursor = text.cursor;
+                    let marked = text.marked.clone();
+                    crate::scene::effects::paint_shadows(
+                        bounds,
+                        &shadows,
+                        zoom,
                         window,
-                        cx,
+                        |window| {
+                            window.with_content_mask(
+                                Some(gpui::ContentMask { bounds }),
+                                |window| {
+                                    layout.paint(0..0, 0, None, false, window, cx);
+                                },
+                            );
+                        },
                     );
+                    window.with_content_mask(Some(gpui::ContentMask { bounds }), |window| {
+                        layout.paint(selection, cursor, marked, focused, window, cx)
+                    });
                     window.handle_input(
                         &focus,
                         ElementInputHandler::new(bounds, paint.clone()),

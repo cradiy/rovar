@@ -1,6 +1,7 @@
 //! Property controls, bindings, and paint editors for the current selection.
 
 mod bindings;
+mod effects;
 mod fields;
 #[cfg(test)]
 mod fill_tests;
@@ -28,6 +29,35 @@ use uic::components::{
 pub(super) const PROPERTY_COUNT: usize = 18;
 // Independent inputs for the sidebar, solid, gradient, and image editors.
 pub(super) const PROPERTY_SURFACES: usize = 4;
+
+fn inspector_input(state: &Entity<TextInput>) -> Input {
+    Input::new(state)
+        .text_size(px(12.))
+        .text_color(rgb(TEXT))
+        .appearance(InputAppearance {
+            focus_border: rgb(ACCENT).into(),
+            caret: rgb(ACCENT).into(),
+            selection: gpui::rgba(0xb4a2ee44).into(),
+            caret_height: px(16.),
+            ..Default::default()
+        })
+}
+
+fn inspector_color_picker(state: &Entity<ColorPickerState>) -> ColorPicker {
+    ColorPicker::new(state)
+        .horizontal_hue(true)
+        .gap(px(10.))
+        .p_0()
+        .border_0()
+        .bg(gpui::rgba(0))
+        .appearance(ColorPickerAppearance {
+            area_height: px(152.),
+            hue_width: px(14.),
+            marker_size: px(12.),
+            accent: rgb(ACCENT).into(),
+            ..Default::default()
+        })
+}
 
 pub(super) fn inspector_section(title: &'static str) -> Div {
     div()

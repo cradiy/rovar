@@ -154,6 +154,7 @@ impl Workspace {
     pub(crate) fn dismiss_menus(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.close_tool_menus(window, cx);
         self.close_export_menus(window, cx);
+        self.close_shadow_menus(window, cx);
     }
     pub(crate) fn can_undo_redo(&self, redo: bool) -> bool {
         if let Some(draft) = &self.bezier_draft {

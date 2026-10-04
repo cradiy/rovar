@@ -507,7 +507,32 @@ impl Workspace {
             .child({
                 let mut board = board.clone();
                 board.image_fill = self.cropped_fill(id, &board.image_fill);
-                board.surface(self.view.zoom)
+                let shadows = self.hierarchy.shadows.get(&id).cloned().unwrap_or_default();
+                let zoom = self.view.zoom;
+                let background = board.background();
+                let image = (board.fill_mode == FillMode::Image).then(|| board.image_fill.clone());
+                board
+                    .surface(zoom)
+                    .on_paint_before_children(move |bounds, _, window, _| {
+                        crate::scene::effects::paint_shadows(
+                            bounds,
+                            &shadows,
+                            zoom,
+                            window,
+                            |window| {
+                                if let Some(image) = &image {
+                                    window.with_subtree_effect_chain(
+                                        bounds,
+                                        &[],
+                                        image.opacity,
+                                        |window| image.paint(bounds, window),
+                                    );
+                                } else {
+                                    window.paint_quad(gpui::fill(bounds, background.clone()));
+                                }
+                            },
+                        );
+                    })
             })
             .child(
                 div()

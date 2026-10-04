@@ -240,24 +240,15 @@ impl Workspace {
                     })
                     .when(index != 0 && !image_color, |el| {
                         el.child(
-                            Input::new(&self.inspector.fields[slot])
+                            inspector_input(&self.inspector.fields[slot])
                                 .w_full()
                                 .h(px(30.))
                                 .px(px(4.))
                                 .rounded(px(4.))
-                                .text_size(px(12.))
-                                .text_color(rgb(TEXT))
                                 .bg(rgb(0x282b33))
                                 .border_color(rgb(0x282b33))
                                 .when(!popup, |el| {
                                     el.bg(gpui::rgba(0)).border_color(gpui::rgba(0))
-                                })
-                                .appearance(InputAppearance {
-                                    focus_border: rgb(ACCENT).into(),
-                                    caret: rgb(ACCENT).into(),
-                                    selection: gpui::rgba(0xb4a2ee44).into(),
-                                    caret_height: px(16.),
-                                    ..Default::default()
                                 }),
                         )
                     }),

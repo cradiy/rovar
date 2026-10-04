@@ -529,19 +529,7 @@ impl Workspace {
     }
 
     pub(in crate::editor) fn color_picker(&self) -> impl IntoElement {
-        ColorPicker::new(&self.inspector.picker)
-            .horizontal_hue(true)
-            .gap(px(10.))
-            .p_0()
-            .border_0()
-            .bg(gpui::rgba(0))
-            .appearance(ColorPickerAppearance {
-                area_height: px(152.),
-                hue_width: px(14.),
-                marker_size: px(12.),
-                accent: rgb(ACCENT).into(),
-                ..Default::default()
-            })
+        inspector_color_picker(&self.inspector.picker)
     }
     pub(super) fn color_panel(
         &self,

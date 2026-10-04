@@ -69,6 +69,9 @@ impl Workspace {
             r.width += 2. * width;
             r.height += 2. * width;
         }
+        if let Some(shadows) = self.hierarchy.shadows.get(&id) {
+            r = crate::scene::effects::bounds(r, shadows);
+        }
         let rotation = self.object_rotation(id);
         let pivot = crate::scene::rotation::center(self.world_rect(id)?);
         let center =
@@ -156,7 +159,7 @@ impl Workspace {
                 .filter(|(id, _)| order.contains(id))
                 .filter_map(|(id, parent)| parent.and_then(|p| boards.get(&p)).map(|r| (id, *r)))
                 .collect();
-            let mut bounds = boards.get(&root).copied();
+            let mut bounds = boards.get(&root).and_then(|_| self.export_bounds(root));
             if bounds.is_none() {
                 for id in &order {
                     if clips.contains_key(id) {

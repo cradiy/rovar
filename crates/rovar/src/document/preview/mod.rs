@@ -87,7 +87,18 @@ pub(crate) fn render(
             rect.width += outset * 2.;
             rect.height += outset * 2.;
         }
-        let rect = crate::scene::rotation::bounds(rect, items[id].1.rotation);
+        let original_center = crate::scene::rotation::center(rect);
+        if let Some(shadows) = doc.hierarchy.shadows.get(id) {
+            rect = crate::scene::effects::bounds(rect, shadows);
+        }
+        let center = crate::scene::rotation::around(
+            crate::scene::rotation::center(rect),
+            original_center,
+            items[id].1.rotation,
+        );
+        let mut rect = crate::scene::rotation::bounds(rect, items[id].1.rotation);
+        rect.x = center.x - rect.width / 2.;
+        rect.y = center.y - rect.height / 2.;
         bounds = Some(bounds.map_or(
             (rect.x, rect.y, rect.x + rect.width, rect.y + rect.height),
             |(l, t, r, b)| {

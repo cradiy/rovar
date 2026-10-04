@@ -9,6 +9,7 @@ impl Render for Workspace {
         self.sync_layout_inputs(cx);
         self.sync_video_visibility(cx);
         self.sync_export_controls(window, cx);
+        self.sync_shadow_controls(window, cx);
         self.load_visible_media(window, cx);
         if self.preview_read_only() {
             return self.preview_canvas(window, cx).into_any_element();
@@ -155,6 +156,7 @@ impl Render for Workspace {
                             | GestureKind::GradientMidpoint { style: false, .. }
                             | GestureKind::GradientSeam { style: false, .. }
                             | GestureKind::LayoutProperty { .. }
+                            | GestureKind::ShadowProperty { .. }
                             | GestureKind::Panel { .. }
                             | GestureKind::MultiProperty { .. }
                     )

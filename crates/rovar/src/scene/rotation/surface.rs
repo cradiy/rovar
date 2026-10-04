@@ -20,7 +20,7 @@ pub fn surface<E: IntoElement>(
         .max(s.abs() * width + c.abs() * height - height)
         .max(0.)
         / 2.;
-    let padding = (extent + 36.).max(overflow);
+    let padding = extent + 36_f32.max(overflow * (s.abs() + c.abs()));
     let x = width / 2. + padding;
     let y = height / 2. + padding;
     let inner = gpui_effects::transform_group(

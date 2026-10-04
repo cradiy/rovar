@@ -5997,6 +5997,7 @@ dependencies = [
  "hex",
  "image",
  "js-sys",
+ "naga",
  "reqwest 0.12.28",
  "resvg 0.48.1",
  "rovar-api",

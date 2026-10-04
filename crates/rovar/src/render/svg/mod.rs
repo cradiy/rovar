@@ -6,6 +6,7 @@ use crate::{
 };
 use anyhow::{Context, Result, ensure};
 use std::{collections::BTreeMap, fmt::Write as _};
+mod effects;
 mod paint;
 mod path;
 
@@ -86,6 +87,28 @@ impl Scene<'_> {
                 rect.x + rect.width / 2.,
                 rect.y + rect.height / 2.
             )?;
+            let mut effect_rect = rect;
+            if let Some(shape) = shape.filter(|s| s.stroke.enabled) {
+                let pad = if shape.kind == ShapeKind::Arrow {
+                    (shape.stroke.width * 4.).max(12.)
+                } else if shape.kind.is_path() || shape.kind.is_polygon() {
+                    shape.stroke.width / 2.
+                } else {
+                    shape.stroke.outset()
+                };
+                effect_rect.x -= pad;
+                effect_rect.y -= pad;
+                effect_rect.width += 2. * pad;
+                effect_rect.height += 2. * pad;
+            }
+            let has_shadow = doc
+                .hierarchy
+                .shadows
+                .get(id)
+                .is_some_and(|shadows| effects::filter(&mut defs, *id, effect_rect, shadows));
+            if has_shadow {
+                write!(body, "<g filter=\"url(#shadow-{id})\">")?;
+            }
             if shape.is_some_and(|s| s.kind == ShapeKind::Video) {
                 ensure!(
                     matches!(output, Output::Preview),
@@ -247,6 +270,9 @@ impl Scene<'_> {
                 }
             }
             body.push_str("</g>");
+            if has_shadow {
+                body.push_str("</g>");
+            }
             if has_clip {
                 body.push_str("</g>");
             }

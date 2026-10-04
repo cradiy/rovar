@@ -81,6 +81,7 @@ version = "3"
 embed-resource = "3"
 
 [dev-dependencies]
+naga = { version = "30", features = ["wgsl-in"] }
 gpui = { git = "https://github.com/cradiy/gpui-fusion.git", rev = "6fc8a5316e04e88bdf45acf018d13059cb728ff4", features = [
   "test-support",
 ] }

@@ -3,6 +3,7 @@
 use super::*;
 
 pub(in crate::editor) struct State {
+    pub shadows: super::effects::Controls,
     pub gradient_menu: Entity<uic::components::dropdown::DropdownState>,
     pub stroke_editing: bool,
     pub paint_stops: [usize; 2],
@@ -172,6 +173,7 @@ impl State {
             ));
         }
         Self {
+            shadows: Default::default(),
             gradient_menu: cx.new(|cx| uic::components::dropdown::DropdownState::new(window, cx)),
             name_scroll: Rc::new(Cell::new(px(0.))),
             stroke_editing: false,

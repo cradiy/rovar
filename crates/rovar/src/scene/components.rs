@@ -178,6 +178,7 @@ pub(crate) fn extract(page: &Page, root: usize) -> anyhow::Result<Page> {
         sizing.constraints = None;
     }
     out.hierarchy.exports.retain(|id, _| included.contains(id));
+    out.hierarchy.shadows.retain(|id, _| included.contains(id));
     out.hierarchy.order.retain(|id| included.contains(id));
     out.hierarchy.components.clear();
     out.assets.retain(|a| included.contains(&a.object));
@@ -264,6 +265,12 @@ pub(crate) fn place(
         .exports
         .iter()
         .map(|(id, presets)| (nodes[id], presets.clone()))
+        .collect();
+    out.hierarchy.shadows = template
+        .hierarchy
+        .shadows
+        .iter()
+        .map(|(id, shadows)| (nodes[id], shadows.clone()))
         .collect();
     out.hierarchy.order = template
         .hierarchy
@@ -447,7 +454,7 @@ pub(crate) fn synchronize(pages: &mut [Page], definitions: &mut Definitions) -> 
                     else { page.hierarchy.$field.insert(id,serde_json::from_value(value)?); }
                 }
             })*}; }
-            maps!(groups, parents, names, layouts, sizing, exports);
+            maps!(groups, parents, names, layouts, sizing, exports, shadows);
             let removed: BTreeSet<_> = ids(&previous).difference(&ids(&next)).copied().collect();
             page.hierarchy.groups.retain(|id, _| !removed.contains(id));
             let old_assets: BTreeMap<_, _> = previous
@@ -483,6 +490,7 @@ pub(crate) fn synchronize(pages: &mut [Page], definitions: &mut Definitions) -> 
             page.hierarchy.layouts.retain(|id, _| live.contains(id));
             page.hierarchy.sizing.retain(|id, _| live.contains(id));
             page.hierarchy.exports.retain(|id, _| live.contains(id));
+            page.hierarchy.shadows.retain(|id, _| live.contains(id));
             page.assets.retain(|a| live.contains(&a.object));
             for a in &page.assets {
                 let asset = media.get(&a.hash).cloned();

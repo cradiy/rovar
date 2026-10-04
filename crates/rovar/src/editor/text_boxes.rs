@@ -222,6 +222,7 @@ impl Workspace {
                 &text.editor,
                 self.view.zoom,
                 self.focus.clone(),
+                self.hierarchy.shadows.get(&id).cloned().unwrap_or_default(),
                 cx,
             ))
             .when(selected, |el| {
@@ -279,7 +280,13 @@ impl Workspace {
                 }))
                 .children(self.rotation_handles(id, width, height, 0., cx))
             });
-        crate::scene::rotation::surface(element, text.layer.rotation, width, height, 0.)
+        crate::scene::rotation::surface(
+            element,
+            text.layer.rotation,
+            width,
+            height,
+            self.shadow_padding(id),
+        )
     }
     pub(super) fn text_properties(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let align = self.selected_text().and_then(|t| {
@@ -428,6 +435,7 @@ impl Workspace {
             .child(self.auto_layout_controls(cx))
             .child(self.constraint_controls(cx))
             .child(self.size_limit_controls(cx))
+            .child(self.shadow_controls(cx))
             .child(self.export_properties(cx))
     }
 }

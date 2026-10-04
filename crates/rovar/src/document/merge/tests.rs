@@ -54,6 +54,53 @@ fn disjoint_properties_merge_but_divergent_edits_and_delete_edit_do_not() {
 }
 
 #[test]
+fn shadows_merge_with_geometry_and_follow_remapped_object_ids() {
+    use crate::scene::effects::Shadow;
+    let base = document();
+    let mut local = base.clone();
+    let mut remote = base.clone();
+    local.pages[0]
+        .hierarchy
+        .shadows
+        .insert(1, vec![Shadow::default()]);
+    remote.pages[0].shapes[0].rect.x = 80.;
+    let result = merged(&base, &local, &remote).unwrap();
+    assert_eq!(
+        result.pages[0].hierarchy.shadows[&1],
+        vec![Shadow::default()]
+    );
+    assert_eq!(result.pages[0].shapes[0].rect.x, 80.);
+    let a = shape(3);
+    let b = shape(3);
+    local.pages[0].shapes.push(a.clone());
+    remote.pages[0].shapes.push(b.clone());
+    local.pages[0].next_id = 4;
+    remote.pages[0].next_id = 4;
+    local.pages[0].hierarchy.shadows.insert(
+        3,
+        vec![Shadow {
+            x: 24.,
+            ..Default::default()
+        }],
+    );
+    remote.pages[0].hierarchy.shadows.insert(
+        3,
+        vec![Shadow {
+            x: -40.,
+            ..Default::default()
+        }],
+    );
+    let result = merged(&base, &local, &remote).unwrap();
+    let page = &result.pages[0];
+    let id = |uid| page.shapes.iter().find(|s| s.uid == uid).unwrap().id;
+    assert_eq!(page.hierarchy.shadows[&id(a.uid)][0].x, 24.);
+    assert_eq!(page.hierarchy.shadows[&id(b.uid)][0].x, -40.);
+    let mut invalid = result.clone();
+    invalid.pages[0].hierarchy.shadows.get_mut(&1).unwrap()[0].blur = -1.;
+    assert!(invalid.pages[0].validate().is_err());
+}
+
+#[test]
 fn offline_insertions_with_the_same_handle_keep_their_identity_and_references() {
     let base = document();
     let mut local = base.clone();

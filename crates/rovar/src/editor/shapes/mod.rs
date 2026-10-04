@@ -129,15 +129,21 @@ impl Workspace {
             .canvas_layer_order()
             .into_iter()
             .filter_map(|id| {
+                let shadow_margin = self.shadow_padding(id);
                 if let Some(board) = boards.get(&id) {
                     let mut rect = board.rect;
                     rect.width = rect.width.max(100. / self.view.zoom);
-                    (self.is_selected(id) || visible(rect, None, 0., 32.))
+                    (self.is_selected(id) || visible(rect, None, 0., 32. + shadow_margin))
                         .then(|| (id, self.board_element(board, cx).into_any_element()))
                 } else if let Some(text) = texts.get(&id) {
                     (text.editor.read(cx).editing
                         || self.is_selected(id)
-                        || visible(text.rect, text.board, text.layer.rotation, 32.))
+                        || visible(
+                            text.rect,
+                            text.board,
+                            text.layer.rotation,
+                            32. + shadow_margin,
+                        ))
                     .then(|| (id, self.text_element(text, cx).into_any_element()))
                 } else if self.hierarchy.groups.contains_key(&id) {
                     self.group_element(id, cx).map(|el| (id, el))
@@ -151,7 +157,7 @@ impl Workspace {
                                     s.rect,
                                     s.board,
                                     s.layer.rotation,
-                                    GeometryKey::outset(s, self.view.zoom) + 16.,
+                                    GeometryKey::outset(s, self.view.zoom) + 16. + shadow_margin,
                                 )
                         })
                         .map(|s| (id, self.shape_element(s, cx).into_any_element()))
@@ -181,12 +187,18 @@ impl Workspace {
         let selected = self.selected_shape == Some(id);
         let key = GeometryKey::new(shape, self.view.zoom);
         let outset = key.outset;
-        let fill = (shape.fill_enabled && shape.can_fill()).then(|| shape.background());
+        let fill = (shape.fill_enabled && shape.can_fill() && !shape.kind.is_media())
+            .then(|| shape.background());
         let edit_hatch = self.vector_edit == Some(id) && shape.editable_closed();
         let stroke = shape.stroke.background();
-        let image_fill =
+        let image_fill = if shape.kind == ShapeKind::Image {
+            Some(self.cropped_media(shape))
+        } else {
             (shape.fill_enabled && shape.can_fill() && shape.fill_mode == FillMode::Image)
-                .then(|| self.cropped_fill(id, &shape.image_fill));
+                .then(|| self.cropped_fill(id, &shape.image_fill))
+        };
+        let shadows = self.hierarchy.shadows.get(&id).cloned().unwrap_or_default();
+        let zoom = self.view.zoom;
         let paths = self.shape_paths.clone();
         let surface = canvas(
             move |_, _, _| {
@@ -197,36 +209,45 @@ impl Workspace {
                 paths[&id].clone()
             },
             move |bounds, geometry, window, _| {
-                if let Some(fill) = fill {
-                    paint_path(&geometry.fill, bounds.origin, fill, window);
-                }
-                if let Some(image_fill) = &image_fill {
-                    let image_bounds = Bounds::new(
-                        bounds.origin + point(px(outset), px(outset)),
-                        gpui::size(px(width), px(height)),
-                    );
-                    let capture = image_bounds.intersect(&window.content_mask().bounds);
-                    if !capture.is_empty() && image_fill.asset.is_some() {
-                        window.with_subtree_pair(
-                            capture,
-                            gpui::EffectShader::wgsl_two_images(include_str!("image_mask.wgsl")),
-                            Default::default(),
-                            0.,
-                            image_fill.opacity,
-                            |input, window| match input {
-                                gpui::SubtreeInput::First => paint_path(
-                                    &geometry.fill,
-                                    bounds.origin,
-                                    rgb(0xffffff).into(),
-                                    window,
-                                ),
-                                gpui::SubtreeInput::Second => {
-                                    image_fill.paint(image_bounds, window)
-                                }
-                            },
-                        );
+                let mut paint = |window: &mut Window| {
+                    if let Some(fill) = &fill {
+                        paint_path(&geometry.fill, bounds.origin, fill.clone(), window);
                     }
-                }
+                    if let Some(image_fill) = &image_fill {
+                        let image_bounds = Bounds::new(
+                            bounds.origin + point(px(outset), px(outset)),
+                            gpui::size(px(width), px(height)),
+                        );
+                        let capture = image_bounds.intersect(&window.content_mask().bounds);
+                        if !capture.is_empty() && image_fill.asset.is_some() {
+                            window.with_subtree_pair(
+                                capture,
+                                gpui::EffectShader::wgsl_two_images(include_str!(
+                                    "image_mask.wgsl"
+                                )),
+                                Default::default(),
+                                0.,
+                                image_fill.opacity,
+                                |input, window| match input {
+                                    gpui::SubtreeInput::First => paint_path(
+                                        &geometry.fill,
+                                        bounds.origin,
+                                        rgb(0xffffff).into(),
+                                        window,
+                                    ),
+                                    gpui::SubtreeInput::Second => {
+                                        image_fill.paint(image_bounds, window)
+                                    }
+                                },
+                            );
+                        }
+                    }
+                    if let Some(path) = &geometry.stroke {
+                        paint_path(path, bounds.origin, stroke.clone(), window);
+                    }
+                };
+                crate::scene::effects::paint_shadows(bounds, &shadows, zoom, window, &mut paint);
+                paint(window);
                 if edit_hatch {
                     // Reuse the actual filled contour, including holes and curves.
                     // This is only a paint overlay; document fills and hitboxes stay intact.
@@ -237,9 +258,6 @@ impl Workspace {
                         gpui::pattern_slash(rgb(ACCENT).opacity(0.65), 1.5 * scale, 14. * scale),
                         window,
                     );
-                }
-                if let Some(path) = &geometry.stroke {
-                    paint_path(path, bounds.origin, stroke, window);
                 }
             },
         )
@@ -335,8 +353,8 @@ impl Workspace {
                     }
                 }),
             )
-            .when(!shape.kind.is_media(), |el| el.child(surface))
-            .when(shape.kind.is_media(), |el| {
+            .when(shape.kind != ShapeKind::Video, |el| el.child(surface))
+            .when(shape.kind == ShapeKind::Video, |el| {
                 el.child(self.media_surface(shape, outset))
             })
             .when(
@@ -445,7 +463,7 @@ impl Workspace {
             shape.layer.rotation,
             width + outset * 2.,
             height + outset * 2.,
-            if self.vector_edit == Some(id) {
+            (if self.vector_edit == Some(id) {
                 // Control handles can extend well outside the curve's true bounds.
                 shape
                     .nodes
@@ -460,7 +478,8 @@ impl Workspace {
                     .fold(0., f32::max)
             } else {
                 0.
-            },
+            })
+            .max(self.shadow_padding(id)),
         )
     }
 }

@@ -26,6 +26,8 @@ pub(crate) struct LayerGroup {
 #[derive(Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub(crate) struct Hierarchy {
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub shadows: std::collections::BTreeMap<usize, Vec<crate::scene::effects::Shadow>>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub exports: std::collections::BTreeMap<usize, Vec<crate::document::export::Preset>>,
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub components: std::collections::BTreeMap<usize, crate::scene::components::Binding>,

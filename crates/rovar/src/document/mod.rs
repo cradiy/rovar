@@ -288,6 +288,19 @@ impl Page {
             "Invalid layer reference"
         );
         crate::scene::auto_layout::validate(self, &ids)?;
+        for (id, shadows) in &self.hierarchy.shadows {
+            ensure!(
+                ids.contains(id) && !self.hierarchy.groups.contains_key(id),
+                "Invalid shadow object"
+            );
+            ensure!(
+                shadows.len() <= crate::scene::effects::MAX_SHADOWS,
+                "Too many shadows"
+            );
+            for shadow in shadows {
+                shadow.validate()?;
+            }
+        }
         for (id, presets) in &self.hierarchy.exports {
             ensure!(ids.contains(id), "Invalid export object");
             for preset in presets {

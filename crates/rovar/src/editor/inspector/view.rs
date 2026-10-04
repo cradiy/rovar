@@ -237,6 +237,7 @@ impl Workspace {
                         .child(self.auto_layout_controls(cx))
                         .child(self.constraint_controls(cx))
                         .child(self.size_limit_controls(cx))
+                        .child(self.shadow_controls(cx))
                         .child(self.export_properties(cx)),
                 )
             })

@@ -171,6 +171,17 @@ impl Workspace {
                     self.finish_layout_scrub(changed, cx);
                     None
                 }
+                GestureKind::ShadowProperty {
+                    index,
+                    field,
+                    original,
+                } => {
+                    let changed = self
+                        .shadow_number(index, field)
+                        .is_some_and(|v| v != original);
+                    self.finish_property_scrub(changed, cx);
+                    None
+                }
                 GestureKind::Draw => {
                     self.finish_drawing(window, cx);
                     None
