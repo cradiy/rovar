@@ -11,6 +11,7 @@ impl Workspace {
         self.canvas_layer_order()
             .into_iter()
             .rev()
+            .filter(|id| self.mask_hit(*id, world))
             .filter(|id| {
                 self.world_rect(*id).is_some_and(|rect| {
                     let p = crate::scene::rotation::around(

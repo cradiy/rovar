@@ -378,6 +378,7 @@ impl Page {
                 next = parents.get(&id).copied().flatten();
             }
         }
+        crate::scene::mask::validate(&self.hierarchy, &self.shapes)?;
         for rect in self
             .boards
             .iter()

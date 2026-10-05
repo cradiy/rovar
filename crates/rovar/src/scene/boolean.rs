@@ -147,7 +147,7 @@ fn evaluate(input: &Input) -> Option<(Shape, Polygons)> {
     }
 }
 
-fn flatten(shape: &Shape) -> Vec<[f64; 2]> {
+pub(super) fn flatten(shape: &Shape) -> Vec<[f64; 2]> {
     let nodes = shape.editable_nodes();
     let center = super::rotation::center(shape.rect);
     let p = |p| {

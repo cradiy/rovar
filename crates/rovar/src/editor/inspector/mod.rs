@@ -2,6 +2,7 @@
 
 use crate::ui::theme::Color;
 mod bindings;
+pub(super) mod composition;
 mod effects;
 mod fields;
 #[cfg(test)]

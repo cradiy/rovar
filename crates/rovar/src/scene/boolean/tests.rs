@@ -16,6 +16,7 @@ fn setup(operation: Operation) -> (Hierarchy, Vec<Shape>) {
         3,
         LayerGroup {
             boolean: Some(operation),
+            mask: None,
             uid: uuid::Uuid::new_v4(),
             name: "Boolean".into(),
             board: None,

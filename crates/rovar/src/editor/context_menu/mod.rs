@@ -49,6 +49,8 @@ enum Command {
     Delete,
     Rename,
     Group,
+    Mask,
+    ReleaseMask,
     Boolean(crate::scene::boolean::Operation),
     AutoLayout,
     CreateComponent,
@@ -153,6 +155,25 @@ impl Workspace {
                     menu
                 },
             );
+        }
+        if self.can_mask() || self.selected_mask().is_some() {
+            let release = self.selected_mask().is_some();
+            menu = menu.item(item(
+                "context-mask",
+                t(if release {
+                    "mask-release"
+                } else {
+                    "mask-create"
+                }),
+                LucideIcons::Scan,
+                "",
+                if release {
+                    Command::ReleaseMask
+                } else {
+                    Command::Mask
+                },
+                true,
+            ));
         }
         menu = menu
             .item(item(
@@ -578,6 +599,8 @@ impl Workspace {
                 }
             }
             Command::Group => self.group_selection(cx),
+            Command::Mask => self.create_mask(window, cx),
+            Command::ReleaseMask => self.release_mask(window, cx),
             Command::Boolean(operation) => self.apply_boolean(operation, window, cx),
             Command::AutoLayout => self.enable_auto_layout(window, cx),
             Command::CreateComponent => self.create_component(window, cx),

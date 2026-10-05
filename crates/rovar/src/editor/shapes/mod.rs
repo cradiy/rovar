@@ -131,10 +131,18 @@ impl Workspace {
         };
         let order = self.canvas_layer_order();
         let included = order.iter().copied().collect();
+        let masks = crate::scene::mask::outlines(
+            &self.hierarchy,
+            &self.shapes,
+            &self.boards,
+            &mut self.boolean_cache.borrow_mut(),
+        );
         let mut elements: Vec<_> = order
-            .into_iter()
+            .iter()
+            .copied()
             .filter_map(|id| {
-                let consumed = crate::scene::boolean::consumed(&self.hierarchy, id, &included);
+                let consumed = crate::scene::boolean::consumed(&self.hierarchy, id, &included)
+                    || crate::scene::mask::is_source(&self.hierarchy, id, &included);
                 if consumed && !self.is_selected(id) && self.vector_edit != Some(id) {
                     return None;
                 }
@@ -209,15 +217,74 @@ impl Workspace {
                 self.shape_element(&draft.shape, cx).into_any_element(),
             ));
         }
-        elements
+        if masks.is_empty() {
+            return elements
+                .into_iter()
+                .flat_map(|(id, el)| {
+                    (!crate::scene::boolean::consumed(&self.hierarchy, id, &included))
+                        .then(|| self.background_blur_element(id))
+                        .flatten()
+                        .into_iter()
+                        .chain(std::iter::once(el))
+                })
+                .collect();
+        }
+        let mut rendered: HashMap<_, Vec<_>> = elements
             .into_iter()
-            .flat_map(|(id, el)| {
-                (!crate::scene::boolean::consumed(&self.hierarchy, id, &included))
-                    .then(|| self.background_blur_element(id))
-                    .flatten()
-                    .into_iter()
-                    .chain(std::iter::once(el))
+            .map(|(id, el)| {
+                let source = crate::scene::mask::is_source(&self.hierarchy, id, &included);
+                let elements = (!source
+                    && !crate::scene::boolean::consumed(&self.hierarchy, id, &included))
+                .then(|| self.background_blur_element(id))
+                .flatten()
+                .into_iter()
+                .chain(std::iter::once(el))
+                .collect();
+                (id, elements)
             })
+            .collect();
+        // Capture each complete mask group once, preserving its internal stacking.
+        let mut groups: HashMap<usize, Vec<Vec<AnyElement>>> = HashMap::new();
+        let mut roots = Vec::new();
+        let mut overlays = Vec::new();
+        for id in order.iter().rev().copied() {
+            let mut content = rendered.remove(&id).unwrap_or_default();
+            if crate::scene::mask::is_source(&self.hierarchy, id, &included) {
+                overlays.extend(content);
+                continue;
+            }
+            if let Some(outline) = masks.get(&id) {
+                let children = groups
+                    .remove(&id)
+                    .unwrap_or_default()
+                    .into_iter()
+                    .rev()
+                    .flatten();
+                content.push(
+                    self.mask_element(
+                        div()
+                            .absolute()
+                            .inset_0()
+                            .children(children)
+                            .into_any_element(),
+                        outline.clone(),
+                    ),
+                );
+            }
+            if let Some(parent) =
+                crate::scene::mask::ancestors(&self.hierarchy, id, &included).first()
+            {
+                groups.entry(*parent).or_default().push(content);
+            } else {
+                roots.push(content);
+            }
+        }
+        roots
+            .into_iter()
+            .rev()
+            .flatten()
+            .chain(rendered.remove(&usize::MAX).unwrap_or_default())
+            .chain(overlays)
             .collect()
     }
 
@@ -387,152 +454,162 @@ impl Workspace {
             },
         )
         .size_full();
-        let element = div()
-            .id(("shape", id))
-            .on_mouse_down(
-                MouseButton::Right,
-                cx.listener(move |this, _: &gpui::MouseDownEvent, window, cx| {
-                    this.open_context_menu(
-                        Some(id),
-                        false,
-                        window.raw_mouse_position(),
-                        window,
-                        cx,
-                    );
-                    cx.stop_propagation();
-                }),
-            )
-            .debug_selector(move || format!("shape-{id}"))
-            .absolute()
-            .left(px(position.x - outset))
-            .top(px(position.y - outset))
-            .w(px(width + outset * 2.))
-            .h(px(height + outset * 2.))
-            .cursor(CursorStyle::OpenHand)
-            .when(self.vector_edit == Some(id), |el| {
-                el.cursor(CursorStyle::Arrow)
-            })
-            .when(!self.layer_editable(id), |el| el.cursor(CursorStyle::Arrow))
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(move |this, event: &gpui::MouseDownEvent, window, cx| {
-                    let event = &gpui::MouseDownEvent {
-                        position: window.raw_mouse_position(),
-                        ..event.clone()
-                    };
-                    if this.space_down {
-                        this.begin(
-                            GestureKind::Pan {
-                                original: this.view.pan,
-                            },
-                            event.position,
-                            event.button,
+        let element =
+            div()
+                .id(("shape", id))
+                .on_mouse_down(
+                    MouseButton::Right,
+                    cx.listener(move |this, _: &gpui::MouseDownEvent, window, cx| {
+                        this.open_context_menu(
+                            Some(id),
+                            false,
+                            window.raw_mouse_position(),
                             window,
                             cx,
                         );
-                    } else if id != 0 {
-                        if !this.layer_editable(id) {
-                            this.focus.focus(window, cx);
-                            this.select(None, cx);
-                            cx.stop_propagation();
-                            return;
-                        }
-                        if crate::scene::boolean::is_boolean(&this.hierarchy, id) {
-                            if event.click_count >= 2 && !event.modifiers.shift {
-                                if let Some(child) = this.ordered_children(Some(id)).last().copied()
-                                {
-                                    this.set_selection(BTreeSet::from([child]), cx);
-                                }
-                            } else if !this.selection_pointer(id, event, window, cx) {
-                                this.set_selection(BTreeSet::from([id]), cx);
-                                this.batch_before = this.before_geometry();
-                                this.begin(
-                                    GestureKind::SelectionMove,
-                                    event.position,
-                                    event.button,
-                                    window,
-                                    cx,
-                                );
-                            }
-                            cx.stop_propagation();
-                            return;
-                        }
-                        if this.vector_edit == Some(id) {
-                            this.vector_pointer(id, event, window, cx);
-                            return;
-                        }
-                        if this.selection_pointer(id, event, window, cx) {
-                            return;
-                        }
-                        if event.click_count >= 2 && !event.modifiers.shift {
-                            if this.start_image_crop(id, window, cx) {
-                                cx.stop_propagation();
-                                return;
-                            }
-                            if this.shapes.iter().any(|s| s.id == id && s.kind.is_media()) {
-                                this.select_shape(id, cx);
-                                if this.selected_shape().unwrap().kind == ShapeKind::Video {
-                                    this.play_video(id, window, cx);
-                                }
-                                cx.stop_propagation();
-                                return;
-                            }
-                            this.enter_vector_edit(id, window, cx);
-                            cx.stop_propagation();
-                            return;
-                        }
-                        this.select_shape(id, cx);
-                        if let Some(shape) = this.selected_shape() {
+                        cx.stop_propagation();
+                    }),
+                )
+                .debug_selector(move || format!("shape-{id}"))
+                .absolute()
+                .left(px(position.x - outset))
+                .top(px(position.y - outset))
+                .w(px(width + outset * 2.))
+                .h(px(height + outset * 2.))
+                .cursor(CursorStyle::OpenHand)
+                .when(self.vector_edit == Some(id), |el| {
+                    el.cursor(CursorStyle::Arrow)
+                })
+                .when(!self.layer_editable(id), |el| el.cursor(CursorStyle::Arrow))
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(move |this, event: &gpui::MouseDownEvent, window, cx| {
+                        let event = &gpui::MouseDownEvent {
+                            position: window.raw_mouse_position(),
+                            ..event.clone()
+                        };
+                        if this.space_down {
                             this.begin(
-                                GestureKind::Shape {
-                                    id,
-                                    original: shape.rect,
-                                    handle: None,
+                                GestureKind::Pan {
+                                    original: this.view.pan,
                                 },
                                 event.position,
                                 event.button,
                                 window,
                                 cx,
                             );
+                        } else if id != 0 {
+                            if !this.layer_editable(id) {
+                                this.focus.focus(window, cx);
+                                this.select(None, cx);
+                                cx.stop_propagation();
+                                return;
+                            }
+                            if crate::scene::boolean::is_boolean(&this.hierarchy, id) {
+                                if event.click_count >= 2 && !event.modifiers.shift {
+                                    if let Some(child) =
+                                        this.ordered_children(Some(id)).last().copied()
+                                    {
+                                        this.set_selection(BTreeSet::from([child]), cx);
+                                    }
+                                } else if !this.selection_pointer(id, event, window, cx) {
+                                    this.set_selection(BTreeSet::from([id]), cx);
+                                    this.batch_before = this.before_geometry();
+                                    this.begin(
+                                        GestureKind::SelectionMove,
+                                        event.position,
+                                        event.button,
+                                        window,
+                                        cx,
+                                    );
+                                }
+                                cx.stop_propagation();
+                                return;
+                            }
+                            if this.vector_edit == Some(id) {
+                                this.vector_pointer(id, event, window, cx);
+                                return;
+                            }
+                            if this.selection_pointer(id, event, window, cx) {
+                                return;
+                            }
+                            if event.click_count >= 2 && !event.modifiers.shift {
+                                if this.start_image_crop(id, window, cx) {
+                                    cx.stop_propagation();
+                                    return;
+                                }
+                                if this.shapes.iter().any(|s| s.id == id && s.kind.is_media()) {
+                                    this.select_shape(id, cx);
+                                    if this.selected_shape().unwrap().kind == ShapeKind::Video {
+                                        this.play_video(id, window, cx);
+                                    }
+                                    cx.stop_propagation();
+                                    return;
+                                }
+                                this.enter_vector_edit(id, window, cx);
+                                cx.stop_propagation();
+                                return;
+                            }
+                            this.select_shape(id, cx);
+                            if let Some(shape) = this.selected_shape() {
+                                this.begin(
+                                    GestureKind::Shape {
+                                        id,
+                                        original: shape.rect,
+                                        handle: None,
+                                    },
+                                    event.position,
+                                    event.button,
+                                    window,
+                                    cx,
+                                );
+                            }
                         }
-                    }
-                }),
-            )
-            .when(shape.kind != ShapeKind::Video, |el| el.child(surface))
-            .when(shape.kind == ShapeKind::Video, |el| {
-                el.child(self.media_surface(shape, outset))
-            })
-            .when(
-                selected
-                    && self.vector_edit != Some(id)
-                    && !shape.kind.is_line()
-                    && self.image_crop.is_none(),
-                |el| {
-                    el.child(
-                        div()
-                            .absolute()
-                            .left(px(outset))
-                            .top(px(outset))
-                            .w(px(width))
-                            .h(px(height))
-                            .border_1()
-                            .border_color(ACCENT.color()),
-                    )
-                    .children(Handle::ALL.into_iter().enumerate().map(|(index, handle)| {
-                        let x = (handle.0 as f32 + 1.) * 0.5 * width + outset;
-                        let y = (handle.1 as f32 + 1.) * 0.5 * height + outset;
-                        let cursor = rotation::handle_cursor(handle, shape.layer.rotation);
-                        let corner = handle.0 != 0 && handle.1 != 0;
-                        // Reserve the corner targets; the rest of each edge resizes
-                        // without adding a visible midpoint or changing the hit slop.
-                        let (left, top, hit_width, hit_height) = if handle.0 == 0 {
-                            (outset + 6., y - 6., (width - 12.).max(0.), 12.)
-                        } else if handle.1 == 0 {
-                            (x - 6., outset + 6., 12., (height - 12.).max(0.))
-                        } else {
-                            (x - 6., y - 6., 12., 12.)
-                        };
-                        div()
+                    }),
+                )
+                .when(shape.kind != ShapeKind::Video, |el| el.child(surface))
+                .when(shape.kind == ShapeKind::Video, |el| {
+                    el.child(self.media_surface(shape, outset))
+                })
+                .when(
+                    selected
+                        && self.vector_edit != Some(id)
+                        && !shape.kind.is_line()
+                        && self.image_crop.is_none(),
+                    |el| {
+                        el.child(
+                            self.mask_overlay(
+                                id,
+                                div()
+                                    .absolute()
+                                    .left(px(outset))
+                                    .top(px(outset))
+                                    .w(px(width))
+                                    .h(px(height))
+                                    .border_1()
+                                    .border_color(ACCENT.color()),
+                            ),
+                        )
+                        .children(
+                            Handle::ALL
+                                .into_iter()
+                                .enumerate()
+                                .map(|(index, handle)| {
+                                    let x = (handle.0 as f32 + 1.) * 0.5 * width + outset;
+                                    let y = (handle.1 as f32 + 1.) * 0.5 * height + outset;
+                                    let cursor =
+                                        rotation::handle_cursor(handle, shape.layer.rotation);
+                                    let corner = handle.0 != 0 && handle.1 != 0;
+                                    // Reserve the corner targets; the rest of each edge resizes
+                                    // without adding a visible midpoint or changing the hit slop.
+                                    let (left, top, hit_width, hit_height) = if handle.0 == 0 {
+                                        (outset + 6., y - 6., (width - 12.).max(0.), 12.)
+                                    } else if handle.1 == 0 {
+                                        (x - 6., outset + 6., 12., (height - 12.).max(0.))
+                                    } else {
+                                        (x - 6., y - 6., 12., 12.)
+                                    };
+                                    div()
                             .id(("shape-handle", index))
                             .debug_selector(move || format!("shape-handle-{index}"))
                             .absolute()
@@ -588,21 +665,41 @@ impl Workspace {
                                     },
                                 ),
                             )
-                    }))
-                },
-            )
-            .when(
-                selected && shape.kind.is_line() && self.vector_edit != Some(id),
-                |el| el.children(self.line_handles(shape, outset, cx)),
-            )
-            .when(
-                self.vector_edit == Some(id) || (shape.kind == ShapeKind::Bezier && id == 0),
-                |el| el.children(self.bezier_handles(&self.vector_handle_shape(shape), outset, cx)),
-            )
-            .when(
-                selected && self.vector_edit != Some(id) && self.image_crop.is_none(),
-                |el| el.children(self.rotation_handles(id, width, height, outset, cx)),
-            );
+                                })
+                                .map(|el| self.mask_overlay(id, el)),
+                        )
+                    },
+                )
+                .when(
+                    selected && shape.kind.is_line() && self.vector_edit != Some(id),
+                    |el| {
+                        el.children(
+                            self.line_handles(shape, outset, cx)
+                                .into_iter()
+                                .map(|el| self.mask_overlay(id, el)),
+                        )
+                    },
+                )
+                .when(
+                    self.vector_edit == Some(id) || (shape.kind == ShapeKind::Bezier && id == 0),
+                    |el| {
+                        el.children(
+                            self.bezier_handles(&self.vector_handle_shape(shape), outset, cx)
+                                .into_iter()
+                                .map(|el| self.mask_overlay(id, el)),
+                        )
+                    },
+                )
+                .when(
+                    selected && self.vector_edit != Some(id) && self.image_crop.is_none(),
+                    |el| {
+                        el.children(
+                            self.rotation_handles(id, width, height, outset, cx)
+                                .into_iter()
+                                .map(|el| self.mask_overlay(id, el)),
+                        )
+                    },
+                );
         crate::scene::rotation::surface(
             element,
             shape.layer.rotation,

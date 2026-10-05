@@ -15,6 +15,9 @@ impl LayerState {
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub(crate) struct LayerGroup {
+    /// Direct child whose closed contour clips the other children.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mask: Option<usize>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub boolean: Option<crate::scene::boolean::Operation>,
     #[serde(default, skip_serializing_if = "uuid::Uuid::is_nil")]

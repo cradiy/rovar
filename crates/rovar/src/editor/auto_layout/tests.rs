@@ -24,6 +24,7 @@ fn moving_layout_group_between_boards_preserves_child_constraints(cx: &mut TestA
                 3,
                 LayerGroup {
                     boolean: None,
+                    mask: None,
                     uid: uuid::Uuid::new_v4(),
                     name: "Card".into(),
                     board: Some(1),

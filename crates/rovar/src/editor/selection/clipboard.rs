@@ -518,6 +518,7 @@ impl Workspace {
         for (id, mut group) in clipboard.hierarchy.groups {
             group.uid = uuid::Uuid::new_v4();
             group.board = group.board.and_then(|p| id_map.get(&p).copied());
+            group.mask = group.mask.and_then(|id| id_map.get(&id).copied());
             self.hierarchy.groups.insert(id_map[&id], group);
         }
         for (id, parent) in clipboard.hierarchy.parents {

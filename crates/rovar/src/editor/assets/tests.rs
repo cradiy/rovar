@@ -63,6 +63,7 @@ fn saved_group_embeds_media_and_inserts_independent_objects_with_one_undo(cx: &m
                 4,
                 LayerGroup {
                     boolean: None,
+                    mask: None,
                     uid: uuid::Uuid::new_v4(),
                     name: "Card".into(),
                     board: Some(1),

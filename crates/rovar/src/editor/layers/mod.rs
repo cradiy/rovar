@@ -120,9 +120,16 @@ impl Workspace {
     fn layer_row(&self, layer: Layer, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let id = layer.id;
         let label = self.layer_name(id, cx);
+        let mask_source =
+            self.hierarchy.parents.get(&id).is_some_and(|parent| {
+                crate::scene::mask::source(&self.hierarchy, *parent) == Some(id)
+            });
         let glyph = match layer.kind {
             LayerKind::Board => LucideIcons::Frame,
             LayerKind::Text => LucideIcons::Type,
+            LayerKind::Group if crate::scene::mask::source(&self.hierarchy, id).is_some() => {
+                LucideIcons::Scan
+            }
             LayerKind::Group if crate::scene::boolean::is_boolean(&self.hierarchy, id) => {
                 LucideIcons::Combine
             }
@@ -273,6 +280,22 @@ impl Workspace {
                         )
                     }),
             )
+            .when(mask_source, |el| {
+                el.child(
+                    div()
+                        .debug_selector(move || format!("layer-mask-source-{id}"))
+                        .flex_shrink_0()
+                        .h(px(18.))
+                        .px(px(5.))
+                        .rounded(px(4.))
+                        .flex()
+                        .items_center()
+                        .text_size(px(10.))
+                        .text_color(ACCENT.color())
+                        .bg(Color::Selected.color())
+                        .child(t("mask-title")),
+                )
+            })
             .child(self.layer_controls(id, own, parent, cx))
             .when_some(drop, |el, (_, above)| {
                 el.child(

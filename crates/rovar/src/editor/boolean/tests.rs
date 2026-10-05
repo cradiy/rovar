@@ -23,6 +23,10 @@ fn boolean_group_keeps_current_menu_option_and_editable_operands(cx: &mut TestAp
     let mut visual = VisualTestContext::from_window(handle.into(), cx);
     draw(&mut visual);
     assert!(visual.debug_bounds("shape-3").is_some());
+    let operation = visual.debug_bounds("boolean-menu").unwrap();
+    let release = visual.debug_bounds("boolean-release").unwrap();
+    assert_eq!(operation.center().y, release.center().y);
+    assert!(operation.right() < release.left());
     assert!(visual.debug_bounds("shape-1").is_none());
     assert!(visual.debug_bounds("shape-2").is_none());
     handle

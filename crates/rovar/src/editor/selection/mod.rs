@@ -286,6 +286,11 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
+        if !self.is_selected(id)
+            && !self.mask_hit(id, self.board_point(None, window.raw_mouse_position()))
+        {
+            return true;
+        }
         if event.modifiers.control || event.modifiers.platform {
             self.focus.focus(window, cx);
             if event.modifiers.shift {

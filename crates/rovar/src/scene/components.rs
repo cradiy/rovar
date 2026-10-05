@@ -76,6 +76,16 @@ fn origin(page: &Page, id: Option<usize>) -> [f32; 2] {
         .map_or([0., 0.], |b| [b.rect.x, b.rect.y])
 }
 pub(crate) fn bounds(page: &Page, id: usize) -> Option<Rect> {
+    if let Some(source) = super::mask::source(&page.hierarchy, id) {
+        return super::mask::outline(
+            &page.hierarchy,
+            &page.shapes,
+            &page.boards,
+            &mut Default::default(),
+            source,
+        )
+        .bounds();
+    }
     if super::boolean::is_boolean(&page.hierarchy, id)
         && let Some(g) = super::boolean::Cache::default()
             .get(&page.hierarchy, &page.shapes, id)
@@ -233,6 +243,7 @@ pub(crate) fn place(
         .map(|(id, g)| {
             let mut g = g.clone();
             g.board = g.board.map(|p| nodes[&p]).or(external);
+            g.mask = g.mask.map(|id| nodes[&id]);
             (nodes[id], g)
         })
         .collect();

@@ -140,6 +140,7 @@ fn align(page: &mut Page, handles: &BTreeMap<uuid::Uuid, usize>) -> Result<()> {
     }
     for group in page.hierarchy.groups.values_mut() {
         group.board = group.board.map(id).transpose()?;
+        group.mask = group.mask.map(id).transpose()?;
     }
     for parent in page.hierarchy.parents.values_mut() {
         *parent = id(*parent)?;

@@ -377,6 +377,7 @@ impl Workspace {
                 root,
                 crate::scene::layer::LayerGroup {
                     boolean: None,
+                    mask: None,
                     uid: uuid::Uuid::new_v4(),
                     name: name.clone(),
                     board: None,

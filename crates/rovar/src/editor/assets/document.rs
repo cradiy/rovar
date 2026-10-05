@@ -103,6 +103,7 @@ impl Workspace {
                 id,
                 crate::scene::layer::LayerGroup {
                     boolean: None,
+                    mask: None,
                     uid: uuid::Uuid::new_v4(),
                     name: t("asset-default-name").into(),
                     board: None,

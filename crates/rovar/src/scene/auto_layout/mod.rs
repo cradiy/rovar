@@ -235,6 +235,18 @@ pub(crate) fn resolve(
     for (id, group) in &page.hierarchy.groups {
         parents.insert(*id, page.hierarchy.parents.get(id).copied().or(group.board));
         hidden.insert(*id, group.layer.hidden);
+        if let Some(source) = super::mask::source(&page.hierarchy, *id)
+            && let Some(rect) = super::mask::outline(
+                &page.hierarchy,
+                &page.shapes,
+                &page.boards,
+                &mut booleans,
+                source,
+            )
+            .bounds()
+        {
+            rects.insert(*id, rect);
+        }
         if group.boolean.is_some()
             && let Some(g) = booleans
                 .get(&page.hierarchy, &page.shapes, *id)

@@ -82,6 +82,7 @@ impl Workspace {
             .filter(|id| {
                 !self.hierarchy.groups.contains_key(id)
                     || crate::scene::boolean::is_boolean(&self.hierarchy, *id)
+                    || crate::scene::mask::source(&self.hierarchy, *id).is_some()
             })
             .collect()
     }
@@ -204,6 +205,18 @@ impl Workspace {
     }
 
     pub(super) fn group_bounds(&self, id: usize) -> Option<Rect> {
+        if let Some(source) = crate::scene::mask::source(&self.hierarchy, id)
+            && let Some(bounds) = crate::scene::mask::outline(
+                &self.hierarchy,
+                &self.shapes,
+                &self.boards,
+                &mut self.boolean_cache.borrow_mut(),
+                source,
+            )
+            .bounds()
+        {
+            return Some(bounds);
+        }
         if crate::scene::boolean::is_boolean(&self.hierarchy, id)
             && let Some(g) = self.boolean_geometry(id).filter(|g| !g.contours.is_empty())
         {
@@ -300,6 +313,7 @@ impl Workspace {
             id,
             LayerGroup {
                 boolean: operation,
+                mask: None,
                 uid: uuid::Uuid::new_v4(),
                 name: operation.map_or_else(
                     || crate::i18n::message("group-name", &[("id", id.to_string())]),
@@ -385,6 +399,7 @@ impl Workspace {
         all.retain(|id| !ids.contains(id));
         all.extend_from_slice(ids);
         self.hierarchy.order = all;
+        self.prune_masks();
     }
 
     pub(super) fn shift_layers(&mut self, forward: bool, edge: bool, cx: &mut Context<Self>) {
@@ -489,6 +504,7 @@ impl Workspace {
         self.hierarchy.exports.retain(|id, _| ids.contains(id));
         self.hierarchy.effects.retain(|id, _| ids.contains(id));
         self.hierarchy.components.retain(|id, _| ids.contains(id));
+        self.prune_masks();
         self.boolean_cache.borrow_mut().retain(&self.hierarchy);
         self.shape_paths
             .borrow_mut()

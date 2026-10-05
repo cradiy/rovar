@@ -419,7 +419,7 @@ impl Workspace {
             .child(div().p(px(14.)).flex_shrink_0().child(actions))
             .child(self.auto_layout_controls(cx))
             .child(self.variant_controls(cx))
-            .children(self.boolean_controls(cx))
+            .children(self.composition_controls(cx))
             .child(self.constraint_controls(cx))
             .child(self.size_limit_controls(cx))
             .child(

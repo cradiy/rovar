@@ -60,6 +60,7 @@ pub(crate) fn render(
         }
         if !doc.hierarchy.groups.contains_key(&id)
             || crate::scene::boolean::is_boolean(&doc.hierarchy, id)
+            || crate::scene::mask::source(&doc.hierarchy, id).is_some()
         {
             order.push(id);
         }
@@ -68,8 +69,18 @@ pub(crate) fn render(
         }
     }
     let included = order.iter().copied().collect();
-    order.retain(|id| !crate::scene::boolean::consumed(&doc.hierarchy, *id, &included));
+    order.retain(|id| {
+        !crate::scene::boolean::consumed(&doc.hierarchy, *id, &included)
+            && !crate::scene::mask::is_source(&doc.hierarchy, *id, &included)
+    });
     let mut boolean_cache = crate::scene::boolean::Cache::default();
+    let masks =
+        crate::scene::mask::outlines(&doc.hierarchy, &doc.shapes, &doc.boards, &mut boolean_cache);
+    for (id, outline) in &masks {
+        if let Some(bounds) = outline.bounds() {
+            items.insert(*id, (None, doc.hierarchy.groups[id].layer, bounds));
+        }
+    }
     let mut compositions = BTreeMap::new();
     for id in &order {
         if crate::scene::boolean::is_boolean(&doc.hierarchy, *id)
@@ -119,6 +130,14 @@ pub(crate) fn render(
         let mut rect = crate::scene::rotation::bounds(rect, items[id].1.rotation);
         rect.x = center.x - rect.width / 2.;
         rect.y = center.y - rect.height / 2.;
+        let Some(rect) = crate::scene::mask::clip_bounds(
+            rect,
+            crate::scene::mask::ancestors(&doc.hierarchy, *id, &included)
+                .iter()
+                .map(|id| masks.get(id).and_then(|o| o.bounds())),
+        ) else {
+            continue;
+        };
         bounds = Some(bounds.map_or(
             (rect.x, rect.y, rect.x + rect.width, rect.y + rect.height),
             |(l, t, r, b)| {

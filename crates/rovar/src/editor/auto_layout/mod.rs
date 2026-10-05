@@ -406,9 +406,10 @@ impl Workspace {
         let ids = self.selection_ids();
         !ids.is_empty()
             && (ids.len() > 1
-                || !ids
-                    .iter()
-                    .any(|id| crate::scene::boolean::is_boolean(&self.hierarchy, *id)))
+                || !ids.iter().any(|id| {
+                    crate::scene::boolean::is_boolean(&self.hierarchy, *id)
+                        || crate::scene::mask::source(&self.hierarchy, *id).is_some()
+                }))
             && self.common_parent(&ids).is_some()
             && ids.iter().all(|id| self.layer_editable(*id))
             && (self.can_group()

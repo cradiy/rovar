@@ -20,6 +20,7 @@ mod inspector;
 mod interaction;
 mod layers;
 mod layout;
+mod mask;
 mod media;
 mod organization;
 mod pages;

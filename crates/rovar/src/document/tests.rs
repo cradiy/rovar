@@ -345,6 +345,7 @@ fn rich_text_paths_groups_and_external_edit_conflicts_round_trip(cx: &mut gpui::
         3,
         crate::scene::layer::LayerGroup {
             boolean: None,
+            mask: None,
             uid: uuid::Uuid::new_v4(),
             name: "Group".into(),
             board: None,

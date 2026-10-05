@@ -64,14 +64,27 @@ impl Scene<'_> {
         let mut backdrops = backdrop::Renderer::new(self, raster_scale);
         let included = self.order.iter().copied().collect();
         let mut booleans = crate::scene::boolean::Cache::default();
+        let masks =
+            crate::scene::mask::outlines(&doc.hierarchy, &doc.shapes, &doc.boards, &mut booleans);
+        for (id, outline) in &masks {
+            let mut path = String::new();
+            for contour in &outline.0 {
+                for (i, p) in contour.iter().enumerate() {
+                    write!(path, "{} {} {} ", if i == 0 { "M" } else { "L" }, p.x, p.y)?;
+                }
+                path.push_str("Z ");
+            }
+            clip(&mut defs, &format!("vector-mask-{id}"), &path);
+        }
         for id in self.order {
-            if crate::scene::boolean::consumed(&doc.hierarchy, *id, &included) {
+            if crate::scene::boolean::consumed(&doc.hierarchy, *id, &included)
+                || crate::scene::mask::is_source(&doc.hierarchy, *id, &included)
+            {
                 continue;
             }
             let composition = crate::scene::boolean::is_boolean(&doc.hierarchy, *id)
                 .then(|| booleans.get(&doc.hierarchy, &doc.shapes, *id))
                 .flatten();
-            backdrops.paint(self, *id, &mut defs, &mut body)?;
             let board = doc.boards.iter().find(|item| item.id == *id);
             let shape = doc
                 .shapes
@@ -88,6 +101,14 @@ impl Scene<'_> {
             } else {
                 continue;
             };
+            let mask_groups = crate::scene::mask::ancestors(&doc.hierarchy, *id, &included);
+            let backdrop_start = body.len();
+            backdrops.paint(self, *id, &mut defs, &mut body)?;
+            let backdrop = body.split_off(backdrop_start);
+            for group in &mask_groups {
+                write!(body, "<g clip-path=\"url(#vector-mask-{group})\">")?;
+            }
+            body.push_str(&backdrop);
             let has_clip = if let Some(bounds) = self.clips.get(id) {
                 let key = format!("board-clip-{id}");
                 clip(&mut defs, &key, &rect_path(*bounds));
@@ -306,6 +327,9 @@ impl Scene<'_> {
                 body.push_str("</g>");
             }
             if has_clip {
+                body.push_str("</g>");
+            }
+            for _ in &mask_groups {
                 body.push_str("</g>");
             }
         }

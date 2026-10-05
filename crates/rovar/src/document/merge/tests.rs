@@ -171,6 +171,7 @@ fn concurrent_page_insertions_survive_and_invalid_combined_parents_are_rejected(
         3,
         crate::scene::layer::LayerGroup {
             boolean: None,
+            mask: None,
             uid: uuid::Uuid::new_v4(),
             name: "Group".into(),
             board: None,
@@ -198,6 +199,41 @@ fn incompatible_reordering_remains_a_conflict() {
     local.pages[0].hierarchy.order = vec![2, 1, 3];
     remote.pages[0].hierarchy.order = vec![1, 3, 2];
     assert!(merged(&base, &local, &remote).is_err());
+}
+
+#[test]
+fn mask_source_references_follow_node_identity_when_handles_change() {
+    let mut base = document();
+    base.pages[0].hierarchy.groups.insert(
+        3,
+        crate::scene::layer::LayerGroup {
+            boolean: None,
+            mask: Some(1),
+            uid: uuid::Uuid::new_v4(),
+            name: "Mask".into(),
+            board: None,
+            layer: Default::default(),
+        },
+    );
+    base.pages[0].hierarchy.parents.extend([(1, 3), (2, 3)]);
+    base.pages[0].next_id = 4;
+    let mut local = base.clone();
+    let mut remote = base.clone();
+    local.pages[0].shapes[0].id = 100;
+    local.pages[0].hierarchy.parents.remove(&1);
+    local.pages[0].hierarchy.parents.insert(100, 3);
+    local.pages[0].hierarchy.groups.get_mut(&3).unwrap().mask = Some(100);
+    local.pages[0].shapes[1].rect.x = 20.;
+    local.pages[0].next_id = 101;
+    remote.pages[0].shapes[0].rect.width = 80.;
+    let result = merged(&base, &local, &remote).unwrap();
+    let page = &result.pages[0];
+    assert_eq!(page.hierarchy.groups[&3].mask, Some(100));
+    assert_eq!(
+        page.shapes.iter().find(|s| s.id == 100).unwrap().rect.width,
+        80.
+    );
+    assert_eq!(page.shapes.iter().find(|s| s.id == 2).unwrap().rect.x, 20.);
 }
 
 #[test]

@@ -360,6 +360,7 @@ fn nested_hug_frames_are_stable_and_serialize_without_ui_state(cx: &mut gpui::Te
         4,
         crate::scene::layer::LayerGroup {
             boolean: None,
+            mask: None,
             uid: uuid::Uuid::new_v4(),
             name: "Stack".into(),
             board: Some(1),

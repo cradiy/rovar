@@ -117,6 +117,12 @@ impl Workspace {
         let json = Arc::new(serde_json::to_vec(&doc)?);
         let assets = Arc::new(assets);
         let mut jobs = Vec::new();
+        let masks = crate::scene::mask::outlines(
+            &self.hierarchy,
+            &self.shapes,
+            &self.boards,
+            &mut self.boolean_cache.borrow_mut(),
+        );
         for root in roots {
             let ids = self.descendants(&BTreeSet::from([root]));
             let order: Vec<_> = self
@@ -124,6 +130,7 @@ impl Workspace {
                 .into_iter()
                 .filter(|id| ids.contains(id))
                 .filter(|id| !crate::scene::boolean::consumed(&self.hierarchy, *id, &ids))
+                .filter(|id| !crate::scene::mask::is_source(&self.hierarchy, *id, &ids))
                 .collect();
             ensure!(!order.is_empty(), "{}", t("export-empty-selection"));
             if let Some(shape) = doc
@@ -182,7 +189,14 @@ impl Workspace {
                     if clips.contains_key(id) {
                         continue;
                     }
-                    if let Some(r) = self.export_bounds(*id) {
+                    if let Some(r) = self.export_bounds(*id).and_then(|r| {
+                        crate::scene::mask::clip_bounds(
+                            r,
+                            crate::scene::mask::ancestors(&self.hierarchy, *id, &ids)
+                                .iter()
+                                .map(|id| masks.get(id).and_then(|o| o.bounds())),
+                        )
+                    }) {
                         bounds = Some(bounds.map_or(r, |b| {
                             let x = b.x.min(r.x);
                             let y = b.y.min(r.y);
