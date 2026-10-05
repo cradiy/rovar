@@ -170,6 +170,7 @@ fn concurrent_page_insertions_survive_and_invalid_combined_parents_are_rejected(
     base.pages[0].hierarchy.groups.insert(
         3,
         crate::scene::layer::LayerGroup {
+            boolean: None,
             uid: uuid::Uuid::new_v4(),
             name: "Group".into(),
             board: None,

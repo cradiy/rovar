@@ -15,6 +15,8 @@ impl LayerState {
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub(crate) struct LayerGroup {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub boolean: Option<crate::scene::boolean::Operation>,
     #[serde(default, skip_serializing_if = "uuid::Uuid::is_nil")]
     pub uid: uuid::Uuid,
     pub name: String,

@@ -109,6 +109,7 @@ fn selection_export_separates_roots_expands_groups_and_clips_board_children(
             this.hierarchy.groups.insert(
                 20,
                 LayerGroup {
+                    boolean: None,
                     uid: uuid::Uuid::new_v4(),
                     name: "Group".into(),
                     board: None,
@@ -363,6 +364,7 @@ fn video_selection_exports_original_and_hides_image_options(cx: &mut TestAppCont
             this.hierarchy.groups.insert(
                 3,
                 LayerGroup {
+                    boolean: None,
                     uid: uuid::Uuid::new_v4(),
                     name: "Group".into(),
                     board: None,

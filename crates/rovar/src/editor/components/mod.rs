@@ -376,6 +376,7 @@ impl Workspace {
             page.hierarchy.groups.insert(
                 root,
                 crate::scene::layer::LayerGroup {
+                    boolean: None,
                     uid: uuid::Uuid::new_v4(),
                     name: name.clone(),
                     board: None,

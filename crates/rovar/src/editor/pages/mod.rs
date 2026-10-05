@@ -106,6 +106,7 @@ impl Workspace {
         self.vector_hover = None;
         self.draw_tool = None;
         self.shape_paths.borrow_mut().clear();
+        *self.boolean_cache.borrow_mut() = Default::default();
         self.media.clear_page();
         self.load_page(state.page, window, cx);
         self.restore_view(state.view);

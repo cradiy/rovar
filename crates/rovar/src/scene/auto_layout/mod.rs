@@ -135,6 +135,10 @@ impl Container {
 pub(crate) fn validate(page: &Page, ids: &std::collections::BTreeSet<usize>) -> anyhow::Result<()> {
     for (id, layout) in &page.hierarchy.layouts {
         anyhow::ensure!(
+            !crate::scene::boolean::is_boolean(&page.hierarchy, *id),
+            "Boolean groups cannot be auto layout containers"
+        );
+        anyhow::ensure!(
             (1..=MAX_GRID_TRACKS).contains(&layout.columns)
                 && layout
                     .column_width
@@ -227,9 +231,22 @@ pub(crate) fn resolve(
         parents.insert(id, page.hierarchy.parents.get(&id).copied().or(board));
         hidden.insert(id, hide);
     }
+    let mut booleans = crate::scene::boolean::Cache::default();
     for (id, group) in &page.hierarchy.groups {
         parents.insert(*id, page.hierarchy.parents.get(id).copied().or(group.board));
         hidden.insert(*id, group.layer.hidden);
+        if group.boolean.is_some()
+            && let Some(g) = booleans
+                .get(&page.hierarchy, &page.shapes, *id)
+                .filter(|g| !g.contours.is_empty())
+        {
+            let mut rect = g.shape.rect;
+            if let Some(origin) = group.board.and_then(|id| boards.get(&id)) {
+                rect.x += origin.x;
+                rect.y += origin.y;
+            }
+            rects.insert(*id, rect);
+        }
         if let Some(layout) = page.hierarchy.layouts.get(id) {
             let mut rect = layout.frame;
             if let Some(origin) = group.board.and_then(|id| boards.get(&id)) {

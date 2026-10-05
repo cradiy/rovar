@@ -22,6 +22,8 @@ image = { version = "0.25", default-features = false, features = [
   "tiff",
 ] }
 anyhow = "1"
+i_overlay = "9"
+kurbo = "0.13"
 taffy = { version = "0.10.1", default-features = false, features = [
   "std",
   "taffy_tree",

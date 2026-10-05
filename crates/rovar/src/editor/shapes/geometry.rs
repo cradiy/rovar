@@ -17,6 +17,7 @@ pub(in crate::editor) struct GeometryKey {
     pub nodes: crate::scene::bezier::Nodes,
     pub closed: bool,
     pub zoom: f32,
+    pub contours: Option<crate::scene::boolean::Contours>,
 }
 
 impl GeometryKey {
@@ -60,6 +61,7 @@ impl GeometryKey {
             },
             closed: shape.editable_closed(),
             zoom,
+            contours: None,
         }
     }
 
@@ -115,6 +117,18 @@ impl GeometryKey {
                 px(self.outset + p.y * self.height),
             )
         };
+        if let Some(contours) = &self.contours {
+            for contour in contours.iter() {
+                if let Some(first) = contour.first() {
+                    path.move_to(to_pixel(*first));
+                    for p in &contour[1..] {
+                        path.line_to(to_pixel(*p));
+                    }
+                    path.close();
+                }
+            }
+            return;
+        }
         let Some(first) = self.nodes.0.first() else {
             return;
         };
@@ -143,7 +157,7 @@ impl GeometryKey {
                     .with_fill_rule(FillRule::EvenOdd)
                     .with_tolerance(tolerance),
             ));
-            if self.closed && self.nodes.0.len() >= 2 {
+            if self.closed && (self.contours.is_some() || self.nodes.0.len() >= 2) {
                 self.bezier_contour(&mut fill);
             }
             let mut stroke =
@@ -154,7 +168,7 @@ impl GeometryKey {
                         .with_line_join(LineJoin::Round)
                         .with_tolerance(tolerance),
                 ));
-            if self.stroke_width > 0. && self.nodes.0.len() >= 2 {
+            if self.stroke_width > 0. && (self.contours.is_some() || self.nodes.0.len() >= 2) {
                 self.bezier_contour(&mut stroke);
             }
             match (fill.build(), stroke.build()) {

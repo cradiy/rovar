@@ -76,6 +76,18 @@ fn origin(page: &Page, id: Option<usize>) -> [f32; 2] {
         .map_or([0., 0.], |b| [b.rect.x, b.rect.y])
 }
 pub(crate) fn bounds(page: &Page, id: usize) -> Option<Rect> {
+    if super::boolean::is_boolean(&page.hierarchy, id)
+        && let Some(g) = super::boolean::Cache::default()
+            .get(&page.hierarchy, &page.shapes, id)
+            .filter(|g| !g.contours.is_empty())
+    {
+        let offset = origin(page, g.shape.board);
+        return Some(Rect {
+            x: g.shape.rect.x + offset[0],
+            y: g.shape.rect.y + offset[1],
+            ..g.shape.rect
+        });
+    }
     if let Some(b) = page.boards.iter().find(|b| b.id == id) {
         return Some(b.rect);
     }

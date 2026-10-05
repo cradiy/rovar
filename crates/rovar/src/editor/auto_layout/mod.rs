@@ -405,6 +405,10 @@ impl Workspace {
     pub(super) fn can_auto_layout(&self) -> bool {
         let ids = self.selection_ids();
         !ids.is_empty()
+            && (ids.len() > 1
+                || !ids
+                    .iter()
+                    .any(|id| crate::scene::boolean::is_boolean(&self.hierarchy, *id)))
             && self.common_parent(&ids).is_some()
             && ids.iter().all(|id| self.layer_editable(*id))
             && (self.can_group()

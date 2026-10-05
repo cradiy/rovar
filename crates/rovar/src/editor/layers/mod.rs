@@ -123,6 +123,9 @@ impl Workspace {
         let glyph = match layer.kind {
             LayerKind::Board => LucideIcons::Frame,
             LayerKind::Text => LucideIcons::Type,
+            LayerKind::Group if crate::scene::boolean::is_boolean(&self.hierarchy, id) => {
+                LucideIcons::Combine
+            }
             LayerKind::Group => LucideIcons::Group,
             LayerKind::Shape => match self.shapes[layer.index].kind {
                 ShapeKind::Rectangle => LucideIcons::Square,

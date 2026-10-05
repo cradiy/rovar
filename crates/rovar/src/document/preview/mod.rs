@@ -58,11 +58,25 @@ pub(crate) fn render(
         if items[&id].1.hidden {
             continue;
         }
-        if !doc.hierarchy.groups.contains_key(&id) {
+        if !doc.hierarchy.groups.contains_key(&id)
+            || crate::scene::boolean::is_boolean(&doc.hierarchy, id)
+        {
             order.push(id);
         }
         if let Some(children) = children.get(&Some(id)) {
             stack.extend(children.iter().rev());
+        }
+    }
+    let included = order.iter().copied().collect();
+    order.retain(|id| !crate::scene::boolean::consumed(&doc.hierarchy, *id, &included));
+    let mut boolean_cache = crate::scene::boolean::Cache::default();
+    let mut compositions = BTreeMap::new();
+    for id in &order {
+        if crate::scene::boolean::is_boolean(&doc.hierarchy, *id)
+            && let Some(g) = boolean_cache.get(&doc.hierarchy, &doc.shapes, *id)
+        {
+            items.insert(*id, (g.shape.board, g.shape.layer, g.shape.rect));
+            compositions.insert(*id, g);
         }
     }
     let world = |id: usize| {
@@ -76,7 +90,13 @@ pub(crate) fn render(
     let mut bounds: Option<(f32, f32, f32, f32)> = None;
     for id in &order {
         let mut rect = world(*id);
-        if let Some(shape) = doc.shapes.iter().find(|s| s.id == *id && s.stroke.enabled) {
+        if let Some(shape) = doc
+            .shapes
+            .iter()
+            .find(|s| s.id == *id)
+            .or_else(|| compositions.get(id).map(|g| &g.shape))
+            .filter(|s| s.stroke.enabled)
+        {
             let outset = if shape.kind.is_path() || shape.kind.is_polygon() {
                 shape.stroke.width / 2.
             } else {

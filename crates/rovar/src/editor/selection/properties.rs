@@ -6,29 +6,46 @@ use crate::scene::property::Property::*;
 use crate::ui::theme::Color;
 
 impl Workspace {
-    pub(in crate::editor) fn batch_color_supported(&self, cx: &gpui::App) -> bool {
-        self.operation_ids().into_iter().all(|id| {
-            if let Some(t) = self.texts.iter().find(|t| t.id == id) {
-                let e = t.editor.read(cx);
-                e.effective_style().fill_mode == FillMode::Solid && !e.mixed(TextProperty::FillMode)
-            } else if let Some(s) = self.shapes.iter().find(|s| s.id == id) {
-                !s.kind.is_media()
-                    && s.paint_mode(!s.can_fill()) == FillMode::Solid
-                    && (if s.can_fill() {
-                        s.fill_enabled
-                    } else {
-                        s.stroke.enabled
-                    })
-            } else {
-                self.boards
-                    .iter()
-                    .any(|b| b.id == id && b.fill_mode == FillMode::Solid)
+    fn multi_property_ids(&self, property: Property) -> BTreeSet<usize> {
+        if let Some(id) = self.selected_boolean() {
+            if property.is_geometry() {
+                return BTreeSet::from([id]);
             }
-        })
+            return self
+                .boolean_geometry(id)
+                .map(|g| g.source)
+                .into_iter()
+                .collect();
+        }
+        self.operation_ids()
+    }
+
+    pub(in crate::editor) fn batch_color_supported(&self, cx: &gpui::App) -> bool {
+        let ids = self.multi_property_ids(Color);
+        !ids.is_empty()
+            && ids.into_iter().all(|id| {
+                if let Some(t) = self.texts.iter().find(|t| t.id == id) {
+                    let e = t.editor.read(cx);
+                    e.effective_style().fill_mode == FillMode::Solid
+                        && !e.mixed(TextProperty::FillMode)
+                } else if let Some(s) = self.shapes.iter().find(|s| s.id == id) {
+                    !s.kind.is_media()
+                        && s.paint_mode(!s.can_fill()) == FillMode::Solid
+                        && (if s.can_fill() {
+                            s.fill_enabled
+                        } else {
+                            s.stroke.enabled
+                        })
+                } else {
+                    self.boards
+                        .iter()
+                        .any(|b| b.id == id && b.fill_mode == FillMode::Solid)
+                }
+            })
     }
 
     pub(in crate::editor) fn multi_picker_color(&self, cx: &gpui::App) -> Option<gpui::Rgba> {
-        self.object_color(*self.operation_ids().first()?, cx)
+        self.object_color(*self.multi_property_ids(Color).first()?, cx)
     }
 
     fn object_color(&self, id: usize, cx: &gpui::App) -> Option<gpui::Rgba> {
@@ -55,7 +72,11 @@ impl Workspace {
 
     fn object_value(&self, id: usize, property: Property, cx: &gpui::App) -> Option<String> {
         if property.is_geometry() {
-            let r = self.world_rect(id)?;
+            let r = if crate::scene::boolean::is_boolean(&self.hierarchy, id) {
+                self.boolean_property_bounds(id)?
+            } else {
+                self.world_rect(id)?
+            };
             return Some(number(match property {
                 X => r.x,
                 Y => r.y,
@@ -92,7 +113,7 @@ impl Workspace {
         {
             return None;
         }
-        let property_ids = self.operation_ids();
+        let property_ids = self.multi_property_ids(property);
         let mut values = property_ids
             .iter()
             .map(|id| self.object_value(*id, property, cx));
@@ -106,7 +127,8 @@ impl Workspace {
 
     pub(in crate::editor) fn multi_can_scrub(&self, property: Property, cx: &gpui::App) -> bool {
         (property.is_geometry() || (property == Opacity && self.batch_color_supported(cx)))
-            && self.operation_ids().iter().all(|id| {
+            && !(matches!(property, Width | Height) && self.boolean_result_empty())
+            && self.multi_property_ids(property).iter().all(|id| {
                 self.object_value(*id, property, cx)
                     .is_some_and(|v| v.parse::<f32>().is_ok())
             })
@@ -142,6 +164,10 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) {
         if property.is_geometry() {
+            if self.selected_boolean() == Some(id) {
+                self.set_boolean_numeric(id, property, value);
+                return;
+            }
             if let Some((parent, mut rect)) = self.object_rect(id) {
                 let origin = self.parent_origin(parent);
                 match property {
@@ -226,6 +252,7 @@ impl Workspace {
     ) -> bool {
         if !(property.is_geometry() || matches!(property, Color | Opacity))
             || (matches!(property, Color | Opacity) && !self.batch_color_supported(cx))
+            || (matches!(property, Width | Height) && self.boolean_result_empty())
         {
             return false;
         }
@@ -238,7 +265,7 @@ impl Workspace {
             let Ok(color) = u32::from_str_radix(value, 16) else {
                 return false;
             };
-            for id in self.operation_ids() {
+            for id in self.multi_property_ids(property) {
                 self.set_batch_color(id, rgb(color), false, cx);
             }
         } else {
@@ -249,7 +276,7 @@ impl Workspace {
             if !value.is_finite() || !(min..=max).contains(&value) {
                 return false;
             }
-            for id in self.operation_ids() {
+            for id in self.multi_property_ids(property) {
                 self.set_batch_numeric(id, property, value, cx);
             }
         }
@@ -277,7 +304,7 @@ impl Workspace {
             return;
         }
         self.batch_values = self
-            .operation_ids()
+            .multi_property_ids(property)
             .iter()
             .map(|id| {
                 (
@@ -310,6 +337,9 @@ impl Workspace {
             return;
         }
         let (min, max) = multi_limits(property);
+        if self.selected_boolean().is_some() && property.is_geometry() {
+            self.restore_batch(&self.batch_before.clone(), cx);
+        }
         for (id, original) in self.batch_values.clone() {
             let value = (original + (delta * if shift { 10. } else { 1. }).round()).clamp(min, max);
             self.set_batch_numeric(id, property, value, cx);
@@ -338,7 +368,7 @@ impl Workspace {
                 .gap(px(6.))
                 .child(div().flex_1().text_size(px(12.)).child(crate::i18n::count(
                     "selection-count",
-                    self.operation_ids().len(),
+                    self.selection_ids().len(),
                 )));
         for (id, glyph, label, delete) in [
             (
@@ -389,6 +419,7 @@ impl Workspace {
             .child(div().p(px(14.)).flex_shrink_0().child(actions))
             .child(self.auto_layout_controls(cx))
             .child(self.variant_controls(cx))
+            .children(self.boolean_controls(cx))
             .child(self.constraint_controls(cx))
             .child(self.size_limit_controls(cx))
             .child(

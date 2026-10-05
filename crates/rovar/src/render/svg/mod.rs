@@ -43,7 +43,7 @@ fn rect_path(r: Rect) -> String {
 fn clip(defs: &mut String, id: &str, path: &str) {
     write!(
         defs,
-        "<clipPath id=\"{id}\"><path d=\"{path}\"/></clipPath>"
+        "<clipPath id=\"{id}\"><path d=\"{path}\" clip-rule=\"evenodd\"/></clipPath>"
     )
     .unwrap();
 }
@@ -62,10 +62,22 @@ impl Scene<'_> {
         let mut body = String::new();
         let mut images = BTreeMap::new();
         let mut backdrops = backdrop::Renderer::new(self, raster_scale);
+        let included = self.order.iter().copied().collect();
+        let mut booleans = crate::scene::boolean::Cache::default();
         for id in self.order {
+            if crate::scene::boolean::consumed(&doc.hierarchy, *id, &included) {
+                continue;
+            }
+            let composition = crate::scene::boolean::is_boolean(&doc.hierarchy, *id)
+                .then(|| booleans.get(&doc.hierarchy, &doc.shapes, *id))
+                .flatten();
             backdrops.paint(self, *id, &mut defs, &mut body)?;
             let board = doc.boards.iter().find(|item| item.id == *id);
-            let shape = doc.shapes.iter().find(|item| item.id == *id);
+            let shape = doc
+                .shapes
+                .iter()
+                .find(|item| item.id == *id)
+                .or_else(|| composition.as_ref().map(|g| &g.shape));
             let text = doc.texts.iter().find(|item| item.id == *id);
             let (rect, rotation) = if let Some(b) = board {
                 (b.rect, b.layer.rotation)
@@ -171,7 +183,24 @@ impl Scene<'_> {
                 if local.kind == ShapeKind::Image {
                     local.kind = ShapeKind::Rectangle;
                 }
-                let contour = path::contour(&local, 0.);
+                let contour = if let Some(g) = &composition {
+                    let mut path = String::new();
+                    for contour in g.contours.iter() {
+                        for (i, p) in contour.iter().enumerate() {
+                            write!(
+                                path,
+                                "{} {} {} ",
+                                if i == 0 { "M" } else { "L" },
+                                rect.x + p.x * rect.width,
+                                rect.y + p.y * rect.height
+                            )?;
+                        }
+                        path.push_str("Z ");
+                    }
+                    path
+                } else {
+                    path::contour(&local, 0.)
+                };
                 let (mode, color, gradient, enabled, image_fill) = if let Some(b) = board {
                     (b.fill_mode, b.color, &b.gradient, true, &b.image_fill)
                 } else {
@@ -197,10 +226,10 @@ impl Scene<'_> {
                     write!(body, "<path d=\"{contour}\" fill-rule=\"evenodd\" {fill}/>")?;
                 }
                 if (media || (enabled && mode == FillMode::Image))
-                    && let Some(asset) = doc
-                        .assets
-                        .iter()
-                        .find(|a| a.object == *id && a.fill != media)
+                    && let Some(asset) = doc.assets.iter().find(|a| {
+                        a.object == composition.as_ref().map_or(*id, |g| g.source)
+                            && a.fill != media
+                    })
                 {
                     if !images.contains_key(&asset.hash) {
                         let source = self

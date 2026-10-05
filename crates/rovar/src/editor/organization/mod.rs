@@ -79,7 +79,10 @@ impl Workspace {
     pub(super) fn paint_order(&self) -> Vec<usize> {
         self.canvas_layer_order()
             .into_iter()
-            .filter(|id| !self.hierarchy.groups.contains_key(id))
+            .filter(|id| {
+                !self.hierarchy.groups.contains_key(id)
+                    || crate::scene::boolean::is_boolean(&self.hierarchy, *id)
+            })
             .collect()
     }
 
@@ -201,6 +204,15 @@ impl Workspace {
     }
 
     pub(super) fn group_bounds(&self, id: usize) -> Option<Rect> {
+        if crate::scene::boolean::is_boolean(&self.hierarchy, id)
+            && let Some(g) = self.boolean_geometry(id).filter(|g| !g.contours.is_empty())
+        {
+            let mut rect = g.shape.rect;
+            let origin = self.parent_origin(g.shape.board);
+            rect.x += origin.x;
+            rect.y += origin.y;
+            return Some(rect);
+        }
         if let Some(layout) = self.hierarchy.layouts.get(&id) {
             let mut rect = layout.frame;
             let origin = self.parent_origin(self.hierarchy.groups.get(&id)?.board);
@@ -251,6 +263,14 @@ impl Workspace {
     }
 
     pub(super) fn group_selection(&mut self, cx: &mut Context<Self>) {
+        self.group_selection_with(None, cx);
+    }
+
+    pub(super) fn group_selection_with(
+        &mut self,
+        operation: Option<crate::scene::boolean::Operation>,
+        cx: &mut Context<Self>,
+    ) {
         if !self.can_group() {
             return;
         }
@@ -279,8 +299,12 @@ impl Workspace {
         self.hierarchy.groups.insert(
             id,
             LayerGroup {
+                boolean: operation,
                 uid: uuid::Uuid::new_v4(),
-                name: crate::i18n::message("group-name", &[("id", id.to_string())]),
+                name: operation.map_or_else(
+                    || crate::i18n::message("group-name", &[("id", id.to_string())]),
+                    |op| op.label().to_owned(),
+                ),
                 board,
                 layer: LayerState::default(),
             },
@@ -330,6 +354,7 @@ impl Workspace {
             }
             self.hierarchy.groups.remove(&id);
             self.hierarchy.components.remove(&id);
+            self.shape_paths.borrow_mut().remove(&id);
             self.hierarchy.parents.remove(&id);
             self.hierarchy.order.retain(|i| *i != id);
             self.hierarchy.layouts.remove(&id);
@@ -340,6 +365,7 @@ impl Workspace {
             selected.remove(&id);
             selected.extend(children);
         }
+        self.boolean_cache.borrow_mut().retain(&self.hierarchy);
         self.set_selection(selected, cx);
         self.history.borrow_mut().record(vec![before], None);
         cx.notify();
@@ -463,6 +489,10 @@ impl Workspace {
         self.hierarchy.exports.retain(|id, _| ids.contains(id));
         self.hierarchy.effects.retain(|id, _| ids.contains(id));
         self.hierarchy.components.retain(|id, _| ids.contains(id));
+        self.boolean_cache.borrow_mut().retain(&self.hierarchy);
+        self.shape_paths
+            .borrow_mut()
+            .retain(|id, _| ids.contains(id));
     }
 }
 

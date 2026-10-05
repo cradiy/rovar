@@ -3,6 +3,7 @@
 mod assets;
 mod auto_layout;
 mod boards;
+mod boolean;
 mod canvas;
 mod color_styles;
 mod components;
@@ -95,6 +96,7 @@ pub(crate) struct Workspace {
     vector_bend: bool,
     vector_segment_t: f32,
     shape_paths: shapes::ShapePaths,
+    boolean_cache: std::cell::RefCell<crate::scene::boolean::Cache>,
     media: media::State,
     draw_tool: Option<DrawTool>,
     box_draft: Option<BoxDraft>,

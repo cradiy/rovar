@@ -16,7 +16,10 @@ mod vector_edit;
 pub(super) use drawing::Draft;
 use geometry::{Geometry, GeometryKey};
 pub(super) use nodes::NodeAction;
-use std::{cell::RefCell, collections::HashMap};
+use std::{
+    cell::RefCell,
+    collections::{BTreeSet, HashMap},
+};
 
 pub(super) type ShapePaths = Rc<RefCell<HashMap<usize, Rc<Geometry>>>>;
 
@@ -126,10 +129,15 @@ impl Workspace {
             rect.height += margin * 2.;
             crate::scene::rotation::intersects(rect, rotation, viewport)
         };
-        let mut elements: Vec<_> = self
-            .canvas_layer_order()
+        let order = self.canvas_layer_order();
+        let included = order.iter().copied().collect();
+        let mut elements: Vec<_> = order
             .into_iter()
             .filter_map(|id| {
+                let consumed = crate::scene::boolean::consumed(&self.hierarchy, id, &included);
+                if consumed && !self.is_selected(id) && self.vector_edit != Some(id) {
+                    return None;
+                }
                 let shadow_margin = self.effect_padding(id);
                 if let Some(board) = boards.get(&id) {
                     let mut rect = board.rect;
@@ -147,7 +155,25 @@ impl Workspace {
                         ))
                     .then(|| (id, self.text_element(text, cx).into_any_element()))
                 } else if self.hierarchy.groups.contains_key(&id) {
-                    self.group_element(id, cx).map(|el| (id, el))
+                    if crate::scene::boolean::is_boolean(&self.hierarchy, id) && !consumed {
+                        self.boolean_geometry(id)
+                            .map(|g| {
+                                (
+                                    id,
+                                    self.shape_render(
+                                        &g.shape,
+                                        Some(g.contours),
+                                        true,
+                                        Some(g.source),
+                                        cx,
+                                    )
+                                    .into_any_element(),
+                                )
+                            })
+                            .or_else(|| self.group_element(id, cx).map(|el| (id, el)))
+                    } else {
+                        self.group_element(id, cx).map(|el| (id, el))
+                    }
                 } else {
                     shapes
                         .get(&id)
@@ -161,7 +187,13 @@ impl Workspace {
                                     GeometryKey::outset(s, self.view.zoom) + 16. + shadow_margin,
                                 )
                         })
-                        .map(|s| (id, self.shape_element(s, cx).into_any_element()))
+                        .map(|s| {
+                            (
+                                id,
+                                self.shape_render(s, None, !consumed, None, cx)
+                                    .into_any_element(),
+                            )
+                        })
                 }
             })
             .collect();
@@ -180,7 +212,9 @@ impl Workspace {
         elements
             .into_iter()
             .flat_map(|(id, el)| {
-                self.background_blur_element(id)
+                (!crate::scene::boolean::consumed(&self.hierarchy, id, &included))
+                    .then(|| self.background_blur_element(id))
+                    .flatten()
                     .into_iter()
                     .chain(std::iter::once(el))
             })
@@ -252,25 +286,44 @@ impl Workspace {
         )
     }
     fn shape_element(&self, shape: &Shape, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+        self.shape_render(shape, None, true, None, cx)
+    }
+
+    fn shape_render(
+        &self,
+        shape: &Shape,
+        contours: Option<crate::scene::boolean::Contours>,
+        paint: bool,
+        source: Option<usize>,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement + use<> {
         let id = shape.id;
         let origin = self.parent_origin(shape.board);
         let position = self.view.screen(origin + point(shape.rect.x, shape.rect.y));
         let width = shape.rect.width * self.view.zoom;
         let height = shape.rect.height * self.view.zoom;
         let selected = self.selected_shape == Some(id);
-        let key = GeometryKey::new(shape, self.view.zoom);
+        let mut key = GeometryKey::new(shape, self.view.zoom);
+        key.contours = contours;
+        if !paint {
+            key.stroke_width = 0.;
+        }
         let outset = key.outset;
-        let fill = (shape.fill_enabled && shape.can_fill() && !shape.kind.is_media())
+        let fill = (paint && shape.fill_enabled && shape.can_fill() && !shape.kind.is_media())
             .then(|| shape.background());
         let edit_hatch = self.vector_edit == Some(id) && shape.editable_closed();
         let stroke = shape.stroke.background();
         let image_fill = if shape.kind == ShapeKind::Image {
             Some(self.cropped_media(shape))
         } else {
-            (shape.fill_enabled && shape.can_fill() && shape.fill_mode == FillMode::Image)
-                .then(|| self.cropped_fill(id, &shape.image_fill))
+            (paint && shape.fill_enabled && shape.can_fill() && shape.fill_mode == FillMode::Image)
+                .then(|| self.cropped_fill(source.unwrap_or(id), &shape.image_fill))
         };
-        let effects = self.hierarchy.effects.get(&id).cloned().unwrap_or_default();
+        let effects = if paint {
+            self.hierarchy.effects.get(&id).cloned().unwrap_or_default()
+        } else {
+            Vec::new()
+        };
         let zoom = self.view.zoom;
         let paths = self.shape_paths.clone();
         let surface = canvas(
@@ -381,6 +434,26 @@ impl Workspace {
                         if !this.layer_editable(id) {
                             this.focus.focus(window, cx);
                             this.select(None, cx);
+                            cx.stop_propagation();
+                            return;
+                        }
+                        if crate::scene::boolean::is_boolean(&this.hierarchy, id) {
+                            if event.click_count >= 2 && !event.modifiers.shift {
+                                if let Some(child) = this.ordered_children(Some(id)).last().copied()
+                                {
+                                    this.set_selection(BTreeSet::from([child]), cx);
+                                }
+                            } else if !this.selection_pointer(id, event, window, cx) {
+                                this.set_selection(BTreeSet::from([id]), cx);
+                                this.batch_before = this.before_geometry();
+                                this.begin(
+                                    GestureKind::SelectionMove,
+                                    event.position,
+                                    event.button,
+                                    window,
+                                    cx,
+                                );
+                            }
                             cx.stop_propagation();
                             return;
                         }

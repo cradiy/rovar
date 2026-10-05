@@ -49,6 +49,7 @@ enum Command {
     Delete,
     Rename,
     Group,
+    Boolean(crate::scene::boolean::Operation),
     AutoLayout,
     CreateComponent,
     EditComponent,
@@ -134,6 +135,24 @@ impl Workspace {
         let mut menu = menu(238., "editor-context-glass");
         if !tree {
             menu = self.with_layer_picker(menu, position, cx);
+        }
+        if self.can_boolean() {
+            menu = menu.submenu_with(
+                |_, _| div().child(t("boolean-operations")),
+                |mut menu| {
+                    for operation in crate::scene::boolean::Operation::ALL {
+                        menu = menu.item(item(
+                            operation.key(),
+                            operation.label(),
+                            LucideIcons::Layers,
+                            "",
+                            Command::Boolean(operation),
+                            true,
+                        ));
+                    }
+                    menu
+                },
+            );
         }
         menu = menu
             .item(item(
@@ -559,6 +578,7 @@ impl Workspace {
                 }
             }
             Command::Group => self.group_selection(cx),
+            Command::Boolean(operation) => self.apply_boolean(operation, window, cx),
             Command::AutoLayout => self.enable_auto_layout(window, cx),
             Command::CreateComponent => self.create_component(window, cx),
             Command::EditComponent => {

@@ -23,6 +23,7 @@ I want to build a beautiful, cross-platform UI design tool that is easy for AI a
 - **Precision tools** — snapping, distance measurements, equal spacing, multi-selection resizing, repeated duplication, and on-canvas corner editing.
 - **Colors and gradients** — document color styles, color libraries, and linear, radial, angular, and diamond gradients.
 - **Reusable components** — component libraries, instances, overrides, and updates.
+- **Boolean operations** — union, subtract top layers, intersection, and exclusion for closed shapes and Bézier paths. Operands remain editable and can be released; combinations use the bottom layer's appearance and support PNG/SVG export.
 - **Component variants** — named versions in component sets, edited on canvas with the property panel, and instance switching that preserves matching overrides.
 - **Shadows** — stacked outer and inner shadows for frames, shapes, images, and text, with offset, blur, spread, color, opacity, and PNG/SVG export.
 - **Layer blur** — adjustable blur for shapes, images, and text, including shadows, with PNG/SVG export.
@@ -34,7 +35,7 @@ I want to build a beautiful, cross-platform UI design tool that is easy for AI a
 
 ## Planned
 
-- [ ] **Vector composition** — Boolean operations and masks.
+- [ ] **Vector masks** — clip artwork with editable mask layers.
 - [ ] **Visual effects** — glass, glow, blend modes, and mixed effect stacks.
 - [ ] **Animation** — keyframes, easing, animated gradients, and layer effects.
 - [ ] **Interactive presentations** — event triggers, screen navigation, overlays, scrollable areas, state switching, and transitions.

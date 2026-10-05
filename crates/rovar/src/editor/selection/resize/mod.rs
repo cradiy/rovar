@@ -19,6 +19,97 @@ pub(in crate::editor) struct Resize {
 }
 
 impl Workspace {
+    fn selection_resize_items(&self) -> Vec<Item> {
+        self.operation_ids()
+            .into_iter()
+            .filter_map(|id| {
+                let (parent, local) = self.object_rect(id)?;
+                Some(Item {
+                    id,
+                    parent,
+                    local,
+                    world: self.world_rect(id)?,
+                })
+            })
+            .collect()
+    }
+
+    fn transform_selection_items(
+        &mut self,
+        items: &[Item],
+        original: Rect,
+        rect: Rect,
+        scale: Point<f32>,
+    ) {
+        for item in items {
+            let world = Rect {
+                x: rect.x + (item.world.x - original.x) * scale.x,
+                y: rect.y + (item.world.y - original.y) * scale.y,
+                width: item.world.width * scale.x,
+                height: item.world.height * scale.y,
+            };
+            let origin = self.parent_origin(item.parent);
+            self.set_object_rect(
+                item.id,
+                item.parent,
+                Rect {
+                    x: world.x - origin.x,
+                    y: world.y - origin.y,
+                    ..world
+                },
+            );
+        }
+    }
+
+    pub(in crate::editor) fn set_boolean_numeric(
+        &mut self,
+        id: usize,
+        property: Property,
+        value: f32,
+    ) {
+        use Property::*;
+        let Some(original) = self.boolean_property_bounds(id) else {
+            return;
+        };
+        let items = self.selection_resize_items();
+        if items.is_empty() || items.iter().any(|item| !self.layer_editable(item.id)) {
+            return;
+        }
+        let mut rect = original;
+        let mut scale = point(1., 1.);
+        match property {
+            X => rect.x = value,
+            Y => rect.y = value,
+            Width | Height if original.width > 0. && original.height > 0. => {
+                let (min, max) = scale_limits(&items);
+                let proportional = items.iter().any(|item| {
+                    self.object_rotation(item.id) != 0.
+                        || self
+                            .layer_info(item.id)
+                            .is_some_and(|(s, _)| s.aspect_locked)
+                });
+                if proportional {
+                    let factor = (value
+                        / if property == Width {
+                            original.width
+                        } else {
+                            original.height
+                        })
+                    .clamp(min.x.max(min.y), max.x.min(max.y));
+                    scale = point(factor, factor);
+                } else if property == Width {
+                    scale.x = (value / original.width).clamp(min.x, max.x);
+                } else {
+                    scale.y = (value / original.height).clamp(min.y, max.y);
+                }
+                rect.width *= scale.x;
+                rect.height *= scale.y;
+            }
+            _ => return,
+        }
+        self.transform_selection_items(&items, original, rect, scale);
+    }
+
     fn selection_resize_bounds(&self) -> Option<Rect> {
         if self.multi_selection.is_empty()
             || self
@@ -50,19 +141,7 @@ impl Workspace {
         };
         self.finish_spacing_input(false, cx);
         self.seal_text_edits(cx);
-        let items: Vec<_> = self
-            .operation_ids()
-            .into_iter()
-            .filter_map(|id| {
-                let (parent, local) = self.object_rect(id)?;
-                Some(Item {
-                    id,
-                    parent,
-                    local,
-                    world: self.world_rect(id)?,
-                })
-            })
-            .collect();
+        let items = self.selection_resize_items();
         if items.is_empty() {
             return;
         }
@@ -117,24 +196,7 @@ impl Workspace {
             let rect =
                 self.resize_bounds_with_snapping(original, handle, delta, proportional, limits);
             let scale = point(rect.width / original.width, rect.height / original.height);
-            for item in &state.items {
-                let world = Rect {
-                    x: rect.x + (item.world.x - original.x) * scale.x,
-                    y: rect.y + (item.world.y - original.y) * scale.y,
-                    width: item.world.width * scale.x,
-                    height: item.world.height * scale.y,
-                };
-                let origin = self.parent_origin(item.parent);
-                self.set_object_rect(
-                    item.id,
-                    item.parent,
-                    Rect {
-                        x: world.x - origin.x,
-                        y: world.y - origin.y,
-                        ..world
-                    },
-                );
-            }
+            self.transform_selection_items(&state.items, original, rect, scale);
         }
         self.selection_resize = Some(state);
         self.sync_fields(cx);

@@ -43,7 +43,21 @@ impl Workspace {
 
     fn export_bounds(&self, id: usize) -> Option<Rect> {
         let mut r = self.world_rect(id)?;
-        if let Some(shape) = self.shapes.iter().find(|s| s.id == id) {
+        let boolean = crate::scene::boolean::is_boolean(&self.hierarchy, id)
+            .then(|| self.boolean_geometry(id))
+            .flatten();
+        if let Some(g) = &boolean {
+            r = g.shape.rect;
+            let origin = self.parent_origin(g.shape.board);
+            r.x += origin.x;
+            r.y += origin.y;
+        }
+        if let Some(shape) = self
+            .shapes
+            .iter()
+            .find(|s| s.id == id)
+            .or_else(|| boolean.as_ref().map(|g| &g.shape))
+        {
             let width = if shape.stroke.enabled {
                 if shape.kind.is_path() || shape.kind.is_polygon() {
                     shape.stroke.width / 2.
@@ -109,6 +123,7 @@ impl Workspace {
                 .paint_order()
                 .into_iter()
                 .filter(|id| ids.contains(id))
+                .filter(|id| !crate::scene::boolean::consumed(&self.hierarchy, *id, &ids))
                 .collect();
             ensure!(!order.is_empty(), "{}", t("export-empty-selection"));
             if let Some(shape) = doc
@@ -157,6 +172,7 @@ impl Workspace {
                 .iter()
                 .map(|s| (s.id, s.board))
                 .chain(doc.texts.iter().map(|s| (s.id, s.board)))
+                .chain(doc.hierarchy.groups.iter().map(|(id, g)| (*id, g.board)))
                 .filter(|(id, _)| order.contains(id))
                 .filter_map(|(id, parent)| parent.and_then(|p| boards.get(&p)).map(|r| (id, *r)))
                 .collect();

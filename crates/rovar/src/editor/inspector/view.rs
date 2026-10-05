@@ -11,7 +11,11 @@ impl Workspace {
         let (title, glyph) = if !self.multi_selection.is_empty() {
             (
                 if self.multi_selection.len() == 1 {
-                    t("group-selection")
+                    self.multi_selection
+                        .first()
+                        .and_then(|id| self.hierarchy.groups.get(id))
+                        .and_then(|g| g.boolean)
+                        .map_or(t("group-selection"), |op| op.label())
                 } else {
                     t("multi-selection")
                 },

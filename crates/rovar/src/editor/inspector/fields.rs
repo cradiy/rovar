@@ -54,6 +54,7 @@ impl Workspace {
             && self.inspector.paint_popovers[usize::from(index >= 16)]
                 .read(cx)
                 .is_open();
+        let readonly = image_color || (matches!(index, 3 | 4) && self.boolean_result_empty());
         let numeric = !matches!(index, 0 | 5 | 16);
         let draggable = if !self.multi_selection.is_empty() {
             self.field_property(index)
@@ -232,7 +233,7 @@ impl Workspace {
                     .min_w_0()
                     .overflow_hidden()
                     .when(index == 0, |el| el.child(self.name_input(cx)))
-                    .when(index != 0 && image_color, |el| {
+                    .when(index != 0 && readonly, |el| {
                         el.child(
                             div()
                                 .text_size(px(12.))
@@ -240,7 +241,7 @@ impl Workspace {
                                 .child(self.field_value(index, cx).unwrap_or_default()),
                         )
                     })
-                    .when(index != 0 && !image_color, |el| {
+                    .when(index != 0 && !readonly, |el| {
                         el.child(
                             inspector_input(&self.inspector.fields[slot])
                                 .w_full()

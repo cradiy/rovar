@@ -99,6 +99,7 @@ impl Workspace {
             vector_bend: false,
             vector_segment_t: 0.5,
             shape_paths: Default::default(),
+            boolean_cache: Default::default(),
             media: Default::default(),
             zoom_menu,
             draw_tool: None,

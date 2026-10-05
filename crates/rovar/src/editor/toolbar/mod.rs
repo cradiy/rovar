@@ -59,6 +59,7 @@ pub(super) struct Toolbar {
     shape: Tool,
     pen: Tool,
     menus: [Entity<DropdownState>; 3],
+    pub(super) boolean_menus: [Entity<DropdownState>; 2],
 }
 impl Toolbar {
     pub fn new(window: &mut Window, cx: &mut Context<Workspace>) -> Self {
@@ -67,6 +68,7 @@ impl Toolbar {
             shape: Tool::Rectangle,
             pen: Tool::Bezier,
             menus: std::array::from_fn(|_| cx.new(|cx| DropdownState::new(window, cx))),
+            boolean_menus: std::array::from_fn(|_| cx.new(|cx| DropdownState::new(window, cx))),
         }
     }
 }
@@ -89,7 +91,7 @@ impl Render for ToolTip {
 
 impl Workspace {
     pub(super) fn close_tool_menus(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        for menu in &self.toolbar.menus {
+        for menu in self.toolbar.menus.iter().chain(&self.toolbar.boolean_menus) {
             if menu.read(cx).is_open() {
                 menu.update(cx, |menu, cx| menu.close(window, cx));
             }
@@ -390,7 +392,10 @@ impl Workspace {
                         cx,
                     ))
                     .child(self.tool_group(2, self.toolbar.pen, &[Tool::Bezier, Tool::Pencil], cx))
-                    .child(self.tool_button(Tool::Text, cx)),
+                    .child(self.tool_button(Tool::Text, cx))
+                    .when(self.can_boolean(), |el| {
+                        el.child(self.boolean_menu(true, cx))
+                    }),
             )
     }
 }
