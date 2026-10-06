@@ -226,7 +226,7 @@ impl Workspace {
                 changed.then_some(Change::Shape {
                     id: crop.id,
                     index,
-                    value: Some(before),
+                    value: Some(Box::new(before)),
                 })
             } else if let Some(index) = self.boards.iter().position(|b| b.id == crop.id) {
                 let before = self.boards[index].clone();

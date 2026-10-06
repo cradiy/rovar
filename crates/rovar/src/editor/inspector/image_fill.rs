@@ -74,7 +74,7 @@ impl Workspace {
                             Some(Change::Shape {
                                 id,
                                 index,
-                                value: Some(before),
+                                value: Some(Box::new(before)),
                             })
                         } else if let Some(index) = state.page.boards.iter().position(|b| {
                             b.id == id && b.fill_mode == FillMode::Image && !b.layer.locked
@@ -124,7 +124,7 @@ impl Workspace {
                                 vec![Change::Shape {
                                     id,
                                     index,
-                                    value: Some(before),
+                                    value: Some(Box::new(before)),
                                 }],
                                 None,
                             );

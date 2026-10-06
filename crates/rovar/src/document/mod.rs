@@ -438,6 +438,30 @@ impl Page {
         {
             gradient.validate()?;
         }
+        for mode in self
+            .boards
+            .iter()
+            .map(|b| b.fill_mode)
+            .chain(self.shapes.iter().map(|s| s.fill_mode))
+        {
+            if let crate::scene::artboard::FillMode::Points(g) = mode {
+                g.validate()?;
+            }
+        }
+        for mode in
+            self.shapes
+                .iter()
+                .map(|s| s.stroke.fill_mode)
+                .chain(self.texts.iter().flat_map(|t| {
+                    std::iter::once(t.styles.default.fill_mode)
+                        .chain(t.styles.runs.iter().map(|r| r.style.fill_mode))
+                }))
+        {
+            ensure!(
+                !matches!(mode, crate::scene::artboard::FillMode::Points(_)),
+                "Point gradients require a shape or frame fill"
+            );
+        }
         let mut slots = BTreeSet::new();
         for placement in self.boards.iter().map(|b| &b.image_fill.placement).chain(
             self.shapes

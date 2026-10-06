@@ -57,7 +57,7 @@ impl Workspace {
             changes.push(Change::Shape {
                 id: before.id,
                 index,
-                value: Some(before),
+                value: Some(Box::new(before)),
             });
             self.history.borrow_mut().record(changes, None);
         }
@@ -392,6 +392,10 @@ impl Workspace {
             .then(|| shape.background());
         let edit_hatch = self.vector_edit == Some(id) && shape.editable_closed();
         let stroke = shape.stroke.background();
+        let point_fill = match shape.fill_mode {
+            FillMode::Points(g) if fill.is_some() => Some(g),
+            _ => None,
+        };
         let image_fill = if shape.kind == ShapeKind::Image {
             Some(self.cropped_media(shape))
         } else {
@@ -417,6 +421,33 @@ impl Workspace {
                 let mut paint = |window: &mut Window| {
                     if let Some(fill) = &fill {
                         paint_path(&geometry.fill, bounds.origin, fill.clone(), window);
+                    }
+                    if let Some(gradient) = point_fill {
+                        let surface = Bounds::new(
+                            bounds.origin + point(px(outset), px(outset)),
+                            gpui::size(px(width), px(height)),
+                        );
+                        let capture = surface.intersect(&window.content_mask().bounds);
+                        if !capture.is_empty() {
+                            window.with_subtree_pair(
+                                capture,
+                                gpui::EffectShader::wgsl_two_images(include_str!(
+                                    "image_mask.wgsl"
+                                )),
+                                Default::default(),
+                                0.,
+                                1.,
+                                |input, window| match input {
+                                    gpui::SubtreeInput::First => paint_path(
+                                        &geometry.fill,
+                                        bounds.origin,
+                                        gpui::rgb(0xffffff).into(),
+                                        window,
+                                    ),
+                                    gpui::SubtreeInput::Second => gradient.paint(surface, window),
+                                },
+                            );
+                        }
                     }
                     if let Some(image_fill) = &image_fill {
                         let image_bounds = Bounds::new(

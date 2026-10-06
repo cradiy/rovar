@@ -166,6 +166,7 @@ impl Render for Workspace {
                             | GestureKind::Spacing { .. }
                             | GestureKind::Property { .. }
                             | GestureKind::FillGradientStop { .. }
+                            | GestureKind::PointGradient { .. }
                             | GestureKind::GradientMidpoint { style: false, .. }
                             | GestureKind::GradientSeam { style: false, .. }
                             | GestureKind::LayoutProperty { .. }

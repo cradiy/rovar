@@ -84,7 +84,7 @@ impl Workspace {
                 changes.push(Change::Shape {
                     id: shape.id,
                     index,
-                    value: Some(shape),
+                    value: Some(Box::new(shape)),
                 });
             }
         }
@@ -196,7 +196,7 @@ impl Workspace {
                             .map(|(index, _)| Change::Shape {
                                 id,
                                 index,
-                                value: Some(before),
+                                value: Some(Box::new(before)),
                             })
                     })
                 }
@@ -238,7 +238,7 @@ impl Workspace {
                         Change::Shape {
                             id,
                             index,
-                            value: Some(before),
+                            value: Some(Box::new(before)),
                         }
                     }),
                 GestureKind::Pan { .. }
@@ -259,6 +259,15 @@ impl Workspace {
                             .fill_state(cx)
                             .and_then(|(_, g)| g.stop(id).map(|s| s.position))
                             != Some(original);
+                    self.finish_property_scrub(changed, cx);
+                    None
+                }
+                GestureKind::PointGradient {
+                    index, original, ..
+                } => {
+                    let changed = self.fill_state(cx).is_some_and(|(mode, _)| {
+                        matches!(mode, FillMode::Points(g) if g.points[index].position != original)
+                    });
                     self.finish_property_scrub(changed, cx);
                     None
                 }
@@ -545,10 +554,10 @@ impl Workspace {
                     inverse.push(Change::Shape {
                         id,
                         index,
-                        value: current,
+                        value: current.map(Box::new),
                     });
                     if let Some(shape) = value {
-                        self.shapes.insert(index.min(self.shapes.len()), shape);
+                        self.shapes.insert(index.min(self.shapes.len()), *shape);
                     } else {
                         self.shape_paths.borrow_mut().remove(&id);
                     }
@@ -632,16 +641,10 @@ impl Workspace {
         {
             self.focus.focus(window, cx);
         }
-        let gradient = self
-            .selected_text()
-            .map(|t| &t.editor.read(cx).effective_style().gradient)
-            .or_else(|| {
-                self.selected_shape()
-                    .map(|s| s.paint_gradient(self.inspector.stroke_editing))
-            })
-            .or_else(|| self.selected_board().map(|b| &b.gradient));
-        self.inspector.active_stop = gradient.map_or(0, |gradient| {
-            if gradient.stop(self.inspector.active_stop).is_some() {
+        self.inspector.active_stop = self.fill_state(cx).map_or(0, |(mode, gradient)| {
+            if matches!(mode, FillMode::Points(_)) {
+                self.inspector.active_stop.min(3)
+            } else if gradient.stop(self.inspector.active_stop).is_some() {
                 self.inspector.active_stop
             } else {
                 gradient.stops()[0].id

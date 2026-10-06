@@ -17,6 +17,12 @@ impl Workspace {
         } else {
             self.inspector.paint_stops[stroke as usize]
         };
+        if matches!(
+            self.selected_shape().unwrap().paint_mode(stroke),
+            FillMode::Points(_)
+        ) {
+            return id.min(3);
+        }
         let gradient = self.selected_shape().unwrap().paint_gradient(stroke);
         if gradient.stop(id).is_some() {
             id
@@ -211,6 +217,12 @@ impl Workspace {
                 "fill-image",
                 LucideIcons::Image,
             ),
+            (
+                FillMode::Points(Default::default()),
+                t("gradient-points"),
+                "fill-points",
+                LucideIcons::Palette,
+            ),
         ];
         div()
             .flex_shrink_0()
@@ -230,9 +242,33 @@ impl Workspace {
                         modes
                             .into_iter()
                             .filter(|(m, _, _, _)| *m != FillMode::Image || image_allowed)
+                            .filter(|(m, _, _, _)| {
+                                !matches!(m, FillMode::Points(_))
+                                    || (!text_selected
+                                        && (self.selected_shape.is_none()
+                                            || !self.inspector.stroke_editing)
+                                        && self
+                                            .selected_shape()
+                                            .is_none_or(|s| s.can_fill() && !s.kind.is_media()))
+                            })
                             .map(|(kind, label, id, glyph)| {
-                                icon_button(id, label, glyph, mode == kind && !mixed_mode).on_click(
-                                    cx.listener(move |this, _, window, cx| {
+                                icon_button(
+                                    id,
+                                    label,
+                                    glyph,
+                                    std::mem::discriminant(&mode) == std::mem::discriminant(&kind)
+                                        && !mixed_mode,
+                                )
+                                .on_click(cx.listener(
+                                    move |this, _, window, cx| {
+                                        if matches!(kind, FillMode::Points(_))
+                                            && matches!(
+                                                this.fill_state(cx),
+                                                Some((FillMode::Points(_), _))
+                                            )
+                                        {
+                                            return;
+                                        }
                                         let surface = usize::from(
                                             this.selected_shape.is_some()
                                                 && this.inspector.stroke_editing,
@@ -257,8 +293,8 @@ impl Workspace {
                                         }
                                         this.sync_fields(cx);
                                         cx.notify();
-                                    }),
-                                )
+                                    },
+                                ))
                             }),
                     )
                     .child(div().flex_1())
@@ -275,6 +311,13 @@ impl Workspace {
             .when(mode == FillMode::Image, |el| {
                 el.child(self.image_fill_controls(cx))
             })
+            .when_some(
+                match mode {
+                    FillMode::Points(g) => Some(g),
+                    _ => None,
+                },
+                |el, g| el.child(self.point_gradient_controls(g, cx)),
+            )
             .when(mode == FillMode::Linear, |el| {
                 el.child(
                     div()
@@ -522,19 +565,22 @@ impl Workspace {
                         .h(px(12.))
                         .w_full(),
                     )
-                    .when(mode == FillMode::Solid, |el| {
-                        el.child(
-                            div()
-                                .flex()
-                                .gap(px(6.))
-                                .child(self.paint_input_field(color_index, t("color-hex"), cx))
-                                .child(div().w(px(82.)).child(self.paint_input_field(
-                                    alpha_index,
-                                    t("opacity"),
-                                    cx,
-                                ))),
-                        )
-                    })
+                    .when(
+                        mode == FillMode::Solid || matches!(mode, FillMode::Points(_)),
+                        |el| {
+                            el.child(
+                                div()
+                                    .flex()
+                                    .gap(px(6.))
+                                    .child(self.paint_input_field(color_index, t("color-hex"), cx))
+                                    .child(div().w(px(82.)).child(self.paint_input_field(
+                                        alpha_index,
+                                        t("opacity"),
+                                        cx,
+                                    ))),
+                            )
+                        },
+                    )
             })
     }
 

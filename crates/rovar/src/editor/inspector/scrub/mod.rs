@@ -8,7 +8,8 @@ impl Workspace {
         match property {
             X | Y | StartX | StartY | EndX | EndY | Rotation => (-1_000_000., 1_000_000., 1., 1.),
             Width | Height => (MIN_SIZE, MAX_SIZE, 1., 1.),
-            Opacity | LayerOpacity | GradientPosition => (0., 100., 1., 1.),
+            Opacity | LayerOpacity | GradientPosition | PointX | PointY => (0., 100., 1., 1.),
+            PointRadius => (1., 400., 1., 1.),
             GradientAngle => (0., 360., 1., 1.),
             FontSize => (1., 1000., 1., 1.),
             LineHeight => (0.5, 5., 0.01, 0.01),
@@ -140,7 +141,7 @@ impl Workspace {
                     ..
                 } => {
                     if let Some(shape) = self.shapes.iter_mut().find(|s| s.id == id) {
-                        *shape = before;
+                        *shape = *before;
                     }
                 }
                 Change::TextRect { id, board, value } => {

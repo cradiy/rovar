@@ -57,6 +57,9 @@ pub(super) fn paint(
     defs: &mut String,
     id: &str,
 ) -> Result<String> {
+    if let FillMode::Points(g) = mode {
+        return point_paint(g, r, defs, id);
+    }
     if mode != FillMode::Linear {
         return Ok(format!("fill=\"{}\" fill-opacity=\"{}\"", color(c), c.a));
     }
@@ -141,6 +144,40 @@ pub(super) fn paint(
             )?;
         }
     }
+    Ok(format!("fill=\"url(#{id})\""))
+}
+
+fn point_paint(
+    gradient: crate::scene::point_gradient::PointGradient,
+    r: Rect,
+    defs: &mut String,
+    id: &str,
+) -> Result<String> {
+    use base64::Engine;
+    // SVG has no equivalent weighted four-point paint. Embed a bounded raster
+    // tile while preserving the vector contour, transforms, and layer opacity.
+    let scale = (1024. / r.width.max(r.height).max(1.)).min(4.);
+    let width = (r.width * scale).ceil().clamp(1., 1024.) as u32;
+    let height = (r.height * scale).ceil().clamp(1., 1024.) as u32;
+    let pixels = image::RgbaImage::from_fn(width, height, |x, y| {
+        let c = gradient.sample(
+            gpui::point(
+                (x as f32 + 0.5) / width as f32,
+                (y as f32 + 0.5) / height as f32,
+            ),
+            r.width,
+            r.height,
+        );
+        image::Rgba([c.r, c.g, c.b, c.a].map(|v| (v.clamp(0., 1.) * 255.).round() as u8))
+    });
+    let mut bytes = std::io::Cursor::new(Vec::new());
+    pixels.write_to(&mut bytes, image::ImageFormat::Png)?;
+    let data = base64::engine::general_purpose::STANDARD.encode(bytes.into_inner());
+    write!(
+        defs,
+        "<pattern id=\"{id}\" patternUnits=\"userSpaceOnUse\" x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\"><image width=\"{}\" height=\"{}\" preserveAspectRatio=\"none\" href=\"data:image/png;base64,{data}\"/></pattern>",
+        r.x, r.y, r.width, r.height, r.width, r.height
+    )?;
     Ok(format!("fill=\"url(#{id})\""))
 }
 

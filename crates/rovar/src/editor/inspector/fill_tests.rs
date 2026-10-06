@@ -3,6 +3,93 @@ use crate::editor::tests::{click, create, draw, open};
 use gpui::{TestAppContext, VisualTestContext};
 
 #[gpui::test]
+fn point_gradient_controls_drag_undo_and_cancel_on_rotated_zoomed_shapes(cx: &mut TestAppContext) {
+    for (tool, angle, zoom) in [("add-artboard", 0., 1.), ("add-rectangle", 90., 2.)] {
+        let window = open(cx);
+        let mut visual = VisualTestContext::from_window(window.into(), cx);
+        create(&mut visual, tool);
+        click(&mut visual, "property-drag-5");
+        click(&mut visual, "fill-points");
+        click(&mut visual, "gradient-point-select-3");
+        window
+            .update(&mut visual.cx, |w, _, cx| {
+                assert_eq!(w.inspector.active_stop, 3);
+                let slot = w.paint_surface(cx) * PROPERTY_COUNT + 21;
+                w.edit_field(slot, &InputEvent::Submit("125".into()), cx);
+                let (FillMode::Points(g), _) = w.fill_state(cx).unwrap() else {
+                    panic!()
+                };
+                assert_eq!(g.points[3].radius, 1.25);
+            })
+            .unwrap();
+        click(&mut visual, "color-close");
+        let (original, undo, rect) = window
+            .update(&mut visual.cx, |w, _, cx| {
+                let id = w.selected_shape.or(w.selected).unwrap();
+                if let Some(s) = w.shapes.iter_mut().find(|s| Some(s.id) == w.selected_shape) {
+                    s.layer.rotation = angle;
+                }
+                w.view.zoom = zoom;
+                w.view.pan = point(100., 100.);
+                cx.notify();
+                (
+                    w.fill_state(cx).unwrap().0,
+                    w.history.borrow().undo_len(),
+                    w.world_rect(id).unwrap(),
+                )
+            })
+            .unwrap();
+        draw(&mut visual);
+        let start = visual
+            .debug_bounds("gradient-point-handle-0")
+            .unwrap()
+            .center();
+        let delta = crate::scene::rotation::around(
+            point(rect.width * 0.1 * zoom, 0.),
+            point(0., 0.),
+            angle,
+        )
+        .map(px);
+        let end = start + delta;
+        visual.simulate_mouse_down(start, MouseButton::Left, Default::default());
+        visual.simulate_mouse_move(end, MouseButton::Left, Default::default());
+        visual.simulate_mouse_up(end, MouseButton::Left, Default::default());
+        draw(&mut visual);
+        window
+            .update(&mut visual.cx, |w, _, cx| {
+                let (FillMode::Points(g), _) = w.fill_state(cx).unwrap() else {
+                    panic!()
+                };
+                assert!((g.points[0].position.x - 0.25).abs() < 0.002);
+                assert!((g.points[0].position.y - 0.2).abs() < 0.002);
+                assert_eq!(w.history.borrow().undo_len(), undo + 1);
+            })
+            .unwrap();
+        visual.simulate_keystrokes("ctrl-z");
+        draw(&mut visual);
+        window
+            .update(&mut visual.cx, |w, _, cx| {
+                assert_eq!(w.fill_state(cx).unwrap().0, original)
+            })
+            .unwrap();
+        let start = visual
+            .debug_bounds("gradient-point-handle-0")
+            .unwrap()
+            .center();
+        visual.simulate_mouse_down(start, MouseButton::Left, Default::default());
+        visual.simulate_mouse_move(start + delta, MouseButton::Left, Default::default());
+        visual.simulate_keystrokes("escape");
+        visual.simulate_mouse_up(start + delta, MouseButton::Left, Default::default());
+        draw(&mut visual);
+        window
+            .update(&mut visual.cx, |w, _, cx| {
+                assert_eq!(w.fill_state(cx).unwrap().0, original)
+            })
+            .unwrap();
+    }
+}
+
+#[gpui::test]
 fn gradient_track_inserts_drags_and_cancels_as_one_edit(cx: &mut TestAppContext) {
     for (tool, stroke) in [
         ("add-artboard", false),

@@ -21,7 +21,7 @@ I want to build a beautiful, cross-platform UI design tool that is easy for AI a
 - **Grid layouts** — fixed or equal column widths, row and column gaps, automatic placement, and row/column spans.
 - **Responsive layouts** — edge, center, stretch, and scale constraints, plus frame size presets for phones, tablets, desktop screens, and more.
 - **Precision tools** — snapping, distance measurements, equal spacing, multi-selection resizing, repeated duplication, and on-canvas corner editing.
-- **Colors and gradients** — document color styles, color libraries, and linear, radial, angular, and diamond gradients.
+- **Colors and gradients** — document color styles, color libraries, linear, radial, angular, and diamond gradients, plus four-point fills with draggable color sources.
 - **Reusable components** — component libraries, instances, overrides, and updates.
 - **Boolean operations** — union, subtract top layers, intersection, and exclusion for closed shapes and Bézier paths. Operands remain editable and can be released; combinations use the bottom layer's appearance and support PNG/SVG export.
 - **Vector masks** — use the bottom closed shape or Boolean group to clip selected artwork. Edit the mask and content independently, nest or release mask groups, and export to PNG/SVG.

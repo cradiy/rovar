@@ -77,7 +77,7 @@ impl Workspace {
                 Change::Shape {
                     id: before.id,
                     index,
-                    value: Some(before),
+                    value: Some(Box::new(before)),
                 },
             ]);
             self.history.borrow_mut().record(changes, None);

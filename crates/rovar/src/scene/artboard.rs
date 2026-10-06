@@ -31,12 +31,13 @@ pub struct Artboard {
     pub image_fill: crate::scene::image_fill::ImageFill,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum FillMode {
     #[default]
     Solid,
     Linear,
     Image,
+    Points(super::point_gradient::PointGradient),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -282,11 +283,14 @@ impl Artboard {
         match self.fill_mode {
             FillMode::Solid => self.color.into(),
             FillMode::Linear => self.gradient.background(),
-            FillMode::Image => gpui::rgba(0).into(),
+            FillMode::Image | FillMode::Points(_) => gpui::rgba(0).into(),
         }
     }
 
     pub fn editable_color(&self, stop: usize) -> Rgba {
+        if let FillMode::Points(g) = self.fill_mode {
+            return g.points[stop.min(3)].color;
+        }
         if self.fill_mode == FillMode::Linear {
             self.gradient
                 .stop(stop)
@@ -298,10 +302,10 @@ impl Artboard {
     }
 
     pub fn editable_color_mut(&mut self, stop: usize) -> Option<&mut Rgba> {
-        if self.fill_mode == FillMode::Linear {
-            self.gradient.stop_mut(stop).map(|s| &mut s.color)
-        } else {
-            Some(&mut self.color)
+        match &mut self.fill_mode {
+            FillMode::Points(g) => g.points.get_mut(stop).map(|p| &mut p.color),
+            FillMode::Linear => self.gradient.stop_mut(stop).map(|s| &mut s.color),
+            _ => Some(&mut self.color),
         }
     }
     /// Only the background is painted here. Future child content must not be
@@ -319,6 +323,19 @@ impl Artboard {
                     .bg(checkerboard(rgb(0xd9dce2), 8.)),
             )
             .child(div().absolute().inset_0().bg(self.background()))
+            .when_some(
+                match self.fill_mode {
+                    FillMode::Points(g) => Some(g),
+                    _ => None,
+                },
+                |el, g| {
+                    el.child(
+                        gpui_effects::point_gradient(g.gpu_points())
+                            .absolute()
+                            .inset_0(),
+                    )
+                },
+            )
             .when(self.fill_mode == FillMode::Image, |el| {
                 el.child(self.image_fill.element().absolute().inset_0())
             })

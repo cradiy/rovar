@@ -296,6 +296,55 @@ fn artboard_bounds_clip_children_without_editor_checkerboard() {
 }
 
 #[test]
+fn point_gradient_export_roundtrips_color_alpha_and_contour_at_multiple_scales() {
+    use crate::scene::point_gradient::PointGradient;
+    let mut gradient = PointGradient::default();
+    gradient.points[0].position = gpui::point(0.3, 0.2);
+    gradient.points[0].radius = 0.25;
+    gradient.points[1].color.a = 0.;
+    gradient.points[2].color.a = 0.35;
+    let mut shape = Shape::new(1, None, ShapeKind::Ellipse, rect(90., -20., 120., 80.));
+    shape.fill_mode = FillMode::Points(gradient);
+    let doc = document(vec![shape]);
+    let restored: Page = serde_json::from_slice(&serde_json::to_vec(&doc).unwrap()).unwrap();
+    restored.validate().unwrap();
+    assert_eq!(restored.shapes[0].fill_mode, FillMode::Points(gradient));
+    let job = job(&restored, rect(90., -20., 120., 80.));
+    let svg = String::from_utf8(job.render(Format::Svg, 1, &Default::default()).unwrap()).unwrap();
+    assert!(svg.contains("data:image/png;base64,"));
+    for scale in [1, 2, 4] {
+        let image = png(&job, scale);
+        assert_eq!(image.get_pixel(0, 0).0[3], 0);
+        for (x, y) in [(30, 30), (60, 40), (90, 45)] {
+            let (x, y) = (x * scale, y * scale);
+            let expected = gradient.sample(
+                gpui::point(
+                    (x as f32 + 0.5) / (120 * scale) as f32,
+                    (y as f32 + 0.5) / (80 * scale) as f32,
+                ),
+                120.,
+                80.,
+            );
+            let actual = image.get_pixel(x, y).0;
+            for (a, b) in actual
+                .into_iter()
+                .zip([expected.r, expected.g, expected.b, expected.a])
+            {
+                assert!(
+                    (a as f32 - b * 255.).abs() < 5.,
+                    "scale {scale}: {actual:?} vs {expected:?}"
+                );
+            }
+        }
+    }
+    let mut invalid = restored;
+    if let FillMode::Points(g) = &mut invalid.shapes[0].fill_mode {
+        g.points[0].radius = 0.;
+    }
+    assert!(invalid.validate().is_err());
+}
+
+#[test]
 fn all_gradient_kinds_match_expected_colors_and_have_no_sector_seams() {
     for kind in [
         GradientKind::Linear,

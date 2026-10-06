@@ -7,6 +7,19 @@ impl Workspace {
     pub(in crate::editor) fn field_value(&self, index: usize, cx: &gpui::App) -> Option<String> {
         use Property::*;
         let property = self.field_property(index)?;
+        if matches!(property, PointX | PointY | PointRadius) {
+            let (FillMode::Points(g), _) = self.fill_state(cx)? else {
+                return None;
+            };
+            let p = g.points[self.inspector.active_stop.min(3)];
+            return Some(number(
+                100. * match property {
+                    PointX => p.position.x,
+                    PointY => p.position.y,
+                    _ => p.radius,
+                },
+            ));
+        }
         if property == LayerOpacity {
             let mut values = self
                 .selection_ids()
@@ -176,10 +189,12 @@ impl Workspace {
     }
 
     pub(in crate::editor) fn sync_fields(&mut self, cx: &mut Context<Self>) {
-        if let Some((_, gradient)) = self.fill_state(cx)
-            && gradient.stop(self.inspector.active_stop).is_none()
-        {
-            self.inspector.active_stop = gradient.stops()[0].id;
+        if let Some((mode, gradient)) = self.fill_state(cx) {
+            if matches!(mode, FillMode::Points(_)) {
+                self.inspector.active_stop = self.inspector.active_stop.min(3);
+            } else if gradient.stop(self.inspector.active_stop).is_none() {
+                self.inspector.active_stop = gradient.stops()[0].id;
+            }
         }
         for index in 0..PROPERTY_COUNT {
             self.sync_field(index, cx);

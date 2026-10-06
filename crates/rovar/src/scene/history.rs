@@ -82,7 +82,7 @@ pub(crate) enum Change {
     Shape {
         id: usize,
         index: usize,
-        value: Option<Shape>,
+        value: Option<Box<Shape>>,
     },
     TextRect {
         id: usize,

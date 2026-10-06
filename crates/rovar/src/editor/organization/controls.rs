@@ -66,7 +66,7 @@ impl Workspace {
                 Change::Shape {
                     id,
                     index,
-                    value: Some(before),
+                    value: Some(Box::new(before)),
                 }
             } else {
                 let before = self.snapshot_hierarchy();

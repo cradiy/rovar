@@ -194,7 +194,7 @@ impl Workspace {
                     Some(Change::Shape {
                         id,
                         index,
-                        value: Some(s.clone()),
+                        value: Some(Box::new(s.clone())),
                     })
                 } else {
                     self.texts
@@ -235,7 +235,7 @@ impl Workspace {
                     ..
                 } => {
                     if let Some(s) = self.shapes.iter_mut().find(|s| s.id == *id) {
-                        *s = before.clone();
+                        *s = *before.clone();
                     }
                 }
                 Change::TextRect { id, board, value } => {

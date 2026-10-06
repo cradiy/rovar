@@ -112,7 +112,7 @@ fn main_changes_propagate_across_pages_preserving_text_overrides_and_undo(cx: &m
             let before = Change::Shape {
                 id: 2,
                 index: 0,
-                value: Some(this.shapes[0].clone()),
+                value: Some(Box::new(this.shapes[0].clone())),
             };
             this.shapes.iter_mut().find(|s| s.id == 2).unwrap().color = rgb(0x8866ff);
             this.history.borrow_mut().record(vec![before], None);

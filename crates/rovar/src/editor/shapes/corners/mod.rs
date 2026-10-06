@@ -286,7 +286,7 @@ impl Workspace {
                     vec![Change::Shape {
                         id: edit.target.id,
                         index,
-                        value: Some(edit.original),
+                        value: Some(Box::new(edit.original)),
                     }],
                     None,
                 );
@@ -373,7 +373,7 @@ impl Workspace {
                     vec![Change::Shape {
                         id: edit.target.id,
                         index,
-                        value: Some(before),
+                        value: Some(Box::new(before)),
                     }],
                     None,
                 );

@@ -413,6 +413,7 @@ impl Workspace {
             .child(self.layer_pick_preview(cx))
             .child(self.selection_labels(cx))
             .child(self.corner_controls(cx))
+            .children(self.point_gradient_handles(cx))
             .children(self.vector_hover_preview(cx))
             .when(
                 self.boards.is_empty()
@@ -519,6 +520,10 @@ impl Workspace {
                 let shadows = self.hierarchy.effects.get(&id).cloned().unwrap_or_default();
                 let zoom = self.view.zoom;
                 let background = board.background();
+                let points = match board.fill_mode {
+                    FillMode::Points(g) => Some(g),
+                    _ => None,
+                };
                 let image = (board.fill_mode == FillMode::Image).then(|| board.image_fill.clone());
                 let inner_shadows = shadows.clone();
                 let inner_background = background.clone();
@@ -540,6 +545,8 @@ impl Workspace {
                                         image.opacity,
                                         |window| image.paint(bounds, window),
                                     );
+                                } else if let Some(gradient) = points {
+                                    gradient.paint(bounds, window);
                                 } else {
                                     window.paint_quad(gpui::fill(bounds, background.clone()));
                                 }
@@ -564,6 +571,8 @@ impl Workspace {
                                                 image.opacity,
                                                 |window| image.paint(bounds, window),
                                             );
+                                        } else if let Some(gradient) = points {
+                                            gradient.paint(bounds, window);
                                         } else {
                                             window.paint_quad(gpui::fill(
                                                 bounds,

@@ -90,7 +90,7 @@ impl Stroke {
         match self.fill_mode {
             FillMode::Solid => self.color.into(),
             FillMode::Linear => self.gradient.background(),
-            FillMode::Image => gpui::rgba(0).into(),
+            FillMode::Image | FillMode::Points(_) => gpui::rgba(0).into(),
         }
     }
     pub fn outset(&self) -> f32 {
@@ -186,7 +186,7 @@ impl Shape {
         match self.fill_mode {
             FillMode::Solid => self.color.into(),
             FillMode::Linear => self.gradient.background(),
-            FillMode::Image => gpui::rgba(0).into(),
+            FillMode::Image | FillMode::Points(_) => gpui::rgba(0).into(),
         }
     }
     pub fn set_path(&mut self, points: &[Point<f32>]) {
@@ -314,6 +314,9 @@ impl Shape {
         }
     }
     pub fn paint_color(&self, stop: usize, stroke: bool) -> Rgba {
+        if let FillMode::Points(g) = self.paint_mode(stroke) {
+            return g.points[stop.min(3)].color;
+        }
         let gradient = self.paint_gradient(stroke);
         if self.paint_mode(stroke) == FillMode::Linear {
             gradient.stop(stop).unwrap_or(&gradient.stops()[0]).color
@@ -324,14 +327,19 @@ impl Shape {
         }
     }
     pub fn paint_color_mut(&mut self, stop: usize, stroke: bool) -> Option<&mut Rgba> {
-        if self.paint_mode(stroke) == FillMode::Linear {
-            self.paint_gradient_mut(stroke)
-                .stop_mut(stop)
-                .map(|s| &mut s.color)
-        } else if stroke {
-            Some(&mut self.stroke.color)
+        let (mode, gradient, color) = if stroke {
+            (
+                &mut self.stroke.fill_mode,
+                &mut self.stroke.gradient,
+                &mut self.stroke.color,
+            )
         } else {
-            Some(&mut self.color)
+            (&mut self.fill_mode, &mut self.gradient, &mut self.color)
+        };
+        match mode {
+            FillMode::Points(g) => g.points.get_mut(stop).map(|p| &mut p.color),
+            FillMode::Linear => gradient.stop_mut(stop).map(|s| &mut s.color),
+            _ => Some(color),
         }
     }
     pub fn set_independent_corners(&mut self, independent: bool) {

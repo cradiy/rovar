@@ -19,6 +19,16 @@ impl Workspace {
                 _ => None,
             };
         }
+        if self.selected_text.is_none()
+            && (self.selected_shape.is_none() || !self.inspector.stroke_editing)
+        {
+            match slot {
+                19 => return Some(PointX),
+                20 => return Some(PointY),
+                21 => return Some(PointRadius),
+                _ => {}
+            }
+        }
         if self.selected_text.is_some() {
             return match slot {
                 1 => Some(X),
@@ -164,6 +174,12 @@ pub(super) fn apply_shape_field(
             return shape
                 .paint_gradient_mut(stroke)
                 .set_position(stop, value / 100.);
+        }
+        PointX | PointY | PointRadius if !stroke => {
+            return match &mut shape.fill_mode {
+                FillMode::Points(g) => g.set_number(stop, property, value),
+                _ => false,
+            };
         }
         Radius if shape.kind.supports_corners() && (0. ..=MAX_SIZE / 2.).contains(&value) => {
             shape.radius = value
@@ -314,6 +330,12 @@ pub(super) fn apply_field(
             target.a = value / 100.;
         }
         GradientAngle if (0. ..=360.).contains(&value) => board.gradient.angle = value,
+        PointX | PointY | PointRadius => {
+            return match &mut board.fill_mode {
+                FillMode::Points(g) => g.set_number(stop, property, value),
+                _ => false,
+            };
+        }
         GradientPosition if (0. ..=100.).contains(&value) => {
             return board.gradient.set_position(stop, value / 100.);
         }

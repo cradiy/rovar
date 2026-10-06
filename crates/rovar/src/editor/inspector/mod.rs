@@ -13,6 +13,7 @@ mod frame_presets;
 mod image_fill;
 mod name_input;
 mod paint;
+mod points;
 mod properties;
 mod scrub;
 mod state;
@@ -28,7 +29,7 @@ use uic::components::{
     popover::{Popover, PopoverPlacement},
 };
 
-pub(super) const PROPERTY_COUNT: usize = 19;
+pub(super) const PROPERTY_COUNT: usize = 22;
 // Independent inputs for the sidebar, solid, gradient, and image editors.
 pub(super) const PROPERTY_SURFACES: usize = 4;
 

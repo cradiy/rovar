@@ -70,6 +70,13 @@ pub(super) enum GestureKind {
         width: f32,
         inserted: bool,
     },
+    PointGradient {
+        index: usize,
+        original: Point<f32>,
+        rect: Rect,
+        angle: f32,
+        zoom: f32,
+    },
     GradientMidpoint {
         style: bool,
         id: usize,
@@ -134,6 +141,7 @@ impl Workspace {
             GestureKind::LayerSort => gpui::CursorStyle::ClosedHand,
             GestureKind::CornerRadius => gpui::CursorStyle::ClosedHand,
             GestureKind::ImageCrop { .. } => gpui::CursorStyle::ClosedHand,
+            GestureKind::PointGradient { .. } => gpui::CursorStyle::ClosedHand,
             GestureKind::Panel { .. }
             | GestureKind::Property { .. }
             | GestureKind::LayoutProperty { .. }
@@ -320,6 +328,23 @@ impl Workspace {
                 }
                 self.move_fill_gradient_stop(id, position, cx);
             }
+            GestureKind::PointGradient {
+                index,
+                original,
+                rect,
+                angle,
+                zoom,
+            } => {
+                let delta = crate::scene::rotation::around(delta / zoom, point(0., 0.), -angle);
+                let mut position = point(
+                    (original.x + delta.x / rect.width).clamp(0., 1.),
+                    (original.y + delta.y / rect.height).clamp(0., 1.),
+                );
+                if shift {
+                    position = position.map(|v| (v * 20.).round() / 20.);
+                }
+                self.move_point_gradient(index, position, cx);
+            }
             GestureKind::GradientMidpoint {
                 style,
                 id,
@@ -420,6 +445,7 @@ impl Workspace {
                 GestureKind::Panel { side, original, .. } => self.panels.set(side, original),
                 GestureKind::Property { .. } => self.finish_property_scrub(false, cx),
                 GestureKind::FillGradientStop { .. } => self.finish_property_scrub(false, cx),
+                GestureKind::PointGradient { .. } => self.finish_property_scrub(false, cx),
                 GestureKind::LayoutProperty { .. } => self.finish_layout_scrub(false, cx),
                 GestureKind::EffectProperty { .. } => self.finish_property_scrub(false, cx),
                 GestureKind::ColorStyleProperty { angle, original } => {

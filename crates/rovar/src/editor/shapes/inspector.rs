@@ -14,6 +14,9 @@ impl Workspace {
             5 | 6 => shape.fill_enabled,
             16 | 17 => shape.stroke.enabled,
             7 | 8 => shape.paint_mode(self.inspector.stroke_editing) == FillMode::Linear,
+            19..=21 => {
+                !self.inspector.stroke_editing && matches!(shape.fill_mode, FillMode::Points(_))
+            }
             9 => {
                 shape.kind.is_polygon()
                     || (shape.kind.supports_corners() && !shape.independent_corners)
