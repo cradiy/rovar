@@ -10,10 +10,22 @@ mod tests;
 
 impl Workspace {
     pub(super) fn mask_overlay(&self, id: usize, element: impl IntoElement) -> gpui::AnyElement {
-        if self
-            .ancestors(id)
-            .iter()
-            .any(|id| mask::source(&self.hierarchy, *id).is_some())
+        // A later blended layer can capture any preceding artwork. Keep editor
+        // controls outside those captures, including controls on other layers.
+        let blending = self
+            .hierarchy
+            .effects
+            .values()
+            .any(|effects| crate::scene::effects::backdrop::radius(effects) > 0.)
+            || self.shapes.iter().any(|s| s.layer.composited())
+            || self.boards.iter().any(|b| b.layer.composited())
+            || self.texts.iter().any(|t| t.layer.composited())
+            || self.hierarchy.groups.values().any(|g| g.layer.composited());
+        if blending
+            || self
+                .ancestors(id)
+                .iter()
+                .any(|id| mask::source(&self.hierarchy, *id).is_some())
         {
             gpui::deferred(element).into_any_element()
         } else {

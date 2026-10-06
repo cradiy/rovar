@@ -3,6 +3,7 @@
 pub(crate) mod artboard;
 pub(crate) mod auto_layout;
 pub(crate) mod bezier;
+pub(crate) mod blend;
 pub(crate) mod boolean;
 pub(crate) mod color_styles;
 pub(crate) mod components;

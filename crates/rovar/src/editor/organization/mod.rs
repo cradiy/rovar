@@ -83,6 +83,7 @@ impl Workspace {
                 !self.hierarchy.groups.contains_key(id)
                     || crate::scene::boolean::is_boolean(&self.hierarchy, *id)
                     || crate::scene::mask::source(&self.hierarchy, *id).is_some()
+                    || self.hierarchy.groups[id].layer.composited()
             })
             .collect()
     }

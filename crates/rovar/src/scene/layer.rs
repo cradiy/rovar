@@ -1,5 +1,12 @@
-#[derive(Clone, Copy, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct LayerState {
+    #[serde(default, skip_serializing_if = "super::blend::Mode::is_normal")]
+    pub blend: super::blend::Mode,
+    #[serde(
+        default = "super::blend::opaque",
+        skip_serializing_if = "super::blend::is_opaque"
+    )]
+    pub opacity: f32,
     pub locked: bool,
     pub hidden: bool,
     pub aspect_locked: bool,
@@ -7,7 +14,23 @@ pub struct LayerState {
     pub rotation: f32,
 }
 
+impl Default for LayerState {
+    fn default() -> Self {
+        Self {
+            blend: Default::default(),
+            opacity: 1.,
+            locked: false,
+            hidden: false,
+            aspect_locked: false,
+            rotation: 0.,
+        }
+    }
+}
+
 impl LayerState {
+    pub fn composited(self) -> bool {
+        !self.blend.is_normal() || self.opacity != 1.
+    }
     pub fn editable(self) -> bool {
         !self.locked && !self.hidden
     }

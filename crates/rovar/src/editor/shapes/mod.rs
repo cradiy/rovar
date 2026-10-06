@@ -217,34 +217,55 @@ impl Workspace {
                 self.shape_element(&draft.shape, cx).into_any_element(),
             ));
         }
-        if masks.is_empty() {
-            return elements
-                .into_iter()
-                .flat_map(|(id, el)| {
-                    (!crate::scene::boolean::consumed(&self.hierarchy, id, &included))
-                        .then(|| self.background_blur_element(id))
-                        .flatten()
-                        .into_iter()
-                        .chain(std::iter::once(el))
-                })
-                .collect();
+        let layer_state = |id| {
+            self.hierarchy
+                .groups
+                .get(&id)
+                .map(|g| g.layer)
+                .or_else(|| boards.get(&id).map(|b| b.layer))
+                .or_else(|| shapes.get(&id).map(|s| s.layer))
+                .or_else(|| texts.get(&id).map(|t| t.layer))
+                .unwrap_or_default()
+        };
+        let scopes: std::collections::BTreeSet<_> = order
+            .iter()
+            .copied()
+            .filter(|id| masks.contains_key(id) || layer_state(*id).composited())
+            .collect();
+        if scopes.is_empty()
+            && !order
+                .iter()
+                .any(|id| self.background_blur_filter(*id).is_some())
+        {
+            return elements.into_iter().map(|(_, el)| el).collect();
         }
         let mut rendered: HashMap<_, Vec<_>> = elements
             .into_iter()
-            .map(|(id, el)| {
-                let source = crate::scene::mask::is_source(&self.hierarchy, id, &included);
-                let elements = (!source
-                    && !crate::scene::boolean::consumed(&self.hierarchy, id, &included))
-                .then(|| self.background_blur_element(id))
-                .flatten()
-                .into_iter()
-                .chain(std::iter::once(el))
-                .collect();
-                (id, elements)
-            })
+            .map(|(id, el)| (id, vec![el]))
             .collect();
-        // Capture each complete mask group once, preserving its internal stacking.
-        let mut groups: HashMap<usize, Vec<Vec<AnyElement>>> = HashMap::new();
+        // The order visits parents before children. Resolve each object's
+        // nearest compositing scope once instead of rescanning scene objects.
+        let mut scope_parents = HashMap::new();
+        for id in &order {
+            let parent = self
+                .hierarchy
+                .parents
+                .get(id)
+                .copied()
+                .or_else(|| self.hierarchy.groups.get(id).and_then(|g| g.board))
+                .or_else(|| shapes.get(id).and_then(|s| s.board))
+                .or_else(|| texts.get(id).and_then(|t| t.board));
+            let scope = parent.and_then(|parent| {
+                if scopes.contains(&parent) {
+                    Some(parent)
+                } else {
+                    scope_parents.get(&parent).copied().flatten()
+                }
+            });
+            scope_parents.insert(*id, scope);
+        }
+        // Capture each isolated group once, preserving its internal stacking.
+        let mut groups: HashMap<usize, Vec<super::blend::paint::Layer>> = HashMap::new();
         let mut roots = Vec::new();
         let mut overlays = Vec::new();
         for id in order.iter().rev().copied() {
@@ -253,42 +274,44 @@ impl Workspace {
                 overlays.extend(content);
                 continue;
             }
-            if let Some(outline) = masks.get(&id) {
-                let children = groups
-                    .remove(&id)
-                    .unwrap_or_default()
-                    .into_iter()
-                    .rev()
-                    .flatten();
-                content.push(
-                    self.mask_element(
-                        div()
-                            .absolute()
-                            .inset_0()
-                            .children(children)
-                            .into_any_element(),
-                        outline.clone(),
-                    ),
+            if scopes.contains(&id) {
+                let children = super::blend::paint::compose(
+                    groups.remove(&id).unwrap_or_default().into_iter().rev(),
                 );
+                if let Some(outline) = masks.get(&id) {
+                    content.push(
+                        self.mask_element(
+                            div()
+                                .absolute()
+                                .inset_0()
+                                .children(children)
+                                .into_any_element(),
+                            outline.clone(),
+                        ),
+                    );
+                } else {
+                    content.extend(children);
+                }
             }
-            if let Some(parent) =
-                crate::scene::mask::ancestors(&self.hierarchy, id, &included).first()
-            {
-                groups.entry(*parent).or_default().push(content);
+            let state = layer_state(id);
+            let siblings = if let Some(parent) = scope_parents[&id] {
+                groups.entry(parent).or_default()
             } else {
-                roots.push(content);
-            }
+                &mut roots
+            };
+            let backdrop = (!crate::scene::boolean::consumed(&self.hierarchy, id, &included))
+                .then(|| self.background_blur_filter(id))
+                .flatten();
+            siblings.push((state, content, backdrop));
         }
-        roots
+        super::blend::paint::compose(roots.into_iter().rev())
             .into_iter()
-            .rev()
-            .flatten()
             .chain(rendered.remove(&usize::MAX).unwrap_or_default())
             .chain(overlays)
             .collect()
     }
 
-    fn background_blur_element(&self, id: usize) -> Option<AnyElement> {
+    fn background_blur_filter(&self, id: usize) -> Option<crate::scene::effects::backdrop::Filter> {
         use crate::scene::effects::backdrop::{self, Region};
         let radius = backdrop::radius(self.hierarchy.effects.get(&id)?);
         if radius == 0. {
@@ -310,47 +333,36 @@ impl Workspace {
                     shape.board,
                 )
             };
+        let zoom = self.view.zoom;
+        let position = self.view.screen(point(rect.x, rect.y));
         let region = Region {
-            rect,
+            rect: Rect {
+                x: position.x,
+                y: position.y,
+                width: rect.width * zoom,
+                height: rect.height * zoom,
+            },
             rotation,
-            corners,
+            corners: corners.map(|r| r * zoom),
             ellipse,
         };
-        let bounds = region.bounds();
-        let position = self.view.screen(point(bounds.x, bounds.y));
-        let zoom = self.view.zoom;
         let clip = parent
             .and_then(|id| self.boards.iter().find(|b| b.id == id))
             .map(|b| {
-                (
-                    self.view.screen(point(b.rect.x, b.rect.y)),
-                    gpui::size(px(b.rect.width * zoom), px(b.rect.height * zoom)),
-                )
+                let origin = self.view.screen(point(b.rect.x, b.rect.y));
+                Rect {
+                    x: origin.x,
+                    y: origin.y,
+                    width: b.rect.width * zoom,
+                    height: b.rect.height * zoom,
+                }
             });
-        Some(
-            canvas(
-                |_, _, _| (),
-                move |bounds, _, window, _| {
-                    let mask = clip.map(|(origin, size)| gpui::ContentMask {
-                        bounds: Bounds::new(
-                            bounds.origin - point(px(position.x), px(position.y))
-                                + point(px(origin.x), px(origin.y)),
-                            size,
-                        )
-                        .intersect(&window.content_mask().bounds),
-                    });
-                    window.with_content_mask(mask, |window| {
-                        region.paint(bounds, radius, zoom, window)
-                    });
-                },
-            )
-            .absolute()
-            .left(px(position.x))
-            .top(px(position.y))
-            .w(px(bounds.width * zoom))
-            .h(px(bounds.height * zoom))
-            .into_any_element(),
-        )
+        Some(backdrop::Filter {
+            region,
+            radius: radius * zoom,
+            opacity: self.blend_state(id).opacity,
+            clip,
+        })
     }
     fn shape_element(&self, shape: &Shape, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         self.shape_render(shape, None, true, None, cx)

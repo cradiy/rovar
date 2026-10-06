@@ -7,6 +7,18 @@ impl Workspace {
     pub(in crate::editor) fn field_value(&self, index: usize, cx: &gpui::App) -> Option<String> {
         use Property::*;
         let property = self.field_property(index)?;
+        if property == LayerOpacity {
+            let mut values = self
+                .selection_ids()
+                .into_iter()
+                .filter_map(|id| self.layer_info(id).map(|(l, _)| l.opacity));
+            let first = values.next()?;
+            return Some(if values.all(|v| v == first) {
+                number(first * 100.)
+            } else {
+                String::new()
+            });
+        }
         if property == Rotation {
             return self
                 .selected_text
@@ -258,6 +270,15 @@ impl Workspace {
             }
         }
         if slot >= PROPERTY_COUNT && slot / PROPERTY_COUNT != self.paint_surface(cx) {
+            return;
+        }
+        if property == Property::LayerOpacity {
+            self.inspector.invalid[slot] = !self.edit_layer_opacity(value);
+            if matches!(event, InputEvent::Submit(_)) {
+                self.history.borrow_mut().break_group();
+                self.sync_field(index, cx);
+            }
+            cx.notify();
             return;
         }
         if !self.multi_selection.is_empty() {

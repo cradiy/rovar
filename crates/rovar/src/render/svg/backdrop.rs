@@ -152,6 +152,21 @@ impl Renderer {
             self.options.as_ref().unwrap(),
         )?;
         let center = crate::scene::rotation::center(region.rect);
+        let opacity = scene
+            .document
+            .boards
+            .iter()
+            .find(|b| b.id == id)
+            .map(|b| b.layer.opacity)
+            .or_else(|| {
+                scene
+                    .document
+                    .shapes
+                    .iter()
+                    .find(|s| s.id == id)
+                    .map(|s| s.layer.opacity)
+            })
+            .unwrap_or(1.);
         let transform = format!("rotate({} {} {})", region.rotation, center.x, center.y);
         let mut coverage = format!(
             "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{}\" height=\"{}\" viewBox=\"{} {} {} {}\">",
@@ -164,7 +179,7 @@ impl Renderer {
         }
         write!(
             coverage,
-            "<path d=\"{contour}\" transform=\"{transform}\" fill=\"white\" fill-rule=\"evenodd\"/>"
+            "<path d=\"{contour}\" transform=\"{transform}\" fill=\"white\" fill-opacity=\"{opacity}\" fill-rule=\"evenodd\"/>"
         )?;
         if scene.clips.contains_key(&id) {
             coverage.push_str("</g>");

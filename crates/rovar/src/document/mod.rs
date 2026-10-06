@@ -288,6 +288,19 @@ impl Page {
             "Invalid layer reference"
         );
         crate::scene::auto_layout::validate(self, &ids)?;
+        for layer in self
+            .boards
+            .iter()
+            .map(|b| b.layer)
+            .chain(self.shapes.iter().map(|s| s.layer))
+            .chain(self.texts.iter().map(|t| t.layer))
+            .chain(self.hierarchy.groups.values().map(|g| g.layer))
+        {
+            ensure!(
+                layer.opacity.is_finite() && (0. ..=1.).contains(&layer.opacity),
+                "Invalid layer opacity"
+            );
+        }
         for (id, effects) in &self.hierarchy.effects {
             ensure!(
                 ids.contains(id) && !self.hierarchy.groups.contains_key(id),

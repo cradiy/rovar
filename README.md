@@ -25,6 +25,7 @@ I want to build a beautiful, cross-platform UI design tool that is easy for AI a
 - **Reusable components** — component libraries, instances, overrides, and updates.
 - **Boolean operations** — union, subtract top layers, intersection, and exclusion for closed shapes and Bézier paths. Operands remain editable and can be released; combinations use the bottom layer's appearance and support PNG/SVG export.
 - **Vector masks** — use the bottom closed shape or Boolean group to clip selected artwork. Edit the mask and content independently, nest or release mask groups, and export to PNG/SVG.
+- **Layer blending** — Normal, Multiply, Screen, Overlay, Darken, and Lighten modes with independent layer opacity. Apply opacity to whole groups and preserve blending in PNG/SVG exports.
 - **Component variants** — named versions in component sets, edited on canvas with the property panel, and instance switching that preserves matching overrides.
 - **Shadows** — stacked outer and inner shadows for frames, shapes, images, and text, with offset, blur, spread, color, opacity, and PNG/SVG export.
 - **Layer blur** — adjustable blur for shapes, images, and text, including shadows, with PNG/SVG export.
@@ -36,7 +37,7 @@ I want to build a beautiful, cross-platform UI design tool that is easy for AI a
 
 ## Planned
 
-- [ ] **Visual effects** — glass, glow, blend modes, and mixed effect stacks.
+- [ ] **Visual effects** — glass, glow, and mixed effect stacks.
 - [ ] **Animation** — keyframes, easing, animated gradients, and layer effects.
 - [ ] **Interactive presentations** — event triggers, screen navigation, overlays, scrollable areas, state switching, and transitions.
 - [ ] **Presentation sharing** — standalone playback and browser sharing through a self-hosted server.

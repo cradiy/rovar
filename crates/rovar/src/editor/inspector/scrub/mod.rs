@@ -8,7 +8,7 @@ impl Workspace {
         match property {
             X | Y | StartX | StartY | EndX | EndY | Rotation => (-1_000_000., 1_000_000., 1., 1.),
             Width | Height => (MIN_SIZE, MAX_SIZE, 1., 1.),
-            Opacity | GradientPosition => (0., 100., 1., 1.),
+            Opacity | LayerOpacity | GradientPosition => (0., 100., 1., 1.),
             GradientAngle => (0., 360., 1., 1.),
             FontSize => (1., 1000., 1., 1.),
             LineHeight => (0.5, 5., 0.01, 0.01),
@@ -30,7 +30,7 @@ impl Workspace {
         if self.gesture.is_some() {
             return;
         }
-        if !self.multi_selection.is_empty() {
+        if !self.multi_selection.is_empty() && index != 18 {
             if let Some(property) = self.field_property(index) {
                 self.begin_multi_property(property, event, window, cx);
             }
@@ -79,7 +79,9 @@ impl Workspace {
             return;
         }
         let stop = self.inspector.active_stop;
-        if property == Property::Rotation {
+        if property == Property::LayerOpacity {
+            self.edit_layer_opacity(&value);
+        } else if property == Property::Rotation {
             self.edit_rotation(&value);
         } else if let Some(text) = self.selected_text_mut() {
             let before = text.rect;

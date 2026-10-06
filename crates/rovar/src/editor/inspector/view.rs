@@ -180,16 +180,7 @@ impl Workspace {
                         .when(self.vector_edit.is_some(), |el| {
                             el.child(self.node_controls(cx))
                         })
-                        .when(
-                            self.selected_shape()
-                                .is_some_and(|s| s.kind.supports_corners()),
-                            |el| {
-                                el.child(
-                                    inspector_section(t("appearance"))
-                                        .child(self.shape_corner_controls(cx)),
-                                )
-                            },
-                        )
+                        .child(self.appearance_controls(cx))
                         .when(
                             self.selected_shape().is_some_and(|s| s.kind.is_polygon()),
                             |el| {

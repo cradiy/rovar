@@ -5,6 +5,9 @@ impl Workspace {
     // Slots belong to persistent UI inputs, not to document properties. Resolve
     // their meaning once at the inspector boundary before editing any object.
     pub(in crate::editor) fn field_property(&self, slot: usize) -> Option<Property> {
+        if slot == 18 {
+            return Some(LayerOpacity);
+        }
         if !self.multi_selection.is_empty() {
             return match slot {
                 1 => Some(X),

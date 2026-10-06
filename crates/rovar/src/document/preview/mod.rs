@@ -61,6 +61,7 @@ pub(crate) fn render(
         if !doc.hierarchy.groups.contains_key(&id)
             || crate::scene::boolean::is_boolean(&doc.hierarchy, id)
             || crate::scene::mask::source(&doc.hierarchy, id).is_some()
+            || doc.hierarchy.groups[&id].layer.composited()
         {
             order.push(id);
         }
@@ -100,6 +101,12 @@ pub(crate) fn render(
     };
     let mut bounds: Option<(f32, f32, f32, f32)> = None;
     for id in &order {
+        if doc.hierarchy.groups.contains_key(id)
+            && !crate::scene::boolean::is_boolean(&doc.hierarchy, *id)
+            && crate::scene::mask::source(&doc.hierarchy, *id).is_none()
+        {
+            continue;
+        }
         let mut rect = world(*id);
         if let Some(shape) = doc
             .shapes

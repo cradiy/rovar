@@ -72,6 +72,31 @@ fn background_blur_scene() -> Page {
 }
 
 #[test]
+fn background_blur_remains_active_with_layer_blending_and_opacity() {
+    use crate::scene::blend::Mode;
+    let mut doc = background_blur_scene();
+    for mode in Mode::ALL {
+        doc.shapes[2].layer.blend = mode;
+        doc.shapes[2].layer.opacity = 0.5;
+        let pixels = png(&job(&doc, rect(0., 0., 100., 100.)), 1);
+        let blurred = pixels.get_pixel(49, 35).0;
+        assert!(
+            blurred[0] > 160 && blurred[0] < 230,
+            "{mode:?}: {blurred:?}"
+        );
+        assert!(blurred[2] > 30 && blurred[2] < 100, "{mode:?}: {blurred:?}");
+        assert_eq!(blurred[3], 255);
+    }
+    doc.shapes[2].layer.opacity = 0.;
+    assert_eq!(
+        png(&job(&doc, rect(0., 0., 100., 100.)), 1)
+            .get_pixel(49, 35)
+            .0,
+        [255, 0, 0, 255]
+    );
+}
+
+#[test]
 fn background_blur_exports_only_preceding_artwork_and_preserves_vector_foreground() {
     let mut doc = background_blur_scene();
     let mut front = Shape::new(4, None, ShapeKind::Rectangle, rect(48., 45., 4., 10.));

@@ -56,7 +56,7 @@ impl Workspace {
                 .is_open();
         let readonly = image_color || (matches!(index, 3 | 4) && self.boolean_result_empty());
         let numeric = !matches!(index, 0 | 5 | 16);
-        let draggable = if !self.multi_selection.is_empty() {
+        let draggable = if !self.multi_selection.is_empty() && index != 18 {
             self.field_property(index)
                 .is_some_and(|property| self.multi_can_scrub(property, cx))
         } else {

@@ -7,6 +7,7 @@ use crate::{
 use anyhow::{Context, Result, ensure};
 use std::{collections::BTreeMap, fmt::Write as _};
 mod backdrop;
+mod blend;
 mod effects;
 mod paint;
 mod path;
@@ -60,6 +61,7 @@ impl Scene<'_> {
         let doc = self.document;
         let mut defs = String::new();
         let mut body = String::new();
+        let mut blending = blend::Stack::new(doc);
         let mut images = BTreeMap::new();
         let mut backdrops = backdrop::Renderer::new(self, raster_scale);
         let included = self.order.iter().copied().collect();
@@ -82,6 +84,11 @@ impl Scene<'_> {
             {
                 continue;
             }
+            blending.advance(*id, &mut body);
+            // Backdrop filtering changes preceding artwork in this scope; it
+            // must run before isolating the layer's foreground for blending.
+            backdrops.paint(self, *id, &mut defs, &mut body)?;
+            blending.enter(*id, &mut body);
             let composition = crate::scene::boolean::is_boolean(&doc.hierarchy, *id)
                 .then(|| booleans.get(&doc.hierarchy, &doc.shapes, *id))
                 .flatten();
@@ -102,13 +109,9 @@ impl Scene<'_> {
                 continue;
             };
             let mask_groups = crate::scene::mask::ancestors(&doc.hierarchy, *id, &included);
-            let backdrop_start = body.len();
-            backdrops.paint(self, *id, &mut defs, &mut body)?;
-            let backdrop = body.split_off(backdrop_start);
             for group in &mask_groups {
                 write!(body, "<g clip-path=\"url(#vector-mask-{group})\">")?;
             }
-            body.push_str(&backdrop);
             let has_clip = if let Some(bounds) = self.clips.get(id) {
                 let key = format!("board-clip-{id}");
                 clip(&mut defs, &key, &rect_path(*bounds));
@@ -333,6 +336,7 @@ impl Scene<'_> {
                 body.push_str("</g>");
             }
         }
+        blending.finish(&mut body);
         let r = self.bounds;
         ensure!(
             [r.x, r.y, r.width, r.height].iter().all(|n| n.is_finite())

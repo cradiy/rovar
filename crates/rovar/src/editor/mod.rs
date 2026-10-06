@@ -2,6 +2,7 @@
 
 mod assets;
 mod auto_layout;
+mod blend;
 mod boards;
 mod boolean;
 mod canvas;

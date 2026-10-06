@@ -449,6 +449,7 @@ impl Workspace {
                     )
                     .children(self.layout_position_control(cx)),
             )
+            .child(self.appearance_controls(cx))
             .when(self.batch_color_supported(cx), |el| {
                 el.child(section(t("color")).child(self.paint_value_row(cx)))
             })

@@ -33,6 +33,7 @@ impl Corner {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Property {
+    LayerOpacity,
     Name,
     X,
     Y,

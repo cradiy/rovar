@@ -28,7 +28,7 @@ use uic::components::{
     popover::{Popover, PopoverPlacement},
 };
 
-pub(super) const PROPERTY_COUNT: usize = 18;
+pub(super) const PROPERTY_COUNT: usize = 19;
 // Independent inputs for the sidebar, solid, gradient, and image editors.
 pub(super) const PROPERTY_SURFACES: usize = 4;
 

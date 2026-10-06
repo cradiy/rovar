@@ -24,6 +24,12 @@ fn canvas_culls_offscreen_artwork_but_preserves_edges_and_editing(cx: &mut TestA
                 },
             ));
             assert!(this.content_elements(window, cx).is_empty());
+            this.shapes[0].layer.blend = crate::scene::blend::Mode::Multiply;
+            assert!(
+                this.content_elements(window, cx).is_empty(),
+                "Offscreen blended artwork must not allocate an empty capture"
+            );
+            this.shapes[0].layer.blend = Default::default();
             this.view.pan = point(-10000., -10000.);
             assert_eq!(this.content_elements(window, cx).len(), 1);
             this.view.pan = point(0., 0.);
@@ -276,6 +282,9 @@ fn high_zoom_keeps_pointer_anchor_and_grid_allows_object_selection(cx: &mut Test
 
 pub(super) fn click(visual: &mut VisualTestContext, selector: &'static str) {
     draw(visual);
+    if matches!(selector, "property-drag-5" | "property-drag-16") {
+        reveal_paint_swatch(visual, selector);
+    }
     // Paint controls now live in a swatch popover. Open it through the real trigger.
     if visual.debug_bounds(selector).is_none()
         && (matches!(
@@ -309,6 +318,7 @@ pub(super) fn click(visual: &mut VisualTestContext, selector: &'static str) {
         } else {
             "property-drag-5"
         };
+        reveal_paint_swatch(visual, swatch);
         if visual.debug_bounds(swatch).is_none() {
             click(visual, if stroke { "shape-stroke" } else { "shape-fill" });
         }
@@ -357,6 +367,37 @@ pub(super) fn click(visual: &mut VisualTestContext, selector: &'static str) {
     }
     visual.simulate_click(bounds.center(), Default::default());
     draw(visual);
+}
+
+fn reveal_paint_swatch(visual: &mut VisualTestContext, selector: &'static str) {
+    if visual.debug_bounds("color-panel").is_some() {
+        return;
+    }
+    let Some(panel) = visual.debug_bounds("properties-panel") else {
+        return;
+    };
+    for _ in 0..12 {
+        let delta = if let Some(bounds) = visual.debug_bounds(selector) {
+            if bounds.center().y >= panel.top() + px(100.)
+                && bounds.center().y <= panel.bottom() - px(24.)
+            {
+                return;
+            }
+            if bounds.center().y > panel.bottom() - px(24.) {
+                -100.
+            } else {
+                100.
+            }
+        } else {
+            -100.
+        };
+        visual.simulate_event(gpui::ScrollWheelEvent {
+            position: panel.center(),
+            delta: gpui::ScrollDelta::Pixels(point(px(0.), px(delta))),
+            ..Default::default()
+        });
+        draw(visual);
+    }
 }
 
 // Existing inspector/history tests use this helper to draw a predictable fixture.

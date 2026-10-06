@@ -36,6 +36,23 @@ fn merged(base: &Document, local: &Document, remote: &Document) -> Result<Docume
 }
 
 #[test]
+fn layer_blend_and_opacity_merge_independently_with_geometry() {
+    use crate::scene::blend::Mode;
+    let base = document();
+    let mut local = base.clone();
+    let mut remote = base.clone();
+    local.pages[0].shapes[0].layer.blend = Mode::Multiply;
+    remote.pages[0].shapes[0].layer.opacity = 0.4;
+    remote.pages[0].shapes[0].rect.x = 25.;
+    let result = merged(&base, &local, &remote).unwrap();
+    assert_eq!(result.pages[0].shapes[0].layer.blend, Mode::Multiply);
+    assert_eq!(result.pages[0].shapes[0].layer.opacity, 0.4);
+    assert_eq!(result.pages[0].shapes[0].rect.x, 25.);
+    remote.pages[0].shapes[0].layer.blend = Mode::Screen;
+    assert!(merged(&base, &local, &remote).is_err());
+}
+
+#[test]
 fn disjoint_properties_merge_but_divergent_edits_and_delete_edit_do_not() {
     let base = document();
     let mut local = base.clone();
