@@ -2,7 +2,9 @@ use super::artboard::Rect;
 use gpui::Rgba;
 
 pub(crate) mod backdrop;
+pub(crate) mod glow;
 mod paint;
+pub(crate) use glow::Glow;
 pub(crate) use paint::{paint_effects, paint_shadows};
 
 pub(crate) const MAX_EFFECTS: usize = 8;
@@ -73,6 +75,7 @@ pub(crate) enum Effect {
     Shadow(Shadow),
     LayerBlur { enabled: bool, radius: f32 },
     BackgroundBlur { enabled: bool, radius: f32 },
+    Glow(Glow),
 }
 
 impl Default for Effect {
@@ -85,20 +88,21 @@ impl Effect {
     pub fn shadow(&self) -> Option<&Shadow> {
         match self {
             Self::Shadow(shadow) => Some(shadow),
-            Self::LayerBlur { .. } | Self::BackgroundBlur { .. } => None,
+            Self::LayerBlur { .. } | Self::BackgroundBlur { .. } | Self::Glow(_) => None,
         }
     }
 
     pub fn shadow_mut(&mut self) -> Option<&mut Shadow> {
         match self {
             Self::Shadow(shadow) => Some(shadow),
-            Self::LayerBlur { .. } | Self::BackgroundBlur { .. } => None,
+            Self::LayerBlur { .. } | Self::BackgroundBlur { .. } | Self::Glow(_) => None,
         }
     }
 
     pub fn enabled(&self) -> bool {
         match self {
             Self::Shadow(shadow) => shadow.enabled,
+            Self::Glow(g) => g.enabled,
             Self::LayerBlur { enabled, .. } | Self::BackgroundBlur { enabled, .. } => *enabled,
         }
     }
@@ -106,6 +110,7 @@ impl Effect {
     pub fn toggle(&mut self) {
         let enabled = match self {
             Self::Shadow(shadow) => &mut shadow.enabled,
+            Self::Glow(g) => &mut g.enabled,
             Self::LayerBlur { enabled, .. } | Self::BackgroundBlur { enabled, .. } => enabled,
         };
         *enabled = !*enabled;
@@ -114,6 +119,7 @@ impl Effect {
     pub fn visible(&self) -> bool {
         match self {
             Self::Shadow(shadow) => shadow.visible(),
+            Self::Glow(g) => g.visible(),
             Self::LayerBlur { enabled, radius } | Self::BackgroundBlur { enabled, radius } => {
                 *enabled && *radius > 0.
             }
@@ -123,6 +129,7 @@ impl Effect {
     pub fn validate(&self) -> anyhow::Result<()> {
         match self {
             Self::Shadow(shadow) => shadow.validate(),
+            Self::Glow(g) => g.validate(),
             Self::LayerBlur { radius, .. } | Self::BackgroundBlur { radius, .. } => {
                 anyhow::ensure!(
                     radius.is_finite() && (0. ..=MAX_RADIUS).contains(radius),
@@ -156,6 +163,7 @@ pub(crate) fn padding(effects: &[Effect]) -> f32 {
         .filter(|s| s.visible() && s.kind == ShadowKind::Drop)
         .map(Shadow::padding)
         .fold(0., f32::max)
+        .max(glow::padding(effects))
         + blur_radius(effects) * 1.5
 }
 

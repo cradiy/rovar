@@ -531,27 +531,29 @@ impl Workspace {
                 board
                     .surface(zoom)
                     .on_paint_before_children(move |bounds, _, window, _| {
+                        let mut source = |window: &mut Window| {
+                            if let Some(image) = &image {
+                                window.with_subtree_effect_chain(
+                                    bounds,
+                                    &[],
+                                    image.opacity,
+                                    |window| image.paint(bounds, window),
+                                );
+                            } else if let Some(gradient) = points {
+                                gradient.paint(bounds, window);
+                            } else {
+                                window.paint_quad(gpui::fill(bounds, background.clone()));
+                            }
+                        };
                         crate::scene::effects::paint_shadows(
                             bounds,
                             &shadows,
                             crate::scene::effects::ShadowKind::Drop,
                             zoom,
                             window,
-                            |window| {
-                                if let Some(image) = &image {
-                                    window.with_subtree_effect_chain(
-                                        bounds,
-                                        &[],
-                                        image.opacity,
-                                        |window| image.paint(bounds, window),
-                                    );
-                                } else if let Some(gradient) = points {
-                                    gradient.paint(bounds, window);
-                                } else {
-                                    window.paint_quad(gpui::fill(bounds, background.clone()));
-                                }
-                            },
+                            &mut source,
                         );
+                        crate::scene::effects::glow::paint(bounds, &shadows, zoom, window, source);
                     })
                     .child(
                         canvas(

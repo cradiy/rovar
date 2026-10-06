@@ -88,7 +88,7 @@ pub(crate) fn paint_shadows(
     }
 }
 
-/// Compose shadows around the source, then blur the resulting layer as a whole.
+/// Compose shadows and contour light around the source, then blur the whole layer.
 pub(crate) fn paint_effects(
     bounds: Bounds<Pixels>,
     effects: &[Effect],
@@ -99,6 +99,7 @@ pub(crate) fn paint_effects(
     let radius = super::blur_radius(effects);
     let mut paint = |window: &mut Window| {
         paint_shadows(bounds, effects, ShadowKind::Drop, zoom, window, &mut source);
+        super::glow::paint(bounds, effects, zoom, window, &mut source);
         source(window);
         paint_shadows(
             bounds,

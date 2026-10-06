@@ -9,6 +9,7 @@ use std::{collections::BTreeMap, fmt::Write as _};
 mod backdrop;
 mod blend;
 mod effects;
+pub(crate) mod glow;
 mod paint;
 mod path;
 
@@ -140,14 +141,7 @@ impl Scene<'_> {
                 effect_rect.width += 2. * pad;
                 effect_rect.height += 2. * pad;
             }
-            let has_shadow = doc
-                .hierarchy
-                .effects
-                .get(id)
-                .is_some_and(|shadows| effects::filter(&mut defs, *id, effect_rect, shadows));
-            if has_shadow {
-                write!(body, "<g filter=\"url(#shadow-{id})\">")?;
-            }
+            let source_start = body.len();
             if shape.is_some_and(|s| s.kind == ShapeKind::Video) {
                 ensure!(
                     matches!(output, Output::Preview),
@@ -325,10 +319,23 @@ impl Scene<'_> {
                     }
                 }
             }
-            body.push_str("</g>");
-            if has_shadow {
-                body.push_str("</g>");
+            if let Some(effects) = doc.hierarchy.effects.get(id) {
+                let source = body.split_off(source_start);
+                let lights = glow::images(
+                    &defs,
+                    &source,
+                    effect_rect,
+                    effects,
+                    raster_scale,
+                    text.is_some(),
+                )?;
+                if effects::filter(&mut defs, *id, effect_rect, effects, &lights) {
+                    write!(body, "<g filter=\"url(#shadow-{id})\">{source}</g>")?;
+                } else {
+                    body.push_str(&source);
+                }
             }
+            body.push_str("</g>");
             if has_clip {
                 body.push_str("</g>");
             }

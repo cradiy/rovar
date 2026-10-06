@@ -345,6 +345,47 @@ fn point_gradient_export_roundtrips_color_alpha_and_contour_at_multiple_scales()
 }
 
 #[test]
+fn contour_glow_exports_preserve_holes_source_color_and_layer_opacity() {
+    use crate::scene::effects::{Effect, Glow};
+    let mut shape = Shape::new(1, None, ShapeKind::Rectangle, rect(20., 20., 24., 24.));
+    shape.fill_enabled = false;
+    shape.stroke.enabled = true;
+    shape.stroke.width = 4.;
+    shape.stroke.color = rgb(0xff0000);
+    shape.layer.opacity = 0.5;
+    let mut doc = document(vec![shape]);
+    doc.hierarchy.effects.insert(
+        1,
+        vec![Effect::Glow(Glow {
+            radius: 8.,
+            color: rgb(0x00ff00),
+            ..Default::default()
+        })],
+    );
+    let job = job(&doc, rect(0., 0., 64., 64.));
+    let svg = String::from_utf8(job.render(Format::Svg, 1, &Default::default()).unwrap()).unwrap();
+    assert!(svg.contains("data:image/png;base64,"));
+    for scale in [1, 2, 4] {
+        let pixels = png(&job, scale);
+        let pixel = |x, y| pixels.get_pixel(x * scale, y * scale).0;
+        assert_eq!(pixel(32, 32)[3], 0, "hole must remain transparent");
+        assert_eq!(pixel(0, 0)[3], 0);
+        let source = pixel(21, 32);
+        assert!(
+            source[0] >= 250 && source[1] == 0 && source[3].abs_diff(128) <= 1,
+            "{source:?}"
+        );
+        for x in [18, 26] {
+            let glow = pixel(x, 32);
+            assert!(
+                glow[1] >= 250 && glow[0] == 0 && glow[3] > 0 && glow[3] < 128,
+                "scale {scale}: {glow:?}"
+            );
+        }
+    }
+}
+
+#[test]
 fn all_gradient_kinds_match_expected_colors_and_have_no_sector_seams() {
     for kind in [
         GradientKind::Linear,

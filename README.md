@@ -29,6 +29,7 @@ I want to build a beautiful, cross-platform UI design tool that is easy for AI a
 - **Component variants** — named versions in component sets, edited on canvas with the property panel, and instance switching that preserves matching overrides.
 - **Shadows** — stacked outer and inner shadows for frames, shapes, images, and text, with offset, blur, spread, color, opacity, and PNG/SVG export.
 - **Layer blur** — adjustable blur for shapes, images, and text, including shadows, with PNG/SVG export.
+- **Contour glow** — colored light around frame, shape, text, and image outlines, including holes, with adjustable radius, edge width, intensity, and alpha threshold. PNG follows the export scale; SVG embeds the light at 1× and retains the vector artwork.
 - **Background blur** — blur behind frames, rectangles, ellipses, and images, clipped to their rotated outlines and rounded corners. PNG follows the export scale; SVG embeds the blurred background at 1× while retaining vector foregrounds. Converting a primitive to a path removes its background blur; undo restores both.
 - **Images and video** — media import, image fills, non-destructive cropping, and video playback.
 - **Local and self-hosted workspaces** — personal and team spaces, document and library synchronization, and version-conflict comparison.
@@ -37,7 +38,7 @@ I want to build a beautiful, cross-platform UI design tool that is easy for AI a
 
 ## Planned
 
-- [ ] **Visual effects** — glass, glow, and mixed effect stacks.
+- [ ] **Visual effects** — glass and mixed effect stacks.
 - [ ] **Animation** — keyframes, easing, animated gradients, and layer effects.
 - [ ] **Interactive presentations** — event triggers, screen navigation, overlays, scrollable areas, state switching, and transitions.
 - [ ] **Presentation sharing** — standalone playback and browser sharing through a self-hosted server.

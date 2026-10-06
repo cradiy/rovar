@@ -4,7 +4,13 @@ use crate::scene::{
 };
 use std::fmt::Write;
 
-pub(super) fn filter(defs: &mut String, id: usize, rect: Rect, effects: &[Effect]) -> bool {
+pub(super) fn filter(
+    defs: &mut String,
+    id: usize,
+    rect: Rect,
+    effects: &[Effect],
+    lights: &[(Rect, String)],
+) -> bool {
     if !effects
         .iter()
         .any(|e| e.visible() && !matches!(e, Effect::BackgroundBlur { .. }))
@@ -20,6 +26,9 @@ pub(super) fn filter(defs: &mut String, id: usize, rect: Rect, effects: &[Effect
         .filter(|s| s.visible())
         .map(|s| Shadow::padding(s))
         .fold(0., f32::max)
+        .max(
+            crate::scene::effects::glow::padding(effects) + if lights.is_empty() { 0. } else { 2. },
+        )
         + blur * 1.5;
     let bounds = Rect {
         x: rect.x - padding,
@@ -48,6 +57,9 @@ pub(super) fn filter(defs: &mut String, id: usize, rect: Rect, effects: &[Effect
         }
         write!(defs, "<feFlood flood-color=\"#{:02x}{:02x}{:02x}\" flood-opacity=\"{}\"/><feComposite in2=\"alpha-{i}\" operator=\"in\" result=\"shadow-{i}\"/>", (s.color.r * 255.).round() as u8, (s.color.g * 255.).round() as u8, (s.color.b * 255.).round() as u8, s.color.a).unwrap();
     }
+    for (i, (r, uri)) in lights.iter().enumerate() {
+        write!(defs, "<feImage x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" preserveAspectRatio=\"none\" href=\"{uri}\" result=\"glow-{i}\"/>", r.x, r.y, r.width, r.height).unwrap();
+    }
     defs.push_str("<feMerge>");
     for (i, _) in shadows
         .iter()
@@ -56,6 +68,9 @@ pub(super) fn filter(defs: &mut String, id: usize, rect: Rect, effects: &[Effect
         .filter(|(_, s)| s.visible() && s.kind == ShadowKind::Drop)
     {
         write!(defs, "<feMergeNode in=\"shadow-{i}\"/>").unwrap();
+    }
+    for i in (0..lights.len()).rev() {
+        write!(defs, "<feMergeNode in=\"glow-{i}\"/>").unwrap();
     }
     defs.push_str("<feMergeNode in=\"SourceGraphic\"/>");
     for (i, _) in shadows

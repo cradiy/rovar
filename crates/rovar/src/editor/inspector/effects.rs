@@ -1,10 +1,14 @@
 use super::*;
-use crate::scene::effects::{Effect, MAX_EFFECTS, MAX_OFFSET, MAX_RADIUS, Shadow, ShadowKind};
+use crate::scene::effects::{
+    Effect, Glow, MAX_EFFECTS, MAX_OFFSET, MAX_RADIUS, Shadow, ShadowKind,
+};
 use crate::ui::theme::Color;
 use std::collections::BTreeSet;
 use uic::components::context_menu::{ContextMenuItem, ContextMenuTrigger};
 use uic::components::popover::PopoverState;
 
+#[cfg(test)]
+mod glow_tests;
 #[cfg(test)]
 mod layer_blur_tests;
 #[cfg(test)]
@@ -32,6 +36,7 @@ enum Kind {
     Inner,
     Blur,
     Background,
+    Glow,
 }
 
 impl Kind {
@@ -43,6 +48,7 @@ impl Kind {
             },
             Effect::LayerBlur { .. } => Self::Blur,
             Effect::BackgroundBlur { .. } => Self::Background,
+            Effect::Glow(_) => Self::Glow,
         }
     }
 
@@ -52,12 +58,17 @@ impl Kind {
             Self::Inner => "effect-inner-shadow",
             Self::Blur => "effect-layer-blur",
             Self::Background => "effect-background-blur",
+            Self::Glow => "effect-contour-glow",
         }
     }
 
     fn convert(self, effect: &Effect) -> Effect {
         let enabled = effect.enabled();
         match self {
+            Self::Glow => Effect::Glow(Glow {
+                enabled,
+                ..Default::default()
+            }),
             Self::Blur => Effect::LayerBlur {
                 enabled,
                 radius: 8.,
@@ -80,6 +91,16 @@ impl Kind {
 }
 
 fn field_values(effect: &Effect) -> [String; 6] {
+    if let Effect::Glow(g) = effect {
+        return [
+            number(g.intensity * 100.),
+            number(g.edge_width),
+            number(g.radius),
+            number(g.threshold * 100.),
+            hex(g.color),
+            number(g.color.a * 100.),
+        ];
+    }
     if let Some(s) = effect.shadow() {
         [
             number(s.x),
@@ -104,6 +125,22 @@ fn field_values(effect: &Effect) -> [String; 6] {
     }
 }
 
+fn effect_color(effect: &Effect) -> Option<gpui::Rgba> {
+    match effect {
+        Effect::Shadow(s) => Some(s.color),
+        Effect::Glow(g) => Some(g.color),
+        _ => None,
+    }
+}
+
+fn effect_color_mut(effect: &mut Effect) -> Option<&mut gpui::Rgba> {
+    match effect {
+        Effect::Shadow(s) => Some(&mut s.color),
+        Effect::Glow(g) => Some(&mut g.color),
+        _ => None,
+    }
+}
+
 impl Workspace {
     pub(in crate::editor) fn close_effect_menus(
         &mut self,
@@ -118,6 +155,13 @@ impl Workspace {
     pub(in crate::editor) fn effect_number(&self, index: usize, field: usize) -> Option<f32> {
         let shadows = self.common_effects()?;
         let effect = shadows.get(index)?;
+        if matches!(effect, Effect::Glow(_)) {
+            return field_values(effect)
+                .get(field)?
+                .parse()
+                .ok()
+                .filter(|_| field != 4);
+        }
         if let Effect::LayerBlur { radius, .. } | Effect::BackgroundBlur { radius, .. } = effect {
             return (field == 2).then_some(*radius);
         }
@@ -307,6 +351,31 @@ impl Workspace {
             {
                 *radius = value.clamp(0., MAX_RADIUS);
             }
+        } else if let Effect::Glow(g) = &mut effect {
+            if field == 4 {
+                let hex = value.trim().trim_start_matches('#');
+                if hex.len() == 6
+                    && let Ok(value) = u32::from_str_radix(hex, 16)
+                {
+                    let alpha = g.color.a;
+                    g.color = rgb(value);
+                    g.color.a = alpha;
+                }
+            } else if let Ok(value) = value.trim().parse::<f32>()
+                && value.is_finite()
+            {
+                match field {
+                    0 => g.intensity = (value / 100.).clamp(0., 4.),
+                    1 => g.edge_width = value.clamp(0., g.radius),
+                    2 => {
+                        g.radius = value.clamp(0., MAX_RADIUS);
+                        g.edge_width = g.edge_width.min(g.radius);
+                    }
+                    3 => g.threshold = (value / 100.).clamp(0.001, 0.999),
+                    5 => g.color.a = (value / 100.).clamp(0., 1.),
+                    _ => {}
+                }
+            }
         } else if let Some(shadow) = effect.shadow_mut() {
             if field == 4 {
                 let hex = value.trim().trim_start_matches('#');
@@ -346,12 +415,12 @@ impl Workspace {
     fn refresh_effect_fields(&mut self, cx: &mut Context<Self>) {
         let shadows = self.common_effects().unwrap_or_default();
         for (row, effect) in self.inspector.effects.rows.iter_mut().zip(shadows) {
-            if let Some(shadow) = effect.shadow()
-                && row.color != shadow.color
+            if let Some(color) = effect_color(&effect)
+                && row.color != color
             {
-                row.color = shadow.color;
+                row.color = color;
                 row.picker
-                    .update(cx, |picker, cx| picker.set_value(shadow.color, cx));
+                    .update(cx, |picker, cx| picker.set_value(color, cx));
             }
             for (input, value) in row.inputs.iter().zip(field_values(&effect)) {
                 input.update(cx, |input, cx| {
@@ -393,7 +462,7 @@ impl Workspace {
             };
             for (index, effect) in shadows.iter().enumerate() {
                 let kind = Kind::of(effect);
-                let color = effect.shadow().map_or(Shadow::default().color, |s| s.color);
+                let color = effect_color(effect).unwrap_or(Shadow::default().color);
                 let mut subscriptions = Vec::new();
                 let inputs = std::array::from_fn(|field| {
                     let input = cx.new(TextInput::new);
@@ -428,9 +497,9 @@ impl Workspace {
                             |shadows| {
                                 if let Some(effect) = shadows.get_mut(index)
                                     && Kind::of(effect) == kind
-                                    && let Some(s) = effect.shadow_mut()
+                                    && let Some(target) = effect_color_mut(effect)
                                 {
-                                    s.color = color;
+                                    *target = color;
                                 }
                             },
                             cx,
@@ -657,7 +726,18 @@ impl Workspace {
                 ),
                 |el| el.child(self.shadow_input(index, 2, t("effect-blur"), cx)),
             )
-            .when_some(effect.shadow(), |el, shadow| {
+            .when(matches!(effect, Effect::Glow(_)), |el| {
+                el.child(
+                    div()
+                        .flex()
+                        .gap(px(6.))
+                        .child(self.shadow_input(index, 2, t("glow-radius"), cx))
+                        .child(self.shadow_input(index, 1, t("glow-edge"), cx)),
+                )
+                .child(self.shadow_input(index, 0, t("glow-intensity"), cx))
+                .child(self.shadow_input(index, 3, t("glow-threshold"), cx))
+            })
+            .when_some(effect.shadow(), |el, _| {
                 el.child(
                     div()
                         .flex()
@@ -672,7 +752,9 @@ impl Workspace {
                         .child(self.shadow_input(index, 2, t("effect-blur"), cx))
                         .child(self.shadow_input(index, 3, t("effect-spread"), cx)),
                 )
-                .child(
+            })
+            .when_some(effect_color(effect), |el, color| {
+                el.child(
                     div()
                         .flex()
                         .items_center()
@@ -692,7 +774,7 @@ impl Workspace {
                                         .rounded(px(5.))
                                         .border_1()
                                         .border_color(BORDER.color())
-                                        .bg(shadow.color)
+                                        .bg(color)
                                         .cursor_pointer(),
                                 )
                                 .content(move |_, _| {
@@ -751,7 +833,13 @@ impl Workspace {
         div().flex_1().min_w_0().child(
             ContextMenuTrigger::new(trigger, move |_, _| {
                 let mut menu = super::super::context_menu::menu(180., "shadow-kind-menu");
-                for kind in [Kind::Drop, Kind::Inner, Kind::Blur, Kind::Background] {
+                for kind in [
+                    Kind::Drop,
+                    Kind::Inner,
+                    Kind::Blur,
+                    Kind::Background,
+                    Kind::Glow,
+                ] {
                     let label = kind.label();
                     if (kind == Kind::Blur && !blur_supported)
                         || (kind == Kind::Background && !background_supported)
