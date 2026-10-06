@@ -148,75 +148,91 @@ impl Workspace {
             .get(&id)
             .is_some_and(|s| !s.limits.is_empty());
         let expanded = self.auto_layout.limits.expanded;
-        let mut section = div()
-            .flex_shrink_0()
-            .px(px(14.))
-            .py(px(10.))
-            .border_b_1()
-            .border_color(BORDER.color())
-            .flex()
-            .flex_col()
-            .gap(px(8.))
-            .text_size(px(12.))
-            .font_weight(FontWeight::NORMAL)
-            .line_height(px(16.))
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(6.))
-                    .child(
-                        div()
-                            .id("toggle-size-limits")
-                            .debug_selector(|| "toggle-size-limits".into())
-                            .h(px(24.))
-                            .flex_1()
-                            .flex()
-                            .items_center()
-                            .gap(px(8.))
-                            .cursor_pointer()
-                            .text_color(if has_limits {
-                                TEXT.color()
-                            } else {
-                                MUTED.color()
-                            })
-                            .child(icon(
-                                if expanded {
-                                    LucideIcons::ChevronDown
-                                } else {
-                                    LucideIcons::ChevronRight
-                                },
-                                13.,
-                            ))
-                            .child(t("layout-size-limits"))
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.auto_layout.limits.expanded =
-                                    !this.auto_layout.limits.expanded;
-                                cx.notify();
-                            })),
-                    )
-                    .when(has_limits, |el| {
-                        el.child(
+        let section =
+            div()
+                .flex_shrink_0()
+                .px(px(14.))
+                .py(px(10.))
+                .border_b_1()
+                .border_color(BORDER.color())
+                .flex()
+                .flex_col()
+                .text_size(px(12.))
+                .font_weight(FontWeight::NORMAL)
+                .line_height(px(16.))
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(6.))
+                        .child(
                             div()
-                                .id("clear-size-limits")
-                                .size(px(24.))
+                                .id("toggle-size-limits")
+                                .debug_selector(|| "toggle-size-limits".into())
+                                .h(px(24.))
+                                .flex_1()
                                 .flex()
                                 .items_center()
-                                .justify_center()
-                                .rounded(px(5.))
+                                .gap(px(8.))
                                 .cursor_pointer()
-                                .text_color(MUTED.color())
-                                .hover(|s| s.bg(Color::Input.color()))
-                                .child(icon(LucideIcons::Minus, 13.))
-                                .on_click(cx.listener(move |this, _, _, cx| {
-                                    this.set_size_limits(id, Limits::default(), cx)
+                                .text_color(if has_limits {
+                                    TEXT.color()
+                                } else {
+                                    MUTED.color()
+                                })
+                                .child(crate::ui::disclosure_icon(
+                                    format!("size-limits-chevron-{}-{id}", self.pages.active),
+                                    expanded,
+                                    13.,
+                                    TEXT.color(),
+                                ))
+                                .child(t("layout-size-limits"))
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    if let Some(index) =
+                                        this.auto_layout.limits.inputs.iter().position(|input| {
+                                            input.focus_handle(cx).is_focused(window)
+                                        })
+                                    {
+                                        this.apply_size_limit(index, cx);
+                                    }
+                                    this.focus.focus(window, cx);
+                                    this.auto_layout.limits.expanded =
+                                        !this.auto_layout.limits.expanded;
+                                    cx.notify();
                                 })),
                         )
-                    }),
-            );
-        if !expanded {
-            return section;
-        }
+                        .when(has_limits, |el| {
+                            el.child(
+                                div()
+                                    .id("clear-size-limits")
+                                    .size(px(24.))
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .rounded(px(5.))
+                                    .cursor_pointer()
+                                    .text_color(MUTED.color())
+                                    .hover(|s| s.bg(Color::Input.color()))
+                                    .child(icon(LucideIcons::Minus, 13.))
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        this.set_size_limits(id, Limits::default(), cx)
+                                    })),
+                            )
+                        }),
+                );
+        let fields = self.size_limit_fields();
+        section.child(
+            gpui_effects::animated_collapse(
+                format!("size-limits-{}-{id}", self.pages.active),
+                expanded,
+                move || fields,
+            )
+            .duration(crate::ui::DISCLOSURE_DURATION),
+        )
+    }
+
+    fn size_limit_fields(&self) -> Div {
+        let mut section = div().flex().flex_col().gap(px(8.)).pt(px(8.));
         section = section.child(div().flex().gap(px(8.)).pl(px(26.)).children(
             ["layout-minimum", "layout-maximum"].map(|label| {
                 div()

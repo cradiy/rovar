@@ -2,6 +2,129 @@ use super::*;
 use crate::editor::tests::{click, create, draw, open};
 use gpui::{TestAppContext, VisualTestContext};
 
+fn advance_disclosure(visual: &mut VisualTestContext, millis: u64) {
+    visual
+        .cx
+        .executor()
+        .advance_clock(std::time::Duration::from_millis(millis));
+    draw(visual);
+}
+
+#[gpui::test]
+fn effect_disclosure_commits_focus_and_reverses_without_layout_jump(cx: &mut TestAppContext) {
+    let handle = open(cx);
+    let mut visual = VisualTestContext::from_window(handle.into(), cx);
+    visual.simulate_resize(size(px(1280.), px(1600.)));
+    create(&mut visual, "add-rectangle");
+    click(&mut visual, "shadow-add");
+    let full = visual.debug_bounds("export-add").unwrap().top();
+    let field = visual.debug_bounds("shadow-input-0-0").unwrap();
+    visual.simulate_click(
+        point(field.right() - px(20.), field.center().y),
+        Default::default(),
+    );
+    visual.simulate_keystrokes("ctrl-a");
+    visual.simulate_input("27");
+    click(&mut visual, "shadow-edit-0");
+    handle
+        .update(&mut visual.cx, |this, window, _| {
+            assert_eq!(this.effect_number(0, 0), Some(27.));
+            assert!(
+                this.focus.is_focused(window),
+                "closing must release the hidden input's focus"
+            );
+        })
+        .unwrap();
+    assert_eq!(visual.debug_bounds("export-add").unwrap().top(), full);
+    advance_disclosure(&mut visual, 90);
+    let partial = visual.debug_bounds("export-add").unwrap().top();
+    assert!(
+        partial < full,
+        "following sections must move during collapse"
+    );
+    click(&mut visual, "shadow-edit-0");
+    assert_eq!(
+        visual.debug_bounds("export-add").unwrap().top(),
+        partial,
+        "reversing must start at the displayed height"
+    );
+    advance_disclosure(&mut visual, 300);
+    assert_eq!(visual.debug_bounds("export-add").unwrap().top(), full);
+    click(&mut visual, "shadow-color-0");
+    handle
+        .update(&mut visual.cx, |this, window, cx| {
+            assert!(this.inspector.effects.rows[0].popover.read(cx).is_open());
+            this.toggle_effect_details(0, window, cx);
+            assert!(!this.inspector.effects.rows[0].popover.read(cx).is_open());
+        })
+        .unwrap();
+    draw(&mut visual);
+    advance_disclosure(&mut visual, 300);
+    assert!(visual.debug_bounds("shadow-input-0-0").is_none());
+    let closed = visual.debug_bounds("export-add").unwrap().top();
+    assert!(closed < partial);
+    click(&mut visual, "shadow-edit-0");
+    advance_disclosure(&mut visual, 300);
+    input(&mut visual, 0, "31");
+    handle
+        .update(&mut visual.cx, |this, _, _| {
+            assert_eq!(this.effect_number(0, 0), Some(31.))
+        })
+        .unwrap();
+}
+
+#[gpui::test]
+fn size_limit_disclosure_keeps_edits_and_resets_motion_for_new_selection(cx: &mut TestAppContext) {
+    let handle = open(cx);
+    let mut visual = VisualTestContext::from_window(handle.into(), cx);
+    visual.simulate_resize(size(px(1280.), px(1600.)));
+    create(&mut visual, "add-rectangle");
+    let closed = visual.debug_bounds("shadow-add").unwrap().top();
+    click(&mut visual, "toggle-size-limits");
+    advance_disclosure(&mut visual, 90);
+    let partial = visual.debug_bounds("shadow-add").unwrap().top();
+    assert!(partial > closed);
+    advance_disclosure(&mut visual, 300);
+    let full = visual.debug_bounds("shadow-add").unwrap().top();
+    assert!(full > partial);
+    let field = visual.debug_bounds("size-limit-0").unwrap();
+    visual.simulate_click(field.center(), Default::default());
+    visual.simulate_keystrokes("ctrl-a");
+    visual.simulate_input("80");
+    click(&mut visual, "toggle-size-limits");
+    handle
+        .update(&mut visual.cx, |this, window, _| {
+            assert_eq!(this.hierarchy.sizing[&1].limits.min_width, Some(80.));
+            assert!(this.focus.is_focused(window));
+        })
+        .unwrap();
+    advance_disclosure(&mut visual, 90);
+    handle
+        .update(&mut visual.cx, |this, _, cx| {
+            let mut other = this.shapes[0].clone();
+            other.id = 2;
+            other.rect.x += 300.;
+            this.shapes.push(other);
+            this.next_id = 3;
+            this.select_shape(2, cx);
+        })
+        .unwrap();
+    draw(&mut visual);
+    assert!(
+        visual.debug_bounds("size-limit-0").is_none(),
+        "the new selection must not inherit outgoing fields"
+    );
+    handle
+        .update(&mut visual.cx, |this, _, cx| this.select_shape(1, cx))
+        .unwrap();
+    draw(&mut visual);
+    assert!(
+        visual.debug_bounds("size-limit-0").is_some(),
+        "a selection with limits starts fully expanded"
+    );
+    assert_eq!(visual.debug_bounds("shadow-add").unwrap().top(), full);
+}
+
 pub(super) fn input(visual: &mut VisualTestContext, field: usize, value: &str) {
     let bounds = visual
         .debug_bounds(

@@ -522,94 +522,142 @@ impl Workspace {
             )
     }
 
+    fn toggle_effect_details(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
+        let pending = self
+            .inspector
+            .effects
+            .rows
+            .iter()
+            .enumerate()
+            .find_map(|(index, row)| {
+                row.inputs
+                    .iter()
+                    .position(|input| input.focus_handle(cx).is_focused(window))
+                    .map(|field| (index, field))
+            });
+        if let Some((index, field)) = pending {
+            self.apply_effect_field(index, field, cx);
+        }
+        self.close_effect_menus(window, cx);
+        self.focus.focus(window, cx);
+        self.inspector.effects.expanded =
+            (self.inspector.effects.expanded != Some(index)).then_some(index);
+        cx.notify();
+    }
+
     fn effect_row(&self, index: usize, effect: &Effect, cx: &mut Context<Self>) -> Div {
-        let row = &self.inspector.effects.rows[index];
-        let picker = row.picker.clone();
         let expanded = self.inspector.effects.expanded == Some(index);
+        let id = self.inspector.effects.rows[index].inputs[0].entity_id();
+        let details = self.effect_details(index, effect, cx);
         div()
             .flex()
             .flex_col()
-            .gap(px(8.))
+            .child(self.effect_header(index, effect, expanded, cx))
+            .child(
+                gpui_effects::animated_collapse(("effect-details", id), expanded, move || details)
+                    .duration(crate::ui::DISCLOSURE_DURATION),
+            )
+    }
+
+    fn effect_header(
+        &self,
+        index: usize,
+        effect: &Effect,
+        expanded: bool,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        div()
+            .flex()
+            .items_center()
+            .gap(px(4.))
             .child(
                 div()
+                    .id(format!("shadow-edit-{index}"))
+                    .debug_selector(move || format!("shadow-edit-{index}"))
+                    .w(px(26.))
+                    .h(px(30.))
+                    .px(px(6.))
+                    .rounded(px(5.))
+                    .cursor_pointer()
+                    .hover(|s| s.bg(BORDER.color()))
                     .flex()
                     .items_center()
-                    .gap(px(4.))
-                    .child(
-                        div()
-                            .id(format!("shadow-edit-{index}"))
-                            .w(px(26.))
-                            .h(px(30.))
-                            .px(px(6.))
-                            .rounded(px(5.))
-                            .cursor_pointer()
-                            .hover(|s| s.bg(BORDER.color()))
-                            .flex()
-                            .items_center()
-                            .gap(px(8.))
-                            .child(
-                                icon(
-                                    if expanded {
-                                        LucideIcons::ChevronDown
-                                    } else {
-                                        LucideIcons::ChevronRight
-                                    },
-                                    14.,
-                                )
-                                .text_color(MUTED.color()),
-                            )
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                this.inspector.effects.expanded = (!expanded).then_some(index);
-                                cx.notify();
-                            })),
-                    )
-                    .child(self.effect_kind_control(index, effect, cx))
-                    .child(
-                        button(
-                            format!("shadow-toggle-{index}"),
-                            if effect.enabled() {
-                                LucideIcons::Eye
-                            } else {
-                                LucideIcons::EyeOff
-                            },
-                        )
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            this.edit_effects(
-                                None,
-                                |s| {
-                                    if let Some(s) = s.get_mut(index) {
-                                        s.toggle();
-                                    }
-                                },
-                                cx,
-                            )
-                        })),
-                    )
-                    .child(
-                        button(format!("shadow-remove-{index}"), LucideIcons::Minus).on_click(
-                            cx.listener(move |this, _, _, cx| {
-                                this.edit_effects(
-                                    None,
-                                    |s| {
-                                        if index < s.len() {
-                                            s.remove(index);
-                                        }
-                                    },
-                                    cx,
-                                )
-                            }),
+                    .gap(px(8.))
+                    .child(crate::ui::disclosure_icon(
+                        (
+                            "effect-chevron",
+                            self.inspector.effects.rows[index].inputs[0].entity_id(),
                         ),
-                    ),
+                        expanded,
+                        14.,
+                        MUTED.color(),
+                    ))
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        this.toggle_effect_details(index, window, cx)
+                    })),
             )
+            .child(self.effect_kind_control(index, effect, cx))
+            .child(
+                button(
+                    format!("shadow-toggle-{index}"),
+                    if effect.enabled() {
+                        LucideIcons::Eye
+                    } else {
+                        LucideIcons::EyeOff
+                    },
+                )
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.edit_effects(
+                        None,
+                        |s| {
+                            if let Some(s) = s.get_mut(index) {
+                                s.toggle();
+                            }
+                        },
+                        cx,
+                    )
+                })),
+            )
+            .child(
+                button(format!("shadow-remove-{index}"), LucideIcons::Minus).on_click(cx.listener(
+                    move |this, _, _, cx| {
+                        this.edit_effects(
+                            None,
+                            |s| {
+                                if index < s.len() {
+                                    s.remove(index);
+                                }
+                            },
+                            cx,
+                        )
+                    },
+                )),
+            )
+    }
+
+    fn effect_details(
+        &self,
+        index: usize,
+        effect: &Effect,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement + use<> {
+        let row = &self.inspector.effects.rows[index];
+        let picker = row.picker.clone();
+        div()
+            .id("effect-fields")
+            .debug_selector(move || format!("effect-details-{index}"))
+            .pt(px(8.))
+            .flex()
+            .flex_col()
+            .gap(px(8.))
             .when(
-                expanded
-                    && matches!(
-                        effect,
-                        Effect::LayerBlur { .. } | Effect::BackgroundBlur { .. }
-                    ),
+                matches!(
+                    effect,
+                    Effect::LayerBlur { .. } | Effect::BackgroundBlur { .. }
+                ),
                 |el| el.child(self.shadow_input(index, 2, t("effect-blur"), cx)),
             )
-            .when_some(effect.shadow().filter(|_| expanded), |el, shadow| {
+            .when_some(effect.shadow(), |el, shadow| {
                 el.child(
                     div()
                         .flex()
@@ -639,6 +687,7 @@ impl Workspace {
                                 .trigger(
                                     div()
                                         .id(format!("shadow-color-{index}"))
+                                        .debug_selector(move || format!("shadow-color-{index}"))
                                         .size(px(28.))
                                         .rounded(px(5.))
                                         .border_1()
