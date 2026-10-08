@@ -74,6 +74,12 @@ fn playback_toolbar_fits_long_names_and_close_returns_to_editor(cx: &mut TestApp
         let name = visual.debug_bounds("playback-frame-name").unwrap();
         let close = visual.debug_bounds("presentation-close").unwrap();
         let surface = visual.debug_bounds("playback-surface").unwrap();
+        let expected_zoom = ((width - 32.) / 320_f32).min((height - 52. - 32.) / 480_f32);
+        assert!((f32::from(surface.size.height) - 480. * expected_zoom).abs() < 0.1);
+        assert!(
+            (f32::from(surface.center().x) - width / 2.).abs() <= 0.5,
+            "frame: {surface:?}, window width: {width}"
+        );
         assert!(bar.size.height <= px(52.));
         assert!(back.left() >= bar.left() && back.right() <= restart.left());
         assert!(restart.right() <= name.left() && name.right() <= close.left());
@@ -363,6 +369,45 @@ fn hover_navigation_and_unavailable_variant_targets(cx: &mut TestAppContext) {
     assert_frame(&mut visual, second, vec![first]);
     click(&mut visual, "playback-back");
     assert_frame(&mut visual, first, vec![]);
+    // Resizing ends the old hover region using the configured leave behavior.
+    for exit in [HoverExit::Restore, HoverExit::Keep] {
+        handle
+            .update(&mut visual.cx, |w, _, cx| {
+                w.presentation.player.as_ref().unwrap().update(cx, |p, _| {
+                    p.hierarchy
+                        .interactions
+                        .get_mut(&button)
+                        .unwrap()
+                        .hover_exit = exit;
+                });
+            })
+            .unwrap();
+        let surface = visual.debug_bounds("playback-surface").unwrap();
+        let scale = f32::from(surface.size.width) / 320.;
+        let hotspot = surface.origin + point(px(50. * scale), px(40. * scale));
+        visual.simulate_mouse_move(hotspot, None, Default::default());
+        draw(&mut visual);
+        assert_frame(&mut visual, second, vec![first]);
+        let width = if exit == HoverExit::Restore {
+            520.
+        } else {
+            720.
+        };
+        visual.simulate_resize(size(px(width), px(380.)));
+        draw(&mut visual);
+        draw(&mut visual);
+        if exit == HoverExit::Restore {
+            assert_frame(&mut visual, first, vec![]);
+        } else {
+            assert_frame(&mut visual, second, vec![first]);
+        }
+        handle
+            .update(&mut visual.cx, |w, _, cx| {
+                let p = w.presentation.player.as_ref().unwrap().read(cx);
+                assert!(p.presentation.playback.as_ref().unwrap().hover.is_none());
+            })
+            .unwrap();
+    }
 }
 
 #[gpui::test]

@@ -35,6 +35,7 @@ pub(super) struct Playback {
     hover: Option<variants::Hover>,
     initial_page: crate::document::Page,
     stage: Rc<Cell<Bounds<Pixels>>>,
+    window_size: gpui::Size<Pixels>,
 }
 
 impl State {
@@ -109,6 +110,7 @@ impl Workspace {
                 hover: None,
                 initial_page,
                 stage: Rc::new(Cell::new(Bounds::default())),
+                window_size: window.viewport_size(),
             });
             player
         });
@@ -248,6 +250,11 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement + use<> {
+        if self.presentation.playback.as_ref().unwrap().window_size != window.viewport_size() {
+            self.leave_playback_hover(window, cx);
+            self.playback_hover(false, cx);
+            self.presentation.playback.as_mut().unwrap().window_size = window.viewport_size();
+        }
         let playback = self.presentation.playback.as_ref().unwrap();
         let board = self
             .boards
@@ -263,8 +270,7 @@ impl Workspace {
         let stage = playback.stage.clone();
         let available = stage.get().size;
         let zoom = ((f32::from(available.width) - 32.).max(1.) / rect.width.max(1.))
-            .min((f32::from(available.height) - 32.).max(1.) / rect.height.max(1.))
-            .min(1.);
+            .min((f32::from(available.height) - 32.).max(1.) / rect.height.max(1.));
         self.view = Viewport {
             zoom,
             pan: point(-rect.x * zoom, -rect.y * zoom),
