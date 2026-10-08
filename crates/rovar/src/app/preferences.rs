@@ -412,6 +412,19 @@ impl Studio {
                                     ),
                             )
                     })
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(4.))
+                            .child(format!("Rovar {}", env!("CARGO_PKG_VERSION")))
+                            .child(
+                                div()
+                                    .text_size(px(11.))
+                                    .text_color(MUTED.color())
+                                    .child(platform_info()),
+                            ),
+                    )
                     .when_some(panel.error.clone(), |el, error| {
                         el.child(
                             div()
@@ -526,6 +539,15 @@ fn mode_id(mode: TitleBarMode) -> &'static str {
 
 fn mode_label(mode: TitleBarMode) -> &'static str {
     t(mode_id(mode))
+}
+
+fn platform_info() -> String {
+    let platform = if cfg!(target_family = "wasm") {
+        "Web"
+    } else {
+        std::env::consts::OS
+    };
+    format!("{platform} ({})", std::env::consts::ARCH)
 }
 
 #[cfg(test)]

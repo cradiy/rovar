@@ -187,7 +187,8 @@ jobs:
             )
             for asset in "$directory"/*; do
               name=$(basename "$asset")
-              [[ "$name" == SHA256SUMS ]] && continue
+              # Build provenance and packaging reports are CI-only metadata.
+              [[ "$name" == SHA256SUMS || "$name" == *.json ]] && continue
               if [[ ! -f "$asset" || -e "release/$name" ]]; then
                 echo "::error::Unexpected or duplicate release asset: $asset"
                 exit 1
