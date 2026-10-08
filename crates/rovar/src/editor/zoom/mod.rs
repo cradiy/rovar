@@ -102,13 +102,14 @@ impl Workspace {
         collapse: impl IntoElement,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        div()
+        let compact = self.panels.width(panels::Side::Right) < 280.;
+        let row = div()
             .h(px(48.))
-            .px(px(10.))
+            .px(px(8.))
             .flex_shrink_0()
             .flex()
             .items_center()
-            .gap(px(4.))
+            .gap(px(2.))
             .child(
                 div()
                     .id("inspector-modes")
@@ -122,19 +123,79 @@ impl Workspace {
                             .id("inspector-design-tab")
                             .debug_selector(|| "inspector-design-tab".into())
                             .h(px(28.))
-                            .px(px(10.))
+                            .px(px(6.))
+                            .flex_shrink_0()
                             .rounded(px(6.))
-                            .bg(Color::Accent.color().opacity(0.1255))
-                            .text_color(ACCENT.color())
+                            .when(!self.presentation.tab, |el| el.bg(Color::Selected.color()))
+                            .text_color(if self.presentation.tab {
+                                MUTED.color()
+                            } else {
+                                ACCENT.color()
+                            })
+                            .cursor_pointer()
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.set_presentation_tab(false, window, cx)
+                            }))
                             .text_size(px(12.))
                             .font_weight(FontWeight::MEDIUM)
                             .flex()
                             .items_center()
                             .child(t("design")),
+                    )
+                    .child(
+                        div()
+                            .id("inspector-prototype-tab")
+                            .debug_selector(|| "inspector-prototype-tab".into())
+                            .h(px(28.))
+                            .px(px(6.))
+                            .flex_shrink_0()
+                            .rounded(px(6.))
+                            .when(self.presentation.tab, |el| el.bg(Color::Selected.color()))
+                            .text_color(if self.presentation.tab {
+                                ACCENT.color()
+                            } else {
+                                MUTED.color()
+                            })
+                            .text_size(px(12.))
+                            .font_weight(FontWeight::MEDIUM)
+                            .flex()
+                            .items_center()
+                            .cursor_pointer()
+                            .child(t("prototype"))
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.set_presentation_tab(true, window, cx)
+                            })),
                     ),
             )
-            .child(self.zoom_control(cx))
-            .child(collapse)
+            .child(
+                inspector::icon_button("present", t("present"), LucideIcons::Play, false)
+                    .size(px(24.))
+                    .opacity(if self.presentation_start().is_some() {
+                        1.
+                    } else {
+                        0.4
+                    })
+                    .on_click(
+                        cx.listener(|this, _, window, cx| this.start_presentation(window, cx)),
+                    ),
+            )
+            .when(!compact, |el| el.child(self.zoom_control(cx)))
+            .child(collapse);
+        div()
+            .flex()
+            .flex_col()
+            .flex_shrink_0()
+            .child(row)
+            .when(compact, |el| {
+                el.child(
+                    div()
+                        .px(px(8.))
+                        .pb(px(6.))
+                        .flex()
+                        .justify_end()
+                        .child(self.zoom_control(cx)),
+                )
+            })
     }
 
     fn zoom_control(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -154,7 +215,7 @@ impl Workspace {
                     .id("inspector-zoom")
                     .debug_selector(|| "inspector-zoom".into())
                     .h(px(28.))
-                    .px(px(7.))
+                    .px(px(4.))
                     .rounded(px(6.))
                     .text_size(px(12.))
                     .text_color(TEXT.color())

@@ -26,6 +26,7 @@ mod media;
 mod organization;
 mod pages;
 mod panels;
+mod presentation;
 mod preview;
 mod rotation;
 mod selection;
@@ -116,6 +117,7 @@ pub(crate) struct Workspace {
     pub(crate) snapshot_count: Cell<usize>,
     view: Viewport,
     preview: Option<preview::State>,
+    presentation: presentation::State,
     bounds: Rc<Cell<Bounds<Pixels>>>,
     capture: Rc<Cell<Option<HitboxId>>>,
     gesture: Option<Gesture>,

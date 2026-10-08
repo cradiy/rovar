@@ -113,6 +113,7 @@ impl Workspace {
             snapshot_count: Cell::new(0),
             view: Viewport::default(),
             preview: None,
+            presentation: presentation::State::new(window, cx),
             bounds: Rc::new(Cell::new(Bounds::default())),
             capture: Rc::new(Cell::new(None)),
             gesture: None,

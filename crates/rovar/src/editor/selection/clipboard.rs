@@ -9,6 +9,7 @@ struct ObjectClipboard {
     source_page: Option<String>,
     hierarchy: crate::scene::layer::Hierarchy,
     definitions: crate::scene::components::Definitions,
+    component_sets: crate::scene::components::variants::Sets,
     boards: Vec<Artboard>,
     shapes: Vec<Shape>,
     texts: Vec<SavedText>,
@@ -167,6 +168,10 @@ impl Workspace {
         hierarchy.sizing.retain(|id, _| included_ids.contains(id));
         hierarchy.exports.retain(|id, _| included_ids.contains(id));
         hierarchy.effects.retain(|id, _| included_ids.contains(id));
+        hierarchy.start = None;
+        hierarchy
+            .interactions
+            .retain(|id, _| included_ids.contains(id));
         hierarchy
             .components
             .retain(|id, _| included_ids.contains(id));
@@ -183,15 +188,32 @@ impl Workspace {
             .iter()
             .map(|id| (*id, self.layer_parent(*id)))
             .collect();
+        let mut definitions: BTreeSet<_> = hierarchy
+            .components
+            .values()
+            .map(|b| b.component.clone())
+            .collect();
+        let component_sets: crate::scene::components::variants::Sets = self
+            .components
+            .sets
+            .iter()
+            .filter(|(_, set)| set.variants.keys().any(|id| definitions.contains(id)))
+            .map(|(id, set)| (id.clone(), set.clone()))
+            .collect();
+        for set in component_sets.values() {
+            definitions.extend(set.variants.keys().cloned());
+        }
         ObjectClipboard {
+            source_page: Some(self.pages.active.clone()),
             colors: self.colors.palette.clone(),
             definitions: self
                 .components
                 .definitions
                 .iter()
-                .filter(|(id, _)| hierarchy.components.values().any(|b| &b.component == *id))
+                .filter(|(id, _)| definitions.contains(*id))
                 .map(|(id, definition)| (id.clone(), definition.clone()))
                 .collect(),
+            component_sets,
             root_parents,
             hierarchy,
             boards,
@@ -434,7 +456,11 @@ impl Workspace {
             || clipboard
                 .definitions
                 .keys()
-                .any(|id| !self.components.definitions.contains_key(id)))
+                .any(|id| !self.components.definitions.contains_key(id))
+            || clipboard
+                .component_sets
+                .keys()
+                .any(|id| !self.components.sets.contains_key(id)))
         .then(|| self.page_edit(std::slice::from_ref(&self.pages.active), cx));
         let same_document = clipboard
             .source
@@ -442,6 +468,9 @@ impl Workspace {
         self.import_clipboard_colors(&mut clipboard, same_document);
         for (id, definition) in clipboard.definitions {
             self.components.definitions.entry(id).or_insert(definition);
+        }
+        for (id, set) in clipboard.component_sets {
+            self.components.sets.entry(id).or_insert(set);
         }
         let mut id_map = BTreeMap::new();
         // Preserve the relative stacking of mixed text and shape objects.
@@ -544,6 +573,19 @@ impl Workspace {
         }
         for (id, effects) in clipboard.hierarchy.effects {
             self.hierarchy.effects.insert(id_map[&id], effects);
+        }
+        for (id, action) in clipboard.hierarchy.interactions {
+            let action = action.remap(|target| {
+                id_map.get(&target).copied().or_else(|| {
+                    (same_document
+                        && clipboard.source_page.as_deref() == Some(&self.pages.active)
+                        && self.boards.iter().any(|b| b.id == target))
+                    .then_some(target)
+                })
+            });
+            if let Some(action) = action {
+                self.hierarchy.interactions.insert(id_map[&id], action);
+            }
         }
         for (root, mut link) in clipboard.hierarchy.components {
             for id in link.nodes.values_mut() {

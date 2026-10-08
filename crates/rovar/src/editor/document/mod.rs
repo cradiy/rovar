@@ -157,6 +157,9 @@ impl Workspace {
         self.close_effect_menus(window, cx);
     }
     pub(crate) fn can_undo_redo(&self, redo: bool) -> bool {
+        if self.preview_read_only() {
+            return false;
+        }
         if let Some(draft) = &self.bezier_draft {
             return draft.can_replay(redo);
         }
@@ -167,6 +170,9 @@ impl Workspace {
         }
     }
     pub(crate) fn undo_redo(&mut self, redo: bool, window: &mut Window, cx: &mut Context<Self>) {
+        if self.preview_read_only() {
+            return;
+        }
         self.replay_history(redo, window, cx);
     }
     pub(crate) fn refresh_language(&mut self, old_mixed: &str, cx: &mut Context<Self>) {
@@ -281,6 +287,7 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> String {
+        self.presentation.player = None;
         self.colors.palette = document.colors;
         self.components.definitions = document.components;
         self.components.sets = document.component_sets;

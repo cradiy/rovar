@@ -5,6 +5,12 @@ use super::*;
 impl Render for Workspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         crate::ui::theme::activate(window, cx);
+        if self.presentation.player.is_some() {
+            return self.presentation_view(cx).into_any_element();
+        }
+        if self.presentation.playback.is_some() {
+            return self.playback_view(window, cx).into_any_element();
+        }
         if self.inspector.theme_dark != crate::ui::theme::is_dark() {
             self.inspector.theme_dark = crate::ui::theme::is_dark();
             self.inspector.fields[0].update(cx, |input, cx| {
@@ -161,6 +167,7 @@ impl Render for Workspace {
                     matches!(
                         g.kind,
                         GestureKind::LayerSort
+                            | GestureKind::PrototypeConnection
                             | GestureKind::CornerRadius
                             | GestureKind::SelectionResize { .. }
                             | GestureKind::Spacing { .. }

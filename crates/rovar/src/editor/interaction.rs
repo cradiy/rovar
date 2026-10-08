@@ -19,6 +19,7 @@ pub(super) enum GestureKind {
         original: f32,
     },
     LayerSort,
+    PrototypeConnection,
     Marquee,
     SelectionMove,
     CornerRadius,
@@ -138,6 +139,7 @@ impl Workspace {
                 }
             }
             GestureKind::Rotate { .. } => gpui::CursorStyle::Crosshair,
+            GestureKind::PrototypeConnection => gpui::CursorStyle::Crosshair,
             GestureKind::LayerSort => gpui::CursorStyle::ClosedHand,
             GestureKind::CornerRadius => gpui::CursorStyle::ClosedHand,
             GestureKind::ImageCrop { .. } => gpui::CursorStyle::ClosedHand,
@@ -262,6 +264,7 @@ impl Workspace {
                 self.move_rotation(id, original, gesture.start, position, shift, cx)
             }
             GestureKind::LayerSort => self.move_layer_sort(position),
+            GestureKind::PrototypeConnection => self.move_connection(position),
             GestureKind::Marquee => self.move_marquee(position, cx),
             GestureKind::SelectionMove => self.move_selection(snapped),
             GestureKind::CornerRadius => self.move_corner_radius(delta / self.view.zoom, cx),
@@ -424,6 +427,7 @@ impl Workspace {
                     }
                 }
                 GestureKind::LayerSort => self.layer_drag = None,
+                GestureKind::PrototypeConnection => self.cancel_connection(),
                 GestureKind::Marquee => {
                     if let Some(m) = self.marquee.take() {
                         self.set_selection(m.initial, cx);

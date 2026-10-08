@@ -82,6 +82,16 @@ impl Workspace {
         if collapsed {
             return surface.p(px(8.)).child(toggle).into_any_element();
         }
+        if self.presentation.tab {
+            return surface
+                .bottom(px(panels::PANEL_BOTTOM))
+                .w(px(self.panels.width(panels::Side::Right)))
+                .flex()
+                .flex_col()
+                .child(self.inspector_modes(toggle, cx))
+                .child(self.presentation_controls(cx))
+                .into_any_element();
+        }
         surface
             .bottom(px(panels::PANEL_BOTTOM))
             .w(px(self.panels.width(panels::Side::Right)))

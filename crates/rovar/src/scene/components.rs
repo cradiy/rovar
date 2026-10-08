@@ -201,6 +201,7 @@ pub(crate) fn extract(page: &Page, root: usize) -> anyhow::Result<Page> {
     }
     out.hierarchy.exports.retain(|id, _| included.contains(id));
     out.hierarchy.effects.retain(|id, _| included.contains(id));
+    out.hierarchy.retain_interactions(&included);
     out.hierarchy.order.retain(|id| included.contains(id));
     out.hierarchy.components.clear();
     out.assets.retain(|a| included.contains(&a.object));
@@ -300,6 +301,21 @@ pub(crate) fn place(
         .order
         .iter()
         .map(|id| nodes[id])
+        .collect();
+    out.hierarchy.start = template
+        .hierarchy
+        .start
+        .and_then(|id| nodes.get(&id).copied());
+    out.hierarchy.interactions = template
+        .hierarchy
+        .interactions
+        .iter()
+        .filter_map(|(id, action)| {
+            Some((
+                *nodes.get(id)?,
+                action.remap(|target| nodes.get(&target).copied())?,
+            ))
+        })
         .collect();
     out.hierarchy.components.clear();
     for a in &mut out.assets {
@@ -477,7 +493,16 @@ pub(crate) fn synchronize(pages: &mut [Page], definitions: &mut Definitions) -> 
                     else { page.hierarchy.$field.insert(id,serde_json::from_value(value)?); }
                 }
             })*}; }
-            maps!(groups, parents, names, layouts, sizing, exports, effects);
+            maps!(
+                groups,
+                parents,
+                names,
+                layouts,
+                sizing,
+                exports,
+                effects,
+                interactions
+            );
             // A geometry update can invalidate a locally overridden backdrop.
             // Keep the instance serializable when a primitive becomes a path.
             for shape in page.shapes.iter().filter(|s| {
@@ -527,6 +552,7 @@ pub(crate) fn synchronize(pages: &mut [Page], definitions: &mut Definitions) -> 
             page.hierarchy.sizing.retain(|id, _| live.contains(id));
             page.hierarchy.exports.retain(|id, _| live.contains(id));
             page.hierarchy.effects.retain(|id, _| live.contains(id));
+            page.hierarchy.retain_interactions(&live);
             page.assets.retain(|a| live.contains(&a.object));
             for a in &page.assets {
                 let asset = media.get(&a.hash).cloned();

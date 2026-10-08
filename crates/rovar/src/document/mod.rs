@@ -348,6 +348,21 @@ impl Page {
             }
         }
         let boards: BTreeSet<_> = self.boards.iter().map(|b| b.id).collect();
+        ensure!(
+            self.hierarchy.start.is_none_or(|id| boards.contains(&id)),
+            "Invalid starting frame"
+        );
+        for (id, interaction) in &self.hierarchy.interactions {
+            ensure!(ids.contains(id), "Invalid interaction source");
+            for action in [interaction.click, interaction.hover].into_iter().flatten() {
+                ensure!(
+                    action
+                        .remap(|target| boards.contains(&target).then_some(target))
+                        .is_some(),
+                    "Invalid interaction target"
+                );
+            }
+        }
         for board in self
             .shapes
             .iter()

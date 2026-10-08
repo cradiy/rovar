@@ -36,7 +36,9 @@ impl Workspace {
     }
 
     pub(super) fn preview_read_only(&self) -> bool {
-        self.preview.as_ref().is_some_and(|state| !state.editable)
+        self.presentation.player.is_some()
+            || self.presentation.playback.is_some()
+            || self.preview.as_ref().is_some_and(|state| !state.editable)
     }
 
     pub(crate) fn preview_page(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {

@@ -102,8 +102,14 @@ fn fit_content_accounts_for_panels_rotation_and_hidden_layers(cx: &mut TestAppCo
         let tab = visual.debug_bounds("inspector-design-tab").unwrap();
         let zoom = visual.debug_bounds("inspector-zoom").unwrap();
         let toggle = visual.debug_bounds("toggle-properties").unwrap();
-        assert!(tab.right() <= zoom.left());
-        assert!(zoom.right() <= toggle.left());
+        if tab.top() == zoom.top() {
+            assert!(tab.right() <= zoom.left());
+            assert!(zoom.right() <= toggle.left());
+        } else {
+            assert!(zoom.top() >= tab.bottom().max(toggle.bottom()));
+            let panel = visual.debug_bounds("properties-panel").unwrap();
+            assert!(zoom.left() >= panel.left() && zoom.right() <= panel.right());
+        }
         click(&mut visual, "inspector-zoom");
         click(&mut visual, "zoom-fit");
         window

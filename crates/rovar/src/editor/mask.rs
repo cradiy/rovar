@@ -10,6 +10,9 @@ mod tests;
 
 impl Workspace {
     pub(super) fn mask_overlay(&self, id: usize, element: impl IntoElement) -> gpui::AnyElement {
+        if self.presentation.playback.is_some() {
+            return div().into_any_element();
+        }
         // A later blended layer can capture any preceding artwork. Keep editor
         // controls outside those captures, including controls on other layers.
         let blending = self

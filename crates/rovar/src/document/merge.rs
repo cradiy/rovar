@@ -153,6 +153,13 @@ fn align(page: &mut Page, handles: &BTreeMap<uuid::Uuid, usize>) -> Result<()> {
         }
     }
     let h = &mut page.hierarchy;
+    h.start = h.start.map(id).transpose()?;
+    for action in h.interactions.values_mut() {
+        *action = action
+            .remap(|target| mapping.get(&target).copied())
+            .context("Unresolved navigation target")?;
+    }
+    remap(&mut h.interactions, &mapping)?;
     remap(&mut h.groups, &mapping)?;
     remap(&mut h.parents, &mapping)?;
     remap(&mut h.names, &mapping)?;
@@ -221,7 +228,14 @@ fn canonical(document: Document) -> Result<Value> {
             );
         }
         page["assets"] = assets.into();
-        for field in ["exports", "layouts", "sizing", "components", "effects"] {
+        for field in [
+            "exports",
+            "layouts",
+            "sizing",
+            "components",
+            "effects",
+            "interactions",
+        ] {
             if page["hierarchy"].get(field).is_none() {
                 page["hierarchy"][field] = Value::Object(Map::new());
             }

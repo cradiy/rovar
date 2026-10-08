@@ -129,7 +129,12 @@ impl Workspace {
             rect.height += margin * 2.;
             crate::scene::rotation::intersects(rect, rotation, viewport)
         };
-        let order = self.canvas_layer_order();
+        let mut order = self.canvas_layer_order();
+        if let Some(playback) = &self.presentation.playback {
+            order.retain(|id| {
+                *id == playback.current || self.ancestors(*id).contains(&playback.current)
+            });
+        }
         let included = order.iter().copied().collect();
         let masks = crate::scene::mask::outlines(
             &self.hierarchy,

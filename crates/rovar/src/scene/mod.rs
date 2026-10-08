@@ -13,6 +13,7 @@ pub(crate) mod image_fill;
 pub(crate) mod layer;
 pub(crate) mod mask;
 pub(crate) mod point_gradient;
+pub(crate) mod presentation;
 pub(crate) mod property;
 pub(crate) mod rotation;
 pub(crate) mod shape;

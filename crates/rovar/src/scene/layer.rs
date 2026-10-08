@@ -53,6 +53,10 @@ pub(crate) struct LayerGroup {
 /// Group membership is independent of the board coordinate system.
 #[derive(Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub(crate) struct Hierarchy {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start: Option<usize>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub interactions: std::collections::BTreeMap<usize, super::presentation::Interaction>,
     #[serde(
         default,
         alias = "shadows",
@@ -73,4 +77,19 @@ pub(crate) struct Hierarchy {
     pub names: std::collections::BTreeMap<usize, String>,
     /// Bottom to top; newly created objects not in this list sort above it.
     pub order: Vec<usize>,
+}
+
+impl Hierarchy {
+    pub fn retain_interactions(&mut self, ids: &std::collections::BTreeSet<usize>) {
+        self.start = self.start.filter(|id| ids.contains(id));
+        self.interactions.retain(|id, interaction| {
+            if let Some(value) = interaction.remap(|target| ids.contains(&target).then_some(target))
+            {
+                *interaction = value;
+                ids.contains(id)
+            } else {
+                false
+            }
+        });
+    }
 }

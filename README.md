@@ -32,6 +32,7 @@ I want to build a beautiful, cross-platform UI design tool that is easy for AI a
 - **Contour glow** — colored light around frame, shape, text, and image outlines, including holes, with adjustable radius, edge width, intensity, and alpha threshold. PNG follows the export scale; SVG embeds the light at 1× and retains the vector artwork.
 - **Background blur** — blur behind frames, rectangles, ellipses, and images, clipped to their rotated outlines and rounded corners. PNG follows the export scale; SVG embeds the blurred background at 1× while retaining vector foregrounds. Converting a primitive to a path removes its background blur; undo restores both.
 - **Images and video** — media import, image fills, non-destructive cropping, and video playback.
+- **Interactive preview** — connect layers to frames or component variants on canvas, with independent click and hover actions for each variant. Playback supports frame navigation, going back, and switching individual instances without changing the document.
 - **Local and self-hosted workspaces** — personal and team spaces, document and library synchronization, and version-conflict comparison.
 - **Export** — `.rovar` documents, PNG, and SVG.
 - **Desktop and Web** — a shared GPUI interface, English and Simplified Chinese; Web support is experimental.
@@ -40,12 +41,14 @@ I want to build a beautiful, cross-platform UI design tool that is easy for AI a
 
 - [ ] **Visual effects** — glass and mixed effect stacks.
 - [ ] **Animation** — keyframes, easing, animated gradients, and layer effects.
-- [ ] **Interactive presentations** — event triggers, screen navigation, overlays, scrollable areas, state switching, and transitions.
+- [ ] **Advanced interactions** — additional triggers, overlays, scrollable areas, and transitions.
 - [ ] **Presentation sharing** — standalone playback and browser sharing through a self-hosted server.
 - [ ] **AI-assisted design** — natural-language generation, selection editing, layout refinement, and previews of editable results.
 - [ ] **GPUI DSL export** — layouts, styles, components, and assets for GPUI applications.
 
 ## Run
+
+Open **Prototype** in the right panel, choose a starting frame, and select a layer. Choose **On click** or **On hover**, then drag its connection handle to a frame or another main variant in the same component set. You can also choose the destination or **Go back** from the panel; choose **No action** to remove the selected trigger's action. Each variant has its own interactions. Press **Present** beside the inspector tabs to play; press **Esc** to return to editing.
 
 ```sh
 cargo run --locked -p rovar

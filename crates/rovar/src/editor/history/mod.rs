@@ -118,6 +118,10 @@ impl Workspace {
         self.snapping.clear();
         if let Some(gesture) = self.gesture.take() {
             let change = match gesture.kind {
+                GestureKind::PrototypeConnection => {
+                    self.finish_connection(window, cx);
+                    None
+                }
                 GestureKind::Rotate { id, original } => {
                     self.layer_info(id).and_then(|(mut layer, _)| {
                         if layer.rotation == original {
