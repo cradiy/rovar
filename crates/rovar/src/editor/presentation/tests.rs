@@ -51,6 +51,64 @@ fn setup(
 }
 
 #[gpui::test]
+fn playback_toolbar_fits_long_names_and_close_returns_to_editor(cx: &mut TestAppContext) {
+    let handle = open(cx);
+    let saved = handle
+        .update(cx, |w, window, cx| {
+            let (_, _, button) = setup(w, window, cx);
+            w.boards[0].name = "A long frame title ".repeat(30);
+            w.set_selection(BTreeSet::from([button]), cx);
+            let saved = (w.view, w.selection_ids(), w.document_revision());
+            w.start_presentation(window, cx);
+            saved
+        })
+        .unwrap();
+    let mut visual = VisualTestContext::from_window(handle.into(), cx);
+    for (width, height) in [(1280., 800.), (320., 400.), (520., 380.)] {
+        visual.simulate_resize(size(px(width), px(height)));
+        draw(&mut visual);
+        draw(&mut visual);
+        let bar = visual.debug_bounds("playback-toolbar").unwrap();
+        let back = visual.debug_bounds("playback-back").unwrap();
+        let restart = visual.debug_bounds("playback-restart").unwrap();
+        let name = visual.debug_bounds("playback-frame-name").unwrap();
+        let close = visual.debug_bounds("presentation-close").unwrap();
+        let surface = visual.debug_bounds("playback-surface").unwrap();
+        assert!(bar.size.height <= px(52.));
+        assert!(back.left() >= bar.left() && back.right() <= restart.left());
+        assert!(restart.right() <= name.left() && name.right() <= close.left());
+        assert!(close.right() <= bar.right());
+        assert_eq!(back.top(), close.top());
+        assert!(surface.top() >= bar.bottom() && surface.bottom() <= px(height));
+    }
+    click(&mut visual, "playback-back");
+    handle
+        .update(&mut visual.cx, |w, _, cx| {
+            assert!(
+                w.presentation
+                    .player
+                    .as_ref()
+                    .unwrap()
+                    .read(cx)
+                    .presentation
+                    .playback
+                    .as_ref()
+                    .unwrap()
+                    .history
+                    .is_empty()
+            );
+        })
+        .unwrap();
+    click(&mut visual, "presentation-close");
+    handle
+        .update(&mut visual.cx, |w, _, _| {
+            assert!(w.presentation.player.is_none());
+            assert_eq!((w.view, w.selection_ids(), w.document_revision()), saved);
+        })
+        .unwrap();
+}
+
+#[gpui::test]
 fn navigation_persists_and_delete_undo_restores_references(cx: &mut TestAppContext) {
     let handle = open(cx);
     handle

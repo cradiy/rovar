@@ -8,6 +8,7 @@ use crate::{
 };
 use std::collections::BTreeSet;
 use uic::components::dropdown::DropdownState;
+mod chrome;
 mod connections;
 mod controls;
 mod hover_exit;
@@ -25,6 +26,7 @@ pub(super) struct State {
 }
 
 pub(super) struct Playback {
+    owner: gpui::WeakEntity<Workspace>,
     pub current: usize,
     start: usize,
     history: Vec<usize>,
@@ -87,6 +89,7 @@ impl Workspace {
         let initial_page = page.clone();
         let definitions = self.components.definitions.clone();
         let sets = self.components.sets.clone();
+        let owner = cx.entity().downgrade();
         let player = cx.new(|cx| {
             let mut player = Workspace::new(window, cx);
             player.load_page(page, window, cx);
@@ -97,6 +100,7 @@ impl Workspace {
                 text.editor.update(cx, |editor, _| editor.editing = false);
             }
             player.presentation.playback = Some(Playback {
+                owner,
                 current: start,
                 start,
                 history: Vec::new(),
@@ -137,31 +141,6 @@ impl Workspace {
                 cx.stop_propagation();
                 window.prevent_default();
             }))
-            .child(
-                div()
-                    .h(px(40.))
-                    .flex_shrink_0()
-                    .px(px(12.))
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .bg(PANEL.color())
-                    .border_b_1()
-                    .border_color(BORDER.color())
-                    .text_size(px(12.))
-                    .child(t("present"))
-                    .child(
-                        inspector::icon_button(
-                            "presentation-close",
-                            t("close"),
-                            LucideIcons::X,
-                            false,
-                        )
-                        .on_click(
-                            cx.listener(|this, _, window, cx| this.stop_presentation(window, cx)),
-                        ),
-                    ),
-            )
             .child(self.presentation.player.as_ref().unwrap().clone())
     }
 
@@ -276,8 +255,6 @@ impl Workspace {
             .find(|b| b.id == playback.current)
             .unwrap();
         let rect = board.rect;
-        let name = board.name.clone();
-        let can_back = !playback.history.is_empty();
         let cursor = if playback.hotspot_hovered {
             gpui::CursorStyle::PointingHand
         } else {
@@ -334,60 +311,7 @@ impl Workspace {
             .w_full()
             .flex()
             .flex_col()
-            .child(
-                div()
-                    .h(px(36.))
-                    .flex_shrink_0()
-                    .px(px(12.))
-                    .flex()
-                    .items_center()
-                    .gap(px(8.))
-                    .child(
-                        inspector::icon_button(
-                            "playback-back",
-                            t("prototype-back"),
-                            LucideIcons::ArrowLeft,
-                            false,
-                        )
-                        .opacity(if can_back { 1. } else { 0.4 })
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            this.commit_playback_hover();
-                            this.playback_action(Action::Back, cx)
-                        })),
-                    )
-                    .child(
-                        inspector::icon_button(
-                            "playback-restart",
-                            t("prototype-restart"),
-                            LucideIcons::RotateCcw,
-                            false,
-                        )
-                        .on_click(cx.listener(|this, _, window, cx| {
-                            let page = this
-                                .presentation
-                                .playback
-                                .as_ref()
-                                .unwrap()
-                                .initial_page
-                                .clone();
-                            this.load_page(page, window, cx);
-                            let p = this.presentation.playback.as_mut().unwrap();
-                            p.current = p.start;
-                            p.history.clear();
-                            p.hotspot_hovered = false;
-                            p.entered = None;
-                            p.hover = None;
-                            this.pause_videos(cx);
-                            cx.notify();
-                        })),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(12.))
-                            .text_color(MUTED.color())
-                            .child(name),
-                    ),
-            )
+            .child(self.playback_toolbar(cx))
             .child(
                 div()
                     .relative()
