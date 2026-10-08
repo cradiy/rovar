@@ -26,11 +26,30 @@ impl Action {
 }
 
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub(crate) enum HoverExit {
+    #[default]
+    Restore,
+    Keep,
+    ChangeVariant {
+        target: uuid::Uuid,
+    },
+}
+
+impl HoverExit {
+    pub fn is_default(&self) -> bool {
+        *self == Self::Restore
+    }
+}
+
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub(crate) struct Interaction {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub click: Option<Action>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hover: Option<Action>,
+    #[serde(default, skip_serializing_if = "HoverExit::is_default")]
+    pub hover_exit: HoverExit,
 }
 
 impl Interaction {
@@ -53,6 +72,7 @@ impl Interaction {
         let value = Self {
             click: self.click.and_then(|a| a.remap(&mut map)),
             hover: self.hover.and_then(|a| a.remap(&mut map)),
+            hover_exit: self.hover_exit,
         };
         (!value.is_empty()).then_some(value)
     }

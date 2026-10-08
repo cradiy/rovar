@@ -32,7 +32,7 @@ I want to build a beautiful, cross-platform UI design tool that is easy for AI a
 - **Contour glow** — colored light around frame, shape, text, and image outlines, including holes, with adjustable radius, edge width, intensity, and alpha threshold. PNG follows the export scale; SVG embeds the light at 1× and retains the vector artwork.
 - **Background blur** — blur behind frames, rectangles, ellipses, and images, clipped to their rotated outlines and rounded corners. PNG follows the export scale; SVG embeds the blurred background at 1× while retaining vector foregrounds. Converting a primitive to a path removes its background blur; undo restores both.
 - **Images and video** — media import, image fills, non-destructive cropping, and video playback.
-- **Interactive preview** — connect layers to frames or component variants on canvas, with independent click and hover actions for each variant. Playback supports frame navigation, going back, and switching individual instances without changing the document.
+- **Interactive preview** — connect layers to frames or component variants on canvas, with independent click and hover actions for each variant. Playback supports frame navigation, going back, and switching individual instances without changing the document. Leaving a hovered element can restore the previous frame and variant state, keep the current state, or switch to an existing component variant.
 - **Local and self-hosted workspaces** — personal and team spaces, document and library synchronization, and version-conflict comparison.
 - **Export** — `.rovar` documents, PNG, and SVG.
 - **Desktop and Web** — a shared GPUI interface, English and Simplified Chinese; Web support is experimental.

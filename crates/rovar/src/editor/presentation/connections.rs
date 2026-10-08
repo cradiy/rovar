@@ -147,6 +147,7 @@ impl Workspace {
                 continue;
             };
             let from = port(rect);
+            let paired = interaction.click.is_some() && interaction.hover.is_some();
             for trigger in [Trigger::Click, Trigger::Hover] {
                 let Some(action) = interaction.get(trigger) else {
                     continue;
@@ -162,7 +163,13 @@ impl Workspace {
                 let (to, direction) = self
                     .connection_end(action)
                     .map_or((from + point(64., -32.), -1.), |r| end_point(from, r));
-                wires.push((from, to, direction, trigger, selected.contains(source)));
+                let active = selected.contains(source) && self.presentation.trigger == trigger;
+                let offset = if paired {
+                    if trigger == Trigger::Click { -24. } else { 24. }
+                } else {
+                    0.
+                };
+                wires.push((from, to, direction, trigger, active, offset));
             }
         }
         if let Some(c) = &self.presentation.connection
@@ -173,7 +180,7 @@ impl Workspace {
                 .target
                 .and_then(|(id, _)| self.world_bounds(id))
                 .map_or((screen(c.end), -1.), |r| end_point(from, r));
-            wires.push((from, to, direction, c.trigger, true));
+            wires.push((from, to, direction, c.trigger, true, 0.));
         }
         let line_count = wires.len();
         let mut overlay = div()
@@ -184,16 +191,19 @@ impl Workspace {
                 canvas(
                     |_, _, _| (),
                     move |bounds, _, window, _| {
-                        for (from, to, direction, trigger, active) in &wires {
+                        for (from, to, direction, trigger, active, offset) in &wires {
                             let from = from.map(px) + bounds.origin;
                             let to = to.map(px) + bounds.origin;
                             let bend = ((to.x - from.x).abs() * 0.5).clamp(px(40.), px(160.));
                             let mut line = PathBuilder::stroke(px(if *active { 2. } else { 1.5 }));
+                            if *trigger == Trigger::Hover {
+                                line = line.dash_array(&[px(5.), px(4.)]);
+                            }
                             line.move_to(from);
                             line.cubic_bezier_to(
                                 to,
-                                from + point(bend, px(0.)),
-                                to + point(bend * *direction, px(0.)),
+                                from + point(bend, px(*offset)),
+                                to + point(bend * *direction, px(*offset)),
                             );
                             line.move_to(to + point(px(7. * *direction), px(-4.)));
                             line.line_to(to);

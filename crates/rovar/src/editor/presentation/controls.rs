@@ -85,6 +85,13 @@ impl Workspace {
                     .child(self.presentation_menu(None, cx)),
             );
         if let Some(id) = selected {
+            let trigger = self.presentation.trigger;
+            let connected = self
+                .hierarchy
+                .interactions
+                .get(&id)
+                .and_then(|i| i.get(trigger))
+                .is_some();
             section =
                 section.child(
                     inspector::inspector_section(t("prototype-interaction"))
@@ -112,6 +119,7 @@ impl Workspace {
                                     .flex()
                                     .items_center()
                                     .justify_center()
+                                    .gap(px(6.))
                                     .cursor_pointer()
                                     .bg(if self.presentation.trigger == trigger {
                                         Color::Selected.color()
@@ -119,6 +127,21 @@ impl Workspace {
                                         Color::Input.color()
                                     })
                                     .child(t(key))
+                                    .when(
+                                        self.hierarchy
+                                            .interactions
+                                            .get(&id)
+                                            .and_then(|i| i.get(trigger))
+                                            .is_some(),
+                                        |el| {
+                                            el.child(
+                                                div()
+                                                    .size(px(5.))
+                                                    .rounded_full()
+                                                    .bg(ACCENT.color()),
+                                            )
+                                        },
+                                    )
                                     .on_click(cx.listener(move |this, _, window, cx| {
                                         this.cancel_gesture(window, cx);
                                         this.presentation.trigger = trigger;
@@ -126,7 +149,45 @@ impl Workspace {
                                     }))
                             }),
                         ))
-                        .child(self.presentation_menu(Some(id), cx)),
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap(px(4.))
+                                .child(
+                                    div()
+                                        .flex_1()
+                                        .min_w_0()
+                                        .child(self.presentation_menu(Some(id), cx)),
+                                )
+                                .when(connected, |row| {
+                                    row.child(
+                                        inspector::icon_button(
+                                            "prototype-disconnect",
+                                            t("prototype-disconnect"),
+                                            LucideIcons::Unlink,
+                                            false,
+                                        )
+                                        .on_click(
+                                            cx.listener(move |this, _, window, cx| {
+                                                this.set_prototype_action(
+                                                    id, trigger, None, window, cx,
+                                                );
+                                            }),
+                                        ),
+                                    )
+                                }),
+                        )
+                        .when(
+                            trigger == Trigger::Hover
+                                && self
+                                    .hierarchy
+                                    .interactions
+                                    .get(&id)
+                                    .and_then(|i| i.hover)
+                                    .is_some(),
+                            |el| el.child(self.hover_exit_controls(id, cx)),
+                        ),
                 );
         } else {
             section = section.child(

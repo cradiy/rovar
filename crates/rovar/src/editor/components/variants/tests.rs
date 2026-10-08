@@ -41,6 +41,23 @@ fn prototype_wire_to_main_variant_creates_state_change(cx: &mut TestAppContext) 
     visual.simulate_mouse_move(end, Some(MouseButton::Left), Default::default());
     visual.simulate_mouse_up(end, MouseButton::Left, Default::default());
     draw(&mut visual);
+    click(&mut visual, "prototype-hover-exit-menu");
+    click(&mut visual, "prototype-exit-option-1");
+    handle
+        .update(&mut visual.cx, |w, window, cx| {
+            use crate::scene::presentation::HoverExit;
+            assert_eq!(w.hierarchy.interactions[&1].hover_exit, HoverExit::Keep);
+            let page = w.snapshot_page(cx).0;
+            let decoded =
+                crate::document::Page::decode(&serde_json::to_vec(&page).unwrap()).unwrap();
+            assert_eq!(
+                decoded.hierarchy.interactions[&1].hover_exit,
+                HoverExit::Keep
+            );
+            w.undo_redo(false, window, cx);
+            assert_eq!(w.hierarchy.interactions[&1].hover_exit, HoverExit::Restore);
+        })
+        .unwrap();
     handle
         .update(&mut visual.cx, |w, window, cx| {
             assert_eq!(
@@ -59,9 +76,9 @@ fn prototype_wire_to_main_variant_creates_state_change(cx: &mut TestAppContext) 
 
 #[gpui::test]
 fn prototype_variants_are_independent_and_playback_is_temporary(cx: &mut TestAppContext) {
-    use crate::scene::presentation::{Action, Trigger};
+    use crate::scene::presentation::{Action, HoverExit, Trigger};
     let handle = open(cx);
-    let (first, second, instance, other, saved) = handle
+    let (first, second, third, instance, other, saved) = handle
         .update(cx, |w, window, cx| {
             w.add_artboard(
                 Rect {
@@ -91,6 +108,8 @@ fn prototype_variants_are_independent_and_playback_is_temporary(cx: &mut TestApp
             w.add_variant(window, cx);
             let (second_master, binding) = w.selected_component().unwrap();
             let second = binding.component;
+            w.add_variant(window, cx);
+            let third = w.selected_component().unwrap().1.component;
             w.set_prototype_action(
                 master,
                 Trigger::Hover,
@@ -129,7 +148,7 @@ fn prototype_variants_are_independent_and_playback_is_temporary(cx: &mut TestApp
             Document::decode(&json).unwrap();
             let saved = serde_json::to_value(w.snapshot_page(cx).0).unwrap();
             w.start_presentation(window, cx);
-            (first, second, instances[0], instances[1], saved)
+            (first, second, third, instances[0], instances[1], saved)
         })
         .unwrap();
     // A copied instance carries the destination variant and its component set.
@@ -153,11 +172,18 @@ fn prototype_variants_are_independent_and_playback_is_temporary(cx: &mut TestApp
     let scale = f32::from(surface.size.width) / 400.;
     let hotspot = surface.origin + point(px(90. * scale), px(70. * scale));
     let blank = surface.origin + point(px(180. * scale), px(200. * scale));
+    let step = std::cell::Cell::new(0);
     let assert_variant = |visual: &mut VisualTestContext, expected: &str| {
+        step.set(step.get() + 1);
         handle
             .update(&mut visual.cx, |w, _, cx| {
                 let p = w.presentation.player.as_ref().unwrap().read(cx);
-                assert_eq!(p.hierarchy.components[&instance].component, expected);
+                assert_eq!(
+                    p.hierarchy.components[&instance].component,
+                    expected,
+                    "playback step {}",
+                    step.get()
+                );
                 assert_eq!(p.hierarchy.components[&other].component, first);
                 assert_eq!(serde_json::to_value(w.snapshot_page(cx).0).unwrap(), saved);
             })
@@ -169,6 +195,37 @@ fn prototype_variants_are_independent_and_playback_is_temporary(cx: &mut TestApp
     visual.simulate_mouse_move(hotspot + point(px(1.), px(1.)), None, Default::default());
     draw(&mut visual);
     assert_variant(&mut visual, &second);
+    visual.simulate_mouse_move(blank, None, Default::default());
+    draw(&mut visual);
+    assert_variant(&mut visual, &first);
+    // The destination does not need a reverse hover action to restore the source.
+    handle
+        .update(&mut visual.cx, |w, _, cx| {
+            w.presentation.player.as_ref().unwrap().update(cx, |p, _| {
+                let definition = p.components.definitions.get_mut(&second).unwrap();
+                definition
+                    .page
+                    .hierarchy
+                    .interactions
+                    .get_mut(&definition.root)
+                    .unwrap()
+                    .hover = None;
+            });
+        })
+        .unwrap();
+    visual.simulate_mouse_move(hotspot, None, Default::default());
+    draw(&mut visual);
+    assert_variant(&mut visual, &second);
+    visual.simulate_mouse_move(
+        surface.origin - point(px(5.), px(5.)),
+        None,
+        Default::default(),
+    );
+    draw(&mut visual);
+    assert_variant(&mut visual, &first);
+    visual.simulate_mouse_move(hotspot, None, Default::default());
+    draw(&mut visual);
+    assert_variant(&mut visual, &second);
     visual.simulate_click(hotspot, Default::default());
     draw(&mut visual);
     assert_variant(&mut visual, &first);
@@ -176,11 +233,42 @@ fn prototype_variants_are_independent_and_playback_is_temporary(cx: &mut TestApp
     draw(&mut visual);
     assert_variant(&mut visual, &first);
     visual.simulate_mouse_move(blank, None, Default::default());
+    draw(&mut visual);
+    assert_variant(&mut visual, &first);
     visual.simulate_mouse_move(hotspot, None, Default::default());
     draw(&mut visual);
     assert_variant(&mut visual, &second);
     click(&mut visual, "playback-restart");
     assert_variant(&mut visual, &first);
+    for (exit, expected) in [
+        (HoverExit::Keep, &second),
+        (
+            HoverExit::ChangeVariant {
+                target: uuid::Uuid::parse_str(&third).unwrap(),
+            },
+            &third,
+        ),
+    ] {
+        handle
+            .update(&mut visual.cx, |w, _, cx| {
+                w.presentation.player.as_ref().unwrap().update(cx, |p, _| {
+                    p.hierarchy
+                        .interactions
+                        .get_mut(&instance)
+                        .unwrap()
+                        .hover_exit = exit;
+                });
+            })
+            .unwrap();
+        visual.simulate_mouse_move(hotspot, None, Default::default());
+        draw(&mut visual);
+        assert_variant(&mut visual, &second);
+        visual.simulate_mouse_move(blank, None, Default::default());
+        draw(&mut visual);
+        assert_variant(&mut visual, expected);
+        click(&mut visual, "playback-restart");
+        assert_variant(&mut visual, &first);
+    }
     visual.simulate_keystrokes("escape");
     handle
         .update(&mut visual.cx, |w, _, cx| {

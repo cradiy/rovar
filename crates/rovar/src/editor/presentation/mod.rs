@@ -3,13 +3,14 @@
 use super::*;
 use crate::{
     i18n::t,
-    scene::presentation::{Action, Trigger},
+    scene::presentation::{Action, HoverExit, Trigger},
     ui::theme::Color,
 };
 use std::collections::BTreeSet;
 use uic::components::dropdown::DropdownState;
 mod connections;
 mod controls;
+mod hover_exit;
 #[cfg(test)]
 mod tests;
 mod variants;
@@ -20,7 +21,7 @@ pub(super) struct State {
     connection: Option<connections::Connection>,
     pub player: Option<Entity<Workspace>>,
     pub playback: Option<Playback>,
-    menus: [Entity<DropdownState>; 2],
+    menus: [Entity<DropdownState>; 3],
 }
 
 pub(super) struct Playback {
@@ -29,6 +30,7 @@ pub(super) struct Playback {
     history: Vec<usize>,
     hotspot_hovered: bool,
     entered: Option<usize>,
+    hover: Option<variants::Hover>,
     initial_page: crate::document::Page,
     stage: Rc<Cell<Bounds<Pixels>>>,
 }
@@ -100,6 +102,7 @@ impl Workspace {
                 history: Vec::new(),
                 hotspot_hovered: false,
                 entered: None,
+                hover: None,
                 initial_page,
                 stage: Rc::new(Cell::new(Bounds::default())),
             });
@@ -291,8 +294,38 @@ impl Workspace {
         };
         self.load_visible_media(window, cx);
         let weak = cx.entity().downgrade();
+        let pointer = weak.clone();
         let frame_bounds = self.bounds.clone();
         div()
+            .on_paint_before_children(move |_, _, window, _| {
+                let moving = pointer.clone();
+                window.on_mouse_event(move |event: &gpui::MouseMoveEvent, phase, window, cx| {
+                    if phase != gpui::DispatchPhase::Capture {
+                        return;
+                    }
+                    let _ = moving.update(cx, |this, cx| {
+                        if this
+                            .presentation
+                            .playback
+                            .as_ref()
+                            .is_some_and(|p| p.hover.is_some())
+                        {
+                            this.playback_pointer(event.position, window, cx);
+                            cx.stop_propagation();
+                        }
+                    });
+                });
+                let leaving = pointer.clone();
+                window.on_mouse_event(move |_: &gpui::MouseExitEvent, phase, window, cx| {
+                    if phase != gpui::DispatchPhase::Capture {
+                        return;
+                    }
+                    let _ = leaving.update(cx, |this, cx| {
+                        this.playback_hover(false, cx);
+                        this.leave_playback_hover(window, cx);
+                    });
+                });
+            })
             .id("playback")
             .debug_selector(|| "playback".into())
             .track_focus(&self.focus)
@@ -317,9 +350,10 @@ impl Workspace {
                             false,
                         )
                         .opacity(if can_back { 1. } else { 0.4 })
-                        .on_click(
-                            cx.listener(|this, _, _, cx| this.playback_action(Action::Back, cx)),
-                        ),
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.commit_playback_hover();
+                            this.playback_action(Action::Back, cx)
+                        })),
                     )
                     .child(
                         inspector::icon_button(
@@ -342,6 +376,7 @@ impl Workspace {
                             p.history.clear();
                             p.hotspot_hovered = false;
                             p.entered = None;
+                            p.hover = None;
                             this.pause_videos(cx);
                             cx.notify();
                         })),
@@ -393,19 +428,13 @@ impl Workspace {
                                             this.playback_pointer(event.position, window, cx);
                                         },
                                     ))
-                                    .on_mouse_exit(cx.listener(|this, _, _, cx| {
-                                        this.playback_hover(false, cx);
-                                        if let Some(p) = &mut this.presentation.playback {
-                                            p.entered = None;
-                                        }
-                                    }))
                                     .on_click(cx.listener(
                                         |this, event: &gpui::ClickEvent, window, cx| {
                                             let world = this.board_point(None, event.position());
                                             if let Some((source, action)) =
                                                 this.playback_hit(world, Trigger::Click)
                                             {
-                                                this.activate_prototype(source, action, window, cx);
+                                                this.playback_click(source, action, window, cx);
                                             }
                                             cx.stop_propagation();
                                         },

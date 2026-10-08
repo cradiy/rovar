@@ -111,6 +111,7 @@ fn prototype_wire_drag_commit_cancel_and_undo(cx: &mut TestAppContext) {
     let mut visual = VisualTestContext::from_window(handle.into(), cx);
     visual.simulate_resize(size(px(1280.), px(1000.)));
     draw(&mut visual);
+    assert!(visual.debug_bounds("prototype-disconnect").is_none());
     let target = handle
         .update(&mut visual.cx, |w, _, _| {
             w.bounds.get().origin + w.view.screen(point(550., 100.)).map(px)
@@ -136,6 +137,31 @@ fn prototype_wire_drag_commit_cancel_and_undo(cx: &mut TestAppContext) {
             })
             .unwrap();
     }
+    let click_label: &'static str = format!("prototype-wire-{button}-prototype-click").leak();
+    let hover_label: &'static str = format!("prototype-wire-{button}-prototype-hover").leak();
+    assert!(visual.debug_bounds(click_label).is_none());
+    assert!(visual.debug_bounds(hover_label).is_none());
+    let disconnect = visual.debug_bounds("prototype-disconnect").unwrap();
+    let menu = visual.debug_bounds("prototype-click-menu").unwrap();
+    let panel = visual.debug_bounds("properties-panel").unwrap();
+    assert!(menu.right() <= disconnect.left());
+    assert!(disconnect.right() <= panel.right());
+    click(&mut visual, "prototype-disconnect");
+    handle
+        .update(&mut visual.cx, |w, window, cx| {
+            assert_eq!(w.hierarchy.interactions[&button].hover, None);
+            assert_eq!(
+                w.hierarchy.interactions[&button].click,
+                Some(Action::Navigate { target: second })
+            );
+            w.undo_redo(false, window, cx);
+            assert_eq!(
+                w.hierarchy.interactions[&button].hover,
+                Some(Action::Navigate { target: second })
+            );
+        })
+        .unwrap();
+    draw(&mut visual);
     let depth = handle
         .update(&mut visual.cx, |w, _, _| w.history.borrow().undo_len())
         .unwrap();
@@ -179,6 +205,106 @@ fn prototype_wire_drag_commit_cancel_and_undo(cx: &mut TestAppContext) {
         .unwrap();
     draw(&mut visual);
     assert!(visual.debug_bounds("prototype-port").is_none());
+}
+
+#[gpui::test]
+fn hover_navigation_and_unavailable_variant_targets(cx: &mut TestAppContext) {
+    let handle = open(cx);
+    let (first, second, button) = handle
+        .update(cx, |w, window, cx| {
+            let (first, second, button) = setup(w, window, cx);
+            let target = w.boards.iter_mut().find(|b| b.id == second).unwrap();
+            target.rect.width = 160.;
+            target.rect.height = 100.;
+            let revision = w.document_revision();
+            for trigger in [Trigger::Click, Trigger::Hover] {
+                w.set_prototype_action(
+                    button,
+                    trigger,
+                    Some(Action::ChangeVariant {
+                        target: uuid::Uuid::new_v4(),
+                    }),
+                    window,
+                    cx,
+                );
+            }
+            assert_eq!(w.document_revision(), revision);
+            w.set_prototype_action(
+                button,
+                Trigger::Hover,
+                Some(Action::Navigate { target: second }),
+                window,
+                cx,
+            );
+            w.set_selection(BTreeSet::from([button]), cx);
+            w.set_presentation_tab(true, window, cx);
+            (first, second, button)
+        })
+        .unwrap();
+    let mut visual = VisualTestContext::from_window(handle.into(), cx);
+    draw(&mut visual);
+    click(&mut visual, "prototype-hover");
+    click(&mut visual, "prototype-hover-exit-menu");
+    click(&mut visual, "prototype-exit-option-1");
+    handle
+        .update(&mut visual.cx, |w, window, cx| {
+            assert_eq!(
+                w.hierarchy.interactions[&button].hover_exit,
+                HoverExit::Keep
+            );
+            w.undo_redo(false, window, cx);
+            assert_eq!(
+                w.hierarchy.interactions[&button].hover_exit,
+                HoverExit::Restore
+            );
+        })
+        .unwrap();
+    click(&mut visual, "present");
+    draw(&mut visual);
+    draw(&mut visual);
+    let surface = visual.debug_bounds("playback-surface").unwrap();
+    let scale = f32::from(surface.size.width) / 320.;
+    let hotspot = surface.origin + point(px(50. * scale), px(40. * scale));
+    let outside = surface.origin + point(px(250. * scale), px(200. * scale));
+    let assert_frame = |visual: &mut VisualTestContext, current, history: Vec<usize>| {
+        handle
+            .update(&mut visual.cx, |w, _, cx| {
+                let p = w.presentation.player.as_ref().unwrap().read(cx);
+                assert_eq!(p.presentation.playback.as_ref().unwrap().current, current);
+                assert_eq!(p.presentation.playback.as_ref().unwrap().history, history);
+            })
+            .unwrap();
+    };
+    for _ in 0..2 {
+        visual.simulate_mouse_move(hotspot, None, Default::default());
+        draw(&mut visual);
+        assert_frame(&mut visual, second, vec![first]);
+        // Different frame positions and sizes must not move the original hover region.
+        visual.simulate_mouse_move(hotspot + point(px(1.), px(1.)), None, Default::default());
+        draw(&mut visual);
+        assert_frame(&mut visual, second, vec![first]);
+        visual.simulate_mouse_move(outside, None, Default::default());
+        draw(&mut visual);
+        assert_frame(&mut visual, first, vec![]);
+    }
+    handle
+        .update(&mut visual.cx, |w, _, cx| {
+            w.presentation.player.as_ref().unwrap().update(cx, |p, _| {
+                p.hierarchy
+                    .interactions
+                    .get_mut(&button)
+                    .unwrap()
+                    .hover_exit = HoverExit::Keep;
+            });
+        })
+        .unwrap();
+    visual.simulate_mouse_move(hotspot, None, Default::default());
+    draw(&mut visual);
+    visual.simulate_mouse_move(outside, None, Default::default());
+    draw(&mut visual);
+    assert_frame(&mut visual, second, vec![first]);
+    click(&mut visual, "playback-back");
+    assert_frame(&mut visual, first, vec![]);
 }
 
 #[gpui::test]

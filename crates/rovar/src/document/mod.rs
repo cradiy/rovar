@@ -354,6 +354,11 @@ impl Page {
         );
         for (id, interaction) in &self.hierarchy.interactions {
             ensure!(ids.contains(id), "Invalid interaction source");
+            if let crate::scene::presentation::HoverExit::ChangeVariant { target } =
+                interaction.hover_exit
+            {
+                ensure!(!target.is_nil(), "Invalid hover exit target");
+            }
             for action in [interaction.click, interaction.hover].into_iter().flatten() {
                 ensure!(
                     action
