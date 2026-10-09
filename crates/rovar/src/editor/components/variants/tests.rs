@@ -41,6 +41,21 @@ fn prototype_wire_to_main_variant_creates_state_change(cx: &mut TestAppContext) 
     visual.simulate_mouse_move(end, Some(MouseButton::Left), Default::default());
     visual.simulate_mouse_up(end, MouseButton::Left, Default::default());
     draw(&mut visual);
+    click(&mut visual, "prototype-dissolve");
+    handle
+        .update(&mut visual.cx, |w, window, cx| {
+            use crate::scene::presentation::Transition;
+            assert_eq!(
+                w.hierarchy.interactions[&1].hover_transition,
+                Transition::Dissolve { duration_ms: 200 }
+            );
+            w.undo_redo(false, window, cx);
+            assert_eq!(
+                w.hierarchy.interactions[&1].hover_transition,
+                Transition::Instant
+            );
+        })
+        .unwrap();
     click(&mut visual, "prototype-hover-exit-menu");
     click(&mut visual, "prototype-exit-option-1");
     handle
@@ -76,7 +91,7 @@ fn prototype_wire_to_main_variant_creates_state_change(cx: &mut TestAppContext) 
 
 #[gpui::test]
 fn prototype_variants_are_independent_and_playback_is_temporary(cx: &mut TestAppContext) {
-    use crate::scene::presentation::{Action, HoverExit, Trigger};
+    use crate::scene::presentation::{Action, HoverExit, Transition, Trigger};
     let handle = open(cx);
     let (first, second, third, instance, other, saved) = handle
         .update(cx, |w, window, cx| {
@@ -110,6 +125,12 @@ fn prototype_variants_are_independent_and_playback_is_temporary(cx: &mut TestApp
             let second = binding.component;
             w.add_variant(window, cx);
             let third = w.selected_component().unwrap().1.component;
+            let second_shape = w.shapes.iter_mut().find(|s| s.id == second_master).unwrap();
+            second_shape.color = rgb(0xff3300);
+            second_shape.rect.width = 160.;
+            second_shape.rect.height = 90.;
+            w.history.borrow_mut().mark_changed();
+            w.sync_components(window, cx);
             w.set_prototype_action(
                 master,
                 Trigger::Hover,
@@ -129,7 +150,21 @@ fn prototype_variants_are_independent_and_playback_is_temporary(cx: &mut TestApp
                     window,
                     cx,
                 );
+                w.set_prototype_transition(
+                    second_master,
+                    trigger,
+                    Transition::Dissolve { duration_ms: 500 },
+                    window,
+                    cx,
+                );
             }
+            w.set_prototype_transition(
+                master,
+                Trigger::Hover,
+                Transition::Dissolve { duration_ms: 500 },
+                window,
+                cx,
+            );
             let mut instances = Vec::new();
             for x in [40., 220.] {
                 w.insert_document_component(&first, false, Some(point(x, 40.)), window, cx);
@@ -192,12 +227,24 @@ fn prototype_variants_are_independent_and_playback_is_temporary(cx: &mut TestApp
     visual.simulate_mouse_move(hotspot, None, Default::default());
     draw(&mut visual);
     assert_variant(&mut visual, &second);
+    visual
+        .cx
+        .executor()
+        .advance_clock(std::time::Duration::from_millis(150));
+    draw(&mut visual);
+    assert!(visual.debug_bounds("playback-outgoing-snapshot").is_some());
     visual.simulate_mouse_move(hotspot + point(px(1.), px(1.)), None, Default::default());
     draw(&mut visual);
     assert_variant(&mut visual, &second);
     visual.simulate_mouse_move(blank, None, Default::default());
     draw(&mut visual);
     assert_variant(&mut visual, &first);
+    visual
+        .cx
+        .executor()
+        .advance_clock(std::time::Duration::from_millis(600));
+    draw(&mut visual);
+    assert!(visual.debug_bounds("playback-outgoing-snapshot").is_none());
     // The destination does not need a reverse hover action to restore the source.
     handle
         .update(&mut visual.cx, |w, _, cx| {
@@ -266,6 +313,28 @@ fn prototype_variants_are_independent_and_playback_is_temporary(cx: &mut TestApp
         visual.simulate_mouse_move(blank, None, Default::default());
         draw(&mut visual);
         assert_variant(&mut visual, expected);
+        if exit == HoverExit::Keep {
+            visual
+                .cx
+                .executor()
+                .advance_clock(std::time::Duration::from_millis(600));
+            draw(&mut visual);
+            visual.simulate_click(hotspot, Default::default());
+            draw(&mut visual);
+            assert_variant(&mut visual, &first);
+            visual
+                .cx
+                .executor()
+                .advance_clock(std::time::Duration::from_millis(150));
+            draw(&mut visual);
+            assert!(visual.debug_bounds("playback-outgoing-snapshot").is_some());
+            visual
+                .cx
+                .executor()
+                .advance_clock(std::time::Duration::from_millis(600));
+            draw(&mut visual);
+            assert!(visual.debug_bounds("playback-outgoing-snapshot").is_none());
+        }
         click(&mut visual, "playback-restart");
         assert_variant(&mut visual, &first);
     }

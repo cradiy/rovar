@@ -38,6 +38,7 @@ pub(super) struct Playback {
     stage: Rc<Cell<Bounds<Pixels>>>,
     window_size: gpui::Size<Pixels>,
     transition: Transition,
+    visual: transition::Visual,
 }
 
 impl State {
@@ -114,6 +115,7 @@ impl Workspace {
                 stage: Rc::new(Cell::new(Bounds::default())),
                 window_size: window.viewport_size(),
                 transition: Transition::Instant,
+                visual: transition::Visual::default(),
             });
             player
         });
@@ -272,7 +274,10 @@ impl Workspace {
             gpui::CursorStyle::Arrow
         };
         let stage = playback.stage.clone();
-        let current = playback.current;
+        let frame = transition::FrameKey {
+            board: playback.current,
+            visual: playback.visual.clone(),
+        };
         let duration = match playback.transition {
             Transition::Instant => std::time::Duration::ZERO,
             Transition::Dissolve { duration_ms } => {
@@ -291,10 +296,10 @@ impl Workspace {
         let pointer = weak.clone();
         let frame_bounds = self.bounds.clone();
         let workspace = cx.entity().downgrade();
-        let frames = gpui_effects::animated_switch("playback-transition", current, move |board| {
+        let frames = gpui_effects::animated_switch("playback-transition", frame, move |frame| {
             transition::Frame {
                 workspace: workspace.clone(),
-                board: *board,
+                key: frame.clone(),
             }
         })
         .size_full()

@@ -20,6 +20,7 @@ struct HoverSnapshot {
     history: Vec<usize>,
     view: Viewport,
     bounds: Bounds<Pixels>,
+    visual: transition::Visual,
 }
 
 impl Hover {
@@ -75,7 +76,6 @@ impl Workspace {
         {
             return;
         }
-        self.presentation.playback.as_mut().unwrap().transition = Transition::Instant;
         let root = self.prototype_component(source).unwrap();
         let (mut page, _) = self.snapshot_page(cx);
         if let Err(error) = crate::scene::components::variants::switch(
@@ -89,7 +89,9 @@ impl Workspace {
             return;
         }
         self.pause_videos(cx);
+        self.freeze_playback_visual(window, cx);
         self.apply_component_page(page, window, cx);
+        self.presentation.playback.as_mut().unwrap().visual = transition::Visual::default();
         self.set_selection(BTreeSet::new(), cx);
         cx.notify();
     }
@@ -180,6 +182,7 @@ impl Workspace {
                         history: p.history.clone(),
                         view: self.view,
                         bounds: self.bounds.get(),
+                        visual: p.visual.clone(),
                     });
                     self.presentation.playback.as_mut().unwrap().hover = Some(Hover {
                         region,
@@ -218,7 +221,11 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) {
         self.pause_videos(cx);
+        if self.presentation.playback.as_ref().unwrap().visual != snapshot.visual {
+            self.freeze_playback_visual(window, cx);
+        }
         self.apply_component_page(snapshot.page, window, cx);
+        self.restore_playback_visual(snapshot.visual);
         let p = self.presentation.playback.as_mut().unwrap();
         p.current = snapshot.current;
         p.history = snapshot.history;

@@ -100,6 +100,19 @@ impl Workspace {
         window: &Window,
         cx: &mut Context<Self>,
     ) -> Vec<AnyElement> {
+        self.content_elements_in_frame(
+            window,
+            cx,
+            self.presentation.playback.as_ref().map(|p| p.current),
+        )
+    }
+
+    pub(super) fn content_elements_in_frame(
+        &self,
+        window: &Window,
+        cx: &mut Context<Self>,
+        frame: Option<usize>,
+    ) -> Vec<AnyElement> {
         let boards: HashMap<_, _> = self.boards.iter().map(|b| (b.id, b)).collect();
         let texts: HashMap<_, _> = self.texts.iter().map(|t| (t.id, t)).collect();
         let shapes: HashMap<_, _> = self.shapes.iter().map(|s| (s.id, s)).collect();
@@ -130,10 +143,8 @@ impl Workspace {
             crate::scene::rotation::intersects(rect, rotation, viewport)
         };
         let mut order = self.canvas_layer_order();
-        if let Some(playback) = &self.presentation.playback {
-            order.retain(|id| {
-                *id == playback.current || self.ancestors(*id).contains(&playback.current)
-            });
+        if let Some(frame) = frame {
+            order.retain(|id| *id == frame || self.ancestors(*id).contains(&frame));
         }
         let included = order.iter().copied().collect();
         let masks = crate::scene::mask::outlines(

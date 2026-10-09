@@ -96,6 +96,7 @@ impl Workspace {
                             p.entered = None;
                             p.hover = None;
                             p.transition = Transition::Instant;
+                            p.visual = transition::Visual::default();
                             this.pause_videos(cx);
                             cx.notify();
                         })),
