@@ -92,18 +92,20 @@ impl Workspace {
                 .get(&id)
                 .and_then(|i| i.get(trigger))
                 .is_some();
-            section =
-                section.child(
-                    inspector::inspector_section(t("prototype-interaction"))
-                        .child(
-                            div()
-                                .text_size(px(12.))
-                                .text_color(MUTED.color())
-                                .truncate()
-                                .child(self.layer_name(id, cx)),
-                        )
-                        .child(div().flex().gap(px(4.)).children(
-                            [Trigger::Click, Trigger::Hover].map(|trigger| {
+            section = section.child(
+                inspector::inspector_section(t("prototype-interaction"))
+                    .child(
+                        div()
+                            .text_size(px(12.))
+                            .text_color(MUTED.color())
+                            .truncate()
+                            .child(self.layer_name(id, cx)),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .gap(px(4.))
+                            .children([Trigger::Click, Trigger::Hover].map(|trigger| {
                                 let key = if trigger == Trigger::Click {
                                     "prototype-click"
                                 } else {
@@ -147,48 +149,56 @@ impl Workspace {
                                         this.presentation.trigger = trigger;
                                         cx.notify();
                                     }))
-                            }),
-                        ))
-                        .child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap(px(4.))
-                                .child(
-                                    div()
-                                        .flex_1()
-                                        .min_w_0()
-                                        .child(self.presentation_menu(Some(id), cx)),
-                                )
-                                .when(connected, |row| {
-                                    row.child(
-                                        inspector::icon_button(
-                                            "prototype-disconnect",
-                                            t("prototype-disconnect"),
-                                            LucideIcons::Unlink,
-                                            false,
-                                        )
-                                        .on_click(
-                                            cx.listener(move |this, _, window, cx| {
-                                                this.set_prototype_action(
-                                                    id, trigger, None, window, cx,
-                                                );
-                                            }),
-                                        ),
+                            })),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(4.))
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .child(self.presentation_menu(Some(id), cx)),
+                            )
+                            .when(connected, |row| {
+                                row.child(
+                                    inspector::icon_button(
+                                        "prototype-disconnect",
+                                        t("prototype-disconnect"),
+                                        LucideIcons::Unlink,
+                                        false,
                                     )
-                                }),
-                        )
-                        .when(
-                            trigger == Trigger::Hover
-                                && self
-                                    .hierarchy
-                                    .interactions
-                                    .get(&id)
-                                    .and_then(|i| i.hover)
-                                    .is_some(),
-                            |el| el.child(self.hover_exit_controls(id, cx)),
-                        ),
-                );
+                                    .on_click(cx.listener(
+                                        move |this, _, window, cx| {
+                                            this.set_prototype_action(
+                                                id, trigger, None, window, cx,
+                                            );
+                                        },
+                                    )),
+                                )
+                            }),
+                    )
+                    .when(
+                        self.hierarchy
+                            .interactions
+                            .get(&id)
+                            .and_then(|i| i.get(trigger))
+                            .is_some_and(|a| matches!(a, Action::Navigate { .. } | Action::Back)),
+                        |el| el.child(self.transition_controls(id, trigger, cx)),
+                    )
+                    .when(
+                        trigger == Trigger::Hover
+                            && self
+                                .hierarchy
+                                .interactions
+                                .get(&id)
+                                .and_then(|i| i.hover)
+                                .is_some(),
+                        |el| el.child(self.hover_exit_controls(id, cx)),
+                    ),
+            );
         } else {
             section = section.child(
                 div()

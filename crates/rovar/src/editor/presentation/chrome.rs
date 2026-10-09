@@ -66,6 +66,8 @@ impl Workspace {
                         .on_click(cx.listener(move |this, _, _, cx| {
                             if can_back {
                                 this.commit_playback_hover();
+                                this.presentation.playback.as_mut().unwrap().transition =
+                                    Transition::Instant;
                                 this.playback_action(Action::Back, cx);
                             }
                         })),
@@ -93,6 +95,7 @@ impl Workspace {
                             p.hotspot_hovered = false;
                             p.entered = None;
                             p.hover = None;
+                            p.transition = Transition::Instant;
                             this.pause_videos(cx);
                             cx.notify();
                         })),

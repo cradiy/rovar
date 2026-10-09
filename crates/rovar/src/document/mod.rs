@@ -354,6 +354,10 @@ impl Page {
         );
         for (id, interaction) in &self.hierarchy.interactions {
             ensure!(ids.contains(id), "Invalid interaction source");
+            ensure!(
+                interaction.click_transition.valid() && interaction.hover_transition.valid(),
+                "Invalid transition duration"
+            );
             if let crate::scene::presentation::HoverExit::ChangeVariant { target } =
                 interaction.hover_exit
             {

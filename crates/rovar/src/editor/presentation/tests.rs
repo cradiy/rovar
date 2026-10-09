@@ -2,6 +2,224 @@ use super::*;
 use crate::editor::tests::{click, draw, open};
 use gpui::{TestAppContext, VisualTestContext};
 
+#[gpui::test]
+fn transition_controls_persist_per_trigger_with_undo_and_validation(cx: &mut TestAppContext) {
+    let handle = open(cx);
+    let button = handle
+        .update(cx, |w, window, cx| {
+            let (_, second, button) = setup(w, window, cx);
+            w.set_prototype_action(
+                button,
+                Trigger::Hover,
+                Some(Action::Navigate { target: second }),
+                window,
+                cx,
+            );
+            w.set_selection(BTreeSet::from([button]), cx);
+            w.set_presentation_tab(true, window, cx);
+            button
+        })
+        .unwrap();
+    let mut visual = VisualTestContext::from_window(handle.into(), cx);
+    draw(&mut visual);
+    click(&mut visual, "prototype-dissolve");
+    click(&mut visual, "prototype-duration");
+    click(&mut visual, "prototype-duration-500");
+    click(&mut visual, "prototype-hover");
+    assert!(visual.debug_bounds("prototype-duration").is_none());
+    click(&mut visual, "prototype-dissolve");
+    handle
+        .update(&mut visual.cx, |w, window, cx| {
+            let settings = w.hierarchy.interactions[&button];
+            assert_eq!(
+                settings.click_transition,
+                Transition::Dissolve { duration_ms: 500 }
+            );
+            assert_eq!(
+                settings.hover_transition,
+                Transition::Dissolve { duration_ms: 200 }
+            );
+            w.undo_redo(false, window, cx);
+            assert_eq!(
+                w.hierarchy.interactions[&button].hover_transition,
+                Transition::Instant
+            );
+            assert_eq!(
+                w.hierarchy.interactions[&button].click_transition,
+                settings.click_transition
+            );
+            w.undo_redo(true, window, cx);
+            let page = w.snapshot_page(cx).0;
+            let mut decoded =
+                crate::document::Page::decode(&serde_json::to_vec(&page).unwrap()).unwrap();
+            assert_eq!(decoded.hierarchy.interactions[&button], settings);
+            decoded
+                .hierarchy
+                .interactions
+                .get_mut(&button)
+                .unwrap()
+                .click_transition = Transition::Dissolve { duration_ms: 0 };
+            assert!(decoded.validate().is_err());
+            w.set_prototype_action(button, Trigger::Click, None, window, cx);
+            assert_eq!(
+                w.hierarchy.interactions[&button].click_transition,
+                Transition::Instant
+            );
+            assert_eq!(
+                w.hierarchy.interactions[&button].hover_transition,
+                settings.hover_transition
+            );
+        })
+        .unwrap();
+}
+
+#[gpui::test]
+fn dissolve_reverses_hover_and_restart_clears_outgoing_frames(cx: &mut TestAppContext) {
+    let handle = open(cx);
+    let (first, second, saved) = handle
+        .update(cx, |w, window, cx| {
+            let (first, second, button) = setup(w, window, cx);
+            w.boards[1].rect.width = 160.;
+            w.boards[1].rect.height = 100.;
+            w.set_prototype_action(
+                button,
+                Trigger::Hover,
+                Some(Action::Navigate { target: second }),
+                window,
+                cx,
+            );
+            w.set_prototype_transition(
+                button,
+                Trigger::Hover,
+                Transition::Dissolve { duration_ms: 500 },
+                window,
+                cx,
+            );
+            let saved = serde_json::to_value(w.snapshot_page(cx).0).unwrap();
+            w.start_presentation(window, cx);
+            (first, second, saved)
+        })
+        .unwrap();
+    let mut visual = VisualTestContext::from_window(handle.into(), cx);
+    draw(&mut visual);
+    draw(&mut visual);
+    let surface = visual.debug_bounds("playback-surface").unwrap();
+    let scale = f32::from(surface.size.width) / 320.;
+    let hotspot = surface.origin + point(px(50. * scale), px(40. * scale));
+    let outside = surface.origin + point(px(250. * scale), px(200. * scale));
+    let from_selector: &'static str = format!("playback-frame-{first}").leak();
+    let to_selector: &'static str = format!("playback-frame-{second}").leak();
+    visual.simulate_mouse_move(hotspot, None, Default::default());
+    draw(&mut visual);
+    visual
+        .cx
+        .executor()
+        .advance_clock(std::time::Duration::from_millis(200));
+    draw(&mut visual);
+    let from = visual.debug_bounds(from_selector).unwrap();
+    let to = visual.debug_bounds(to_selector).unwrap();
+    assert!((from.size.width / from.size.height - 320. / 480.).abs() < 0.001);
+    assert!((to.size.width / to.size.height - 160. / 100.).abs() < 0.001);
+    visual.simulate_mouse_move(outside, None, Default::default());
+    draw(&mut visual);
+    visual
+        .cx
+        .executor()
+        .advance_clock(std::time::Duration::from_millis(600));
+    draw(&mut visual);
+    assert!(visual.debug_bounds(from_selector).is_some());
+    assert!(visual.debug_bounds(to_selector).is_none());
+    handle
+        .update(&mut visual.cx, |w, _, cx| {
+            let p = w.presentation.player.as_ref().unwrap().read(cx);
+            let playback = p.presentation.playback.as_ref().unwrap();
+            assert_eq!(playback.current, first);
+            assert!(playback.history.is_empty());
+            assert!(playback.hover.is_none());
+            assert_eq!(serde_json::to_value(w.snapshot_page(cx).0).unwrap(), saved);
+        })
+        .unwrap();
+    visual.simulate_mouse_move(hotspot, None, Default::default());
+    draw(&mut visual);
+    visual
+        .cx
+        .executor()
+        .advance_clock(std::time::Duration::from_millis(100));
+    draw(&mut visual);
+    click(&mut visual, "playback-restart");
+    assert!(visual.debug_bounds(to_selector).is_none());
+    assert!(visual.debug_bounds(from_selector).is_some());
+}
+
+#[gpui::test]
+fn rapid_dissolve_clicks_finish_at_latest_target_without_changing_history(cx: &mut TestAppContext) {
+    let handle = open(cx);
+    let (first, second, third) = handle
+        .update(cx, |w, window, cx| {
+            let (first, second, button) = setup(w, window, cx);
+            w.add_artboard(
+                Rect {
+                    x: 1000.,
+                    y: 0.,
+                    width: 240.,
+                    height: 360.,
+                },
+                cx,
+            );
+            let third = w.boards.last().unwrap().id;
+            w.set_click(second, Some(Action::Navigate { target: third }), window, cx);
+            for source in [button, second] {
+                w.set_prototype_transition(
+                    source,
+                    Trigger::Click,
+                    Transition::Dissolve { duration_ms: 500 },
+                    window,
+                    cx,
+                );
+            }
+            w.start_presentation(window, cx);
+            (first, second, third)
+        })
+        .unwrap();
+    let mut visual = VisualTestContext::from_window(handle.into(), cx);
+    draw(&mut visual);
+    draw(&mut visual);
+    let surface = visual.debug_bounds("playback-surface").unwrap();
+    let scale = f32::from(surface.size.width) / 320.;
+    visual.simulate_click(
+        surface.origin + point(px(50. * scale), px(40. * scale)),
+        Default::default(),
+    );
+    draw(&mut visual);
+    visual
+        .cx
+        .executor()
+        .advance_clock(std::time::Duration::from_millis(100));
+    draw(&mut visual);
+    let destination = visual.debug_bounds("playback-surface").unwrap().center();
+    visual.simulate_click(destination, Default::default());
+    draw(&mut visual);
+    for _ in 0..2 {
+        visual
+            .cx
+            .executor()
+            .advance_clock(std::time::Duration::from_millis(600));
+        draw(&mut visual);
+    }
+    for (id, visible) in [(first, false), (second, false), (third, true)] {
+        let selector: &'static str = format!("playback-frame-{id}").leak();
+        assert_eq!(visual.debug_bounds(selector).is_some(), visible);
+    }
+    handle
+        .update(&mut visual.cx, |w, _, cx| {
+            let p = w.presentation.player.as_ref().unwrap().read(cx);
+            let playback = p.presentation.playback.as_ref().unwrap();
+            assert_eq!(playback.current, third);
+            assert_eq!(playback.history, vec![first, second]);
+        })
+        .unwrap();
+}
+
 fn setup(
     w: &mut Workspace,
     window: &mut Window,

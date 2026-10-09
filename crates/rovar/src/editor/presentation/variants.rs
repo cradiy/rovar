@@ -11,6 +11,7 @@ pub(super) struct Hover {
     restore: Option<HoverSnapshot>,
     root: usize,
     exit: HoverExit,
+    transition: Transition,
 }
 
 struct HoverSnapshot {
@@ -74,6 +75,7 @@ impl Workspace {
         {
             return;
         }
+        self.presentation.playback.as_mut().unwrap().transition = Transition::Instant;
         let root = self.prototype_component(source).unwrap();
         let (mut page, _) = self.snapshot_page(cx);
         if let Err(error) = crate::scene::components::variants::switch(
@@ -187,8 +189,11 @@ impl Workspace {
                         bounds: self.bounds.get(),
                         root: self.prototype_component(source).unwrap_or(source),
                         exit: self.hierarchy.interactions[&source].hover_exit,
+                        transition: self.prototype_transition(source, Trigger::Hover),
                     });
                 }
+                self.presentation.playback.as_mut().unwrap().transition =
+                    self.prototype_transition(source, Trigger::Hover);
                 self.activate_prototype(source, action, window, cx);
             }
         }
@@ -244,6 +249,7 @@ impl Workspace {
         match hover.exit {
             HoverExit::Keep => (),
             HoverExit::Restore | HoverExit::ChangeVariant { .. } => {
+                self.presentation.playback.as_mut().unwrap().transition = hover.transition;
                 self.restore_hover_snapshot(snapshot, window, cx);
                 if let HoverExit::ChangeVariant { target } = hover.exit {
                     self.activate_prototype(
@@ -265,6 +271,7 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let transition = self.prototype_transition(source, Trigger::Click);
         let root = self.prototype_component(source);
         if let Some(p) = &mut self.presentation.playback
             && let Some(hover) = &mut p.hover
@@ -285,6 +292,7 @@ impl Workspace {
         } else {
             source
         };
+        self.presentation.playback.as_mut().unwrap().transition = transition;
         self.activate_prototype(source, action, window, cx);
     }
 }

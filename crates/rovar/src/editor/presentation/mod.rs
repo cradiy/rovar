@@ -3,7 +3,7 @@
 use super::*;
 use crate::{
     i18n::t,
-    scene::presentation::{Action, HoverExit, Trigger},
+    scene::presentation::{Action, HoverExit, Transition, Trigger},
     ui::theme::Color,
 };
 use std::collections::BTreeSet;
@@ -14,6 +14,7 @@ mod controls;
 mod hover_exit;
 #[cfg(test)]
 mod tests;
+mod transition;
 mod variants;
 
 pub(super) struct State {
@@ -22,7 +23,7 @@ pub(super) struct State {
     connection: Option<connections::Connection>,
     pub player: Option<Entity<Workspace>>,
     pub playback: Option<Playback>,
-    menus: [Entity<DropdownState>; 3],
+    menus: [Entity<DropdownState>; 4],
 }
 
 pub(super) struct Playback {
@@ -36,6 +37,7 @@ pub(super) struct Playback {
     initial_page: crate::document::Page,
     stage: Rc<Cell<Bounds<Pixels>>>,
     window_size: gpui::Size<Pixels>,
+    transition: Transition,
 }
 
 impl State {
@@ -111,6 +113,7 @@ impl Workspace {
                 initial_page,
                 stage: Rc::new(Cell::new(Bounds::default())),
                 window_size: window.viewport_size(),
+                transition: Transition::Instant,
             });
             player
         });
@@ -254,6 +257,7 @@ impl Workspace {
             self.leave_playback_hover(window, cx);
             self.playback_hover(false, cx);
             self.presentation.playback.as_mut().unwrap().window_size = window.viewport_size();
+            self.presentation.playback.as_mut().unwrap().transition = Transition::Instant;
         }
         let playback = self.presentation.playback.as_ref().unwrap();
         let board = self
@@ -268,6 +272,13 @@ impl Workspace {
             gpui::CursorStyle::Arrow
         };
         let stage = playback.stage.clone();
+        let current = playback.current;
+        let duration = match playback.transition {
+            Transition::Instant => std::time::Duration::ZERO,
+            Transition::Dissolve { duration_ms } => {
+                std::time::Duration::from_millis(duration_ms.into())
+            }
+        };
         let available = stage.get().size;
         let zoom = ((f32::from(available.width) - 32.).max(1.) / rect.width.max(1.))
             .min((f32::from(available.height) - 32.).max(1.) / rect.height.max(1.));
@@ -279,6 +290,17 @@ impl Workspace {
         let weak = cx.entity().downgrade();
         let pointer = weak.clone();
         let frame_bounds = self.bounds.clone();
+        let workspace = cx.entity().downgrade();
+        let frames = gpui_effects::animated_switch("playback-transition", current, move |board| {
+            transition::Frame {
+                workspace: workspace.clone(),
+                board: *board,
+            }
+        })
+        .size_full()
+        .duration(duration)
+        .enabled(!duration.is_zero() && window.supports_subtree_effects())
+        .kind(gpui_effects::TransitionKind::CrossFade);
         div()
             .on_paint_before_children(move |_, _, window, _| {
                 let moving = pointer.clone();
@@ -333,6 +355,7 @@ impl Workspace {
                             let _ = weak.update(cx, |_, cx| cx.notify());
                         }
                     })
+                    .child(div().absolute().inset_0().child(frames))
                     .child(
                         div()
                             .relative()
@@ -343,7 +366,6 @@ impl Workspace {
                             .on_paint_before_children(move |bounds, _, _, _| {
                                 frame_bounds.set(bounds)
                             })
-                            .children(self.content_elements(window, cx))
                             .child(
                                 div()
                                     .id("playback-surface")

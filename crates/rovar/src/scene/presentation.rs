@@ -43,6 +43,29 @@ impl HoverExit {
 }
 
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub(crate) enum Transition {
+    #[default]
+    Instant,
+    Dissolve {
+        duration_ms: u16,
+    },
+}
+
+impl Transition {
+    pub fn is_default(&self) -> bool {
+        *self == Self::Instant
+    }
+
+    pub fn valid(self) -> bool {
+        match self {
+            Self::Instant => true,
+            Self::Dissolve { duration_ms } => (50..=2000).contains(&duration_ms),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub(crate) struct Interaction {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub click: Option<Action>,
@@ -50,6 +73,10 @@ pub(crate) struct Interaction {
     pub hover: Option<Action>,
     #[serde(default, skip_serializing_if = "HoverExit::is_default")]
     pub hover_exit: HoverExit,
+    #[serde(default, skip_serializing_if = "Transition::is_default")]
+    pub click_transition: Transition,
+    #[serde(default, skip_serializing_if = "Transition::is_default")]
+    pub hover_transition: Transition,
 }
 
 impl Interaction {
@@ -64,6 +91,21 @@ impl Interaction {
             Trigger::Click => self.click = action,
             Trigger::Hover => self.hover = action,
         }
+        if action.is_none() {
+            self.set_transition(trigger, Transition::Instant);
+        }
+    }
+    pub fn transition(self, trigger: Trigger) -> Transition {
+        match trigger {
+            Trigger::Click => self.click_transition,
+            Trigger::Hover => self.hover_transition,
+        }
+    }
+    pub fn set_transition(&mut self, trigger: Trigger, transition: Transition) {
+        match trigger {
+            Trigger::Click => self.click_transition = transition,
+            Trigger::Hover => self.hover_transition = transition,
+        }
     }
     pub fn is_empty(self) -> bool {
         self.click.is_none() && self.hover.is_none()
@@ -72,7 +114,7 @@ impl Interaction {
         let value = Self {
             click: self.click.and_then(|a| a.remap(&mut map)),
             hover: self.hover.and_then(|a| a.remap(&mut map)),
-            hover_exit: self.hover_exit,
+            ..self
         };
         (!value.is_empty()).then_some(value)
     }
