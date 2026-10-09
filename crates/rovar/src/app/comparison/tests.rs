@@ -134,9 +134,9 @@ fn comparison_copies_server_objects_into_local_history_without_modifying_server(
     visual.simulate_mouse_down(target, gpui::MouseButton::Left, Default::default());
     visual.simulate_mouse_up(target, gpui::MouseButton::Left, Default::default());
     // The server can copy, but cut, paste, delete and undo must never mutate it.
-    visual.simulate_keystrokes("ctrl-c ctrl-x ctrl-v delete ctrl-z");
+    visual.simulate_keystrokes("secondary-c secondary-x secondary-v delete secondary-z");
     click(&mut visual, "compare-local");
-    visual.simulate_keystrokes("ctrl-shift-v");
+    visual.simulate_keystrokes("secondary-shift-v");
     draw(&mut visual);
     let merged = handle
         .update(&mut visual.cx, |studio, _, cx| {
@@ -152,7 +152,7 @@ fn comparison_copies_server_objects_into_local_history_without_modifying_server(
             json
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     handle
         .update(&mut visual.cx, |studio, _, cx| {
             assert_eq!(
@@ -167,7 +167,7 @@ fn comparison_copies_server_objects_into_local_history_without_modifying_server(
             );
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-shift-z");
+    visual.simulate_keystrokes("secondary-shift-z");
     click(&mut visual, "compare-server");
     let start =
         visual.debug_bounds("comparison-canvas").unwrap().origin + point(px(500.), px(400.));
@@ -207,7 +207,7 @@ fn comparison_copies_server_objects_into_local_history_without_modifying_server(
         })
         .unwrap();
     // Returning to the normal editor retains the same history, not a replacement document.
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     handle
         .update(&mut visual.cx, |studio, _, cx| {
             assert_eq!(

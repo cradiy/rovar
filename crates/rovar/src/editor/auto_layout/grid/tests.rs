@@ -52,7 +52,7 @@ fn input(visual: &mut VisualTestContext, index: usize, value: &str) {
         gpui::Modifiers::default(),
     );
     draw(visual);
-    visual.simulate_keystrokes("ctrl-a");
+    visual.simulate_keystrokes("secondary-a");
     visual.simulate_input(value);
     visual.simulate_keystrokes("enter");
     draw(visual);
@@ -88,7 +88,7 @@ fn grid_scrubbing_updates_guides_commits_once_and_cancels(cx: &mut TestAppContex
             assert_eq!(this.history.borrow().undo_len(), depth + 1)
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     visual.simulate_mouse_down(start, MouseButton::Left, Default::default());
     visual.simulate_mouse_move(

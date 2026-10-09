@@ -105,7 +105,7 @@ impl Catalog {
         bundle.add_resource_overriding(
             FluentResource::try_new(format!(
                 "-primary-modifier = {}\n",
-                crate::ui::shortcuts::PRIMARY_MODIFIER
+                crate::ui::shortcuts::primary_modifier()
             ))
             .expect("Invalid shortcut modifier term"),
         );

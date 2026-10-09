@@ -161,7 +161,7 @@ fn reverse_drag_zoom_square_cancel_and_creation_history(cx: &mut TestAppContext)
             assert_eq!(this.history.borrow().undo_len(), 1);
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     // A cancelled creation must preserve the redo branch and next object ID.
     click(&mut visual, "add-artboard");
@@ -169,7 +169,7 @@ fn reverse_drag_zoom_square_cancel_and_creation_history(cx: &mut TestAppContext)
     visual.simulate_mouse_down(a, MouseButton::Left, Default::default());
     visual.simulate_keystrokes("escape");
     visual.simulate_mouse_up(a, MouseButton::Left, Default::default());
-    visual.simulate_keystrokes("ctrl-shift-z");
+    visual.simulate_keystrokes("secondary-shift-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -259,14 +259,14 @@ fn moving_components_attaches_detaches_and_undo_restores_parent_and_position(
                 shape.clone()
             })
             .unwrap();
-        visual.simulate_keystrokes("ctrl-z");
+        visual.simulate_keystrokes("secondary-z");
         draw(&mut visual);
         window
             .update(&mut visual.cx, |this, _, _| {
                 assert_eq!(this.shapes[0], before.0)
             })
             .unwrap();
-        visual.simulate_keystrokes("ctrl-shift-z");
+        visual.simulate_keystrokes("secondary-shift-z");
         draw(&mut visual);
         window
             .update(&mut visual.cx, |this, _, _| {
@@ -299,14 +299,14 @@ fn moving_components_attaches_detaches_and_undo_restores_parent_and_position(
                 assert_eq!(text.editor.read(cx).content, "保留样式和内容");
             })
             .unwrap();
-        visual.simulate_keystrokes("ctrl-z");
+        visual.simulate_keystrokes("secondary-z");
         draw(&mut visual);
         window
             .update(&mut visual.cx, |this, _, _| {
                 assert_eq!((this.texts[0].board, this.texts[0].rect), before)
             })
             .unwrap();
-        visual.simulate_keystrokes("ctrl-shift-z");
+        visual.simulate_keystrokes("secondary-shift-z");
         draw(&mut visual);
         center = target;
     }
@@ -327,7 +327,7 @@ fn moving_components_attaches_detaches_and_undo_restores_parent_and_position(
             assert_eq!(this.shapes[0].board, None);
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, cx| {

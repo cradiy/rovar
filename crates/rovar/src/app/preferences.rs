@@ -582,7 +582,7 @@ mod tests {
         click(&mut visual, "app-menu");
         click(&mut visual, "settings");
         assert!(visual.debug_bounds("settings-dialog").is_some());
-        visual.simulate_keystrokes("ctrl-n");
+        visual.simulate_keystrokes("secondary-n");
         draw(&mut visual);
         window
             .update(&mut visual.cx, |studio, _, _| {
@@ -638,7 +638,7 @@ mod tests {
         visual.simulate_keystrokes("escape");
         draw(&mut visual);
         assert!(visual.debug_bounds("settings-dialog").is_none());
-        visual.simulate_keystrokes("ctrl-,");
+        visual.simulate_keystrokes("secondary-,");
         draw(&mut visual);
         assert!(visual.debug_bounds("settings-dialog").is_some());
         click(&mut visual, "settings-done");

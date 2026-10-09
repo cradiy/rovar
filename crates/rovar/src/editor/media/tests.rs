@@ -125,10 +125,10 @@ fn large_image_fits_visible_canvas_and_corner_edits_survive_undo(cx: &mut TestAp
             .unwrap();
     }
     click(&mut visual, "property-9");
-    visual.simulate_keystrokes("ctrl-a 2 4");
+    visual.simulate_keystrokes("secondary-a 2 4");
     click(&mut visual, "corners-independent");
     click(&mut visual, "property-11");
-    visual.simulate_keystrokes("ctrl-a 4 8");
+    visual.simulate_keystrokes("secondary-a 4 8");
     click(&mut visual, "corners-unified");
     window
         .update(&mut visual.cx, |this, window, cx| {

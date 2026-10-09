@@ -444,7 +444,7 @@ fn dragging_out_of_layout_detaches_at_drop_position_and_undo_restores_fill(
             assert!(!this.hierarchy.sizing.contains_key(&2));
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -630,7 +630,7 @@ fn spacing_scrub_updates_layout_and_commits_once_or_cancels(cx: &mut TestAppCont
                 assert_eq!(this.history.borrow().undo_len(), depth + 1)
             })
             .unwrap();
-        visual.simulate_keystrokes("ctrl-z");
+        visual.simulate_keystrokes("secondary-z");
         draw(&mut visual);
         window
             .update(&mut visual.cx, |this, _, _| {

@@ -183,9 +183,7 @@ impl Render for Workspace {
                     )
                 }) {
                     if event.keystroke.key == "escape"
-                        || ((event.keystroke.modifiers.control
-                            || event.keystroke.modifiers.platform)
-                            && event.keystroke.key == "z")
+                        || (event.keystroke.modifiers.secondary() && event.keystroke.key == "z")
                     {
                         this.cancel_gesture(window, cx);
                     }

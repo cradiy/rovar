@@ -64,7 +64,7 @@ fn gradient_popup_stays_open_during_scrub_release_and_cancel(cx: &mut TestAppCon
                 assert_eq!(this.history.borrow().undo_len(), depth + 1);
             })
             .unwrap();
-        visual.simulate_keystrokes("ctrl-z");
+        visual.simulate_keystrokes("secondary-z");
         draw(&mut visual);
         let start = start(&mut visual, "property-drag-8");
         visual.simulate_mouse_move(
@@ -91,7 +91,7 @@ fn gradient_popup_stays_open_during_scrub_release_and_cancel(cx: &mut TestAppCon
                 assert!(this.history.borrow().can_redo());
             })
             .unwrap();
-        visual.simulate_keystrokes("ctrl-shift-z");
+        visual.simulate_keystrokes("secondary-shift-z");
         draw(&mut visual);
         window
             .update(&mut visual.cx, |this, _, _| {
@@ -140,7 +140,7 @@ fn numeric_drag_previews_clamps_and_commits_once_and_cancel_preserves_redo(
             assert_eq!(this.history.borrow().undo_len(), 2);
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     let p = start(&mut visual, "property-drag-3");
     visual.simulate_mouse_move(
@@ -156,7 +156,7 @@ fn numeric_drag_previews_clamps_and_commits_once_and_cancel_preserves_redo(
             assert_eq!(this.boards[0].rect.width, 640.)
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-shift-z");
+    visual.simulate_keystrokes("secondary-shift-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -186,7 +186,7 @@ fn numeric_drag_previews_clamps_and_commits_once_and_cancel_preserves_redo(
         })
         .unwrap();
     click(&mut visual, "property-3");
-    visual.simulate_keystrokes("ctrl-a 3 2 0");
+    visual.simulate_keystrokes("secondary-a 3 2 0");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -201,7 +201,7 @@ fn text_scrubbing_preserves_style_selection_fractional_values_and_history(cx: &m
     let mut visual = VisualTestContext::from_window(window.into(), cx);
     create(&mut visual, "add-text");
     visual.simulate_input("abcd");
-    visual.simulate_keystrokes("ctrl-home shift-right shift-right");
+    visual.simulate_keystrokes("secondary-home shift-right shift-right");
     draw(&mut visual);
     let before = window
         .update(&mut visual.cx, |this, _, _| {
@@ -218,14 +218,14 @@ fn text_scrubbing_preserves_style_selection_fractional_values_and_history(cx: &m
             assert_eq!(this.history.borrow().undo_len(), before + 1);
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, cx| {
             assert_eq!(this.texts[0].editor.read(cx).effective_style().size, 24.)
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-shift-z");
+    visual.simulate_keystrokes("secondary-shift-z");
     draw(&mut visual);
     // Return focus to the text and inspect the untouched half of the text.
     window
@@ -238,7 +238,7 @@ fn text_scrubbing_preserves_style_selection_fractional_values_and_history(cx: &m
                 .focus(window, cx)
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-end shift-left shift-left");
+    visual.simulate_keystrokes("secondary-end shift-left shift-left");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, cx| {

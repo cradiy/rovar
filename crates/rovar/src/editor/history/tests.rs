@@ -8,9 +8,9 @@ fn shortcuts_follow_one_history_across_text_properties_and_creation(cx: &mut Tes
     let mut visual = VisualTestContext::from_window(window.into(), cx);
     create(&mut visual, "add-artboard");
     create(&mut visual, "add-text");
-    visual.simulate_keystrokes("a b c ctrl-home shift-right");
+    visual.simulate_keystrokes("a b c secondary-home shift-right");
     click(&mut visual, "property-7");
-    visual.simulate_keystrokes("ctrl-a 4 8");
+    visual.simulate_keystrokes("secondary-a 4 8");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, cx| {
@@ -19,7 +19,7 @@ fn shortcuts_follow_one_history_across_text_properties_and_creation(cx: &mut Tes
             assert_eq!(this.history.borrow().undo_len(), 4);
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, window, cx| {
@@ -30,14 +30,14 @@ fn shortcuts_follow_one_history_across_text_properties_and_creation(cx: &mut Tes
             assert!(this.inspector.fields[7].focus_handle(cx).is_focused(window));
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, cx| {
             assert!(this.texts[0].editor.read(cx).content.is_empty())
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, window, _| {
@@ -46,13 +46,13 @@ fn shortcuts_follow_one_history_across_text_properties_and_creation(cx: &mut Tes
             assert!(this.focus.is_focused(window));
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| assert!(this.boards.is_empty()))
         .unwrap();
     for _ in 0..4 {
-        visual.simulate_keystrokes("ctrl-shift-z");
+        visual.simulate_keystrokes("secondary-shift-z");
         draw(&mut visual);
     }
     window
@@ -72,7 +72,7 @@ fn deleting_a_board_restores_its_children_styles_and_order_as_one_step(cx: &mut 
     create(&mut visual, "add-artboard");
     create(&mut visual, "add-text");
     visual.simulate_input("A中😀B");
-    visual.simulate_keystrokes("ctrl-home shift-right");
+    visual.simulate_keystrokes("secondary-home shift-right");
     click(&mut visual, "fill-linear");
     create(&mut visual, "add-text");
     visual.simulate_input("second");
@@ -103,7 +103,7 @@ fn deleting_a_board_restores_its_children_styles_and_order_as_one_step(cx: &mut 
             assert_eq!(this.history.borrow().undo_len(), depth + 1);
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, cx| {
@@ -122,7 +122,7 @@ fn deleting_a_board_restores_its_children_styles_and_order_as_one_step(cx: &mut 
             }
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-shift-z");
+    visual.simulate_keystrokes("secondary-shift-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, cx| {
@@ -163,7 +163,7 @@ fn pointer_drag_is_one_step_and_cancel_does_not_destroy_redo(cx: &mut TestAppCon
         })
         .unwrap();
     assert_ne!(original, moved);
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     visual.simulate_mouse_down(start, MouseButton::Left, Default::default());
     visual.simulate_mouse_move(
@@ -179,7 +179,7 @@ fn pointer_drag_is_one_step_and_cancel_does_not_destroy_redo(cx: &mut TestAppCon
             assert_eq!(this.boards[0].rect, original)
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-shift-z");
+    visual.simulate_keystrokes("secondary-shift-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -187,16 +187,16 @@ fn pointer_drag_is_one_step_and_cancel_does_not_destroy_redo(cx: &mut TestAppCon
         })
         .unwrap();
     // Invalid inspector input must not discard redo, but a new valid edit must.
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     click(&mut visual, "property-3");
-    visual.simulate_keystrokes("ctrl-a 0 ctrl-shift-z");
+    visual.simulate_keystrokes("secondary-a 0 secondary-shift-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
             assert_eq!(this.boards[0].rect, moved)
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z ctrl-a 3 2 0 ctrl-shift-z");
+    visual.simulate_keystrokes("secondary-z secondary-a 3 2 0 secondary-shift-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -258,7 +258,7 @@ fn picker_preview_commit_groups_board_and_text_colors(cx: &mut TestAppContext) {
                 assert_eq!(this.history.borrow().undo_len(), depth + 1)
             })
             .unwrap();
-        visual.simulate_keystrokes("ctrl-z");
+        visual.simulate_keystrokes("secondary-z");
         draw(&mut visual);
         window
             .update(&mut visual.cx, |this, _, cx| {
@@ -271,7 +271,7 @@ fn picker_preview_commit_groups_board_and_text_colors(cx: &mut TestAppContext) {
                 assert_eq!(this.inspector.active_stop, 1);
             })
             .unwrap();
-        visual.simulate_keystrokes("ctrl-shift-z");
+        visual.simulate_keystrokes("secondary-shift-z");
         draw(&mut visual);
         window
             .update(&mut visual.cx, |this, _, cx| {
@@ -301,7 +301,7 @@ fn composition_keeps_shortcuts_until_commit_and_undo_restores_unicode(cx: &mut T
         })
         .unwrap();
     draw(&mut visual);
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, window, cx| {
@@ -313,14 +313,14 @@ fn composition_keeps_shortcuts_until_commit_and_undo_restores_unicode(cx: &mut T
         })
         .unwrap();
     draw(&mut visual);
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, cx| {
             assert_eq!(this.texts[0].editor.read(cx).content, "A😀B")
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-shift-z");
+    visual.simulate_keystrokes("secondary-shift-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, cx| {
@@ -360,21 +360,21 @@ fn resized_text_can_be_deleted_restored_and_undone_through_its_previous_edits(
         .update(&mut visual.cx, |this, _, _| this.texts[0].rect)
         .unwrap();
     assert_ne!(resized, original);
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
             assert_eq!(this.texts[0].rect, original)
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-shift-z");
+    visual.simulate_keystrokes("secondary-shift-z");
     draw(&mut visual);
     visual.simulate_keystrokes("delete");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| assert!(this.texts.is_empty()))
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, cx| {
@@ -382,7 +382,7 @@ fn resized_text_can_be_deleted_restored_and_undone_through_its_previous_edits(
             assert_eq!(this.texts[0].editor.read(cx).content, "fixed box");
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, cx| {
@@ -391,7 +391,7 @@ fn resized_text_can_be_deleted_restored_and_undone_through_its_previous_edits(
             assert_eq!(this.texts[0].editor.read(cx).effective_style().size, 24.);
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, cx| {
@@ -428,14 +428,14 @@ fn empty_preedit_after_chinese_commit_allows_backspace_without_refocusing(cx: &m
             assert!(text.focus.is_focused(window));
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, cx| {
             assert_eq!(this.texts[0].editor.read(cx).content, "😀你");
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, window, cx| {
@@ -448,7 +448,7 @@ fn empty_preedit_after_chinese_commit_allows_backspace_without_refocusing(cx: &m
         })
         .unwrap();
     draw(&mut visual);
-    visual.simulate_keystrokes("ctrl-shift-z");
+    visual.simulate_keystrokes("secondary-shift-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, cx| {

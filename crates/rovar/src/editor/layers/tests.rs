@@ -49,7 +49,7 @@ fn layers_select_children_fold_without_changing_selection_and_delete_with_undo(
     draw(&mut visual);
     assert!(visual.debug_bounds("layer-3").is_none());
     assert!(visual.debug_bounds("layer-2").is_some());
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     assert!(visual.debug_bounds("layer-3").is_some());
     click(&mut visual, "layer-1");
@@ -158,7 +158,7 @@ fn locking_exits_text_editing_and_blocks_canvas_layer_and_keyboard_edits(cx: &mu
         })
         .unwrap();
     // Undo restores editability; redo must clear selection again.
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     click(&mut visual, "layer-2");
     window
@@ -166,7 +166,7 @@ fn locking_exits_text_editing_and_blocks_canvas_layer_and_keyboard_edits(cx: &mu
             assert_eq!(this.selected_text, Some(2))
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-shift-z");
+    visual.simulate_keystrokes("secondary-shift-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -237,11 +237,11 @@ fn hiding_boards_preserves_child_flags_and_overlapping_root_layers_through_histo
             assert!(this.selected.is_none());
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     assert!(visual.debug_bounds("shape-4").is_some());
     assert!(visual.debug_bounds("text-box-3").is_none());
-    visual.simulate_keystrokes("ctrl-shift-z");
+    visual.simulate_keystrokes("secondary-shift-z");
     draw(&mut visual);
     assert!(visual.debug_bounds("shape-4").is_none());
     click(&mut visual, "layer-visibility-2");
@@ -253,7 +253,7 @@ fn hiding_boards_preserves_child_flags_and_overlapping_root_layers_through_histo
     draw(&mut visual);
     assert!(visual.debug_bounds("shape-1").is_some());
     assert!(visual.debug_bounds("layer-3").is_none());
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     assert!(visual.debug_bounds("layer-3").is_some());
     assert!(visual.debug_bounds("text-box-3").is_none());

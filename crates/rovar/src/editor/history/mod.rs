@@ -367,7 +367,7 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) {
         let modifiers = event.keystroke.modifiers;
-        if !(modifiers.control || modifiers.platform) || modifiers.alt {
+        if !modifiers.secondary() || modifiers.alt {
             return;
         }
         let redo = match event.keystroke.key.as_str() {

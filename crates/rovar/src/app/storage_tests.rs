@@ -177,7 +177,7 @@ fn save_is_internal_and_exported_files_are_independent(cx: &mut TestAppContext) 
         .unwrap();
     let mut visual = VisualTestContext::from_window(window.into(), cx);
     visual.update(|window, cx| window.draw(cx).clear());
-    visual.simulate_keystrokes("ctrl-s");
+    visual.simulate_keystrokes("secondary-s");
     visual.cx.run_until_parked();
     assert!(!visual.cx.did_prompt_for_new_path());
     let (internal, id, json) = window
@@ -204,7 +204,7 @@ fn save_is_internal_and_exported_files_are_independent(cx: &mut TestAppContext) 
     visual.cx.simulate_new_path_selection(|_| None);
     visual.cx.run_until_parked();
     assert!(!output.exists());
-    visual.simulate_keystrokes("ctrl-shift-e");
+    visual.simulate_keystrokes("secondary-shift-e");
     visual
         .cx
         .simulate_new_path_selection(|_| Some(output.clone()));

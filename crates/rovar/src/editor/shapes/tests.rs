@@ -20,13 +20,13 @@ fn paint_sections_stay_visible_and_popovers_keep_target_and_stops(cx: &mut TestA
     assert!(visual.debug_bounds("property-16").is_some());
     click(&mut visual, "shape-stroke");
     click(&mut visual, "property-5");
-    visual.simulate_keystrokes("ctrl-a");
+    visual.simulate_keystrokes("secondary-a");
     visual.simulate_input("FF0000");
     click(&mut visual, "property-16");
-    visual.simulate_keystrokes("ctrl-a");
+    visual.simulate_keystrokes("secondary-a");
     visual.simulate_input("0000FF");
     click(&mut visual, "property-17");
-    visual.simulate_keystrokes("ctrl-a 4 0 enter");
+    visual.simulate_keystrokes("secondary-a 4 0 enter");
     window
         .update(&mut visual.cx, |this, _, cx| {
             assert_eq!(this.shapes[0].color, rgb(0xff0000));
@@ -89,22 +89,22 @@ fn shape_properties_and_gradient_are_independent_of_the_board_and_other_shapes(
     create(&mut visual, "add-artboard");
     create(&mut visual, "add-rectangle");
     click(&mut visual, "property-3");
-    visual.simulate_keystrokes("ctrl-a 3 2 0");
+    visual.simulate_keystrokes("secondary-a 3 2 0");
     click(&mut visual, "property-9");
-    visual.simulate_keystrokes("ctrl-a 4 0");
+    visual.simulate_keystrokes("secondary-a 4 0");
     click(&mut visual, "property-6");
-    visual.simulate_keystrokes("ctrl-a 5 0");
+    visual.simulate_keystrokes("secondary-a 5 0");
     click(&mut visual, "fill-linear");
     click(&mut visual, "gradient-add");
     click(&mut visual, "gradient-add");
     click(&mut visual, "property-7");
-    visual.simulate_keystrokes("ctrl-a 4 5");
+    visual.simulate_keystrokes("secondary-a 4 5");
     click(&mut visual, "property-8");
-    visual.simulate_keystrokes("ctrl-a 1 0");
+    visual.simulate_keystrokes("secondary-a 1 0");
     click(&mut visual, "property-5");
-    visual.simulate_keystrokes("ctrl-a f f 0 0 0 0");
+    visual.simulate_keystrokes("secondary-a f f 0 0 0 0");
     click(&mut visual, "property-6");
-    visual.simulate_keystrokes("ctrl-a 2 5");
+    visual.simulate_keystrokes("secondary-a 2 5");
     draw(&mut visual);
     let rectangle = window
         .update(&mut visual.cx, |this, _, cx| {
@@ -152,9 +152,9 @@ fn shape_properties_and_gradient_are_independent_of_the_board_and_other_shapes(
     create(&mut visual, "add-ellipse");
     assert!(visual.debug_bounds("property-9").is_none());
     click(&mut visual, "property-3");
-    visual.simulate_keystrokes("ctrl-a 1 2 0");
+    visual.simulate_keystrokes("secondary-a 1 2 0");
     click(&mut visual, "property-4");
-    visual.simulate_keystrokes("ctrl-a 2 4 0");
+    visual.simulate_keystrokes("secondary-a 2 4 0");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -167,7 +167,7 @@ fn shape_properties_and_gradient_are_independent_of_the_board_and_other_shapes(
         .unwrap();
     // Invalid values never enter history or corrupt ellipse geometry.
     click(&mut visual, "property-3");
-    visual.simulate_keystrokes("ctrl-a 0");
+    visual.simulate_keystrokes("secondary-a 0");
     click(&mut visual, "property-4");
     window
         .update(&mut visual.cx, |this, _, cx| {
@@ -175,7 +175,7 @@ fn shape_properties_and_gradient_are_independent_of_the_board_and_other_shapes(
             assert_eq!(this.inspector.fields[3].read(cx).value().as_ref(), "120");
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -212,7 +212,7 @@ fn shape_resize_uses_world_coordinates_and_board_movement_preserves_local_positi
             assert_eq!(this.shapes[0].rect.height, original.height + 40.);
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -234,7 +234,7 @@ fn shape_resize_uses_world_coordinates_and_board_movement_preserves_local_positi
             assert_eq!(this.shapes[0].rect, original)
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-shift-z");
+    visual.simulate_keystrokes("secondary-shift-z");
     draw(&mut visual);
     let shape_before = visual.debug_bounds("shape-2").unwrap();
     let board = visual.debug_bounds("artboard-1").unwrap();
@@ -263,7 +263,7 @@ fn shape_resize_uses_world_coordinates_and_board_movement_preserves_local_positi
         })
         .unwrap();
     click(&mut visual, "property-1");
-    visual.simulate_keystrokes("ctrl-a - 2 0");
+    visual.simulate_keystrokes("secondary-a - 2 0");
     draw(&mut visual);
     let shape = visual.debug_bounds("shape-2").unwrap();
     assert!(shape.left() < visual.debug_bounds("artboard-1").unwrap().left());
@@ -306,7 +306,7 @@ fn shape_text_stacking_and_board_delete_restore_share_one_history(cx: &mut TestA
             assert!(!this.shape_paths.borrow().contains_key(&4));
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     let saved = window
         .update(&mut visual.cx, |this, window, cx| {
@@ -325,7 +325,7 @@ fn shape_text_stacking_and_board_delete_restore_share_one_history(cx: &mut TestA
             assert!(this.shape_paths.borrow().is_empty());
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, cx| {
@@ -343,7 +343,7 @@ fn shape_text_stacking_and_board_delete_restore_share_one_history(cx: &mut TestA
         })
         .unwrap();
     // A selection-only change leaves deletion redo available.
-    visual.simulate_keystrokes("ctrl-shift-z");
+    visual.simulate_keystrokes("secondary-shift-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -360,13 +360,13 @@ fn fill_stroke_and_corner_modes_preserve_independent_values_and_undo(cx: &mut Te
     create(&mut visual, "add-artboard");
     create(&mut visual, "add-rectangle");
     click(&mut visual, "property-9");
-    visual.simulate_keystrokes("ctrl-a 2 4");
+    visual.simulate_keystrokes("secondary-a 2 4");
     click(&mut visual, "corners-independent");
     click(&mut visual, "property-11");
-    visual.simulate_keystrokes("ctrl-a 4 8");
+    visual.simulate_keystrokes("secondary-a 4 8");
     click(&mut visual, "corners-unified");
     click(&mut visual, "property-9");
-    visual.simulate_keystrokes("ctrl-a 1 2");
+    visual.simulate_keystrokes("secondary-a 1 2");
     click(&mut visual, "corners-independent");
     window
         .update(&mut visual.cx, |this, _, cx| {
@@ -377,18 +377,18 @@ fn fill_stroke_and_corner_modes_preserve_independent_values_and_undo(cx: &mut Te
         })
         .unwrap();
     click(&mut visual, "property-5");
-    visual.simulate_keystrokes("ctrl-a f f 0 0 0 0");
+    visual.simulate_keystrokes("secondary-a f f 0 0 0 0");
     click(&mut visual, "stroke-visibility");
     click(&mut visual, "property-14");
-    visual.simulate_keystrokes("ctrl-a 2 0");
+    visual.simulate_keystrokes("secondary-a 2 0");
     click(&mut visual, "stroke-outside");
     click(&mut visual, "fill-linear");
     click(&mut visual, "gradient-add");
     click(&mut visual, "gradient-add");
     click(&mut visual, "property-16");
-    visual.simulate_keystrokes("ctrl-a 0 0 f f 0 0");
+    visual.simulate_keystrokes("secondary-a 0 0 f f 0 0");
     click(&mut visual, "property-17");
-    visual.simulate_keystrokes("ctrl-a 4 0");
+    visual.simulate_keystrokes("secondary-a 4 0");
     draw(&mut visual);
     let geometry = window
         .update(&mut visual.cx, |this, _, _| {
@@ -436,7 +436,7 @@ fn fill_stroke_and_corner_modes_preserve_independent_values_and_undo(cx: &mut Te
             assert!(Rc::ptr_eq(&geometry, &this.shape_paths.borrow()[&2]));
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     let (before_picker, depth) = window
         .update(&mut visual.cx, |this, _, _| {
@@ -477,7 +477,7 @@ fn fill_stroke_and_corner_modes_preserve_independent_values_and_undo(cx: &mut Te
             assert!(Rc::ptr_eq(&geometry, &this.shape_paths.borrow()[&2]));
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -494,19 +494,19 @@ fn fill_stroke_and_corner_modes_preserve_independent_values_and_undo(cx: &mut Te
             assert!(Rc::ptr_eq(&geometry, &this.shape_paths.borrow()[&2]));
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
             assert!(this.shapes[0].fill_enabled)
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-shift-z");
+    visual.simulate_keystrokes("secondary-shift-z");
     draw(&mut visual);
     click(&mut visual, "stroke-visibility");
     click(&mut visual, "shape-paint-enabled");
     click(&mut visual, "property-14");
-    visual.simulate_keystrokes("ctrl-a - 1");
+    visual.simulate_keystrokes("secondary-a - 1");
     click(&mut visual, "stroke-center");
     window
         .update(&mut visual.cx, |this, _, cx| {
@@ -518,7 +518,7 @@ fn fill_stroke_and_corner_modes_preserve_independent_values_and_undo(cx: &mut Te
         .unwrap();
     // Only selection changes when switching the paint editor: no extra undo entry.
     click(&mut visual, "shape-fill");
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -539,7 +539,7 @@ fn undo_hiding_corner_or_stroke_inputs_keeps_keyboard_history_working(cx: &mut T
     create(&mut visual, "add-rectangle");
     click(&mut visual, "corners-independent");
     click(&mut visual, "property-10");
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, window, _| {
@@ -547,12 +547,12 @@ fn undo_hiding_corner_or_stroke_inputs_keeps_keyboard_history_working(cx: &mut T
             assert!(this.focus.is_focused(window));
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-shift-z");
+    visual.simulate_keystrokes("secondary-shift-z");
     draw(&mut visual);
     assert!(visual.debug_bounds("property-10").is_some());
     click(&mut visual, "stroke-visibility");
     click(&mut visual, "property-14");
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, window, _| {
@@ -560,7 +560,7 @@ fn undo_hiding_corner_or_stroke_inputs_keeps_keyboard_history_working(cx: &mut T
             assert!(this.focus.is_focused(window));
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-shift-z");
+    visual.simulate_keystrokes("secondary-shift-z");
     draw(&mut visual);
     assert!(visual.debug_bounds("property-14").is_some());
 }

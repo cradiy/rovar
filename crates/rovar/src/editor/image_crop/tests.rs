@@ -81,7 +81,7 @@ fn crop_preview_keeps_document_unchanged_then_commits_once_and_undoes(cx: &mut T
             );
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {

@@ -167,7 +167,7 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) -> bool {
         let modifiers = event.keystroke.modifiers;
-        if (modifiers.control || modifiers.platform)
+        if modifiers.secondary()
             && modifiers.shift
             && event.keystroke.key.eq_ignore_ascii_case("k")
             && self.gesture.is_none()

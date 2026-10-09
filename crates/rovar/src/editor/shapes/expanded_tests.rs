@@ -9,7 +9,7 @@ fn polygon_and_star_parameters_flip_and_vector_conversion_share_history(cx: &mut
     for tool in ["add-polygon", "add-star"] {
         create(&mut visual, tool);
         click(&mut visual, "property-9");
-        visual.simulate_keystrokes("ctrl-a 7 enter");
+        visual.simulate_keystrokes("secondary-a 7 enter");
         draw(&mut visual);
         let before = window
             .update(&mut visual.cx, |this, _, _| {
@@ -42,7 +42,7 @@ fn polygon_and_star_parameters_flip_and_vector_conversion_share_history(cx: &mut
             .unwrap();
     }
     click(&mut visual, "property-10");
-    visual.simulate_keystrokes("ctrl-a 6 0 enter");
+    visual.simulate_keystrokes("secondary-a 6 0 enter");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -66,7 +66,7 @@ fn arrow_draws_endpoints_in_both_directions_and_converts_its_head(cx: &mut TestA
         })
         .unwrap();
     click(&mut visual, "property-3");
-    visual.simulate_keystrokes("ctrl-a - 4 0 enter");
+    visual.simulate_keystrokes("secondary-a - 4 0 enter");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, window, cx| {

@@ -52,7 +52,11 @@ impl Workspace {
         if !self.preview_read_only() {
             return;
         }
-        let command = event.keystroke.modifiers.control || event.keystroke.modifiers.platform;
+        let modifiers = event.keystroke.modifiers;
+        let command = modifiers.secondary();
+        if modifiers.alt || (!command && (modifiers.control || modifiers.platform)) {
+            return;
+        }
         match (event.keystroke.key.as_str(), command) {
             ("c", true) => self.copy_selection(cx),
             ("a", true) => self.set_selection(self.canvas_layer_order().into_iter().collect(), cx),

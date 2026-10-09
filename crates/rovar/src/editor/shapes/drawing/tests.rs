@@ -72,7 +72,7 @@ fn line_draw_endpoint_crossing_and_properties_use_board_coordinates_and_one_step
             assert_eq!(this.history.borrow().undo_len(), 3);
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     assert_eq!(visual.debug_bounds("line-end-1").unwrap().center(), b);
     visual.simulate_mouse_down(b, MouseButton::Left, Default::default());
@@ -81,11 +81,11 @@ fn line_draw_endpoint_crossing_and_properties_use_board_coordinates_and_one_step
     visual.simulate_mouse_up(crossed, MouseButton::Left, Default::default());
     draw(&mut visual);
     assert_eq!(visual.debug_bounds("line-end-1").unwrap().center(), b);
-    visual.simulate_keystrokes("ctrl-shift-z");
+    visual.simulate_keystrokes("secondary-shift-z");
     draw(&mut visual);
     assert_eq!(visual.debug_bounds("line-end-1").unwrap().center(), crossed);
     click(&mut visual, "property-3");
-    visual.simulate_keystrokes("ctrl-a - 1 2 0");
+    visual.simulate_keystrokes("secondary-a - 1 2 0");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -111,7 +111,7 @@ fn line_draw_endpoint_crossing_and_properties_use_board_coordinates_and_one_step
             assert_eq!(this.shapes[1].path_point(1), point(20., 200.));
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -210,7 +210,7 @@ fn pen_keeps_bends_and_moves_from_bounding_box_with_shared_geometry(cx: &mut Tes
             assert_eq!(this.shapes[0].path_point(0), point(100., 90.));
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     // A cancelled draft must leave the redo branch and IDs intact.
     click(&mut visual, "draw-pen");
@@ -219,7 +219,7 @@ fn pen_keeps_bends_and_moves_from_bounding_box_with_shared_geometry(cx: &mut Tes
     visual.simulate_keystrokes("escape");
     visual.simulate_mouse_up(c, MouseButton::Left, Default::default());
     draw(&mut visual);
-    visual.simulate_keystrokes("ctrl-shift-z");
+    visual.simulate_keystrokes("secondary-shift-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -248,7 +248,7 @@ fn pen_keeps_bends_and_moves_from_bounding_box_with_shared_geometry(cx: &mut Tes
         .unwrap();
     visual.simulate_keystrokes("delete");
     draw(&mut visual);
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {

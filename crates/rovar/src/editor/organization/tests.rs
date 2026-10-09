@@ -94,7 +94,7 @@ fn group_gaps_select_drag_and_respect_layer_order_and_flags(cx: &mut TestAppCont
             assert_eq!(this.history.borrow().undo_len(), before + 1);
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, cx| {
@@ -213,7 +213,7 @@ fn sibling_sort_changes_canvas_hit_order_and_drag_is_cancellable(cx: &mut TestAp
             assert_eq!(this.selected_shape, Some(3))
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-shift-[");
+    visual.simulate_keystrokes("secondary-shift-[");
     draw(&mut visual);
     pick(&mut visual, 110., 110.);
     window
@@ -221,7 +221,7 @@ fn sibling_sort_changes_canvas_hit_order_and_drag_is_cancellable(cx: &mut TestAp
             assert_eq!(this.selected_shape, Some(2))
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     pick(&mut visual, 110., 110.);
     window
@@ -277,7 +277,7 @@ fn inline_names_commit_cancel_and_preserve_text_content(cx: &mut TestAppContext)
     visual.simulate_keystrokes("f2");
     draw(&mut visual);
     assert!(visual.debug_bounds("layer-rename").is_some());
-    visual.simulate_keystrokes("ctrl-a");
+    visual.simulate_keystrokes("secondary-a");
     visual.simulate_input("说明文字");
     visual.simulate_keystrokes("enter");
     draw(&mut visual);
@@ -287,19 +287,19 @@ fn inline_names_commit_cancel_and_preserve_text_content(cx: &mut TestAppContext)
             assert_eq!(this.texts[0].editor.read(cx).content, "保留文字内容");
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, cx| {
             assert_eq!(this.layer_name(4, cx), "保留文字内容")
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-shift-z");
+    visual.simulate_keystrokes("secondary-shift-z");
     draw(&mut visual);
     click(&mut visual, "layer-1");
     visual.simulate_keystrokes("f2");
     draw(&mut visual);
-    visual.simulate_keystrokes("ctrl-a");
+    visual.simulate_keystrokes("secondary-a");
     visual.simulate_input("不保存");
     visual.simulate_keystrokes("escape");
     draw(&mut visual);
@@ -310,7 +310,7 @@ fn inline_names_commit_cancel_and_preserve_text_content(cx: &mut TestAppContext)
         .unwrap();
     visual.simulate_keystrokes("f2");
     draw(&mut visual);
-    visual.simulate_keystrokes("ctrl-a");
+    visual.simulate_keystrokes("secondary-a");
     visual.simulate_input("卡片");
     click(&mut visual, "layer-2");
     window
@@ -322,7 +322,7 @@ fn inline_names_commit_cancel_and_preserve_text_content(cx: &mut TestAppContext)
     visual.simulate_keystrokes("f2");
     draw(&mut visual);
     visual.simulate_input("取消改名");
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, cx| {
@@ -343,7 +343,7 @@ fn nested_groups_move_once_and_reparent_as_a_unit(cx: &mut TestAppContext) {
         })
         .unwrap();
     draw(&mut visual);
-    visual.simulate_keystrokes("ctrl-g");
+    visual.simulate_keystrokes("secondary-g");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, cx| {
@@ -352,7 +352,7 @@ fn nested_groups_move_once_and_reparent_as_a_unit(cx: &mut TestAppContext) {
             this.set_selection(BTreeSet::from([5, 4]), cx);
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-g");
+    visual.simulate_keystrokes("secondary-g");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, cx| {
@@ -390,7 +390,7 @@ fn nested_groups_move_once_and_reparent_as_a_unit(cx: &mut TestAppContext) {
         })
         .unwrap();
     draw(&mut visual);
-    visual.simulate_keystrokes("ctrl-shift-g");
+    visual.simulate_keystrokes("secondary-shift-g");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -399,7 +399,7 @@ fn nested_groups_move_once_and_reparent_as_a_unit(cx: &mut TestAppContext) {
             assert_eq!(this.layer_parent(1), Some(5));
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -421,7 +421,7 @@ fn group_copy_delete_and_flags_preserve_members_and_names(cx: &mut TestAppContex
         })
         .unwrap();
     draw(&mut visual);
-    visual.simulate_keystrokes("ctrl-d");
+    visual.simulate_keystrokes("secondary-d");
     draw(&mut visual);
     let group = window
         .update(&mut visual.cx, |this, _, cx| {
@@ -448,7 +448,7 @@ fn group_copy_delete_and_flags_preserve_members_and_names(cx: &mut TestAppContex
             assert!(!this.hierarchy.groups.contains_key(&group));
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -509,7 +509,7 @@ fn group_pointer_selects_whole_and_properties_edit_members_without_panicking(
             assert_eq!(this.texts[0].rect.x, 70.);
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -528,7 +528,7 @@ fn group_pointer_selects_whole_and_properties_edit_members_without_panicking(
             assert!(!this.hierarchy.groups.contains_key(&5))
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {

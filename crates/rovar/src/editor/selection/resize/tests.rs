@@ -62,7 +62,7 @@ fn edge_resize_scales_positions_and_widths_once_and_undo_redo_restore_selection(
             assert_eq!(this.history.borrow().undo_len(), 1);
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -76,7 +76,7 @@ fn edge_resize_scales_positions_and_widths_once_and_undo_redo_restore_selection(
         .center();
     visual.simulate_mouse_down(start, MouseButton::Left, Default::default());
     visual.simulate_mouse_up(start, MouseButton::Left, Default::default());
-    visual.simulate_keystrokes("ctrl-shift-z");
+    visual.simulate_keystrokes("secondary-shift-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {

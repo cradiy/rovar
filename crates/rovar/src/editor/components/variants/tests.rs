@@ -401,7 +401,7 @@ fn variants_ui_rename_navigation_and_instance_switch(cx: &mut TestAppContext) {
     visual.simulate_resize(gpui::size(px(1280.), px(1400.)));
     click(&mut visual, "add-variant");
     click(&mut visual, "rename-variant");
-    visual.simulate_keystrokes("ctrl-a");
+    visual.simulate_keystrokes("secondary-a");
     visual.simulate_input("Hover");
     visual.simulate_keystrokes("enter");
     draw(&mut visual);
@@ -413,7 +413,7 @@ fn variants_ui_rename_navigation_and_instance_switch(cx: &mut TestAppContext) {
         })
         .unwrap();
     click(&mut visual, "rename-variant");
-    visual.simulate_keystrokes("ctrl-a");
+    visual.simulate_keystrokes("secondary-a");
     visual.simulate_input("Default");
     visual.simulate_keystrokes("enter");
     handle

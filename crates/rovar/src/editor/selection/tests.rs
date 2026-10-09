@@ -3,6 +3,88 @@ use crate::editor::tests::{click, draw, open};
 use gpui::{EntityInputHandler, Modifiers, TestAppContext, VisualTestContext, WindowHandle};
 
 #[gpui::test]
+fn editing_shortcuts_only_accept_the_host_primary_modifier(cx: &mut TestAppContext) {
+    let window = fixture(cx);
+    window
+        .update(cx, |this, _, cx| {
+            this.set_selection(BTreeSet::from([1]), cx)
+        })
+        .unwrap();
+    let mut visual = VisualTestContext::from_window(window.into(), cx);
+    draw(&mut visual);
+    let primary = if Modifiers::secondary_key().platform {
+        "cmd"
+    } else {
+        "ctrl"
+    };
+    let other = if primary == "cmd" { "ctrl" } else { "cmd" };
+    visual.update(|_, cx| {
+        cx.write_to_clipboard(gpui::ClipboardItem::new_string("untouched".into()));
+    });
+    visual.simulate_keystrokes(&format!("{primary}-d"));
+    let before = window
+        .update(&mut visual.cx, |this, _, _| {
+            assert_eq!(this.shapes.len(), 3);
+            (
+                this.shapes.clone(),
+                this.selection_ids(),
+                this.history.borrow().undo_len(),
+            )
+        })
+        .unwrap();
+    for key in [
+        "a",
+        "c",
+        "x",
+        "v",
+        "d",
+        "z",
+        "shift-z",
+        "left",
+        "backspace",
+        "delete",
+        "space",
+    ] {
+        visual.simulate_keystrokes(&format!("{other}-{key}"));
+    }
+    window
+        .update(&mut visual.cx, |this, _, cx| {
+            assert_eq!(this.shapes, before.0);
+            assert_eq!(this.selection_ids(), before.1);
+            assert_eq!(this.history.borrow().undo_len(), before.2);
+            assert!(this.draw_tool.is_none());
+            assert!(!this.space_down);
+            assert_eq!(
+                cx.read_from_clipboard().unwrap().text().unwrap(),
+                "untouched"
+            );
+        })
+        .unwrap();
+    visual.simulate_keystrokes(&format!("{primary}-z"));
+    window
+        .update(&mut visual.cx, |this, _, _| {
+            assert_eq!(this.shapes.len(), 2)
+        })
+        .unwrap();
+    visual.simulate_keystrokes(&format!("{primary}-shift-z"));
+    visual.simulate_keystrokes(&format!("{primary}-a {primary}-c {primary}-x"));
+    window
+        .update(&mut visual.cx, |this, _, _| {
+            assert!(this.shapes.is_empty());
+            assert!(this.texts.is_empty());
+        })
+        .unwrap();
+    visual.simulate_keystrokes(&format!("{primary}-v"));
+    window
+        .update(&mut visual.cx, |this, _, _| {
+            assert_eq!(this.shapes.len(), 3);
+            assert_eq!(this.texts.len(), 1);
+            assert_eq!(this.selection_ids().len(), 4);
+        })
+        .unwrap();
+}
+
+#[gpui::test]
 fn copied_nodes_get_new_identities_and_undo_redo_restores_them(cx: &mut TestAppContext) {
     let window = fixture(cx);
     window
@@ -144,8 +226,8 @@ fn duplicate_repeats_adjusted_displacement_and_resets_after_selection_changes(
     visual.simulate_mouse_move(end, MouseButton::Left, Default::default());
     visual.simulate_mouse_up(end, MouseButton::Left, Default::default());
     draw(&mut visual);
-    visual.simulate_keystrokes("ctrl-d");
-    visual.simulate_keystrokes("ctrl-d");
+    visual.simulate_keystrokes("secondary-d");
+    visual.simulate_keystrokes("secondary-d");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, window, cx| {
@@ -317,7 +399,7 @@ fn group_drag_reparents_without_jumps_and_cancel_preserves_redo(cx: &mut TestApp
             assert_eq!(this.history.borrow().undo_len(), before + 1);
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -327,7 +409,7 @@ fn group_drag_reparents_without_jumps_and_cancel_preserves_redo(cx: &mut TestApp
         })
         .unwrap();
     pointer_drag(&mut visual, point(120., 120.), point(180., 150.), true);
-    visual.simulate_keystrokes("ctrl-shift-z");
+    visual.simulate_keystrokes("secondary-shift-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -343,7 +425,7 @@ fn group_drag_reparents_without_jumps_and_cancel_preserves_redo(cx: &mut TestApp
             assert_eq!(this.texts.len(), 1);
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -413,8 +495,8 @@ fn copies_preserve_rich_text_and_children_and_clipboard_is_not_stale(cx: &mut Te
         })
         .unwrap();
     draw(&mut visual);
-    visual.simulate_keystrokes("ctrl-c");
-    visual.simulate_keystrokes("ctrl-v");
+    visual.simulate_keystrokes("secondary-c");
+    visual.simulate_keystrokes("secondary-v");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -438,7 +520,7 @@ fn copies_preserve_rich_text_and_children_and_clipboard_is_not_stale(cx: &mut Te
             assert_eq!(e.effective_style().size, 37.);
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -447,11 +529,11 @@ fn copies_preserve_rich_text_and_children_and_clipboard_is_not_stale(cx: &mut Te
             assert_eq!(this.texts.len(), 1);
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-shift-z");
+    visual.simulate_keystrokes("secondary-shift-z");
     draw(&mut visual);
     visual
         .update(|_, cx| cx.write_to_clipboard(gpui::ClipboardItem::new_string("外部文字".into())));
-    visual.simulate_keystrokes("ctrl-v");
+    visual.simulate_keystrokes("secondary-v");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -477,7 +559,7 @@ fn mixed_properties_apply_only_one_field_and_scrub_as_one_undo(cx: &mut TestAppC
         })
         .unwrap();
     click(&mut visual, "property-3");
-    visual.simulate_keystrokes("ctrl-a");
+    visual.simulate_keystrokes("secondary-a");
     visual.simulate_input("120");
     visual.simulate_keystrokes("enter");
     draw(&mut visual);
@@ -514,7 +596,7 @@ fn mixed_properties_apply_only_one_field_and_scrub_as_one_undo(cx: &mut TestAppC
             assert_eq!(this.history.borrow().undo_len(), before + 1);
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -523,7 +605,7 @@ fn mixed_properties_apply_only_one_field_and_scrub_as_one_undo(cx: &mut TestAppC
         })
         .unwrap();
     click(&mut visual, "property-5");
-    visual.simulate_keystrokes("ctrl-a");
+    visual.simulate_keystrokes("secondary-a");
     visual.simulate_input("FF0000");
     visual.simulate_keystrokes("enter");
     draw(&mut visual);
@@ -536,7 +618,7 @@ fn mixed_properties_apply_only_one_field_and_scrub_as_one_undo(cx: &mut TestAppC
             );
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, cx| {

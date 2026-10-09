@@ -575,7 +575,7 @@ impl Render for Studio {
                     return;
                 }
                 let modifiers = event.keystroke.modifiers;
-                if !(modifiers.control || modifiers.platform) {
+                if !modifiers.secondary() {
                     return;
                 }
                 match event.keystroke.key.as_str() {

@@ -50,11 +50,11 @@ fn grouped_flip_reflects_geometry_handles_corners_and_paint_with_undo(cx: &mut T
             assert_eq!(this.shapes[2], before[2]);
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     window
         .update(&mut visual.cx, |this, _, _| assert_eq!(this.shapes, before))
         .unwrap();
-    visual.simulate_keystrokes("ctrl-shift-z shift-v");
+    visual.simulate_keystrokes("secondary-shift-z shift-v");
     window
         .update(&mut visual.cx, |this, _, _| {
             assert_eq!(this.shapes[0].rect.y, 70.);
@@ -83,20 +83,20 @@ fn cut_and_in_place_paste_preserve_group_parent_position_and_clipboard_history(
         .unwrap();
     let mut visual = VisualTestContext::from_window(window.into(), cx);
     draw(&mut visual);
-    visual.simulate_keystrokes("ctrl-x");
+    visual.simulate_keystrokes("secondary-x");
     window
         .update(&mut visual.cx, |this, _, _| {
             assert!(!this.shapes.iter().any(|s| s.id == 1));
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     window
         .update(&mut visual.cx, |this, _, _| {
             assert_eq!(this.shapes[0], original);
             assert_eq!(this.layer_parent(1), Some(group));
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-shift-v");
+    visual.simulate_keystrokes("secondary-shift-v");
     window
         .update(&mut visual.cx, |this, _, _| {
             let id = *this.selection_ids().first().unwrap();
@@ -105,7 +105,7 @@ fn cut_and_in_place_paste_preserve_group_parent_position_and_clipboard_history(
             assert!(this.layer_info(id).unwrap().0.aspect_locked);
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z ctrl-shift-z ctrl-v");
+    visual.simulate_keystrokes("secondary-z secondary-shift-z secondary-v");
     window
         .update(&mut visual.cx, |this, _, _| {
             let id = *this.selection_ids().first().unwrap();
@@ -184,7 +184,7 @@ fn aspect_lock_updates_companion_field_and_resize_anchor_and_cancels_scrub(
     draw(&mut visual);
     click(&mut visual, "aspect-lock");
     click(&mut visual, "property-3");
-    visual.simulate_keystrokes("ctrl-a 1 6 0 enter");
+    visual.simulate_keystrokes("secondary-a 1 6 0 enter");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, cx| {
@@ -222,7 +222,7 @@ fn aspect_lock_updates_companion_field_and_resize_anchor_and_cancels_scrub(
         .unwrap();
     visual.simulate_keystrokes("escape");
     visual.simulate_mouse_up(end, MouseButton::Left, Default::default());
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     window
         .update(&mut visual.cx, |this, _, _| {
             assert_eq!(this.shapes[1].rect.width, 80.);
@@ -230,7 +230,7 @@ fn aspect_lock_updates_companion_field_and_resize_anchor_and_cancels_scrub(
             assert!(this.shapes[1].layer.aspect_locked);
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     window
         .update(&mut visual.cx, |this, _, _| {
             assert!(!this.shapes[1].layer.aspect_locked)

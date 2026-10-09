@@ -125,7 +125,7 @@ fn edge_hover_shows_fixed_midpoint_and_keeps_arbitrary_double_click_insertion(
         })
         .unwrap();
     assert!(visual.debug_bounds("vector-insert-preview").is_none());
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -194,7 +194,7 @@ fn rotated_rectangle_enters_without_mutation_then_node_drag_converts_and_undo_re
             shape.clone()
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -202,7 +202,7 @@ fn rotated_rectangle_enters_without_mutation_then_node_drag_converts_and_undo_re
             assert_eq!(this.vector_edit, Some(1));
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-shift-z");
+    visual.simulate_keystrokes("secondary-shift-z");
     click(&mut visual, "vector-done");
     assert!(visual.debug_bounds("bezier-node-0-0").is_none());
     assert!(visual.debug_bounds("shape-handle-0").is_some());
@@ -233,7 +233,7 @@ fn edges_move_and_bend_with_cancel_insertion_and_one_step_history(cx: &mut TestA
             near(n[2].anchor, point(180., 120.));
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     click(&mut visual, "vector-bend");
     visual.simulate_mouse_down(start, MouseButton::Left, Default::default());
@@ -309,7 +309,7 @@ fn ellipse_and_independent_rounded_corners_restore_exactly_after_editing(cx: &mu
                 }
             })
             .unwrap();
-        visual.simulate_keystrokes("ctrl-z");
+        visual.simulate_keystrokes("secondary-z");
         draw(&mut visual);
         window
             .update(&mut visual.cx, |this, _, _| {

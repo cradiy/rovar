@@ -83,14 +83,14 @@ fn full_corner_preset_preserves_geometry_and_mode_and_undoes_once(cx: &mut TestA
             })
             .unwrap();
         click(&mut visual, "corners-full");
-        visual.simulate_keystrokes("ctrl-z");
+        visual.simulate_keystrokes("secondary-z");
         draw(&mut visual);
         window
             .update(&mut visual.cx, |this, _, _| {
                 assert_eq!(this.shapes[0], original);
             })
             .unwrap();
-        visual.simulate_keystrokes("ctrl-shift-z");
+        visual.simulate_keystrokes("secondary-shift-z");
         draw(&mut visual);
         window
             .update(&mut visual.cx, |this, _, _| {
@@ -125,7 +125,7 @@ fn drag_linked_radius_and_undo_are_one_edit_without_resizing(cx: &mut TestAppCon
             assert_eq!(this.history.borrow().undo_len(), 1);
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -191,7 +191,7 @@ fn alt_drag_changes_one_corner_and_cancel_and_undo_restore_mode_and_saved_values
             assert_eq!(this.history.borrow().undo_len(), 1);
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     window
         .update(&mut visual.cx, |this, _, _| {
             assert_eq!(this.shapes[0], original);
@@ -241,7 +241,7 @@ fn numeric_radius_validates_commits_and_cancels_without_changing_other_corners(
         .unwrap();
     hover(window, &mut visual, 0);
     click(&mut visual, "corner-radius-handle");
-    visual.simulate_keystrokes("ctrl-a 4 0 escape");
+    visual.simulate_keystrokes("secondary-a 4 0 escape");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {

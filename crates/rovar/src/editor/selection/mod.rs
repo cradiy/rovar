@@ -575,7 +575,10 @@ impl Workspace {
         if modifiers.alt {
             return false;
         }
-        let command = modifiers.control || modifiers.platform;
+        let command = modifiers.secondary();
+        if !command && (modifiers.control || modifiers.platform) {
+            return false;
+        }
         if !command && self.vector_edit.is_some() {
             if matches!(event.keystroke.key.as_str(), "escape" | "enter") {
                 self.exit_vector_edit(cx);

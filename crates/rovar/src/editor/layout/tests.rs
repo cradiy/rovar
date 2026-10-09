@@ -59,8 +59,8 @@ fn alignment_and_spacing_use_world_bounds_preserve_parents_and_undo(cx: &mut Tes
             assert_eq!(this.history.borrow().undo_len(), 2)
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
+    visual.simulate_keystrokes("secondary-z");
     window
         .update(&mut visual.cx, |this, _, cx| {
             assert_eq!(this.shapes[1].rect.x, 110.);
@@ -191,7 +191,7 @@ fn snapping_respects_zoom_alt_hidden_targets_and_cancel_history(cx: &mut TestApp
             assert_eq!(this.history.borrow().undo_len(), 1);
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -226,7 +226,7 @@ fn grouped_drag_snaps_as_one_bounds_and_never_targets_its_own_members(cx: &mut T
         .unwrap();
     visual.simulate_mouse_up(end, MouseButton::Left, Default::default());
     draw(&mut visual);
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {

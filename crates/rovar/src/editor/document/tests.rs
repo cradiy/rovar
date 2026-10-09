@@ -64,7 +64,7 @@ fn workspace_language_menu_preserves_document_and_input_entities(cx: &mut TestAp
     });
     let mut visual = VisualTestContext::from_window(window.into(), cx);
     draw(&mut visual);
-    visual.simulate_keystrokes("ctrl-n");
+    visual.simulate_keystrokes("secondary-n");
     draw(&mut visual);
     let editor = window
         .update(&mut visual.cx, |studio, _, _| {
@@ -88,7 +88,7 @@ fn workspace_language_menu_preserves_document_and_input_entities(cx: &mut TestAp
         editor.select_shape(1, cx);
     });
     click(&mut visual, "property-3");
-    visual.simulate_keystrokes("ctrl-a");
+    visual.simulate_keystrokes("secondary-a");
     visual.simulate_input("invalid");
     draw(&mut visual);
     let before = editor.update(&mut visual.cx, |editor, cx| {

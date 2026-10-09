@@ -505,16 +505,16 @@ fn selection_properties_and_gradient_keep_other_characters_unchanged(cx: &mut Te
     create(&mut visual, "add-artboard");
     create(&mut visual, "add-text");
     visual.simulate_input("abcd");
-    visual.simulate_keystrokes("ctrl-home shift-right shift-right");
+    visual.simulate_keystrokes("secondary-home shift-right shift-right");
     draw(&mut visual);
     click(&mut visual, "property-7");
-    visual.simulate_keystrokes("ctrl-a 4 8");
+    visual.simulate_keystrokes("secondary-a 4 8");
     draw(&mut visual);
     click(&mut visual, "fill-linear");
     click(&mut visual, "gradient-add");
     click(&mut visual, "gradient-add");
     click(&mut visual, "property-5");
-    visual.simulate_keystrokes("ctrl-a f f 0 0 0 0");
+    visual.simulate_keystrokes("secondary-a f f 0 0 0 0");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, window, cx| {
@@ -535,7 +535,7 @@ fn selection_properties_and_gradient_keep_other_characters_unchanged(cx: &mut Te
         })
         .unwrap();
     draw(&mut visual);
-    visual.simulate_keystrokes("ctrl-a");
+    visual.simulate_keystrokes("secondary-a");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, cx| {
@@ -546,7 +546,7 @@ fn selection_properties_and_gradient_keep_other_characters_unchanged(cx: &mut Te
             assert_eq!(text.content, "abcd");
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-end shift-left shift-left");
+    visual.simulate_keystrokes("secondary-end shift-left shift-left");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, cx| {
@@ -560,7 +560,7 @@ fn selection_properties_and_gradient_keep_other_characters_unchanged(cx: &mut Te
     // Escape switches the target back to the entire box without flattening other properties.
     visual.simulate_keystrokes("escape");
     click(&mut visual, "property-10");
-    visual.simulate_keystrokes("ctrl-a 7 0 0");
+    visual.simulate_keystrokes("secondary-a 7 0 0");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, cx| {
@@ -596,9 +596,9 @@ fn text_creation_typing_properties_and_escape_preserve_the_artboard(cx: &mut Tes
         })
         .unwrap();
     click(&mut visual, "property-4");
-    visual.simulate_keystrokes("ctrl-a 1");
+    visual.simulate_keystrokes("secondary-a 1");
     click(&mut visual, "property-7");
-    visual.simulate_keystrokes("ctrl-a 4 8");
+    visual.simulate_keystrokes("secondary-a 4 8");
     click(&mut visual, "align-center");
     window
         .update(&mut visual.cx, |this, _, cx| {
@@ -613,7 +613,7 @@ fn text_creation_typing_properties_and_escape_preserve_the_artboard(cx: &mut Tes
         })
         .unwrap();
     click(&mut visual, "property-4");
-    visual.simulate_keystrokes("ctrl-a 1 2 0");
+    visual.simulate_keystrokes("secondary-a 1 2 0");
     draw(&mut visual);
     // Re-enter through the actual double-click event, then continue at the retained caret.
     let position = visual.debug_bounds("text-box-2").unwrap().center();
@@ -716,7 +716,7 @@ fn text_selection_survives_zoom_and_multiple_text_boxes_keep_independent_content
     create(&mut visual, "add-artboard");
     create(&mut visual, "add-text");
     visual.simulate_input("first");
-    visual.simulate_keystrokes("ctrl-a");
+    visual.simulate_keystrokes("secondary-a");
     window
         .update(&mut visual.cx, |this, _, cx| {
             this.view.zoom_at(point(400., 300.), 0.75);
@@ -724,7 +724,7 @@ fn text_selection_survives_zoom_and_multiple_text_boxes_keep_independent_content
         })
         .unwrap();
     draw(&mut visual);
-    visual.simulate_keystrokes("ctrl-c");
+    visual.simulate_keystrokes("secondary-c");
     visual.update(|_, cx| assert_eq!(cx.read_from_clipboard().unwrap().text().unwrap(), "first"));
     create(&mut visual, "add-text");
     visual.simulate_input("second");
@@ -738,7 +738,7 @@ fn text_selection_survives_zoom_and_multiple_text_boxes_keep_independent_content
     visual.simulate_mouse_move(end, MouseButton::Left, Default::default());
     visual.simulate_mouse_up(end, MouseButton::Left, Default::default());
     draw(&mut visual);
-    visual.simulate_keystrokes("ctrl-c");
+    visual.simulate_keystrokes("secondary-c");
     visual.update(|_, cx| assert_eq!(cx.read_from_clipboard().unwrap().text().unwrap(), "second"));
     window
         .update(&mut visual.cx, |this, _, cx| {
@@ -755,7 +755,7 @@ fn creation_and_property_editing_keep_boards_independent(cx: &mut TestAppContext
     let mut visual = VisualTestContext::from_window(window.into(), cx);
     create(&mut visual, "add-artboard");
     click(&mut visual, "property-3");
-    visual.simulate_keystrokes("ctrl-a 3 2 0");
+    visual.simulate_keystrokes("secondary-a 3 2 0");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, cx| {
@@ -765,7 +765,7 @@ fn creation_and_property_editing_keep_boards_independent(cx: &mut TestAppContext
         })
         .unwrap();
     click(&mut visual, "property-6");
-    visual.simulate_keystrokes("ctrl-a 0");
+    visual.simulate_keystrokes("secondary-a 0");
     draw(&mut visual);
     create(&mut visual, "add-artboard");
     window
@@ -957,7 +957,7 @@ fn invalid_input_does_not_resize_and_normalizes_on_blur(cx: &mut TestAppContext)
     let mut visual = VisualTestContext::from_window(window.into(), cx);
     create(&mut visual, "add-artboard");
     click(&mut visual, "property-3");
-    visual.simulate_keystrokes("ctrl-a 0");
+    visual.simulate_keystrokes("secondary-a 0");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -996,21 +996,21 @@ fn gradient_editor_targets_selected_stop_and_preserves_each_fill_mode(cx: &mut T
     visual.simulate_resize(size(px(1280.), px(1100.)));
     create(&mut visual, "add-artboard");
     click(&mut visual, "property-6");
-    visual.simulate_keystrokes("ctrl-a 5 0");
+    visual.simulate_keystrokes("secondary-a 5 0");
     draw(&mut visual);
     click(&mut visual, "fill-linear");
     click(&mut visual, "gradient-stop-1");
     click(&mut visual, "property-5");
-    visual.simulate_keystrokes("ctrl-a F F 0 0 0 0");
+    visual.simulate_keystrokes("secondary-a F F 0 0 0 0");
     draw(&mut visual);
     click(&mut visual, "property-6");
-    visual.simulate_keystrokes("ctrl-a 2 5");
+    visual.simulate_keystrokes("secondary-a 2 5");
     draw(&mut visual);
     click(&mut visual, "property-7");
-    visual.simulate_keystrokes("ctrl-a 4 5");
+    visual.simulate_keystrokes("secondary-a 4 5");
     draw(&mut visual);
     click(&mut visual, "property-8");
-    visual.simulate_keystrokes("ctrl-a 7 0");
+    visual.simulate_keystrokes("secondary-a 7 0");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -1027,7 +1027,7 @@ fn gradient_editor_targets_selected_stop_and_preserves_each_fill_mode(cx: &mut T
         .unwrap();
     click(&mut visual, "gradient-add");
     click(&mut visual, "property-8");
-    visual.simulate_keystrokes("ctrl-a 9 0");
+    visual.simulate_keystrokes("secondary-a 9 0");
     draw(&mut visual);
     let saved = window
         .update(&mut visual.cx, |this, _, cx| {
@@ -1081,9 +1081,9 @@ fn vertical_alignment_targets_selection_and_supports_mixed_state_and_undo(cx: &m
     create(&mut visual, "add-artboard");
     create(&mut visual, "add-text");
     visual.simulate_input("AB");
-    visual.simulate_keystrokes("ctrl-home shift-right");
+    visual.simulate_keystrokes("secondary-home shift-right");
     click(&mut visual, "property-7");
-    visual.simulate_keystrokes("ctrl-a 7 2");
+    visual.simulate_keystrokes("secondary-a 7 2");
     window
         .update(&mut visual.cx, |this, window, cx| {
             this.texts[0]
@@ -1095,7 +1095,7 @@ fn vertical_alignment_targets_selection_and_supports_mixed_state_and_undo(cx: &m
         })
         .unwrap();
     draw(&mut visual);
-    visual.simulate_keystrokes("ctrl-end shift-left");
+    visual.simulate_keystrokes("secondary-end shift-left");
     click(&mut visual, "vertical-top");
     window
         .update(&mut visual.cx, |this, _, cx| {
@@ -1106,7 +1106,7 @@ fn vertical_alignment_targets_selection_and_supports_mixed_state_and_undo(cx: &m
         })
         .unwrap();
     click(&mut visual, "vertical-bottom");
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, cx| {
@@ -1120,7 +1120,7 @@ fn vertical_alignment_targets_selection_and_supports_mixed_state_and_undo(cx: &m
             );
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-shift-z ctrl-a");
+    visual.simulate_keystrokes("secondary-shift-z secondary-a");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, cx| {

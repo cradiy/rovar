@@ -124,7 +124,7 @@ fn dragging_gap_preserves_sizes_and_anchor_and_cancel_restores_unequal_gaps(
             assert_eq!(this.history.borrow().undo_len(), 1)
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {

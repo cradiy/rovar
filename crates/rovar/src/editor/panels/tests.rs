@@ -138,7 +138,7 @@ fn inspector_component_action_uses_selection_and_supports_undo(cx: &mut TestAppC
         })
         .unwrap();
     assert!(visual.debug_bounds("inspector-create-component").is_none());
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {

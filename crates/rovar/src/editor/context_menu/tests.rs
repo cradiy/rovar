@@ -32,7 +32,7 @@ fn context_preserves_multiselection_and_runs_glass_submenu_actions(cx: &mut Test
             assert!(!context_menu::is_open(cx));
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     right(&mut visual, p);
     click(&mut visual, "context-duplicate");
@@ -42,7 +42,7 @@ fn context_preserves_multiselection_and_runs_glass_submenu_actions(cx: &mut Test
             assert_eq!(this.selection_ids().len(), 3);
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     window
         .update(&mut visual.cx, |this, _, _| {
             assert_eq!(this.shapes.len(), 3)

@@ -231,7 +231,7 @@ fn layer_opacity_input_and_scrub_cancel_preserve_history(cx: &mut TestAppContext
             .unwrap();
     }
     click(&mut visual, "property-18");
-    visual.simulate_keystrokes("ctrl-a 2 5 enter");
+    visual.simulate_keystrokes("secondary-a 2 5 enter");
     handle
         .update(&mut visual.cx, |this, window, cx| {
             assert_eq!(this.shapes[1].layer.opacity, 0.25);

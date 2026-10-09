@@ -527,7 +527,7 @@ fn presentation_click_back_restart_and_exit_preserve_editor(cx: &mut TestAppCont
             assert!(p.presentation.playback.as_ref().unwrap().history.is_empty());
         })
         .unwrap();
-    visual.simulate_keystrokes("delete ctrl-z");
+    visual.simulate_keystrokes("delete secondary-z");
     click(&mut visual, "presentation-close");
     handle
         .update(&mut visual.cx, |w, _, cx| {

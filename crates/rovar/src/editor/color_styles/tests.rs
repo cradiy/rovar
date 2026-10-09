@@ -545,7 +545,7 @@ fn style_modes_keep_drafts_and_enter_confirms_field_without_saving(cx: &mut Test
         })
         .unwrap();
     crate::editor::tests::draw(&mut visual);
-    visual.simulate_keystrokes("ctrl-a");
+    visual.simulate_keystrokes("secondary-a");
     visual.simulate_input("-");
     visual.simulate_keystrokes("escape");
     crate::editor::tests::draw(&mut visual);
@@ -554,7 +554,7 @@ fn style_modes_keep_drafts_and_enter_confirms_field_without_saving(cx: &mut Test
             assert_eq!(w.colors.angle.read(cx).value().as_ref(), "135")
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-a");
+    visual.simulate_keystrokes("secondary-a");
     visual.simulate_input("120");
     visual.simulate_keystrokes("enter");
     crate::editor::tests::draw(&mut visual);

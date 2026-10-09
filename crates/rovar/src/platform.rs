@@ -64,6 +64,7 @@ pub fn prompt_for_paths(cx: &App, options: PathPromptOptions) -> Dialog<Vec<Path
         }
         let receiver = cx.prompt_for_files(gpui::FilePromptOptions {
             multiple: options.multiple,
+            ..Default::default()
         });
         cx.foreground_executor().spawn(async move {
             let result = async {

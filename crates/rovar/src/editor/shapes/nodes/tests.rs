@@ -123,21 +123,21 @@ fn double_click_subdivides_rotated_curve_without_changing_it_and_undo_restores_n
             shape.clone()
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     window
         .update(&mut visual.cx, |this, _, _| {
             assert_eq!(this.shapes[0], before);
             assert_eq!(this.active_node(), None);
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-shift-z delete");
+    visual.simulate_keystrokes("secondary-shift-z delete");
     window
         .update(&mut visual.cx, |this, _, _| {
             assert_eq!(this.shapes[0].nodes.0.len(), 3);
             assert_eq!(this.active_node(), Some((1, 1)));
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     window
         .update(&mut visual.cx, |this, _, _| {
             assert_eq!(this.shapes[0], inserted)
@@ -200,7 +200,7 @@ fn smooth_handles_link_at_constant_opposite_length_corner_conversion_and_cancel_
             assert!(n.smooth);
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     let p = knob(&mut visual, "bezier-node-1-2");
     visual.simulate_mouse_down(p, MouseButton::Left, Default::default());
@@ -219,7 +219,7 @@ fn smooth_handles_link_at_constant_opposite_length_corner_conversion_and_cancel_
     visual.simulate_mouse_move(end, MouseButton::Left, Default::default());
     visual.simulate_keystrokes("escape");
     visual.simulate_mouse_up(end, MouseButton::Left, Default::default());
-    visual.simulate_keystrokes("ctrl-shift-z");
+    visual.simulate_keystrokes("secondary-shift-z");
     draw(&mut visual);
     click(&mut visual, "node-corner");
     window
@@ -296,7 +296,7 @@ fn closed_segment_insertion_menu_actions_minimum_nodes_and_hidden_layer_are_safe
     window
         .update(&mut visual.cx, |this, _, _| assert!(this.shapes.is_empty()))
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     window
         .update(&mut visual.cx, |this, _, _| {
             assert_eq!(this.shapes[0].nodes.0.len(), 2)

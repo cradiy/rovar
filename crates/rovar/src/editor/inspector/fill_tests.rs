@@ -65,7 +65,7 @@ fn point_gradient_controls_drag_undo_and_cancel_on_rotated_zoomed_shapes(cx: &mu
                 assert_eq!(w.history.borrow().undo_len(), undo + 1);
             })
             .unwrap();
-        visual.simulate_keystrokes("ctrl-z");
+        visual.simulate_keystrokes("secondary-z");
         draw(&mut visual);
         window
             .update(&mut visual.cx, |w, _, cx| {
@@ -473,10 +473,10 @@ fn paint_inputs_keep_focus_and_selection_separate_between_surfaces(cx: &mut Test
             })
             .unwrap();
         click(&mut visual, selector);
-        visual.simulate_keystrokes("ctrl-a");
+        visual.simulate_keystrokes("secondary-a");
         click(&mut visual, "property-drag-5");
         click(&mut visual, selector);
-        visual.simulate_keystrokes("ctrl-a left");
+        visual.simulate_keystrokes("secondary-a left");
         window
             .update(&mut visual.cx, |this, window, cx| {
                 let sidebar = this.inspector.fields[index].update(cx, |input, cx| {
@@ -513,7 +513,7 @@ fn paint_inputs_keep_focus_and_selection_separate_between_surfaces(cx: &mut Test
             })
             .unwrap();
         click(&mut visual, selector);
-        visual.simulate_keystrokes("ctrl-a");
+        visual.simulate_keystrokes("secondary-a");
         window
             .update(&mut visual.cx, |this, window, cx| {
                 assert!(
@@ -530,7 +530,7 @@ fn paint_inputs_keep_focus_and_selection_separate_between_surfaces(cx: &mut Test
             .unwrap();
         click(&mut visual, "fill-solid");
         click(&mut visual, selector);
-        visual.simulate_keystrokes("ctrl-a");
+        visual.simulate_keystrokes("secondary-a");
         visual.simulate_input(value);
         draw(&mut visual);
         window
@@ -582,7 +582,7 @@ fn gradient_geometry_reverse_and_stop_edits_preserve_modes_and_history(cx: &mut 
         .unwrap();
     click(&mut visual, "gradient-add");
     click(&mut visual, "property-8");
-    visual.simulate_keystrokes("ctrl-a 3 0 enter");
+    visual.simulate_keystrokes("secondary-a 3 0 enter");
     for (id, kind) in [
         ("gradient-radial", gpui::GradientKind::Radial),
         ("gradient-angular", gpui::GradientKind::Angular),
@@ -664,7 +664,7 @@ fn image_fill_import_fit_opacity_and_history_keep_source_dimensions_and_reject_i
         draw(&mut visual);
         click(&mut visual, "image-fill-contain");
         click(&mut visual, "property-6");
-        visual.simulate_keystrokes("ctrl-a 4 0 enter");
+        visual.simulate_keystrokes("secondary-a 4 0 enter");
         let before = window
             .update(&mut visual.cx, |this, _, _| {
                 let fill = this.current_image_fill().unwrap();

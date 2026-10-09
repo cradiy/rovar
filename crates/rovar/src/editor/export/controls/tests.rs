@@ -50,7 +50,7 @@ fn export_presets_follow_objects_through_undo_storage_and_clipboard(cx: &mut Tes
             assert_eq!(this.hierarchy.exports[&1].len(), 1);
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, window, cx| {

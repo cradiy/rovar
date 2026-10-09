@@ -101,6 +101,10 @@ impl Workspace {
                 if !this.focus.is_focused(window) {
                     return;
                 }
+                let modifiers = event.keystroke.modifiers;
+                if !modifiers.secondary() && (modifiers.control || modifiers.platform) {
+                    return;
+                }
                 if this.selection_key(event, window, cx) {
                     return;
                 }

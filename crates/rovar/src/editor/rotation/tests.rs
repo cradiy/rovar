@@ -66,13 +66,13 @@ fn rotation_drag_shift_cancel_property_and_copy_share_history(cx: &mut TestAppCo
         .unwrap();
     visual.simulate_mouse_up(end, MouseButton::Left, shift);
     draw(&mut visual);
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     visual.simulate_mouse_down(start, MouseButton::Left, Default::default());
     visual.simulate_mouse_move(end, MouseButton::Left, Default::default());
     visual.simulate_keystrokes("escape");
     visual.simulate_mouse_up(end, MouseButton::Left, Default::default());
-    visual.simulate_keystrokes("ctrl-shift-z");
+    visual.simulate_keystrokes("secondary-shift-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -80,7 +80,7 @@ fn rotation_drag_shift_cancel_property_and_copy_share_history(cx: &mut TestAppCo
         })
         .unwrap();
     click(&mut visual, "property-15");
-    visual.simulate_keystrokes("ctrl-a 4 5 0 enter");
+    visual.simulate_keystrokes("secondary-a 4 5 0 enter");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, window, cx| {
@@ -123,7 +123,7 @@ fn rotated_resize_preserves_world_anchor_ratio_and_actual_hit_region(cx: &mut Te
             near_point(geometry::around(point(r.x, r.y), center(r), 45.), anchor);
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     // Pick a rotated-out corner beyond the edge's six-pixel resize hit slop.
     let bounds = visual.debug_bounds("shape-1").unwrap();
@@ -318,7 +318,7 @@ fn rotated_line_endpoint_keeps_other_endpoint_and_undo_exact(cx: &mut TestAppCon
             near(this.shapes[0].layer.rotation, 30.);
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     window
         .update(&mut visual.cx, |this, _, _| {
             assert_eq!(this.shapes[0], before)
@@ -372,7 +372,7 @@ fn rotated_side_resize_snaps_in_world_space_and_angle_scrub_cancel_keeps_redo(
     let mut visual = VisualTestContext::from_window(window.into(), cx);
     draw(&mut visual);
     click(&mut visual, "property-15");
-    visual.simulate_keystrokes("ctrl-a 1 2 0 enter");
+    visual.simulate_keystrokes("secondary-a 1 2 0 enter");
     draw(&mut visual);
     let start = visual.debug_bounds("property-drag-15").unwrap().center();
     let end = start + point(px(40.), px(0.));
@@ -386,13 +386,13 @@ fn rotated_side_resize_snaps_in_world_space_and_angle_scrub_cancel_keeps_redo(
         .unwrap();
     visual.simulate_keystrokes("escape");
     visual.simulate_mouse_up(end, MouseButton::Left, Default::default());
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     window
         .update(&mut visual.cx, |this, _, _| {
             near(this.object_rotation(1), 90.)
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-shift-z");
+    visual.simulate_keystrokes("secondary-shift-z");
     window
         .update(&mut visual.cx, |this, _, _| {
             near(this.object_rotation(1), 120.)

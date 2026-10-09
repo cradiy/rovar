@@ -23,7 +23,7 @@ fn effect_disclosure_commits_focus_and_reverses_without_layout_jump(cx: &mut Tes
         point(field.right() - px(20.), field.center().y),
         Default::default(),
     );
-    visual.simulate_keystrokes("ctrl-a");
+    visual.simulate_keystrokes("secondary-a");
     visual.simulate_input("27");
     click(&mut visual, "shadow-edit-0");
     handle
@@ -89,7 +89,7 @@ fn size_limit_disclosure_keeps_edits_and_resets_motion_for_new_selection(cx: &mu
     assert!(full > partial);
     let field = visual.debug_bounds("size-limit-0").unwrap();
     visual.simulate_click(field.center(), Default::default());
-    visual.simulate_keystrokes("ctrl-a");
+    visual.simulate_keystrokes("secondary-a");
     visual.simulate_input("80");
     click(&mut visual, "toggle-size-limits");
     handle
@@ -143,7 +143,7 @@ pub(super) fn input(visual: &mut VisualTestContext, field: usize, value: &str) {
         Default::default(),
     );
     draw(visual);
-    visual.simulate_keystrokes("ctrl-a");
+    visual.simulate_keystrokes("secondary-a");
     visual.simulate_input(value);
     visual.simulate_keystrokes("enter");
     draw(visual);
@@ -190,7 +190,7 @@ fn shadow_controls_preserve_undo_storage_clipboard_and_component_updates(cx: &mu
             this.focus.focus(window, cx)
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     handle
         .update(&mut visual.cx, |this, window, cx| {
@@ -529,7 +529,7 @@ fn shadow_scrubbing_is_one_undo_step_and_escape_restores_values(cx: &mut TestApp
             assert_eq!(this.history.borrow().undo_len(), depth + 1)
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     handle
         .update(&mut visual.cx, |this, _, _| {

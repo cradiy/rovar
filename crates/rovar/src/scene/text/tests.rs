@@ -70,6 +70,51 @@ struct TestView {
 }
 
 #[gpui::test]
+fn text_clipboard_shortcuts_only_accept_the_host_primary_modifier(cx: &mut TestAppContext) {
+    let window = cx.open_window(size(px(500.), px(400.)), |window, cx| TestView {
+        editor: cx.new(|cx| TextEditor::new(0, Default::default(), window, cx)),
+    });
+    window
+        .update(cx, |view, window, cx| {
+            view.editor.update(cx, |text, cx| {
+                let primary = if gpui::Modifiers::secondary_key().platform {
+                    "cmd"
+                } else {
+                    "ctrl"
+                };
+                let other = if primary == "cmd" { "ctrl" } else { "cmd" };
+                let event = |modifier: &str, key: &str| KeyDownEvent {
+                    keystroke: Keystroke::parse(&format!("{modifier}-{key}")).unwrap(),
+                    is_held: false,
+                    prefer_character_input: false,
+                };
+                text.replace_text_in_range(None, "A中😀B", window, cx);
+                text.key_down(&event(other, "a"), window, cx);
+                assert!(text.selection().is_empty());
+                text.key_down(&event(primary, "a"), window, cx);
+                assert_eq!(text.selection(), 0..text.content.len());
+                cx.write_to_clipboard(ClipboardItem::new_string("untouched".into()));
+                for key in ["c", "x", "v", "backspace", "left"] {
+                    text.key_down(&event(other, key), window, cx);
+                }
+                assert_eq!(text.content, "A中😀B");
+                assert_eq!(text.selection(), 0..text.content.len());
+                assert_eq!(
+                    cx.read_from_clipboard().unwrap().text().unwrap(),
+                    "untouched"
+                );
+                text.key_down(&event(primary, "c"), window, cx);
+                assert_eq!(cx.read_from_clipboard().unwrap().text().unwrap(), "A中😀B");
+                text.key_down(&event(primary, "x"), window, cx);
+                assert!(text.content.is_empty());
+                text.key_down(&event(primary, "v"), window, cx);
+                assert_eq!(text.content, "A中😀B");
+            });
+        })
+        .unwrap();
+}
+
+#[gpui::test]
 fn color_styles_apply_to_selected_text_and_manual_color_detaches_with_undo(
     cx: &mut TestAppContext,
 ) {
@@ -281,7 +326,7 @@ fn composition_utf16_replacement_is_one_undo_step_and_paste_is_separate(cx: &mut
                 replay(text, true);
                 assert_eq!(text.content, "A您好B");
                 cx.write_to_clipboard(ClipboardItem::new_string("\r\n👩‍💻".to_owned()));
-                text.key_down(&event("ctrl-v"), window, cx);
+                text.key_down(&event("secondary-v"), window, cx);
                 assert_eq!(text.content, "A您好\n👩‍💻B");
                 text.key_down(&event("backspace"), window, cx);
                 assert_eq!(text.content, "A您好\nB");

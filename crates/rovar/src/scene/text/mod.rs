@@ -430,7 +430,10 @@ impl TextEditor {
     fn key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         let key = event.keystroke.key.as_str();
         let modifiers = event.keystroke.modifiers;
-        let command = modifiers.control || modifiers.platform;
+        let command = modifiers.secondary();
+        if !command && (modifiers.control || modifiers.platform) {
+            return;
+        }
         // Let the platform input method consume composition keys first.
         if self.marked.is_some() {
             return;

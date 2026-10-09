@@ -12,7 +12,7 @@ fn home_tabs_documents_and_reopening_preserve_independent_documents(cx: &mut Tes
     let mut visual = VisualTestContext::from_window(window.into(), cx);
     visual.update(|window, cx| window.draw(cx).clear());
     assert!(visual.debug_bounds("home").is_some());
-    visual.simulate_keystrokes("ctrl-n");
+    visual.simulate_keystrokes("secondary-n");
     visual.cx.run_until_parked();
     let first = window
         .update(&mut visual.cx, |this, window, cx| {

@@ -68,7 +68,7 @@ fn equal_gaps_snap_while_dragging_release_with_alt_and_undo_as_one_edit(cx: &mut
             assert_eq!(this.history.borrow().undo_len(), 1);
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -328,7 +328,7 @@ fn resizing_preserves_opposite_corner_aspect_and_reacts_to_stationary_modifiers(
             assert_eq!(this.history.borrow().undo_len(), 1)
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {

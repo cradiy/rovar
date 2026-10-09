@@ -175,7 +175,7 @@ fn dismissing_tool_menu_keeps_pen_draft_and_switching_tools_commits_once(cx: &mu
             assert_eq!(this.history.borrow().undo_len(), 2);
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {

@@ -92,7 +92,7 @@ fn bezier_creation_and_independent_handles_remain_editable_outside_curve_bounds(
             assert_eq!(this.history.borrow().undo_len(), 3);
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     let knob = visual.debug_bounds("bezier-node-0-2").unwrap().center();
     visual.simulate_mouse_down(knob, MouseButton::Left, Default::default());
@@ -100,7 +100,7 @@ fn bezier_creation_and_independent_handles_remain_editable_outside_curve_bounds(
     visual.simulate_keystrokes("escape");
     visual.simulate_mouse_up(target, MouseButton::Left, Default::default());
     draw(&mut visual);
-    visual.simulate_keystrokes("ctrl-shift-z");
+    visual.simulate_keystrokes("secondary-shift-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -160,7 +160,7 @@ fn closing_bezier_preserves_nodes_and_fill_with_bounding_box_selection(cx: &mut 
     click(&mut visual, "fill-visibility");
     click(&mut visual, "fill-linear");
     click(&mut visual, "gradient-add");
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -168,7 +168,7 @@ fn closing_bezier_preserves_nodes_and_fill_with_bounding_box_selection(cx: &mut 
             assert_eq!(this.shapes[0].gradient.stops().len(), 2);
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-shift-z");
+    visual.simulate_keystrokes("secondary-shift-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -195,7 +195,7 @@ fn closing_bezier_preserves_nodes_and_fill_with_bounding_box_selection(cx: &mut 
         .unwrap();
     visual.simulate_keystrokes("delete");
     draw(&mut visual);
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -214,7 +214,7 @@ fn draft_node_history_and_escape_leave_document_history_and_freehand_available(
     let mut visual = VisualTestContext::from_window(window.into(), cx);
     create(&mut visual, "add-artboard");
     create(&mut visual, "add-rectangle");
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     click(&mut visual, "draw-bezier");
     for p in [point(80., 80.), point(280., 80.)] {
@@ -222,7 +222,7 @@ fn draft_node_history_and_escape_leave_document_history_and_freehand_available(
         visual.simulate_click(p, Default::default());
         draw(&mut visual);
     }
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -230,7 +230,7 @@ fn draft_node_history_and_escape_leave_document_history_and_freehand_available(
             assert_eq!(this.history.borrow().undo_len(), 1);
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-shift-z");
+    visual.simulate_keystrokes("secondary-shift-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -240,11 +240,11 @@ fn draft_node_history_and_escape_leave_document_history_and_freehand_available(
     visual.simulate_keystrokes("backspace backspace");
     draw(&mut visual);
     assert!(visual.debug_bounds("bezier-node-0-0").is_none());
-    visual.simulate_keystrokes("ctrl-shift-z");
+    visual.simulate_keystrokes("secondary-shift-z");
     draw(&mut visual);
     visual.simulate_keystrokes("escape");
     draw(&mut visual);
-    visual.simulate_keystrokes("ctrl-shift-z");
+    visual.simulate_keystrokes("secondary-shift-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -344,7 +344,7 @@ fn hover_previews_next_curve_without_committing_and_tracks_closure_zoom_and_undo
     let cursor = screen(window, &mut visual, point(400., 200.));
     visual.simulate_mouse_move(cursor, None, Default::default());
     draw(&mut visual);
-    visual.simulate_keystrokes("ctrl-z");
+    visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
@@ -354,7 +354,7 @@ fn hover_previews_next_curve_without_committing_and_tracks_closure_zoom_and_undo
             )
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-shift-z");
+    visual.simulate_keystrokes("secondary-shift-z");
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, cx| {

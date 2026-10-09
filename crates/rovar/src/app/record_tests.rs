@@ -324,7 +324,7 @@ fn home_and_tab_rename_commit_cancel_and_persist_without_changing_document_path(
     right(&mut visual, "recent-file-0");
     click(&mut visual, "file-menu-rename");
     assert!(visual.debug_bounds("document-name-input").is_some());
-    visual.simulate_keystrokes("ctrl-a");
+    visual.simulate_keystrokes("secondary-a");
     visual.simulate_input("  项目 Alpha  ");
     visual.simulate_keystrokes("enter");
     draw(&mut visual);
@@ -344,7 +344,7 @@ fn home_and_tab_rename_commit_cancel_and_persist_without_changing_document_path(
     click(&mut visual, "document-tab-1");
     right(&mut visual, "document-tab-1");
     click(&mut visual, "file-menu-rename");
-    visual.simulate_keystrokes("ctrl-a");
+    visual.simulate_keystrokes("secondary-a");
     visual.simulate_input("Discard");
     visual.simulate_keystrokes("escape");
     handle
@@ -368,7 +368,7 @@ fn home_and_tab_rename_commit_cancel_and_persist_without_changing_document_path(
     });
     draw(&mut visual);
     assert!(visual.debug_bounds("document-name-input").is_some());
-    visual.simulate_keystrokes("ctrl-a");
+    visual.simulate_keystrokes("secondary-a");
     visual.simulate_input(" ");
     visual.simulate_keystrokes("enter");
     handle
@@ -459,7 +459,7 @@ fn document_delete_closes_its_open_tab_in_another_window_and_cannot_be_autosaved
     click(&mut visual, "home-all-files");
     right(&mut visual, "recent-file-0");
     click(&mut visual, "file-menu-rename");
-    visual.simulate_keystrokes("ctrl-a");
+    visual.simulate_keystrokes("secondary-a");
     visual.simulate_input("Shared name");
     visual.simulate_keystrokes("enter");
     source
@@ -578,7 +578,7 @@ fn history_buttons_follow_real_edits_undo_redo_and_tab_switches(cx: &mut TestApp
     click(&mut visual, "document-redo-enabled");
     assert!(visual.debug_bounds("document-undo-enabled").is_some());
     assert!(visual.debug_bounds("document-redo-disabled").is_some());
-    visual.simulate_keystrokes("ctrl-n");
+    visual.simulate_keystrokes("secondary-n");
     draw(&mut visual);
     assert!(visual.debug_bounds("document-undo-disabled").is_some());
     click(&mut visual, "document-tab-1");
@@ -607,7 +607,7 @@ fn all_files_keeps_new_saved_and_imported_documents(cx: &mut TestAppContext) {
     click(&mut visual, "home-all-files");
     assert!(visual.debug_bounds("recent-file-0").is_some());
     click(&mut visual, "recent-file-0");
-    visual.simulate_keystrokes("ctrl-s");
+    visual.simulate_keystrokes("secondary-s");
     draw(&mut visual);
     click(&mut visual, "home-tab");
     assert!(visual.debug_bounds("recent-file-0").is_some());
@@ -660,7 +660,7 @@ fn failed_open_shows_dismissible_dialog_and_preserves_other_documents(cx: &mut T
             assert!(studio.active.is_none());
         })
         .unwrap();
-    visual.simulate_keystrokes("ctrl-n");
+    visual.simulate_keystrokes("secondary-n");
     handle
         .update(&mut visual.cx, |studio, _, _| {
             assert!(studio.tabs.is_empty())
@@ -668,7 +668,7 @@ fn failed_open_shows_dismissible_dialog_and_preserves_other_documents(cx: &mut T
         .unwrap();
     click(&mut visual, "dismiss-open-error");
     assert!(visual.debug_bounds("open-error-dialog").is_none());
-    visual.simulate_keystrokes("ctrl-n");
+    visual.simulate_keystrokes("secondary-n");
     draw(&mut visual);
     let (token, editor) = handle
         .update(&mut visual.cx, |studio, window, cx| {
@@ -723,7 +723,7 @@ fn simultaneous_open_failures_are_queued(cx: &mut TestAppContext) {
     visual.simulate_keystrokes("enter");
     draw(&mut visual);
     assert!(visual.debug_bounds("open-error-dialog").is_none());
-    visual.simulate_keystrokes("ctrl-n");
+    visual.simulate_keystrokes("secondary-n");
     draw(&mut visual);
     handle
         .update(&mut visual.cx, |studio, _, _| {
