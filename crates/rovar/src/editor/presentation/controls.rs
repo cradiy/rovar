@@ -1,6 +1,17 @@
 use super::*;
 use uic::components::dropdown::{DropdownPlacement, dropdown};
 
+fn action_label(action: Option<Action>) -> &'static str {
+    match action {
+        None => "prototype-none",
+        Some(Action::Navigate { .. }) => "prototype-navigate",
+        Some(Action::OpenOverlay { .. }) => "prototype-open-overlay",
+        Some(Action::CloseOverlay) => "prototype-close-overlay",
+        Some(Action::Back) => "prototype-back",
+        Some(Action::ChangeVariant { .. }) => "prototype-variant-action",
+    }
+}
+
 impl Workspace {
     pub(super) fn set_start(
         &mut self,
@@ -82,16 +93,15 @@ impl Workspace {
             .flex_col()
             .child(
                 inspector::inspector_section(t("prototype-start"))
-                    .child(self.presentation_menu(None, cx)),
+                    .child(self.presentation_menu(None, false, cx)),
             );
         if let Some(id) = selected {
             let trigger = self.presentation.trigger;
-            let connected = self
+            let action = self
                 .hierarchy
                 .interactions
                 .get(&id)
-                .and_then(|i| i.get(trigger))
-                .is_some();
+                .and_then(|i| i.get(trigger));
             section =
                 section.child(
                     inspector::inspector_section(t("prototype-interaction"))
@@ -151,16 +161,21 @@ impl Workspace {
                         ))
                         .child(
                             div()
+                                .text_size(px(12.))
+                                .text_color(MUTED.color())
+                                .child(t("prototype-action")),
+                        )
+                        .child(
+                            div()
                                 .flex()
                                 .items_center()
                                 .gap(px(4.))
-                                .child(
-                                    div()
-                                        .flex_1()
-                                        .min_w_0()
-                                        .child(self.presentation_menu(Some(id), cx)),
-                                )
-                                .when(connected, |row| {
+                                .child(div().flex_1().min_w_0().child(self.presentation_menu(
+                                    Some(id),
+                                    false,
+                                    cx,
+                                )))
+                                .when(action.is_some(), |row| {
                                     row.child(
                                         inspector::icon_button(
                                             "prototype-disconnect",
@@ -179,23 +194,32 @@ impl Workspace {
                                 }),
                         )
                         .when(
-                            self.hierarchy
-                                .interactions
-                                .get(&id)
-                                .and_then(|i| i.get(trigger))
-                                .is_some(),
-                            |el| el.child(self.transition_controls(id, trigger, cx)),
+                            matches!(
+                                action,
+                                Some(
+                                    Action::Navigate { .. }
+                                        | Action::OpenOverlay { .. }
+                                        | Action::ChangeVariant { .. }
+                                )
+                            ),
+                            |el| {
+                                el.child(div().text_size(px(12.)).text_color(MUTED.color()).child(
+                                    t(if matches!(action, Some(Action::ChangeVariant { .. })) {
+                                        "prototype-variant-target"
+                                    } else {
+                                        "prototype-frame-target"
+                                    }),
+                                ))
+                                .child(self.presentation_menu(Some(id), true, cx))
+                            },
                         )
-                        .when(
-                            trigger == Trigger::Hover
-                                && self
-                                    .hierarchy
-                                    .interactions
-                                    .get(&id)
-                                    .and_then(|i| i.hover)
-                                    .is_some(),
-                            |el| el.child(self.hover_exit_controls(id, cx)),
-                        ),
+                        .child(self.overlay_controls(id, trigger, cx))
+                        .when(action.is_some(), |el| {
+                            el.child(self.transition_controls(id, trigger, cx))
+                        })
+                        .when(trigger == Trigger::Hover && action.is_some(), |el| {
+                            el.child(self.hover_exit_controls(id, cx))
+                        }),
                 );
         } else {
             section = section.child(
@@ -212,9 +236,14 @@ impl Workspace {
     fn presentation_menu(
         &self,
         source: Option<usize>,
+        target_menu: bool,
         cx: &mut Context<Self>,
     ) -> impl IntoElement + use<> {
-        let index = usize::from(source.is_some());
+        let index = if target_menu {
+            4
+        } else {
+            usize::from(source.is_some())
+        };
         let trigger = self.presentation.trigger;
         let action = source.and_then(|id| {
             self.hierarchy
@@ -224,7 +253,9 @@ impl Workspace {
         });
         let target = if source.is_none() {
             self.hierarchy.start
-        } else if let Some(Action::Navigate { target }) = action {
+        } else if let Some(Action::Navigate { target } | Action::OpenOverlay { target, .. }) =
+            action
+        {
             Some(target)
         } else {
             None
@@ -234,50 +265,104 @@ impl Workspace {
         } else {
             "prototype-none"
         });
-        let label = if let Some(Action::ChangeVariant { target }) = action {
-            let name = self
-                .components
+        let label = if source.is_some() && !target_menu {
+            t(action_label(action)).to_owned()
+        } else if let Some(Action::ChangeVariant { target }) = action {
+            self.components
                 .sets
                 .values()
                 .find_map(|set| set.variants.get(&target.to_string()))
                 .cloned()
-                .unwrap_or_else(|| t("prototype-missing-variant").into());
-            crate::i18n::message("prototype-change-variant", &[("name", name)])
-        } else if action == Some(Action::Back) {
-            t("prototype-back").to_owned()
+                .unwrap_or_else(|| t("prototype-missing-variant").into())
         } else {
             target
                 .and_then(|id| self.boards.iter().find(|b| b.id == id))
                 .map_or_else(|| empty.to_owned(), |b| b.name.clone())
         };
-        let mut options = vec![(0usize, empty.to_owned(), None)];
-        if source.is_some() {
-            options.push((1, t("prototype-back").to_owned(), Some(Action::Back)));
+        let mut options = Vec::new();
+        if source.is_none() {
+            options.push((0usize, empty.to_owned(), None));
         }
-        options.extend(
-            self.boards
-                .iter()
-                .filter(|b| !b.layer.hidden)
-                .enumerate()
-                .map(|(i, b)| {
-                    (
-                        i + 2,
-                        b.name.clone(),
-                        Some(Action::Navigate { target: b.id }),
-                    )
-                }),
-        );
+        if source.is_none()
+            || (target_menu && !matches!(action, Some(Action::ChangeVariant { .. })))
+        {
+            options.extend(
+                self.boards
+                    .iter()
+                    .filter(|b| !b.layer.hidden)
+                    .enumerate()
+                    .map(|(i, b)| {
+                        (
+                            i + 2,
+                            b.name.clone(),
+                            Some(match action {
+                                Some(Action::OpenOverlay { settings, .. }) => Action::OpenOverlay {
+                                    target: b.id,
+                                    settings,
+                                },
+                                _ => Action::Navigate { target: b.id },
+                            }),
+                        )
+                    }),
+            );
+        }
         if let Some(source) = source {
-            let start = options.len();
-            options.extend(self.prototype_variants(source).into_iter().enumerate().map(
-                |(i, (target, name))| {
-                    (
-                        start + i,
-                        crate::i18n::message("prototype-change-variant", &[("name", name)]),
+            let variants = self.prototype_variants(source);
+            if target_menu && matches!(action, Some(Action::ChangeVariant { .. })) {
+                options.extend(
+                    variants.into_iter().enumerate().map(|(i, (target, name))| {
+                        (i, name, Some(Action::ChangeVariant { target }))
+                    }),
+                );
+            } else if !target_menu {
+                options.push((0, t("prototype-none").to_owned(), None));
+                options.push((1, t("prototype-back").to_owned(), Some(Action::Back)));
+                let board = target
+                    .filter(|id| self.boards.iter().any(|b| b.id == *id && !b.layer.hidden))
+                    .or_else(|| {
+                        self.boards
+                            .iter()
+                            .find(|b| {
+                                !b.layer.hidden
+                                    && b.id != source
+                                    && !self.ancestors(source).contains(&b.id)
+                            })
+                            .map(|b| b.id)
+                    })
+                    .or_else(|| self.boards.iter().find(|b| !b.layer.hidden).map(|b| b.id));
+                if let Some(target) = board {
+                    options.push((
+                        2,
+                        t("prototype-navigate").to_owned(),
+                        Some(Action::Navigate { target }),
+                    ));
+                    let settings = match action {
+                        Some(Action::OpenOverlay { settings, .. }) => settings,
+                        _ => Default::default(),
+                    };
+                    options.push((
+                        3,
+                        t("prototype-open-overlay").to_owned(),
+                        Some(Action::OpenOverlay { target, settings }),
+                    ));
+                }
+                options.push((
+                    4,
+                    t("prototype-close-overlay").to_owned(),
+                    Some(Action::CloseOverlay),
+                ));
+                let variant = match action {
+                    Some(Action::ChangeVariant { target }) => Some(target),
+                    _ => variants.first().map(|(id, _)| *id),
+                };
+                if let Some(target) = variant {
+                    options.push((
+                        5,
+                        t("prototype-variant-action").to_owned(),
                         Some(Action::ChangeVariant { target }),
-                    )
-                },
-            ));
+                    ));
+                }
+            }
         }
         dropdown(&self.presentation.menus[index])
             .placement(DropdownPlacement::BottomStart)
@@ -292,13 +377,17 @@ impl Workspace {
             .text_color(TEXT.color())
             .trigger(
                 div()
-                    .id(if source.is_some() {
+                    .id(if target_menu {
+                        "prototype-target-menu"
+                    } else if source.is_some() {
                         "prototype-click-menu"
                     } else {
                         "prototype-start-menu"
                     })
                     .debug_selector(move || {
-                        if source.is_some() {
+                        if target_menu {
+                            "prototype-target-menu".into()
+                        } else if source.is_some() {
                             "prototype-click-menu".into()
                         } else {
                             "prototype-start-menu".into()
@@ -331,7 +420,9 @@ impl Workspace {
                     .flex_col()
                     .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
                     .children(options.into_iter().map(|(key, label, option)| {
-                        let current = if source.is_some() {
+                        let current = if source.is_some() && !target_menu {
+                            action_label(option) == action_label(action)
+                        } else if source.is_some() {
                             option == action
                         } else {
                             option == target.map(|target| Action::Navigate { target })

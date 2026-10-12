@@ -12,6 +12,7 @@ mod chrome;
 mod connections;
 mod controls;
 mod hover_exit;
+mod overlay;
 #[cfg(test)]
 mod tests;
 mod transition;
@@ -23,7 +24,7 @@ pub(super) struct State {
     connection: Option<connections::Connection>,
     pub player: Option<Entity<Workspace>>,
     pub playback: Option<Playback>,
-    menus: [Entity<DropdownState>; 4],
+    menus: [Entity<DropdownState>; 5],
 }
 
 pub(super) struct Playback {
@@ -39,6 +40,8 @@ pub(super) struct Playback {
     window_size: gpui::Size<Pixels>,
     transition: Transition,
     visual: transition::Visual,
+    overlay: Option<overlay::Overlay>,
+    overlay_transition: Transition,
 }
 
 impl State {
@@ -116,6 +119,8 @@ impl Workspace {
                 window_size: window.viewport_size(),
                 transition: Transition::Instant,
                 visual: transition::Visual::default(),
+                overlay: None,
+                overlay_transition: Transition::Instant,
             });
             player
         });
@@ -142,7 +147,12 @@ impl Workspace {
             .font_family(crate::ui::font::family(cx))
             .capture_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, window, cx| {
                 if event.keystroke.key == "escape" {
-                    this.stop_presentation(window, cx);
+                    let closed = this.presentation.player.as_ref().is_some_and(|player| {
+                        player.update(cx, |player, cx| player.dismiss_overlay(cx))
+                    });
+                    if !closed {
+                        this.stop_presentation(window, cx);
+                    }
                 }
                 // Keep editing shortcuts out of the isolated playback scene.
                 cx.stop_propagation();
@@ -152,7 +162,7 @@ impl Workspace {
     }
 
     fn playback_action(&mut self, action: Action, cx: &mut Context<Self>) {
-        if let Action::Navigate { target } = action
+        if let Action::Navigate { target } | Action::OpenOverlay { target, .. } = action
             && !self
                 .boards
                 .iter()
@@ -164,13 +174,29 @@ impl Workspace {
             return;
         };
         match action {
-            Action::Navigate { target } if target != playback.current => {
-                playback.history.push(playback.current);
-                playback.current = target;
+            Action::Navigate { target } => {
+                if target == playback.current && playback.overlay.is_none() {
+                    return;
+                }
+                if target != playback.current {
+                    playback.history.push(playback.current);
+                    playback.current = target;
+                }
+                playback.overlay = None;
             }
             Action::Back => {
+                playback.overlay = None;
                 if let Some(previous) = playback.history.pop() {
                     playback.current = previous;
+                }
+            }
+            Action::OpenOverlay { target, settings } => {
+                playback.overlay = Some(overlay::Overlay { target, settings });
+                playback.overlay_transition = playback.transition;
+            }
+            Action::CloseOverlay => {
+                if playback.overlay.take().is_none() {
+                    return;
                 }
             }
             _ => return,
@@ -191,7 +217,8 @@ impl Workspace {
     }
 
     fn playback_hit(&self, world: Point<f32>, trigger: Trigger) -> Option<(usize, Action)> {
-        let current = self.presentation.playback.as_ref()?.current;
+        let playback = self.presentation.playback.as_ref()?;
+        let current = playback.overlay.map_or(playback.current, |o| o.target);
         let rect = self.boards.iter().find(|b| b.id == current)?.rect;
         if world.x < rect.x
             || world.y < rect.y
@@ -277,6 +304,7 @@ impl Workspace {
         let frame = transition::FrameKey {
             board: playback.current,
             visual: playback.visual.clone(),
+            overlay: playback.overlay,
         };
         let duration = match playback.transition {
             Transition::Instant => std::time::Duration::ZERO,
@@ -292,6 +320,12 @@ impl Workspace {
             pan: point(-rect.x * zoom, -rect.y * zoom),
         };
         self.load_visible_media(window, cx);
+        if frame.overlay.is_some() {
+            let (view, _) = self.playback_coordinates();
+            let base_view = std::mem::replace(&mut self.view, view);
+            self.load_visible_media(window, cx);
+            self.view = base_view;
+        }
         let weak = cx.entity().downgrade();
         let pointer = weak.clone();
         let frame_bounds = self.bounds.clone();
@@ -347,6 +381,12 @@ impl Workspace {
             .child(self.playback_toolbar(cx))
             .child(
                 div()
+                    .on_paint_before_children(move |bounds, _, _, cx| {
+                        if stage.replace(bounds) != bounds {
+                            let _ = weak.update(cx, |_, cx| cx.notify());
+                        }
+                    })
+                    .id("playback-stage")
                     .relative()
                     .flex_1()
                     .min_h_0()
@@ -355,11 +395,10 @@ impl Workspace {
                     .flex()
                     .items_center()
                     .justify_center()
-                    .on_paint_before_children(move |bounds, _, _, cx| {
-                        if stage.replace(bounds) != bounds {
-                            let _ = weak.update(cx, |_, cx| cx.notify());
-                        }
-                    })
+                    .on_click(cx.listener(|this, event: &gpui::ClickEvent, _, cx| {
+                        this.overlay_outside_click(event.position(), cx);
+                        cx.stop_propagation();
+                    }))
                     .child(div().absolute().inset_0().child(frames))
                     .child(
                         div()
@@ -387,7 +426,11 @@ impl Workspace {
                                     ))
                                     .on_click(cx.listener(
                                         |this, event: &gpui::ClickEvent, window, cx| {
-                                            let world = this.board_point(None, event.position());
+                                            if this.overlay_outside_click(event.position(), cx) {
+                                                cx.stop_propagation();
+                                                return;
+                                            }
+                                            let world = this.playback_world(event.position());
                                             if let Some((source, action)) =
                                                 this.playback_hit(world, Trigger::Click)
                                             {

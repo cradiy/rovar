@@ -66,6 +66,18 @@ impl Workspace {
         if let Some(connection) = self.presentation.connection.take()
             && let Some((_, action)) = connection.target
         {
+            let action = match (
+                action,
+                self.hierarchy
+                    .interactions
+                    .get(&connection.source)
+                    .and_then(|i| i.get(connection.trigger)),
+            ) {
+                (Action::Navigate { target }, Some(Action::OpenOverlay { settings, .. })) => {
+                    Action::OpenOverlay { target, settings }
+                }
+                (action, _) => action,
+            };
             self.set_prototype_action(
                 connection.source,
                 connection.trigger,
@@ -108,14 +120,16 @@ impl Workspace {
 
     fn connection_end(&self, action: Action) -> Option<Rect> {
         match action {
-            Action::Navigate { target } => self.world_bounds(target),
+            Action::Navigate { target } | Action::OpenOverlay { target, .. } => {
+                self.world_bounds(target)
+            }
             Action::ChangeVariant { target } => self
                 .hierarchy
                 .components
                 .iter()
                 .find(|(_, b)| b.master && b.component == target.to_string())
                 .and_then(|(id, _)| self.world_bounds(*id)),
-            Action::Back => None,
+            Action::Back | Action::CloseOverlay => None,
         }
     }
 

@@ -19,6 +19,7 @@ impl Eq for Visual {}
 pub(super) struct FrameKey {
     pub board: usize,
     pub visual: Visual,
+    pub overlay: Option<overlay::Overlay>,
 }
 
 #[derive(IntoElement)]
@@ -41,11 +42,23 @@ impl RenderOnce for Frame {
                 if let Some(frozen) = frozen {
                     frozen.update(cx, |scene, cx| {
                         scene
-                            .playback_frame_content(self.key.board, available, window, cx)
+                            .playback_frame_content(
+                                self.key.board,
+                                self.key.overlay,
+                                available,
+                                window,
+                                cx,
+                            )
                             .debug_selector(|| "playback-outgoing-snapshot".into())
                     })
                 } else {
-                    this.playback_frame_content(self.key.board, available, window, cx)
+                    this.playback_frame_content(
+                        self.key.board,
+                        self.key.overlay,
+                        available,
+                        window,
+                        cx,
+                    )
                 }
             })
             .unwrap_or_else(|_| div())
@@ -56,6 +69,7 @@ impl Workspace {
     fn playback_frame_content(
         &mut self,
         board: usize,
+        overlay: Option<overlay::Overlay>,
         available: gpui::Size<Pixels>,
         window: &Window,
         cx: &mut Context<Self>,
@@ -87,7 +101,50 @@ impl Workspace {
                     .w(px(rect.width * zoom))
                     .h(px(rect.height * zoom))
                     .overflow_hidden()
-                    .children(elements),
+                    .children(elements)
+                    .when_some(overlay, |el, overlay| {
+                        let Some(overlay_rect) = self
+                            .boards
+                            .iter()
+                            .find(|b| b.id == overlay.target)
+                            .map(|b| b.rect)
+                        else {
+                            return el;
+                        };
+                        let (bounds, overlay_zoom) = overlay::geometry(
+                            gpui::size(px(rect.width * zoom), px(rect.height * zoom)),
+                            zoom,
+                            overlay_rect,
+                            overlay.settings.position,
+                        );
+                        let view = std::mem::replace(
+                            &mut self.view,
+                            Viewport {
+                                zoom: overlay_zoom,
+                                pan: point(
+                                    -overlay_rect.x * overlay_zoom,
+                                    -overlay_rect.y * overlay_zoom,
+                                ),
+                            },
+                        );
+                        let elements =
+                            self.content_elements_in_frame(window, cx, Some(overlay.target));
+                        self.view = view;
+                        el.when(overlay.settings.backdrop, |el| {
+                            el.child(div().absolute().inset_0().bg(Color::Overlay.color()))
+                        })
+                        .child(
+                            div()
+                                .debug_selector(|| "playback-overlay".into())
+                                .absolute()
+                                .left(px(bounds.x))
+                                .top(px(bounds.y))
+                                .w(px(bounds.width))
+                                .h(px(bounds.height))
+                                .overflow_hidden()
+                                .children(elements),
+                        )
+                    }),
             )
     }
 

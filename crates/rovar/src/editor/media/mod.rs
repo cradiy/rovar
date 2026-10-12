@@ -29,7 +29,11 @@ impl Workspace {
         } else {
             window.viewport_size()
         };
-        let (left, right) = self.canvas_insets();
+        let (left, right) = if self.presentation.playback.is_some() {
+            (0., 0.)
+        } else {
+            self.canvas_insets()
+        };
         let origin = self.view.world(point(left, 0.));
         let viewport = Rect {
             x: origin.x,

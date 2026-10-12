@@ -10,17 +10,58 @@ pub(crate) enum Trigger {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub(crate) enum Action {
-    Navigate { target: usize },
+    Navigate {
+        target: usize,
+    },
+    OpenOverlay {
+        target: usize,
+        #[serde(default)]
+        settings: OverlaySettings,
+    },
+    CloseOverlay,
     Back,
-    ChangeVariant { target: uuid::Uuid },
+    ChangeVariant {
+        target: uuid::Uuid,
+    },
 }
 
 impl Action {
     pub fn remap(self, mut map: impl FnMut(usize) -> Option<usize>) -> Option<Self> {
         match self {
             Self::Navigate { target } => map(target).map(|target| Self::Navigate { target }),
+            Self::OpenOverlay { target, settings } => {
+                map(target).map(|target| Self::OpenOverlay { target, settings })
+            }
+            Self::CloseOverlay => Some(self),
             Self::Back => Some(Self::Back),
             Self::ChangeVariant { target } => (!target.is_nil()).then_some(self),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum OverlayPosition {
+    #[default]
+    Center,
+    Bottom,
+    Right,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub(crate) struct OverlaySettings {
+    pub position: OverlayPosition,
+    pub backdrop: bool,
+    pub dismiss_outside: bool,
+}
+
+impl Default for OverlaySettings {
+    fn default() -> Self {
+        Self {
+            position: OverlayPosition::Center,
+            backdrop: true,
+            dismiss_outside: true,
         }
     }
 }

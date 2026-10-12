@@ -1,6 +1,316 @@
 use super::*;
 use crate::editor::tests::{click, draw, open};
+use crate::scene::presentation::{OverlayPosition, OverlaySettings};
 use gpui::{TestAppContext, VisualTestContext};
+
+#[gpui::test]
+fn overlay_authoring_roundtrips_and_duplicate_targets_remain_internal(cx: &mut TestAppContext) {
+    let handle = open(cx);
+    let (first, second, button) = handle
+        .update(cx, |w, window, cx| {
+            let ids = setup(w, window, cx);
+            w.set_selection(BTreeSet::from([ids.2]), cx);
+            w.set_presentation_tab(true, window, cx);
+            ids
+        })
+        .unwrap();
+    let mut visual = VisualTestContext::from_window(handle.into(), cx);
+    click(&mut visual, "prototype-click-menu");
+    click(&mut visual, "prototype-option-1-3");
+    click(&mut visual, "prototype-overlay-bottom");
+    click(&mut visual, "prototype-overlay-backdrop");
+    click(&mut visual, "prototype-target-menu");
+    assert!(visual.debug_bounds("prototype-option-4-0").is_none());
+    click(&mut visual, "prototype-option-4-2");
+    handle
+        .update(&mut visual.cx, |w, _, _| {
+            assert_eq!(
+                w.hierarchy.interactions[&button].click,
+                Some(Action::OpenOverlay {
+                    target: first,
+                    settings: OverlaySettings {
+                        position: OverlayPosition::Bottom,
+                        backdrop: false,
+                        dismiss_outside: true
+                    },
+                })
+            );
+        })
+        .unwrap();
+    click(&mut visual, "prototype-target-menu");
+    click(&mut visual, "prototype-option-4-3");
+    click(&mut visual, "prototype-overlay-outside");
+    handle
+        .update(&mut visual.cx, |w, window, cx| {
+            let settings = OverlaySettings {
+                position: OverlayPosition::Bottom,
+                backdrop: false,
+                dismiss_outside: false,
+            };
+            assert_eq!(
+                w.hierarchy.interactions[&button].click,
+                Some(Action::OpenOverlay {
+                    target: second,
+                    settings
+                })
+            );
+            w.undo_redo(false, window, cx);
+            assert!(matches!(
+                w.hierarchy.interactions[&button].click,
+                Some(Action::OpenOverlay {
+                    settings: OverlaySettings {
+                        dismiss_outside: true,
+                        ..
+                    },
+                    ..
+                })
+            ));
+            w.undo_redo(true, window, cx);
+            let page = w.snapshot_page(cx).0;
+            let decoded =
+                crate::document::Page::decode(&serde_json::to_vec(&page).unwrap()).unwrap();
+            assert_eq!(decoded.hierarchy.interactions, page.hierarchy.interactions);
+            w.set_selection(BTreeSet::from([first, second]), cx);
+            w.duplicate_selection(window, cx);
+            let copied_button = w.shapes.iter().find(|s| s.id != button).unwrap();
+            let Some(Action::OpenOverlay {
+                target,
+                settings: copied,
+            }) = w.hierarchy.interactions[&copied_button.id].click
+            else {
+                panic!("Expected overlay")
+            };
+            assert_ne!(target, second);
+            assert!(w.selection_ids().contains(&target));
+            assert_eq!(copied, settings);
+            w.snapshot_page(cx).0.validate().unwrap();
+        })
+        .unwrap();
+}
+
+#[gpui::test]
+fn overlay_blocks_background_and_maps_positioned_hits_without_navigation(cx: &mut TestAppContext) {
+    let handle = open(cx);
+    let (first, second, button) = handle
+        .update(cx, |w, window, cx| {
+            let ids = setup(w, window, cx);
+            w.boards[1].rect.width = 100.;
+            w.boards[1].rect.height = 80.;
+            w.set_click(ids.1, Some(Action::CloseOverlay), window, cx);
+            w.start_presentation(window, cx);
+            ids
+        })
+        .unwrap();
+    let mut visual = VisualTestContext::from_window(handle.into(), cx);
+    draw(&mut visual);
+    draw(&mut visual);
+    let surface = visual.debug_bounds("playback-surface").unwrap();
+    let scale = f32::from(surface.size.width) / 320.;
+    let background_button = surface.origin + point(px(50. * scale), px(40. * scale));
+    for position in [
+        OverlayPosition::Center,
+        OverlayPosition::Bottom,
+        OverlayPosition::Right,
+    ] {
+        handle
+            .update(&mut visual.cx, |w, _, cx| {
+                w.presentation.player.as_ref().unwrap().update(cx, |p, cx| {
+                    p.playback_action(
+                        Action::OpenOverlay {
+                            target: second,
+                            settings: OverlaySettings {
+                                position,
+                                backdrop: false,
+                                dismiss_outside: false,
+                            },
+                        },
+                        cx,
+                    );
+                });
+            })
+            .unwrap();
+        draw(&mut visual);
+        let bounds = visual.debug_bounds("playback-overlay").unwrap();
+        assert!((f32::from(bounds.size.width) - 100. * scale).abs() < 1.);
+        match position {
+            OverlayPosition::Center => {
+                assert!((bounds.center() - surface.center()).magnitude() < 1.)
+            }
+            OverlayPosition::Bottom => {
+                assert!((f32::from(bounds.bottom() - surface.bottom())).abs() < 1.)
+            }
+            OverlayPosition::Right => {
+                assert!((f32::from(bounds.right() - surface.right())).abs() < 1.)
+            }
+        }
+        visual.simulate_click(background_button, Default::default());
+        draw(&mut visual);
+        handle
+            .update(&mut visual.cx, |w, _, cx| {
+                let p = w.presentation.player.as_ref().unwrap().read(cx);
+                let playback = p.presentation.playback.as_ref().unwrap();
+                assert_eq!(playback.current, first);
+                assert!(playback.history.is_empty());
+                assert!(playback.overlay.is_some());
+                let world = p.playback_world(bounds.center());
+                assert_eq!(
+                    p.playback_hit(world, Trigger::Click),
+                    Some((second, Action::CloseOverlay))
+                );
+                assert_eq!(
+                    p.hierarchy.interactions[&button].click,
+                    Some(Action::Navigate { target: second })
+                );
+            })
+            .unwrap();
+        visual.simulate_click(bounds.center(), Default::default());
+        draw(&mut visual);
+        assert!(visual.debug_bounds("playback-overlay").is_none());
+    }
+    // Both the underlying page and the surrounding stage dismiss without click-through.
+    for outside in [background_button, surface.origin - point(px(8.), px(8.))] {
+        handle
+            .update(&mut visual.cx, |w, _, cx| {
+                w.presentation.player.as_ref().unwrap().update(cx, |p, cx| {
+                    p.playback_action(
+                        Action::OpenOverlay {
+                            target: second,
+                            settings: Default::default(),
+                        },
+                        cx,
+                    );
+                });
+            })
+            .unwrap();
+        draw(&mut visual);
+        visual.simulate_click(outside, Default::default());
+        draw(&mut visual);
+        handle
+            .update(&mut visual.cx, |w, _, cx| {
+                let p = w.presentation.player.as_ref().unwrap().read(cx);
+                assert_eq!(p.presentation.playback.as_ref().unwrap().current, first);
+                assert!(p.presentation.playback.as_ref().unwrap().overlay.is_none());
+            })
+            .unwrap();
+    }
+}
+
+#[gpui::test]
+fn overlay_hover_restore_and_escape_preserve_the_base_page(cx: &mut TestAppContext) {
+    let handle = open(cx);
+    let (first, second, button) = handle
+        .update(cx, |w, window, cx| {
+            let ids = setup(w, window, cx);
+            w.boards[1].rect.width = 100.;
+            w.boards[1].rect.height = 80.;
+            w.set_prototype_action(
+                ids.2,
+                Trigger::Hover,
+                Some(Action::OpenOverlay {
+                    target: ids.1,
+                    settings: Default::default(),
+                }),
+                window,
+                cx,
+            );
+            w.set_prototype_transition(
+                ids.2,
+                Trigger::Hover,
+                Transition::Dissolve { duration_ms: 200 },
+                window,
+                cx,
+            );
+            w.set_prototype_action(
+                ids.1,
+                Trigger::Hover,
+                Some(Action::CloseOverlay),
+                window,
+                cx,
+            );
+            w.start_presentation(window, cx);
+            ids
+        })
+        .unwrap();
+    let mut visual = VisualTestContext::from_window(handle.into(), cx);
+    draw(&mut visual);
+    draw(&mut visual);
+    let surface = visual.debug_bounds("playback-surface").unwrap();
+    let scale = f32::from(surface.size.width) / 320.;
+    visual.simulate_mouse_move(
+        surface.origin + point(px(50. * scale), px(40. * scale)),
+        None,
+        Default::default(),
+    );
+    draw(&mut visual);
+    visual
+        .cx
+        .executor()
+        .advance_clock(std::time::Duration::from_millis(100));
+    draw(&mut visual);
+    assert!(visual.debug_bounds("playback-overlay").is_some());
+    visual.simulate_mouse_move(
+        surface.origin + point(px(250. * scale), px(200. * scale)),
+        None,
+        Default::default(),
+    );
+    draw(&mut visual);
+    visual
+        .cx
+        .executor()
+        .advance_clock(std::time::Duration::from_millis(300));
+    draw(&mut visual);
+    assert!(visual.debug_bounds("playback-overlay").is_none());
+    handle
+        .update(&mut visual.cx, |w, _, cx| {
+            w.presentation.player.as_ref().unwrap().update(cx, |p, cx| {
+                assert_eq!(p.presentation.playback.as_ref().unwrap().current, first);
+                assert!(p.presentation.playback.as_ref().unwrap().history.is_empty());
+                assert!(p.hierarchy.interactions[&button].hover.is_some());
+                p.playback_action(
+                    Action::OpenOverlay {
+                        target: second,
+                        settings: Default::default(),
+                    },
+                    cx,
+                );
+            });
+        })
+        .unwrap();
+    draw(&mut visual);
+    // Hover-close also respects the configured restore behavior on pointer exit.
+    visual.simulate_mouse_move(surface.center(), None, Default::default());
+    draw(&mut visual);
+    handle
+        .update(&mut visual.cx, |w, _, cx| {
+            let p = w.presentation.player.as_ref().unwrap().read(cx);
+            assert!(p.presentation.playback.as_ref().unwrap().overlay.is_none());
+        })
+        .unwrap();
+    visual.simulate_mouse_move(
+        surface.origin + point(px(250. * scale), px(200. * scale)),
+        None,
+        Default::default(),
+    );
+    draw(&mut visual);
+    handle
+        .update(&mut visual.cx, |w, _, cx| {
+            let p = w.presentation.player.as_ref().unwrap().read(cx);
+            assert!(p.presentation.playback.as_ref().unwrap().overlay.is_some());
+        })
+        .unwrap();
+    visual.simulate_keystrokes("escape");
+    draw(&mut visual);
+    handle
+        .update(&mut visual.cx, |w, _, cx| {
+            let p = w.presentation.player.as_ref().unwrap().read(cx);
+            assert!(p.presentation.playback.as_ref().unwrap().overlay.is_none());
+            assert_eq!(p.presentation.playback.as_ref().unwrap().current, first);
+        })
+        .unwrap();
+    visual.simulate_keystrokes("escape");
+    draw(&mut visual);
+    assert!(visual.debug_bounds("playback").is_none());
+}
 
 #[gpui::test]
 fn transition_controls_persist_per_trigger_with_undo_and_validation(cx: &mut TestAppContext) {
@@ -786,6 +1096,7 @@ fn prototype_controls_configure_and_remove_clicks(cx: &mut TestAppContext) {
     assert!(zoom.right() < panel.right());
     click(&mut visual, "prototype-click-menu");
     click(&mut visual, "prototype-option-1-1");
+    assert!(visual.debug_bounds("prototype-target-menu").is_none());
     handle
         .update(&mut visual.cx, |w, _, _| {
             assert_eq!(w.hierarchy.interactions[&button].click, Some(Action::Back))

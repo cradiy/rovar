@@ -21,6 +21,8 @@ struct HoverSnapshot {
     view: Viewport,
     bounds: Bounds<Pixels>,
     visual: transition::Visual,
+    overlay: Option<overlay::Overlay>,
+    overlay_transition: Transition,
 }
 
 impl Hover {
@@ -116,7 +118,7 @@ impl Workspace {
             self.playback_hover(false, cx);
             return;
         }
-        let world = self.board_point(None, position);
+        let world = self.playback_world(position);
         let click = self.playback_hit(world, Trigger::Click);
         let hover = self.playback_hit(world, Trigger::Hover);
         self.playback_hover(click.is_some() || hover.is_some(), cx);
@@ -183,13 +185,16 @@ impl Workspace {
                         view: self.view,
                         bounds: self.bounds.get(),
                         visual: p.visual.clone(),
+                        overlay: p.overlay,
+                        overlay_transition: p.overlay_transition,
                     });
+                    let (hover_view, hover_bounds) = self.playback_coordinates();
                     self.presentation.playback.as_mut().unwrap().hover = Some(Hover {
                         region,
                         masks,
                         restore,
-                        view: self.view,
-                        bounds: self.bounds.get(),
+                        view: hover_view,
+                        bounds: hover_bounds,
                         root: self.prototype_component(source).unwrap_or(source),
                         exit: self.hierarchy.interactions[&source].hover_exit,
                         transition: self.prototype_transition(source, Trigger::Hover),
@@ -229,6 +234,8 @@ impl Workspace {
         let p = self.presentation.playback.as_mut().unwrap();
         p.current = snapshot.current;
         p.history = snapshot.history;
+        p.overlay = snapshot.overlay;
+        p.overlay_transition = snapshot.overlay_transition;
         self.view = snapshot.view;
         self.bounds.set(snapshot.bounds);
         cx.notify();
@@ -285,7 +292,7 @@ impl Workspace {
             && hover
                 .restore
                 .as_ref()
-                .is_some_and(|s| s.current != p.current)
+                .is_some_and(|s| s.current != p.current || s.overlay != p.overlay)
         {
             // Clicking the destination commits a hovered navigation before the
             // destination's action runs, preserving its place in the history.
