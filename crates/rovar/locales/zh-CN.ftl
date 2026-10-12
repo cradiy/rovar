@@ -75,6 +75,7 @@ tool-pen = 钢笔
 tool-move = 移动
 tool-hand = 抓手
 artboard = 画板
+context-create = 新建
 tool-media = 图片／视频…
 text-box = 文本框
 text = 文本

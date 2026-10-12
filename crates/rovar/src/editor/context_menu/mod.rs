@@ -36,6 +36,9 @@ pub(super) fn menu(width: f32, selector: &'static str) -> ContextMenu {
 
 #[derive(Clone, Copy)]
 enum Command {
+    Create(DrawTool, Point<f32>),
+    ImportImage(Point<f32>),
+    ImportSvg(Point<f32>),
     SaveAsset,
     Export(crate::document::export::Format),
     Undo,
@@ -137,6 +140,98 @@ impl Workspace {
         let mut menu = menu(238., "editor-context-glass");
         if !tree {
             menu = self.with_layer_picker(menu, position, cx);
+            let origin = self.board_point(None, position);
+            menu = menu
+                .submenu_with(
+                    |_, _| {
+                        div()
+                            .debug_selector(|| "context-create".into())
+                            .flex()
+                            .items_center()
+                            .gap(px(10.))
+                            .child(icon(LucideIcons::Plus, 15.))
+                            .child(t("context-create"))
+                    },
+                    |mut menu| {
+                        for (key, label, glyph, tool) in [
+                            (
+                                "context-create-frame",
+                                "artboard",
+                                LucideIcons::Frame,
+                                DrawTool::Board,
+                            ),
+                            (
+                                "context-create-text",
+                                "text-box",
+                                LucideIcons::Type,
+                                DrawTool::Text,
+                            ),
+                            (
+                                "context-create-rectangle",
+                                "shape-rectangle",
+                                LucideIcons::Square,
+                                DrawTool::Shape(ShapeKind::Rectangle),
+                            ),
+                            (
+                                "context-create-ellipse",
+                                "shape-ellipse",
+                                LucideIcons::Circle,
+                                DrawTool::Shape(ShapeKind::Ellipse),
+                            ),
+                            (
+                                "context-create-line",
+                                "shape-line",
+                                LucideIcons::Minus,
+                                DrawTool::Shape(ShapeKind::Line),
+                            ),
+                            (
+                                "context-create-arrow",
+                                "shape-arrow",
+                                LucideIcons::ArrowUpRight,
+                                DrawTool::Shape(ShapeKind::Arrow),
+                            ),
+                            (
+                                "context-create-polygon",
+                                "shape-polygon",
+                                LucideIcons::Triangle,
+                                DrawTool::Shape(ShapeKind::Polygon),
+                            ),
+                            (
+                                "context-create-star",
+                                "shape-star",
+                                LucideIcons::Star,
+                                DrawTool::Shape(ShapeKind::Star),
+                            ),
+                        ] {
+                            menu = menu.item(item(
+                                key,
+                                t(label),
+                                glyph,
+                                "",
+                                Command::Create(tool, origin),
+                                true,
+                            ));
+                        }
+                        menu.separator()
+                            .item(item(
+                                "context-create-image",
+                                t("shape-image"),
+                                LucideIcons::Image,
+                                "",
+                                Command::ImportImage(origin),
+                                true,
+                            ))
+                            .item(item(
+                                "context-create-svg",
+                                t("svg-import"),
+                                LucideIcons::FileCode,
+                                "",
+                                Command::ImportSvg(origin),
+                                true,
+                            ))
+                    },
+                )
+                .separator();
         }
         if self.can_boolean() {
             menu = menu.submenu_with(
@@ -581,6 +676,9 @@ impl Workspace {
         self.focus.focus(window, cx);
         self.choose_tool(toolbar::Tool::Move, window, cx);
         match command {
+            Command::Create(tool, origin) => self.create_at(tool, origin, window, cx),
+            Command::ImportImage(origin) => self.import_media_at(Some(origin), window, cx),
+            Command::ImportSvg(origin) => self.import_svg_at(Some(origin), window, cx),
             Command::SaveAsset => self.begin_save_asset(window, cx),
             Command::Export(format) => self.export_selection(Some(format), window, cx),
             Command::Node(action) => self.run_node_action(action, cx),
@@ -657,5 +755,6 @@ impl Workspace {
         cx.notify();
     }
 }
+mod create;
 #[cfg(test)]
 mod tests;

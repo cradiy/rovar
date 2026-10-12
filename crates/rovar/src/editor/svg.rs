@@ -55,6 +55,15 @@ impl Workspace {
     }
 
     pub(super) fn import_svg_file(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.import_svg_at(None, window, cx);
+    }
+
+    pub(super) fn import_svg_at(
+        &mut self,
+        origin: Option<Point<f32>>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.finish_bezier(cx);
         self.exit_vector_edit(cx);
         self.draw_tool = None;
@@ -122,8 +131,8 @@ impl Workspace {
                         let center =
                             view.world(point((left + size.width - right) / 2., size.height / 2.));
                         let rect = Rect {
-                            x: center.x - width * scale / 2.,
-                            y: center.y - height * scale / 2.,
+                            x: origin.map_or(center.x - width * scale / 2., |p| p.x),
+                            y: origin.map_or(center.y - height * scale / 2., |p| p.y),
                             width: width * scale,
                             height: height * scale,
                         };

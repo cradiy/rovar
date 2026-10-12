@@ -75,6 +75,7 @@ tool-pen = Pen
 tool-move = Move
 tool-hand = Hand
 artboard = Frame
+context-create = New
 tool-media = Image / video…
 text-box = Text box
 text = Text

@@ -257,6 +257,7 @@ fn hidden_video_pauses_and_deletion_drops_playback_without_putting_it_in_history
                     content: std::sync::OnceLock::from(Ok(AssetContent::Video(Arc::new(poster)))),
                     video: true,
                 }),
+                None,
                 window,
                 cx,
             );

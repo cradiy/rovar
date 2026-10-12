@@ -98,6 +98,15 @@ impl Workspace {
         }
     }
     pub(super) fn import_media(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.import_media_at(None, window, cx);
+    }
+
+    pub(super) fn import_media_at(
+        &mut self,
+        origin: Option<Point<f32>>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.finish_bezier(cx);
         self.exit_vector_edit(cx);
         self.draw_tool = None;
@@ -164,7 +173,7 @@ impl Workspace {
                 match loaded {
                     Ok(asset) => {
                         if this.pages.active == page {
-                            this.add_media(asset, window, cx);
+                            this.add_media(asset, origin, window, cx);
                         } else if let Some(state) =
                             this.pages.entries.iter_mut().find(|p| p.page.id == page)
                         {
@@ -190,8 +199,8 @@ impl Workspace {
                                 None,
                                 asset.kind(),
                                 Rect {
-                                    x: center.x - width / 2.,
-                                    y: center.y - height / 2.,
+                                    x: origin.map_or(center.x - width / 2., |p| p.x),
+                                    y: origin.map_or(center.y - height / 2., |p| p.y),
                                     width,
                                     height,
                                 },
@@ -231,7 +240,13 @@ impl Workspace {
         cx.notify();
     }
 
-    fn add_media(&mut self, asset: Arc<FileAsset>, window: &mut Window, cx: &mut Context<Self>) {
+    fn add_media(
+        &mut self,
+        asset: Arc<FileAsset>,
+        origin: Option<Point<f32>>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.cancel_gesture(window, cx);
         self.draw_tool = None;
         let size = self.bounds.get().size.map(f32::from);
@@ -249,8 +264,8 @@ impl Workspace {
             .view
             .world(point((left + size.width - right) / 2., size.height / 2.));
         let rect = Rect {
-            x: center.x - width / 2.,
-            y: center.y - height / 2.,
+            x: origin.map_or(center.x - width / 2., |p| p.x),
+            y: origin.map_or(center.y - height / 2., |p| p.y),
             width,
             height,
         };
