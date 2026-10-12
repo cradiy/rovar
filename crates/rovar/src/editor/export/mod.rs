@@ -364,7 +364,7 @@ impl Workspace {
             .shapes
             .iter()
             .filter(|s| ids.contains(&s.id) && s.kind == ShapeKind::Video)
-            .filter_map(|s| s.media.as_ref())
+            .filter_map(|s| s.asset.as_ref())
             .filter_map(|asset| asset.path.extension())
             .map(|ext| ext.to_string_lossy().to_uppercase())
             .collect();

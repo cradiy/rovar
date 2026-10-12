@@ -7,6 +7,7 @@ members = [
   "crates/rovar-api",
   "crates/rovar-server",
   "crates/rovar-render",
+  "crates/rovar-svg",
 ]
 default-members = ["crates/rovar"]
 

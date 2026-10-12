@@ -75,7 +75,7 @@ impl Workspace {
             return None;
         }
         let mode = if let Some(s) = self.selected_shape() {
-            if !s.fill_enabled || !s.can_fill() || s.kind.is_media() {
+            if !s.fill_enabled || !s.can_fill() || s.kind.is_asset() {
                 return None;
             }
             s.fill_mode

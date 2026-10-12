@@ -164,7 +164,7 @@ fn media_import_stays_on_its_page_and_survives_transfer(cx: &mut TestAppContext)
         .update(&mut visual.cx, |this, window, cx| {
             this.receive_transfer(transfer, window, cx).unwrap();
             this.switch_page(&first, window, cx);
-            assert!(this.shapes[0].media.is_some());
+            assert!(this.shapes[0].asset.is_some());
         })
         .unwrap();
 }

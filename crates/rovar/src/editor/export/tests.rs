@@ -293,7 +293,7 @@ fn exported_text_keeps_wrapping_rich_styles_and_alignment(cx: &mut TestAppContex
 
 #[gpui::test]
 fn video_selection_exports_original_and_hides_image_options(cx: &mut TestAppContext) {
-    use crate::media::{MediaAsset, MediaContent};
+    use crate::asset::{AssetContent, FileAsset};
     let cache = tempfile::NamedTempFile::new().unwrap().into_temp_path();
     let bytes = b"original video bytes with audio";
     std::fs::write(&cache, bytes).unwrap();
@@ -314,13 +314,13 @@ fn video_selection_exports_original_and_hides_image_options(cx: &mut TestAppCont
             .unwrap();
             let mut video = Shape::new(1, None, ShapeKind::Video, rect(100., 100., 180., 320.));
             video.name = "clip.mp4".into();
-            video.media = Some(Arc::new(MediaAsset {
+            video.asset = Some(Arc::new(FileAsset {
                 path: "/missing-original/clip.mp4".into(),
-                source: crate::media::Source::file(cache),
+                source: crate::asset::Source::file(cache),
                 hash: "a".repeat(64),
                 width: 1440,
                 height: 2560,
-                content: std::sync::OnceLock::from(Ok(MediaContent::Video(Arc::new(poster)))),
+                content: std::sync::OnceLock::from(Ok(AssetContent::Video(Arc::new(poster)))),
                 video: true,
             }));
             this.shapes = vec![

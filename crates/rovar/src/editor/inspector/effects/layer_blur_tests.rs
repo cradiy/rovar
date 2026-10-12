@@ -250,7 +250,7 @@ fn image_and_text_blur_exports_include_pixels_outside_the_original_layer(cx: &mu
     image::RgbaImage::from_pixel(4, 4, image::Rgba([0, 80, 255, 255]))
         .save(&path)
         .unwrap();
-    let asset = crate::media::MediaAsset::load(path).unwrap();
+    let asset = crate::asset::FileAsset::load(path).unwrap();
     let options = crate::render::svg::render_options(true).unwrap();
     let handle = open(cx);
     handle
@@ -262,7 +262,7 @@ fn image_and_text_blur_exports_include_pixels_outside_the_original_layer(cx: &mu
                 height: 40.,
             };
             let mut image = Shape::new(1, None, ShapeKind::Image, rect);
-            image.media = Some(asset);
+            image.asset = Some(asset);
             this.shapes.push(image);
             let text = this.make_text(2, None, rect, window, cx);
             text.editor.update(cx, |editor, cx| {

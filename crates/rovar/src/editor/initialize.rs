@@ -101,6 +101,7 @@ impl Workspace {
             shape_paths: Default::default(),
             boolean_cache: Default::default(),
             media: Default::default(),
+            svg: Default::default(),
             zoom_menu,
             draw_tool: None,
             box_draft: None,

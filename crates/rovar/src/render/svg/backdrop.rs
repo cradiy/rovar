@@ -45,7 +45,7 @@ fn region(scene: &Scene<'_>, id: usize) -> Option<(backdrop::Region, String)> {
         .find(|s| s.id == id && backdrop::supports_shape(s))?;
     let mut local: Shape = s.clone();
     local.rect = world(doc, s.board, s.rect);
-    if local.kind == ShapeKind::Image {
+    if matches!(local.kind, ShapeKind::Image | ShapeKind::Svg) {
         local.kind = ShapeKind::Rectangle;
     }
     Some((

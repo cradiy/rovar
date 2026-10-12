@@ -16,6 +16,16 @@ pub fn add_font(bytes: Vec<u8>) {
 }
 
 #[wasm_bindgen]
+pub fn import_svg(bytes: &[u8]) -> Result<String, JsValue> {
+    OPTIONS.with(|options| {
+        let mut options = options.borrow_mut();
+        options.image_href_resolver.resolve_string = Box::new(|_, _| None);
+        let svg = rovar_svg::parse(bytes, &options).map_err(|error| JsValue::from_str(&error))?;
+        serde_json::to_string(&svg).map_err(|error| JsValue::from_str(&error.to_string()))
+    })
+}
+
+#[wasm_bindgen]
 pub fn render(
     svg: &str,
     width: u32,

@@ -13,6 +13,7 @@ pub(crate) enum ShapeKind {
     Star,
     Arrow,
     Image,
+    Svg,
     Video,
     Line,
     Pen,
@@ -29,8 +30,8 @@ impl ShapeKind {
     pub fn is_polygon(self) -> bool {
         matches!(self, Self::Polygon | Self::Star)
     }
-    pub fn is_media(self) -> bool {
-        matches!(self, Self::Image | Self::Video)
+    pub fn is_asset(self) -> bool {
+        matches!(self, Self::Image | Self::Video | Self::Svg)
     }
     pub fn supports_corners(self) -> bool {
         matches!(self, Self::Rectangle | Self::Image)
@@ -43,6 +44,7 @@ impl ShapeKind {
             Self::Star => t("shape-star"),
             Self::Arrow => t("shape-arrow"),
             Self::Image => t("shape-image"),
+            Self::Svg => "SVG",
             Self::Video => t("shape-video"),
             Self::Line => t("shape-line"),
             Self::Pen => t("tool-pencil"),
@@ -129,7 +131,7 @@ pub(crate) struct Shape {
     pub inner_radius: f32,
     pub mirrored: [bool; 2],
     #[serde(skip)]
-    pub media: Option<std::sync::Arc<crate::media::MediaAsset>>,
+    pub asset: Option<std::sync::Arc<crate::asset::FileAsset>>,
     #[serde(default)]
     pub media_placement: crate::scene::image_fill::Placement,
     pub image_fill: crate::scene::image_fill::ImageFill,
@@ -161,7 +163,7 @@ impl Shape {
             vertices: if kind == ShapeKind::Star { 5 } else { 3 },
             inner_radius: 0.45,
             mirrored: [false; 2],
-            media: None,
+            asset: None,
             media_placement: Default::default(),
             image_fill: Default::default(),
             points: PathPoints::default(),
@@ -257,7 +259,7 @@ impl Shape {
         self.set_path(&points);
     }
     pub fn can_fill(&self) -> bool {
-        !self.kind.is_media()
+        !self.kind.is_asset()
             && (!self.kind.is_path() || (self.kind == ShapeKind::Bezier && self.closed))
     }
     pub fn world_nodes(&self) -> Vec<crate::scene::bezier::Node> {

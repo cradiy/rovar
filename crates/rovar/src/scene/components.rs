@@ -10,7 +10,7 @@ pub(crate) fn sources(page: &Page) -> Vec<crate::document::AssetSource> {
         .iter()
         .filter_map(|b| b.image_fill.asset.as_ref())
         .chain(page.shapes.iter().flat_map(|s| {
-            [s.media.as_ref(), s.image_fill.asset.as_ref()]
+            [s.asset.as_ref(), s.image_fill.asset.as_ref()]
                 .into_iter()
                 .flatten()
         }))
@@ -461,7 +461,7 @@ pub(crate) fn synchronize(pages: &mut [Page], definitions: &mut Definitions) -> 
                 .iter()
                 .filter_map(|b| b.image_fill.asset.clone())
                 .chain(page.shapes.iter().flat_map(|s| {
-                    [s.media.clone(), s.image_fill.asset.clone()]
+                    [s.asset.clone(), s.image_fill.asset.clone()]
                         .into_iter()
                         .flatten()
                 }))
@@ -473,7 +473,7 @@ pub(crate) fn synchronize(pages: &mut [Page], definitions: &mut Definitions) -> 
                         .filter_map(|b| b.image_fill.asset.clone()),
                 )
                 .chain(definition.page.shapes.iter().flat_map(|s| {
-                    [s.media.clone(), s.image_fill.asset.clone()]
+                    [s.asset.clone(), s.image_fill.asset.clone()]
                         .into_iter()
                         .flatten()
                 }))
@@ -564,7 +564,7 @@ pub(crate) fn synchronize(pages: &mut [Page], definitions: &mut Definitions) -> 
                         s.image_fill.asset = asset;
                     }
                 } else if let Some(s) = page.shapes.iter_mut().find(|s| s.id == a.object) {
-                    s.media = asset;
+                    s.asset = asset;
                 }
             }
             let old_ids = ids(&previous);

@@ -65,8 +65,8 @@ fn small_image_import_keeps_intrinsic_size_and_survives_copy_delete_and_source_r
             this.duplicate_selection(window, cx);
             assert_eq!(this.shapes.len(), 2);
             assert!(Arc::ptr_eq(
-                before.media.as_ref().unwrap(),
-                this.selected_shape().unwrap().media.as_ref().unwrap()
+                before.asset.as_ref().unwrap(),
+                this.selected_shape().unwrap().asset.as_ref().unwrap()
             ));
             this.delete_selected(cx);
             assert_eq!(this.shapes.len(), 1);
@@ -118,7 +118,7 @@ fn large_image_fits_visible_canvas_and_corner_edits_survive_undo(cx: &mut TestAp
                 assert!(rect.width < 1080. && rect.width > 100.);
                 assert!((rect.width * zoom - 320.).abs() < 0.001);
                 assert_eq!(rect.width, rect.height);
-                let asset = shape.media.as_ref().unwrap();
+                let asset = shape.asset.as_ref().unwrap();
                 assert_eq!((asset.width, asset.height), (1080, 1080));
                 assert_eq!(this.view.zoom, zoom);
             })
@@ -246,15 +246,15 @@ fn hidden_video_pauses_and_deletion_drops_playback_without_putting_it_in_history
             .unwrap();
             this.view.zoom = 0.25;
             this.add_media(
-                Arc::new(MediaAsset {
+                Arc::new(FileAsset {
                     path: "generated.mp4".into(),
-                    source: crate::media::Source::file(
+                    source: crate::asset::Source::file(
                         tempfile::NamedTempFile::new().unwrap().into_temp_path(),
                     ),
                     hash: String::new(),
                     width: 1920,
                     height: 1080,
-                    content: std::sync::OnceLock::from(Ok(MediaContent::Video(Arc::new(poster)))),
+                    content: std::sync::OnceLock::from(Ok(AssetContent::Video(Arc::new(poster)))),
                     video: true,
                 }),
                 window,
@@ -320,7 +320,7 @@ fn reopening_displays_scene_before_decoding_only_visible_media(cx: &mut TestAppC
         image::RgbaImage::from_pixel(4, 4, image::Rgba([id as u8, 100, 150, 255]))
             .save(&path)
             .unwrap();
-        let asset = MediaAsset::load(path).unwrap();
+        let asset = FileAsset::load(path).unwrap();
         sources.push(AssetSource {
             hash: asset.hash.clone(),
             name: asset.name(),
@@ -360,7 +360,7 @@ fn reopening_displays_scene_before_decoding_only_visible_media(cx: &mut TestAppC
             assert!(
                 this.shapes
                     .iter()
-                    .all(|s| s.media.as_ref().unwrap().is_pending())
+                    .all(|s| s.asset.as_ref().unwrap().is_pending())
             );
         })
         .unwrap();
@@ -368,8 +368,8 @@ fn reopening_displays_scene_before_decoding_only_visible_media(cx: &mut TestAppC
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, cx| {
-            assert!(!this.shapes[0].media.as_ref().unwrap().is_pending());
-            assert!(this.shapes[1].media.as_ref().unwrap().is_pending());
+            assert!(!this.shapes[0].asset.as_ref().unwrap().is_pending());
+            assert!(this.shapes[1].asset.as_ref().unwrap().is_pending());
             assert_eq!(this.snapshot_document(&doc.id, cx).unwrap().0, json);
             assert!(!this.can_undo_redo(false));
             this.view.pan.x = -4600.;
@@ -379,7 +379,7 @@ fn reopening_displays_scene_before_decoding_only_visible_media(cx: &mut TestAppC
     draw(&mut visual);
     window
         .update(&mut visual.cx, |this, _, _| {
-            assert!(!this.shapes[1].media.as_ref().unwrap().is_pending());
+            assert!(!this.shapes[1].asset.as_ref().unwrap().is_pending());
             assert!(this.media.error.is_none());
         })
         .unwrap();

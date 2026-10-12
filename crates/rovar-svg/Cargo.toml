@@ -1,0 +1,12 @@
+[package]
+name = "rovar-svg"
+version.workspace = true
+edition = "2024"
+license = "MIT"
+
+[features]
+parse = ["dep:usvg"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+usvg = { version = "0.48", optional = true, default-features = false, features = ["text"] }

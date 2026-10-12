@@ -198,7 +198,7 @@ impl Scene<'_> {
                     .cloned()
                     .unwrap_or_else(|| Shape::new(*id, None, ShapeKind::Rectangle, rect));
                 local.rect = rect;
-                if local.kind == ShapeKind::Image {
+                if matches!(local.kind, ShapeKind::Image | ShapeKind::Svg) {
                     local.kind = ShapeKind::Rectangle;
                 }
                 let contour = if let Some(g) = &composition {
@@ -231,7 +231,8 @@ impl Scene<'_> {
                         &s.image_fill,
                     )
                 };
-                let media = shape.is_some_and(|s| s.kind == ShapeKind::Image);
+                let media =
+                    shape.is_some_and(|s| matches!(s.kind, ShapeKind::Image | ShapeKind::Svg));
                 if enabled && mode != FillMode::Image && !media {
                     let fill = paint::paint(
                         mode,

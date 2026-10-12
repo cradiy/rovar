@@ -31,6 +31,7 @@ mod preview;
 mod rotation;
 mod selection;
 mod shapes;
+mod svg;
 #[cfg(test)]
 mod tests;
 mod text_boxes;
@@ -101,6 +102,7 @@ pub(crate) struct Workspace {
     shape_paths: shapes::ShapePaths,
     boolean_cache: std::cell::RefCell<crate::scene::boolean::Cache>,
     media: media::State,
+    svg: svg::State,
     draw_tool: Option<DrawTool>,
     box_draft: Option<BoxDraft>,
     toolbar: toolbar::Toolbar,

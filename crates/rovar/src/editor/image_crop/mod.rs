@@ -25,7 +25,7 @@ impl Workspace {
             if shape.kind == ShapeKind::Image {
                 return Some((
                     ImageFill {
-                        asset: shape.media.clone(),
+                        asset: shape.asset.clone(),
                         fit: ImageFit::Contain,
                         placement: shape.media_placement,
                         ..Default::default()
@@ -103,7 +103,7 @@ impl Workspace {
             .filter(|c| c.id == shape.id && c.media)
             .map_or_else(
                 || ImageFill {
-                    asset: shape.media.clone(),
+                    asset: shape.asset.clone(),
                     fit: ImageFit::Contain,
                     placement: shape.media_placement,
                     ..Default::default()

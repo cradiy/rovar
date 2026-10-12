@@ -10,7 +10,7 @@ impl Shape {
 
     /// Generate editing handles without changing the primitive or its history.
     pub fn editable_nodes(&self) -> Vec<Node> {
-        if self.kind.is_media() {
+        if self.kind.is_asset() {
             return Vec::new();
         }
         if self.kind.is_polygon() {

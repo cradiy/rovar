@@ -404,7 +404,7 @@ impl Workspace {
             key.stroke_width = 0.;
         }
         let outset = key.outset;
-        let fill = (paint && shape.fill_enabled && shape.can_fill() && !shape.kind.is_media())
+        let fill = (paint && shape.fill_enabled && shape.can_fill() && !shape.kind.is_asset())
             .then(|| shape.background());
         let edit_hatch = self.vector_edit == Some(id) && shape.editable_closed();
         let stroke = shape.stroke.background();
@@ -412,7 +412,13 @@ impl Workspace {
             FillMode::Points(g) if fill.is_some() => Some(g),
             _ => None,
         };
-        let image_fill = if shape.kind == ShapeKind::Image {
+        let image_fill = if shape.kind == ShapeKind::Svg {
+            Some(crate::scene::image_fill::ImageFill {
+                asset: shape.asset.clone(),
+                fit: crate::scene::image_fill::ImageFit::Contain,
+                ..Default::default()
+            })
+        } else if shape.kind == ShapeKind::Image {
             Some(self.cropped_media(shape))
         } else {
             (paint && shape.fill_enabled && shape.can_fill() && shape.fill_mode == FillMode::Image)
@@ -433,7 +439,7 @@ impl Workspace {
                 }
                 paths[&id].clone()
             },
-            move |bounds, geometry, window, _| {
+            move |bounds, geometry, window, cx| {
                 let mut paint = |window: &mut Window| {
                     if let Some(fill) = &fill {
                         paint_path(&geometry.fill, bounds.origin, fill.clone(), window);
@@ -488,7 +494,7 @@ impl Workspace {
                                         window,
                                     ),
                                     gpui::SubtreeInput::Second => {
-                                        image_fill.paint(image_bounds, window)
+                                        image_fill.paint(image_bounds, window, cx)
                                     }
                                 },
                             );
@@ -597,7 +603,7 @@ impl Workspace {
                                     cx.stop_propagation();
                                     return;
                                 }
-                                if this.shapes.iter().any(|s| s.id == id && s.kind.is_media()) {
+                                if this.shapes.iter().any(|s| s.id == id && s.kind.is_asset()) {
                                     this.select_shape(id, cx);
                                     if this.selected_shape().unwrap().kind == ShapeKind::Video {
                                         this.play_video(id, window, cx);

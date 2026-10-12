@@ -485,7 +485,7 @@ fn download_reconstruction_ignores_local_edits_and_fetches_only_missing_media(
         image::RgbaImage::from_pixel(3, 2, image::Rgba(color))
             .save(&original)
             .unwrap();
-        let asset = crate::media::MediaAsset::load(original.clone()).unwrap();
+        let asset = crate::asset::FileAsset::load(original.clone()).unwrap();
         let bytes = std::fs::read(&original).unwrap();
         media.push(rovar_api::Media {
             hash: asset.hash.clone(),
@@ -612,7 +612,7 @@ fn download_reconstruction_ignores_local_edits_and_fetches_only_missing_media(
         "Apply to the confirmed base, not x=999 from the local editor"
     );
     assert_eq!(
-        document.pages[0].shapes[1].media.as_ref().unwrap().hash,
+        document.pages[0].shapes[1].asset.as_ref().unwrap().hash,
         media[1].hash
     );
     let requests = requests.lock().unwrap();

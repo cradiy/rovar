@@ -88,7 +88,7 @@ impl Workspace {
                 .iter()
                 .filter_map(|b| b.image_fill.asset.as_ref())
                 .chain(page.shapes.iter().flat_map(|s| {
-                    [s.media.as_ref(), s.image_fill.asset.as_ref()]
+                    [s.asset.as_ref(), s.image_fill.asset.as_ref()]
                         .into_iter()
                         .flatten()
                 }))
@@ -250,7 +250,7 @@ impl Workspace {
                 .iter()
                 .filter_map(|b| b.image_fill.asset.as_ref())
                 .chain(page.shapes.iter().flat_map(|s| {
-                    [s.media.as_ref(), s.image_fill.asset.as_ref()]
+                    [s.asset.as_ref(), s.image_fill.asset.as_ref()]
                         .into_iter()
                         .flatten()
                 }))
@@ -311,7 +311,7 @@ impl Workspace {
     pub(super) fn snapshot_page(&self, cx: &gpui::App) -> (Page, Vec<AssetSource>) {
         let mut sources = Vec::new();
         let mut assets = Vec::new();
-        let mut add = |object, fill, asset: &Option<std::sync::Arc<crate::media::MediaAsset>>| {
+        let mut add = |object, fill, asset: &Option<std::sync::Arc<crate::asset::FileAsset>>| {
             if let Some(asset) = asset {
                 assets.push(AssetUse {
                     object,
@@ -330,7 +330,7 @@ impl Workspace {
             add(board.id, true, &board.image_fill.asset);
         }
         for shape in &self.shapes {
-            add(shape.id, false, &shape.media);
+            add(shape.id, false, &shape.asset);
             add(shape.id, true, &shape.image_fill.asset);
         }
         let mut page = Page {

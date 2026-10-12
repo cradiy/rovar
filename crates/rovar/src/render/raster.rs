@@ -37,6 +37,8 @@ mod browser {
     extern "C" {
         #[wasm_bindgen(catch, js_name = ensureRenderer)]
         pub async fn ensure_renderer() -> Result<(), JsValue>;
+        #[wasm_bindgen(catch, js_name = importSvg)]
+        pub fn import_svg(bytes: &[u8]) -> Result<String, JsValue>;
         #[wasm_bindgen(catch)]
         pub fn render(
             svg: &str,
@@ -47,6 +49,12 @@ mod browser {
             vector: bool,
         ) -> Result<Vec<u8>, JsValue>;
     }
+}
+
+#[cfg(target_family = "wasm")]
+pub(crate) fn import_svg(bytes: &[u8]) -> Result<rovar_svg::Svg> {
+    let image = browser::import_svg(bytes).map_err(|error| anyhow::anyhow!("SVG: {error:?}"))?;
+    Ok(serde_json::from_str(&image)?)
 }
 
 pub(crate) fn render(

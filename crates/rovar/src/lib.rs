@@ -1,13 +1,14 @@
 mod app;
+mod asset;
 mod document;
 mod editor;
 mod i18n;
-mod media;
 mod platform;
 mod remote;
 mod render;
 mod scene;
 mod settings;
+mod svg;
 mod ui;
 #[cfg(target_family = "wasm")]
 mod web;

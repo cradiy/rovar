@@ -17,3 +17,8 @@ export function render(svg, width, height, scale, preview, vector) {
     if (!renderer) throw new Error('Renderer has not been loaded');
     return renderer.render(svg, width, height, scale, preview, vector);
 }
+
+export function importSvg(bytes) {
+    if (!renderer) throw new Error('Renderer has not been loaded');
+    return renderer.import_svg(bytes);
+}

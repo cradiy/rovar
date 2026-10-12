@@ -52,6 +52,7 @@ impl Workspace {
                 ShapeKind::Polygon => LucideIcons::Triangle,
                 ShapeKind::Star => LucideIcons::Star,
                 ShapeKind::Image => LucideIcons::Image,
+                ShapeKind::Svg => LucideIcons::FileCode,
                 ShapeKind::Video => LucideIcons::Film,
                 ShapeKind::Line => LucideIcons::Minus,
                 ShapeKind::Pen => LucideIcons::Pencil,

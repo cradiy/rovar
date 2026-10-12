@@ -37,6 +37,7 @@ impl Workspace {
                     ShapeKind::Polygon => LucideIcons::Triangle,
                     ShapeKind::Star => LucideIcons::Star,
                     ShapeKind::Image => LucideIcons::Image,
+                    ShapeKind::Svg => LucideIcons::FileCode,
                     ShapeKind::Video => LucideIcons::Film,
                     ShapeKind::Line => LucideIcons::Minus,
                     ShapeKind::Pen => LucideIcons::Pencil,
@@ -226,11 +227,22 @@ impl Workspace {
                             },
                         )
                         .when(
-                            self.selected_shape().is_some_and(|s| s.kind.is_media()),
-                            |el| el.child(self.media_properties(cx)),
+                            self.selected_shape().is_some_and(|s| s.kind.is_asset()),
+                            |el| {
+                                el.child(
+                                    if self
+                                        .selected_shape()
+                                        .is_some_and(|s| s.kind == ShapeKind::Svg)
+                                    {
+                                        self.svg_properties()
+                                    } else {
+                                        self.media_properties(cx)
+                                    },
+                                )
+                            },
                         )
                         .when(
-                            self.selected_shape().is_some_and(|s| !s.kind.is_media()),
+                            self.selected_shape().is_some_and(|s| !s.kind.is_asset()),
                             |el| el.child(self.shape_paint_controls(cx)),
                         )
                         .when(self.selected_shape.is_none(), |el| {

@@ -522,7 +522,7 @@ fn image_export_embeds_full_pixels_and_preserves_fit_opacity_and_clipping() {
     image::RgbaImage::from_pixel(40, 20, image::Rgba([23, 87, 145, 255]))
         .save(&source)
         .unwrap();
-    let asset = crate::media::MediaAsset::load_image(&source).unwrap();
+    let asset = crate::asset::FileAsset::load_image(&source).unwrap();
     std::fs::remove_file(&source).unwrap();
     let mut shape = Shape::new(1, None, ShapeKind::Ellipse, rect(0., 0., 40., 40.));
     shape.fill_mode = FillMode::Image;
@@ -611,7 +611,7 @@ fn cropped_media_and_image_fills_export_the_same_selected_source_region() {
     })
     .save(&path)
     .unwrap();
-    let asset = crate::media::MediaAsset::load_image(&path).unwrap();
+    let asset = crate::asset::FileAsset::load_image(&path).unwrap();
     for media in [false, true] {
         let mut shape = Shape::new(
             1,
@@ -708,7 +708,7 @@ fn original_video_export_copies_cached_bytes_and_mixed_batch_keeps_each_extensio
     let source = AssetSource {
         hash: "a".repeat(64),
         name: "clip.MP4".into(),
-        path: crate::media::Source::file(source),
+        path: crate::asset::Source::file(source),
         size: [1, 1],
     };
     let video = || {
@@ -751,7 +751,7 @@ fn original_video_export_copies_cached_bytes_and_mixed_batch_keeps_each_extensio
     assert!(write(vec![video()], folder.path().join("wrong.png"), false).is_err());
     let mut missing = video();
     missing.original.as_mut().unwrap().path =
-        crate::media::Source::file(tempfile::NamedTempFile::new().unwrap().into_temp_path());
+        crate::asset::Source::file(tempfile::NamedTempFile::new().unwrap().into_temp_path());
     std::fs::remove_file(
         &*missing
             .original

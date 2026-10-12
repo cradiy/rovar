@@ -13,7 +13,7 @@ fn saved_group_embeds_media_and_inserts_independent_objects_with_one_undo(cx: &m
     image::RgbaImage::from_pixel(2, 2, image::Rgba([90, 45, 190, 255]))
         .save(&original)
         .unwrap();
-    let asset = crate::media::MediaAsset::load(original.clone()).unwrap();
+    let asset = crate::asset::FileAsset::load(original.clone()).unwrap();
     let source = cx.open_window(size(px(1280.), px(800.)), |window, cx| {
         Workspace::new(window, cx)
     });
@@ -40,7 +40,7 @@ fn saved_group_embeds_media_and_inserts_independent_objects_with_one_undo(cx: &m
                     height: 60.,
                 },
             );
-            image.media = Some(asset.clone());
+            image.asset = Some(asset.clone());
             image.layer.rotation = 17.;
             editor.shapes.push(image);
             let text = editor.make_text(
@@ -132,7 +132,7 @@ fn saved_group_embeds_media_and_inserts_independent_objects_with_one_undo(cx: &m
             assert_eq!(editor.shapes[0].board, Some(1));
             assert!(
                 editor.shapes[0]
-                    .media
+                    .asset
                     .as_ref()
                     .unwrap()
                     .source

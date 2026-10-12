@@ -14,6 +14,7 @@ pub(super) enum Tool {
     Polygon,
     Star,
     Media,
+    Svg,
     Line,
     Bezier,
     Pencil,
@@ -46,6 +47,7 @@ impl Tool {
                 "Mod+Shift+K",
                 LucideIcons::Image,
             ),
+            Self::Svg => ("import-svg", t("svg-import"), "", LucideIcons::FileCode),
             Self::Line => ("draw-line", t("shape-line"), "L", LucideIcons::Minus),
             Self::Bezier => ("draw-bezier", t("tool-pen"), "P", LucideIcons::PenTool),
             Self::Pencil => ("draw-pen", t("tool-pencil"), "Shift+P", LucideIcons::Pencil),
@@ -104,6 +106,10 @@ impl Workspace {
         self.media.cancel_import();
         if tool == Tool::Media {
             self.import_media(window, cx);
+            return;
+        }
+        if tool == Tool::Svg {
+            self.import_svg_file(window, cx);
             return;
         }
         if !matches!(tool, Tool::Move | Tool::Hand) {
@@ -387,6 +393,7 @@ impl Workspace {
                             Tool::Ellipse,
                             Tool::Polygon,
                             Tool::Star,
+                            Tool::Svg,
                             Tool::Media,
                         ],
                         cx,

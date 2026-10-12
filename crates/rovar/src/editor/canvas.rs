@@ -281,6 +281,10 @@ impl Workspace {
             .when(self.media.importing || self.media.error.is_some(), |el| {
                 el.child(self.media_status(cx))
             })
+            .when(
+                self.svg.loading || self.svg.pending.is_some() || self.svg.error.is_some(),
+                |el| el.child(self.svg_status(cx)),
+            )
             .when(self.vector_edit.is_some(), |el| {
                 el.child(self.vector_toolbar(cx))
             })
@@ -535,14 +539,14 @@ impl Workspace {
                 let inner_image = image.clone();
                 board
                     .surface(zoom)
-                    .on_paint_before_children(move |bounds, _, window, _| {
+                    .on_paint_before_children(move |bounds, _, window, cx| {
                         let mut source = |window: &mut Window| {
                             if let Some(image) = &image {
                                 window.with_subtree_effect_chain(
                                     bounds,
                                     &[],
                                     image.opacity,
-                                    |window| image.paint(bounds, window),
+                                    |window| image.paint(bounds, window, cx),
                                 );
                             } else if let Some(gradient) = points {
                                 gradient.paint(bounds, window);
@@ -563,7 +567,7 @@ impl Workspace {
                     .child(
                         canvas(
                             |_, _, _| (),
-                            move |bounds, _, window, _| {
+                            move |bounds, _, window, cx| {
                                 crate::scene::effects::paint_shadows(
                                     bounds,
                                     &inner_shadows,
@@ -576,7 +580,7 @@ impl Workspace {
                                                 bounds,
                                                 &[],
                                                 image.opacity,
-                                                |window| image.paint(bounds, window),
+                                                |window| image.paint(bounds, window, cx),
                                             );
                                         } else if let Some(gradient) = points {
                                             gradient.paint(bounds, window);

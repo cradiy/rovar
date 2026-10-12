@@ -183,12 +183,15 @@ fn point_paint(
 
 pub(super) fn image_uri(source: &AssetSource, output: Output) -> Result<String> {
     use base64::Engine;
-    let asset = crate::media::MediaAsset::from_cached(
+    let asset = crate::asset::FileAsset::from_cached(
         source.name.clone().into(),
         source.path.clone(),
         source.hash.clone(),
     )?;
-    let Some(crate::media::MediaContent::Image(image)) = asset.content() else {
+    if let Some(crate::asset::AssetContent::Svg(svg)) = asset.content() {
+        return Ok(svg.uri.clone());
+    }
+    let Some(crate::asset::AssetContent::Image(image)) = asset.content() else {
         anyhow::bail!("Expected an image");
     };
     let mut rgba = image.as_bytes(0).context("Missing image pixels")?.to_vec();

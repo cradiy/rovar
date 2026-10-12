@@ -69,7 +69,7 @@ impl Source {
             } => {
                 let mut cache = cache
                     .lock()
-                    .map_err(|_| anyhow::anyhow!("Poisoned media cache"))?;
+                    .map_err(|_| anyhow::anyhow!("Poisoned asset cache"))?;
                 if let Some(path) = &*cache {
                     return Ok(path.clone());
                 }

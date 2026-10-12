@@ -249,7 +249,7 @@ impl Workspace {
                                             || !self.inspector.stroke_editing)
                                         && self
                                             .selected_shape()
-                                            .is_none_or(|s| s.can_fill() && !s.kind.is_media()))
+                                            .is_none_or(|s| s.can_fill() && !s.kind.is_asset()))
                             })
                             .map(|(kind, label, id, glyph)| {
                                 icon_button(

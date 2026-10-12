@@ -178,7 +178,7 @@ fn concurrent_image_insertions_keep_both_embedded_assets_after_handle_remapping(
         image::RgbaImage::from_pixel(3, 2, image::Rgba(color))
             .save(&image_path)
             .unwrap();
-        let asset = crate::media::MediaAsset::load(image_path.clone()).unwrap();
+        let asset = crate::asset::FileAsset::load(image_path.clone()).unwrap();
         let mut edited = base.clone();
         let mut shape = edited.pages[0].shapes[0].clone();
         shape.uid = uuid::Uuid::new_v4();
@@ -234,7 +234,7 @@ fn concurrent_image_insertions_keep_both_embedded_assets_after_handle_remapping(
     assert_eq!(
         images
             .iter()
-            .map(|s| s.media.as_ref().unwrap().hash.clone())
+            .map(|s| s.asset.as_ref().unwrap().hash.clone())
             .collect::<BTreeSet<_>>(),
         hashes
     );

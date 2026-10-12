@@ -183,7 +183,7 @@ fn file_round_trip_and_failed_save_preserve_the_previous_document(cx: &mut gpui:
     let bad_asset = AssetSource {
         hash: "0".repeat(64),
         name: "missing.png".into(),
-        path: crate::media::Source::file(tempfile::NamedTempFile::new().unwrap().into_temp_path()),
+        path: crate::asset::Source::file(tempfile::NamedTempFile::new().unwrap().into_temp_path()),
         size: [1, 1],
     };
     assert!(
@@ -221,7 +221,7 @@ fn embedded_assets_survive_source_removal_and_deduplicate(cx: &mut gpui::TestApp
     image::RgbaImage::from_pixel(3, 2, image::Rgba([42, 70, 90, 255]))
         .save(&original)
         .unwrap();
-    let asset = crate::media::MediaAsset::load(original.clone()).unwrap();
+    let asset = crate::asset::FileAsset::load(original.clone()).unwrap();
     std::fs::remove_file(&original).unwrap();
     let mut document = fixture();
     document.pages[0].shapes[0].kind = ShapeKind::Image;
@@ -265,8 +265,8 @@ fn embedded_assets_survive_source_removal_and_deduplicate(cx: &mut gpui::TestApp
     assert_eq!(loaded.assets.len(), 1);
     let decoded = load(&path).unwrap().into_document().unwrap();
     assert!(Arc::ptr_eq(
-        decoded.pages[0].shapes[0].media.as_ref().unwrap(),
-        decoded.pages[1].shapes[0].media.as_ref().unwrap(),
+        decoded.pages[0].shapes[0].asset.as_ref().unwrap(),
+        decoded.pages[1].shapes[0].asset.as_ref().unwrap(),
     ));
     assert_eq!(
         (

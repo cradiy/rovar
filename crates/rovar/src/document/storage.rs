@@ -416,10 +416,10 @@ pub(crate) fn load(path: &Path) -> Result<Loaded> {
             block.info.kind == "media" && block.info.hash == decode_hash(&asset.hash)?,
             "Invalid media block"
         );
-        let source = crate::media::Source::block(block, &meta.name);
+        let source = crate::asset::Source::block(block, &meta.name);
         assets.insert(
             asset.hash.clone(),
-            crate::media::MediaAsset::deferred(
+            crate::asset::FileAsset::deferred(
                 meta.name.clone().into(),
                 source,
                 asset.hash.clone(),

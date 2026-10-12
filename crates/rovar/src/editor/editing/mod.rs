@@ -38,7 +38,7 @@ impl Workspace {
             && ids.iter().all(|id| {
                 self.shapes
                     .iter()
-                    .any(|s| s.id == *id && !s.kind.is_media())
+                    .any(|s| s.id == *id && !s.kind.is_asset())
             })
     }
     pub(super) fn flip_selection(&mut self, horizontal: bool, cx: &mut Context<Self>) {

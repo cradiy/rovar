@@ -1,6 +1,6 @@
 use super::*;
+use crate::asset::{AssetContent, FileAsset};
 use crate::i18n::t;
-use crate::media::{MediaAsset, MediaContent};
 use crate::ui::theme::Color;
 use gpui::AnimationExt as _;
 use gpui_media::{MediaBackend, MediaOutputSink, MediaPlaybackRequest};
@@ -53,7 +53,7 @@ impl Workspace {
             .iter()
             .filter_map(|b| b.image_fill.asset.as_ref().map(|asset| (b.id, asset)))
             .chain(self.shapes.iter().flat_map(|s| {
-                [s.media.as_ref(), s.image_fill.asset.as_ref()]
+                [s.asset.as_ref(), s.image_fill.asset.as_ref()]
                     .into_iter()
                     .flatten()
                     .map(move |asset| (s.id, asset))
@@ -151,7 +151,11 @@ impl Workspace {
             if !current {
                 return;
             }
-            let loaded = MediaAsset::load_async(path, cx.background_executor()).await;
+            let loaded = if crate::svg::is_svg(&path) {
+                Err(anyhow::anyhow!(t("svg-use-import")))
+            } else {
+                FileAsset::load_async(path, cx.background_executor()).await
+            };
             let _ = this.update_in(cx, |this, window, cx| {
                 if this.media.import_request != request {
                     return;
@@ -200,7 +204,7 @@ impl Workspace {
                                 fill: false,
                                 hash: asset.hash.clone(),
                             });
-                            shape.media = Some(asset);
+                            shape.asset = Some(asset);
                             let index = state.page.shapes.len();
                             state.page.shapes.push(shape);
                             this.history.borrow_mut().record_for(
@@ -227,7 +231,7 @@ impl Workspace {
         cx.notify();
     }
 
-    fn add_media(&mut self, asset: Arc<MediaAsset>, window: &mut Window, cx: &mut Context<Self>) {
+    fn add_media(&mut self, asset: Arc<FileAsset>, window: &mut Window, cx: &mut Context<Self>) {
         self.cancel_gesture(window, cx);
         self.draw_tool = None;
         let size = self.bounds.get().size.map(f32::from);
@@ -257,7 +261,7 @@ impl Workspace {
         shape.name = asset.name();
         shape.fill_enabled = false;
         shape.layer.aspect_locked = true;
-        shape.media = Some(asset);
+        shape.asset = Some(asset);
         self.shapes.push(shape);
         self.history.borrow_mut().record(
             vec![Change::Shape {
@@ -274,9 +278,9 @@ impl Workspace {
     pub(super) fn media_surface(&self, shape: &Shape, outset: f32) -> Div {
         let mut content = div().absolute().inset(px(outset)).overflow_hidden();
         let [tl, tr, br, bl] = shape.displayed_radii().map(|r| px(r * self.view.zoom));
-        if let Some(asset) = &shape.media {
+        if let Some(asset) = &shape.asset {
             content = match asset.content() {
-                Some(MediaContent::Image(_)) => content.child(
+                Some(AssetContent::Image(_)) => content.child(
                     self.cropped_media(shape)
                         .element_with_radii(gpui::Corners {
                             top_left: tl,
@@ -286,10 +290,10 @@ impl Workspace {
                         })
                         .size_full(),
                 ),
-                Some(MediaContent::Video(frame)) => content
+                Some(AssetContent::Video(frame)) => content
                     .bg(Color::Workspace.color())
                     .child(gpui::surface(frame.clone()).absolute().size_full()),
-                None => content.bg(Color::Accent.color().opacity(0.0706)),
+                _ => content.bg(Color::Accent.color().opacity(0.0706)),
             };
             if let Some(runtime) = self.media.videos.get(&shape.id) {
                 content = content.child(runtime.view.clone());
@@ -301,7 +305,7 @@ impl Workspace {
     pub(super) fn media_properties(&self, cx: &mut Context<Self>) -> Div {
         let shape = self.selected_shape().unwrap();
         let id = shape.id;
-        let Some(asset) = &shape.media else {
+        let Some(asset) = &shape.asset else {
             return div();
         };
         let asset = asset.clone();
@@ -337,11 +341,11 @@ impl Workspace {
                         .items_center()
                         .justify_center()
                         .child(match asset.content() {
-                            Some(MediaContent::Image(image)) => gpui::img(image.clone())
+                            Some(AssetContent::Image(image)) => gpui::img(image.clone())
                                 .size_full()
                                 .object_fit(gpui::ObjectFit::Contain)
                                 .into_any_element(),
-                            Some(MediaContent::Video(frame)) => gpui::surface(frame.clone())
+                            Some(AssetContent::Video(frame)) => gpui::surface(frame.clone())
                                 .size_full()
                                 .object_fit(gpui::ObjectFit::Contain)
                                 .into_any_element(),
@@ -533,7 +537,7 @@ impl Workspace {
             .shapes
             .iter()
             .find(|s| s.id == id && s.kind == ShapeKind::Video)
-            .and_then(|s| s.media.clone())
+            .and_then(|s| s.asset.clone())
         else {
             self.media.video_loading.remove(&id);
             return;
@@ -573,7 +577,7 @@ impl Workspace {
                 this.media.video_loading.remove(&id);
                 if !this.layer_editable(id)
                     || !this.shapes.iter().any(|s| {
-                        s.id == id && s.media.as_ref().is_some_and(|a| Arc::ptr_eq(a, &expected))
+                        s.id == id && s.asset.as_ref().is_some_and(|a| Arc::ptr_eq(a, &expected))
                     })
                 {
                     return;

@@ -9,7 +9,7 @@ fn crop_preview_keeps_document_unchanged_then_commits_once_and_undoes(cx: &mut T
     image::RgbaImage::from_pixel(200, 100, image::Rgba([30, 100, 190, 255]))
         .save(&path)
         .unwrap();
-    let asset = crate::media::MediaAsset::load_image(&path).unwrap();
+    let asset = crate::asset::FileAsset::load_image(&path).unwrap();
     let window = open(cx);
     window
         .update(cx, |this, window, cx| {
@@ -26,7 +26,7 @@ fn crop_preview_keeps_document_unchanged_then_commits_once_and_undoes(cx: &mut T
                     height: 100.,
                 },
             );
-            shape.media = Some(asset);
+            shape.asset = Some(asset);
             shape.layer.rotation = 90.;
             this.shapes.push(shape);
             this.next_id = 2;
@@ -107,7 +107,7 @@ fn double_click_image_fill_enters_crop_and_locked_layers_cannot_enter(cx: &mut T
     image::RgbaImage::from_pixel(100, 50, image::Rgba([50, 100, 190, 255]))
         .save(&path)
         .unwrap();
-    let asset = crate::media::MediaAsset::load_image(&path).unwrap();
+    let asset = crate::asset::FileAsset::load_image(&path).unwrap();
     let window = open(cx);
     window
         .update(cx, |this, window, cx| {

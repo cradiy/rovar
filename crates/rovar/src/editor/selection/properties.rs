@@ -29,7 +29,7 @@ impl Workspace {
                     e.effective_style().fill_mode == FillMode::Solid
                         && !e.mixed(TextProperty::FillMode)
                 } else if let Some(s) = self.shapes.iter().find(|s| s.id == id) {
-                    !s.kind.is_media()
+                    !s.kind.is_asset()
                         && s.paint_mode(!s.can_fill()) == FillMode::Solid
                         && (if s.can_fill() {
                             s.fill_enabled

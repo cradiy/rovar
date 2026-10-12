@@ -52,10 +52,7 @@ impl Workspace {
             }) else {
                 return;
             };
-            let asset = cx
-                .background_executor()
-                .spawn(async move { crate::media::MediaAsset::load_image(&path) })
-                .await;
+            let asset = crate::asset::FileAsset::load_async(path, cx.background_executor()).await;
             let _ = this.update(cx, |this, cx| {
                 if this.media.image_request != request {
                     return;

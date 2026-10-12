@@ -1,4 +1,5 @@
 use crate::i18n::t;
+use crate::svg;
 use anyhow::{Context, Result, bail};
 use gpui::{RenderImage, SurfaceFrame};
 use gpui_media::{MediaSource, VideoFrameExtractor, VideoSurface};
@@ -10,37 +11,38 @@ use std::{
 mod source;
 pub(crate) use source::Source;
 
-pub(crate) enum MediaContent {
+pub(crate) enum AssetContent {
     Image(Arc<RenderImage>),
+    Svg(svg::SvgAsset),
     Video(Arc<SurfaceFrame>),
 }
 
-pub(crate) struct MediaAsset {
+pub(crate) struct FileAsset {
     pub path: PathBuf,
     pub source: Arc<Source>,
     pub hash: String,
     pub width: u32,
     pub height: u32,
-    pub content: OnceLock<Result<MediaContent, String>>,
+    pub content: OnceLock<Result<AssetContent, String>>,
     pub video: bool,
 }
 
-// Document snapshots share decoded media; playback state is kept separately.
-impl PartialEq for MediaAsset {
+// Document snapshots share decoded assets; playback state is kept separately.
+impl PartialEq for FileAsset {
     fn eq(&self, other: &Self) -> bool {
         std::ptr::eq(self, other)
     }
 }
-impl std::fmt::Debug for MediaAsset {
+impl std::fmt::Debug for FileAsset {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("MediaAsset")
+        f.debug_struct("FileAsset")
             .field("path", &self.path)
             .field("width", &self.width)
             .field("height", &self.height)
             .finish()
     }
 }
-impl MediaAsset {
+impl FileAsset {
     pub async fn load_async(
         path: PathBuf,
         executor: &gpui::BackgroundExecutor,
@@ -53,6 +55,9 @@ impl MediaAsset {
         {
             let _ = executor;
             if !is_video(&path) {
+                if svg::is_svg(&path) {
+                    crate::render::raster::prepare().await?;
+                }
                 return Self::load(path);
             }
             let (source, hash) = Self::cache_source(&path)?;
@@ -80,6 +85,9 @@ impl MediaAsset {
         {
             let _ = executor;
             if !self.video {
+                if svg::is_svg(&self.path) {
+                    crate::render::raster::prepare().await?;
+                }
                 return self.ensure_decoded();
             }
             if self.content.get().is_none() {
@@ -88,7 +96,7 @@ impl MediaAsset {
                     .and_then(|(w, h, content)| {
                         anyhow::ensure!(
                             (w, h) == (self.width, self.height),
-                            "Media dimensions differ from stored metadata"
+                            "Asset dimensions differ from stored metadata"
                         );
                         Ok(content)
                     })
@@ -104,7 +112,7 @@ impl MediaAsset {
         }
     }
     #[cfg(target_family = "wasm")]
-    async fn decode_video(source: &Source) -> Result<(u32, u32, MediaContent)> {
+    async fn decode_video(source: &Source) -> Result<(u32, u32, AssetContent)> {
         gpui_media_backend::SystemBackend::initialize()?;
         let frame = VideoFrameExtractor::new(
             source.media_source()?,
@@ -116,17 +124,19 @@ impl MediaAsset {
         Ok((
             size.width.try_into()?,
             size.height.try_into()?,
-            MediaContent::Video(VideoSurface::new().set_frame(&frame)?),
+            AssetContent::Video(VideoSurface::new().set_frame(&frame)?),
         ))
     }
     pub fn kind(&self) -> crate::scene::shape::ShapeKind {
-        if self.video {
+        if svg::is_svg(&self.path) {
+            crate::scene::shape::ShapeKind::Svg
+        } else if self.video {
             crate::scene::shape::ShapeKind::Video
         } else {
             crate::scene::shape::ShapeKind::Image
         }
     }
-    pub fn content(&self) -> Option<&MediaContent> {
+    pub fn content(&self) -> Option<&AssetContent> {
         self.content.get().and_then(|result| result.as_ref().ok())
     }
     pub fn is_pending(&self) -> bool {
@@ -138,7 +148,7 @@ impl MediaAsset {
                 .and_then(|(width, height, content)| {
                     anyhow::ensure!(
                         (width, height) == (self.width, self.height),
-                        "Media dimensions differ from stored metadata"
+                        "Asset dimensions differ from stored metadata"
                     );
                     Ok(content)
                 })
@@ -213,11 +223,12 @@ impl MediaAsset {
             content: OnceLock::from(Ok(content)),
         }))
     }
+    #[cfg(test)]
     pub(crate) fn load_image(path: &Path) -> Result<Arc<Self>> {
         let (source, hash) = Self::cache_source(path)?;
         Self::from_cached(path.to_owned(), source, hash)
     }
-    fn decode(path: &Path, source: &Source) -> Result<(u32, u32, MediaContent)> {
+    fn decode(path: &Path, source: &Source) -> Result<(u32, u32, AssetContent)> {
         if is_video(path) {
             gpui_media_backend::SystemBackend::initialize()?;
             let cache = source.cached_path()?;
@@ -231,10 +242,13 @@ impl MediaAsset {
             return Ok((
                 size.width.try_into()?,
                 size.height.try_into()?,
-                MediaContent::Video(poster),
+                AssetContent::Video(poster),
             ));
         }
         source.verify()?;
+        if svg::is_svg(path) {
+            return svg::decode(source);
+        }
         let mut reader = image::ImageReader::new(std::io::BufReader::new(source.open()?))
             .with_guessed_format()?;
         let mut limits = image::Limits::default();
@@ -258,7 +272,7 @@ impl MediaAsset {
         Ok((
             width,
             height,
-            MediaContent::Image(Arc::new(RenderImage::new(vec![image::Frame::new(pixels)]))),
+            AssetContent::Image(Arc::new(RenderImage::new(vec![image::Frame::new(pixels)]))),
         ))
     }
 }

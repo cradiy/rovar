@@ -42,7 +42,7 @@ impl Workspace {
         let DrawTool::Shape(kind) = kind else {
             return;
         };
-        if kind.is_media() {
+        if kind.is_asset() {
             return;
         }
         if kind == ShapeKind::Bezier {

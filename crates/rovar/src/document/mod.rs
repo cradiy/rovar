@@ -163,14 +163,14 @@ impl Document {
 pub(crate) struct AssetSource {
     pub hash: String,
     pub name: String,
-    pub path: Arc<crate::media::Source>,
+    pub path: Arc<crate::asset::Source>,
     pub size: [u32; 2],
 }
 
 pub(crate) struct Loaded {
     pub json: Vec<u8>,
     pub needs_upgrade: bool,
-    pub assets: BTreeMap<String, Arc<crate::media::MediaAsset>>,
+    pub assets: BTreeMap<String, Arc<crate::asset::FileAsset>>,
 }
 
 impl Loaded {
@@ -195,7 +195,7 @@ impl Loaded {
                         shape.image_fill.asset = Some(asset);
                     }
                 } else if let Some(shape) = page.shapes.iter_mut().find(|s| s.id == use_.object) {
-                    shape.media = Some(asset);
+                    shape.asset = Some(asset);
                 }
             }
         }
@@ -501,7 +501,7 @@ impl Page {
                     && (if asset.fill {
                         boards.contains(&asset.object) || shape.is_some()
                     } else {
-                        shape.is_some_and(|s| s.kind.is_media())
+                        shape.is_some_and(|s| s.kind.is_asset())
                     })
                     && asset.hash.len() == 64
                     && asset.hash.bytes().all(|b| b.is_ascii_hexdigit()),
@@ -510,8 +510,8 @@ impl Page {
         }
         for shape in &self.shapes {
             ensure!(
-                !shape.kind.is_media() || slots.contains(&(shape.id, false)),
-                "Missing media asset"
+                !shape.kind.is_asset() || slots.contains(&(shape.id, false)),
+                "Missing source asset"
             );
             ensure!(
                 [

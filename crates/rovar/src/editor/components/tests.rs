@@ -385,7 +385,7 @@ fn image_overrides_reset_and_unused_definitions_survive_save_and_window_transfer
             image::RgbaImage::from_pixel(2, 2, image::Rgba([value, 30, 90, 255]))
                 .save(&path)
                 .unwrap();
-            crate::media::MediaAsset::load(path).unwrap()
+            crate::asset::FileAsset::load(path).unwrap()
         })
         .collect();
     let window = open(cx);
