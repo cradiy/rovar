@@ -5,7 +5,69 @@ use crate::ui::theme::Color;
 use gpui::AnimationExt as _;
 use gpui_media::{MediaBackend, MediaOutputSink, MediaPlaybackRequest};
 use std::{sync::Arc, time::Duration};
+mod audio;
 mod state;
+#[derive(Clone, Copy)]
+pub(super) enum ImportKind {
+    Image,
+    Video,
+    Audio,
+}
+
+impl ImportKind {
+    fn mime_types(self) -> &'static [&'static str] {
+        match self {
+            Self::Image => &[
+                "image/png",
+                "image/jpeg",
+                "image/webp",
+                "image/gif",
+                "image/bmp",
+                "image/tiff",
+            ],
+            Self::Video => &[
+                "video/mp4",
+                "video/quicktime",
+                "video/x-matroska",
+                "video/webm",
+                "video/x-msvideo",
+                "video/x-m4v",
+            ],
+            Self::Audio => &[
+                "audio/mpeg",
+                "audio/wav",
+                "audio/flac",
+                "audio/ogg",
+                "audio/mp4",
+                "audio/m4a",
+                "audio/aac",
+            ],
+        }
+    }
+
+    fn accepts(self, path: &std::path::Path) -> bool {
+        let extensions: &[&str] = match self {
+            Self::Image => &["png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff"],
+            Self::Video => &["mp4", "mov", "mkv", "webm", "avi", "m4v"],
+            Self::Audio => &["mp3", "wav", "flac", "ogg", "oga", "m4a", "aac"],
+        };
+        path.extension()
+            .and_then(|ext| ext.to_str())
+            .is_some_and(|ext| {
+                extensions
+                    .iter()
+                    .any(|allowed| ext.eq_ignore_ascii_case(allowed))
+            })
+    }
+
+    fn error(self) -> &'static str {
+        t(match self {
+            Self::Image => "image-required",
+            Self::Video => "video-required",
+            Self::Audio => "audio-required",
+        })
+    }
+}
 #[cfg(test)]
 mod tests;
 mod video;
@@ -16,6 +78,11 @@ use video::{VideoControls, VideoPreview};
 pub(super) struct VideoSnapshot {
     state: Option<video::Snapshot>,
     pending: Vec<MediaCommand>,
+}
+
+pub(super) enum MediaSnapshot {
+    Video(VideoSnapshot),
+    Audio(Option<audio::Snapshot>),
 }
 
 #[derive(Clone)]
@@ -98,18 +165,27 @@ impl Workspace {
         }
     }
 
-    pub(crate) fn pause_videos(&mut self, cx: &mut Context<Self>) {
+    pub(crate) fn pause_media(&mut self, cx: &mut Context<Self>) {
+        for runtime in self.media.audios.values() {
+            runtime.update(cx, |player, cx| player.pause(cx));
+        }
         self.media.video_commands.clear();
         for runtime in self.media.videos.values() {
             runtime.view.update(cx, |video, cx| video.pause(cx));
         }
     }
-    pub(super) fn import_media(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.import_media_at(None, window, cx);
+    pub(super) fn import_media(
+        &mut self,
+        kind: ImportKind,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.import_media_at(kind, None, window, cx);
     }
 
     pub(super) fn import_media_at(
         &mut self,
+        kind: ImportKind,
         origin: Option<Point<f32>>,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -124,15 +200,7 @@ impl Workspace {
         let view = self.view;
         let size = self.bounds.get().size.map(f32::from);
         let insets = self.canvas_insets();
-        let dialog = crate::platform::prompt_for_paths(
-            cx,
-            gpui::PathPromptOptions {
-                files: true,
-                directories: false,
-                multiple: false,
-                prompt: Some(t("media-choose").into()),
-            },
-        );
+        let dialog = crate::platform::prompt_for_files(cx, false, kind.mime_types());
         cx.spawn_in(window, async move |this, cx| {
             let path = match dialog.await {
                 Ok(Ok(Some(paths))) => paths.into_iter().next(),
@@ -169,6 +237,8 @@ impl Workspace {
             }
             let loaded = if crate::svg::is_svg(&path) {
                 Err(anyhow::anyhow!(t("svg-use-import")))
+            } else if !kind.accepts(&path) {
+                Err(anyhow::anyhow!(kind.error()))
             } else {
                 FileAsset::load_async(path, cx.background_executor()).await
             };
@@ -299,6 +369,22 @@ impl Workspace {
 
     pub(super) fn media_surface(&self, shape: &Shape, outset: f32) -> Div {
         let mut content = div().absolute().inset(px(outset)).overflow_hidden();
+        if shape.kind == ShapeKind::Audio {
+            return content
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded(px(8.))
+                .bg(Color::Selected.color())
+                .child(
+                    icon(
+                        LucideIcons::Music,
+                        (24. * self.view.zoom)
+                            .min(shape.rect.width.min(shape.rect.height) * self.view.zoom),
+                    )
+                    .text_color(ACCENT.color()),
+                );
+        }
         let [tl, tr, br, bl] = shape.displayed_radii().map(|r| px(r * self.view.zoom));
         if let Some(asset) = &shape.asset {
             content = match asset.content() {
@@ -332,9 +418,12 @@ impl Workspace {
         };
         let asset = asset.clone();
         let video = shape.kind == ShapeKind::Video;
+        let audio = shape.kind == ShapeKind::Audio;
         let loading = self.media.video_loading.contains(&id);
         let name = asset.name();
-        inspector::inspector_section(t(if video {
+        inspector::inspector_section(t(if audio {
+            "audio-source"
+        } else if video {
             "video-source"
         } else {
             "image-source"
@@ -372,7 +461,9 @@ impl Workspace {
                                 .object_fit(gpui::ObjectFit::Contain)
                                 .into_any_element(),
                             _ => icon(
-                                if video {
+                                if audio {
+                                    LucideIcons::Music
+                                } else if video {
                                     LucideIcons::Film
                                 } else {
                                     LucideIcons::Image
@@ -396,55 +487,75 @@ impl Workspace {
                             div()
                                 .text_size(px(11.))
                                 .text_color(MUTED.color())
-                                .child(format!("{} × {} px", asset.width, asset.height)),
+                                .child(if audio {
+                                    t("shape-audio").to_owned()
+                                } else {
+                                    format!("{} × {} px", asset.width, asset.height)
+                                }),
                         )
                         .tooltip(move |_, cx| cx.new(|_| toolbar::ToolTip(name.clone())).into()),
                 )
-                .when(!video, |el| el.child(self.image_crop_button(id, cx)))
-                .when(video && !self.media.videos.contains_key(&id), |el| {
-                    el.child(
-                        div()
-                            .id("video-start")
-                            .debug_selector(|| "video-start".into())
-                            .size(px(28.))
-                            .flex_shrink_0()
-                            .rounded(px(6.))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .child(
-                                icon(
-                                    if loading {
-                                        LucideIcons::Loader
-                                    } else {
-                                        LucideIcons::Play
-                                    },
-                                    16.,
-                                )
-                                .text_color(if loading {
-                                    ACCENT.color()
-                                } else {
-                                    MUTED.color()
-                                }),
-                            )
-                            .tooltip(move |_, cx| {
-                                cx.new(|_| {
-                                    toolbar::ToolTip(
-                                        t(if loading { "video-loading" } else { "play" }).into(),
+                .when(!video && !audio, |el| {
+                    el.child(self.image_crop_button(id, cx))
+                })
+                .when(
+                    (video && !self.media.videos.contains_key(&id))
+                        || (audio && !self.media.audios.contains_key(&id)),
+                    |el| {
+                        el.child(
+                            div()
+                                .id("video-start")
+                                .debug_selector(|| "video-start".into())
+                                .size(px(28.))
+                                .flex_shrink_0()
+                                .rounded(px(6.))
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .child(
+                                    icon(
+                                        if loading {
+                                            LucideIcons::Loader
+                                        } else {
+                                            LucideIcons::Play
+                                        },
+                                        16.,
                                     )
+                                    .text_color(if loading {
+                                        ACCENT.color()
+                                    } else {
+                                        MUTED.color()
+                                    }),
+                                )
+                                .tooltip(move |_, cx| {
+                                    cx.new(|_| {
+                                        toolbar::ToolTip(
+                                            t(if loading { "video-loading" } else { "play" })
+                                                .into(),
+                                        )
+                                    })
+                                    .into()
                                 })
-                                .into()
-                            })
-                            .when(!loading, |el| {
-                                el.cursor_pointer()
-                                    .hover(|el| el.bg(BORDER.color()))
-                                    .on_click(cx.listener(move |this, _, window, cx| {
-                                        this.play_video(id, window, cx)
-                                    }))
-                            }),
-                    )
-                }),
+                                .when(!loading, |el| {
+                                    el.cursor_pointer()
+                                        .hover(|el| el.bg(BORDER.color()))
+                                        .on_click(cx.listener(move |this, _, window, cx| {
+                                            if audio {
+                                                this.control_audio(id, MediaCommand::Toggle, cx);
+                                            } else {
+                                                this.play_video(id, window, cx);
+                                            }
+                                        }))
+                                }),
+                        )
+                    },
+                ),
         )
+        .when(audio, |el| {
+            el.when_some(self.media.audios.get(&id), |el, runtime| {
+                el.child(runtime.clone())
+            })
+        })
         .when(video, |el| {
             el.when_some(self.media.videos.get(&id), |el, runtime| {
                 el.child(runtime.controls.clone())
@@ -556,8 +667,20 @@ impl Workspace {
         self.control_video(id, MediaCommand::Toggle, window, cx);
     }
 
-    pub(super) fn video_snapshot(&self, id: usize, cx: &gpui::App) -> VideoSnapshot {
-        VideoSnapshot {
+    pub(super) fn media_snapshot(&self, id: usize, cx: &gpui::App) -> MediaSnapshot {
+        if self
+            .shapes
+            .iter()
+            .any(|s| s.id == id && s.kind == ShapeKind::Audio)
+        {
+            return MediaSnapshot::Audio(
+                self.media
+                    .audios
+                    .get(&id)
+                    .map(|runtime| runtime.read(cx).snapshot(cx)),
+            );
+        }
+        MediaSnapshot::Video(VideoSnapshot {
             state: self
                 .media
                 .videos
@@ -569,16 +692,31 @@ impl Workspace {
                 .get(&id)
                 .cloned()
                 .unwrap_or_default(),
-        }
+        })
     }
 
-    pub(super) fn restore_video(
+    pub(super) fn restore_media(
         &mut self,
         id: usize,
-        snapshot: VideoSnapshot,
+        snapshot: MediaSnapshot,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let snapshot = match snapshot {
+            MediaSnapshot::Video(snapshot) => snapshot,
+            MediaSnapshot::Audio(snapshot) => {
+                if let Some(snapshot) = snapshot {
+                    if let Some(runtime) = self.media.audios.get(&id) {
+                        runtime.update(cx, |player, cx| player.restore(snapshot, cx));
+                    }
+                } else if let Some(runtime) = self.media.audios.remove(&id) {
+                    runtime.update(cx, |player, cx| player.pause(cx));
+                    self.media.audio_errors.remove(&id);
+                }
+                cx.notify();
+                return;
+            }
+        };
         self.media.video_commands.remove(&id);
         if let Some(snapshot) = snapshot.state {
             if let Some(runtime) = self.media.videos.get(&id) {
@@ -723,7 +861,23 @@ impl Workspace {
         cx.notify();
     }
 
-    pub(super) fn sync_video_visibility(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn sync_media_visibility(&mut self, cx: &mut Context<Self>) {
+        self.media.audios.retain(|id, _| {
+            self.shapes
+                .iter()
+                .any(|s| s.id == *id && s.kind == ShapeKind::Audio)
+        });
+        self.media
+            .audio_errors
+            .retain(|id, _| self.media.audios.contains_key(id));
+        for (id, runtime) in &self.media.audios {
+            if self
+                .layer_info(*id)
+                .is_none_or(|(own, parent)| self.effective_layer(own, parent).hidden)
+            {
+                runtime.update(cx, |player, cx| player.pause(cx));
+            }
+        }
         self.media.videos.retain(|id, _| {
             self.shapes
                 .iter()

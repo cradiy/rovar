@@ -134,7 +134,7 @@ fn media_import_stays_on_its_page_and_survives_transfer(cx: &mut TestAppContext)
         .update(cx, |this, _, _| this.pages.active.clone())
         .unwrap();
     let mut visual = gpui::VisualTestContext::from_window(window.into(), cx);
-    click(&mut visual, "import-media");
+    click(&mut visual, "import-image");
     window
         .update(&mut visual.cx, |this, window, cx| {
             this.add_page(None, window, cx)

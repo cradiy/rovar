@@ -15,7 +15,7 @@ pub(super) struct Hover {
 }
 
 struct HoverSnapshot {
-    media: Option<(usize, super::super::media::VideoSnapshot)>,
+    media: Option<(usize, super::super::media::MediaSnapshot)>,
     page: crate::document::Page,
     current: usize,
     history: Vec<usize>,
@@ -69,7 +69,15 @@ impl Workspace {
     ) {
         if let Action::Media { target, command } = action {
             if self.presentation.playback.is_some() {
-                self.control_video(target, command, window, cx);
+                if self
+                    .shapes
+                    .iter()
+                    .any(|s| s.id == target && s.kind == ShapeKind::Audio)
+                {
+                    self.control_audio(target, command, cx);
+                } else {
+                    self.control_video(target, command, window, cx);
+                }
             }
             return;
         }
@@ -97,7 +105,7 @@ impl Workspace {
             eprintln!("Could not switch preview variant: {error:#}");
             return;
         }
-        self.pause_videos(cx);
+        self.pause_media(cx);
         self.freeze_playback_visual(window, cx);
         self.apply_component_page(page, window, cx);
         self.presentation.playback.as_mut().unwrap().visual = transition::Visual::default();
@@ -188,7 +196,7 @@ impl Workspace {
                     let restore = Some(HoverSnapshot {
                         media: match action {
                             Action::Media { target, .. } => {
-                                Some((target, self.video_snapshot(target, cx)))
+                                Some((target, self.media_snapshot(target, cx)))
                             }
                             _ => None,
                         },
@@ -239,10 +247,10 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) {
         if let Some((target, state)) = snapshot.media {
-            self.restore_video(target, state, window, cx);
+            self.restore_media(target, state, window, cx);
             return;
         }
-        self.pause_videos(cx);
+        self.pause_media(cx);
         if self.presentation.playback.as_ref().unwrap().visual != snapshot.visual {
             self.freeze_playback_visual(window, cx);
         }

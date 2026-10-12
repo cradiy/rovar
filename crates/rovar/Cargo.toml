@@ -11,6 +11,7 @@ gpui = { git = "https://github.com/cradiy/gpui-fusion.git", rev = "5480951172839
 gpui_effects = { git = "https://github.com/cradiy/gpui-fusion.git", rev = "5480951172839b4e7e137f3798a7455ab32d38a4" }
 gpui_media = { git = "https://github.com/cradiy/gpui-fusion.git", rev = "5480951172839b4e7e137f3798a7455ab32d38a4", default-features = false, features = [
   "video",
+  "audio",
 ] }
 gpui_media_backend = { git = "https://github.com/cradiy/gpui-fusion.git", rev = "5480951172839b4e7e137f3798a7455ab32d38a4" }
 image = { version = "0.25", default-features = false, features = [

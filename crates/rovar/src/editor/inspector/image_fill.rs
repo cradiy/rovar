@@ -24,14 +24,18 @@ impl Workspace {
         cx.notify();
         let request = self.media.image_request;
         let page = self.pages.active.clone();
-        let dialog = crate::platform::prompt_for_paths(
+        let dialog = crate::platform::prompt_for_files(
             cx,
-            gpui::PathPromptOptions {
-                files: true,
-                directories: false,
-                multiple: false,
-                prompt: Some(t("image-background-choose").into()),
-            },
+            false,
+            &[
+                "image/png",
+                "image/jpeg",
+                "image/webp",
+                "image/gif",
+                "image/bmp",
+                "image/tiff",
+                "image/svg+xml",
+            ],
         );
         cx.spawn(async move |this, cx| {
             let Ok(Ok(Some(paths))) = dialog.await else {
@@ -52,7 +56,12 @@ impl Workspace {
             }) else {
                 return;
             };
-            let asset = crate::asset::FileAsset::load_async(path, cx.background_executor()).await;
+            let asset = crate::asset::FileAsset::load_async(path, cx.background_executor())
+                .await
+                .and_then(|asset| {
+                    anyhow::ensure!(!asset.kind().is_playable(), "{}", t("image-required"));
+                    Ok(asset)
+                });
             let _ = this.update(cx, |this, cx| {
                 if this.media.image_request != request {
                     return;

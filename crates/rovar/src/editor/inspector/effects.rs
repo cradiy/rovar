@@ -252,7 +252,7 @@ impl Workspace {
                     && !self
                         .shapes
                         .iter()
-                        .any(|s| s.id == *id && s.kind == ShapeKind::Video)
+                        .any(|s| s.id == *id && s.kind.is_playable())
             })
             .collect()
     }

@@ -64,6 +64,11 @@ pub(crate) enum MediaCommand {
 }
 
 impl MediaCommand {
+    pub fn supports(self, kind: super::shape::ShapeKind) -> bool {
+        self.valid()
+            && kind.is_playable()
+            && !(kind == super::shape::ShapeKind::Audio && matches!(self, Self::Rate { .. }))
+    }
     pub fn valid(self) -> bool {
         match self {
             Self::Rate { percent } => (25..=400).contains(&percent),

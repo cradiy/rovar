@@ -25,7 +25,7 @@ pub(super) struct State {
     connection: Option<connections::Connection>,
     pub player: Option<Entity<Workspace>>,
     pub playback: Option<Playback>,
-    menus: [Entity<DropdownState>; 5],
+    menus: [Entity<DropdownState>; 6],
     media: media::State,
 }
 
@@ -134,7 +134,7 @@ impl Workspace {
 
     fn stop_presentation(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(player) = self.presentation.player.take() {
-            player.update(cx, |player, cx| player.pause_videos(cx));
+            player.update(cx, |player, cx| player.pause_media(cx));
         }
         self.focus.focus(window, cx);
         cx.notify();
@@ -206,7 +206,7 @@ impl Workspace {
         }
         playback.hotspot_hovered = false;
         playback.entered = None;
-        self.pause_videos(cx);
+        self.pause_media(cx);
         cx.notify();
     }
 
@@ -241,6 +241,10 @@ impl Workspace {
                 .and_then(|i| i.get(trigger))
                 .is_some()
                 && (*id == current || self.ancestors(*id).contains(&current))
+                && !self
+                    .shapes
+                    .iter()
+                    .any(|s| s.id == *id && s.kind == ShapeKind::Audio)
                 && !crate::scene::boolean::consumed(&self.hierarchy, *id, &included)
                 && !crate::scene::mask::is_source(&self.hierarchy, *id, &included)
                 && self.mask_hit(*id, world)

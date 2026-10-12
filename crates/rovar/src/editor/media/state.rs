@@ -12,6 +12,8 @@ pub(in crate::editor) struct State {
     pub image_request: usize,
     pub image_loading: Option<usize>,
     pub videos: HashMap<usize, VideoRuntime>,
+    pub audios: HashMap<usize, gpui::Entity<super::audio::Playback>>,
+    pub audio_errors: HashMap<usize, gpui::Subscription>,
     pub video_loading: BTreeSet<usize>,
     pub video_commands: HashMap<usize, Vec<crate::scene::presentation::MediaCommand>>,
 }
@@ -29,6 +31,8 @@ impl State {
 
     pub fn clear_page(&mut self) {
         self.videos.clear();
+        self.audios.clear();
+        self.audio_errors.clear();
         self.video_loading.clear();
         self.video_commands.clear();
         self.image_loading = None;

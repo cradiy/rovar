@@ -75,7 +75,7 @@ fn image_and_text_content_export_through_a_vector_mask(cx: &mut TestAppContext) 
             setup(this, cx);
             this.shapes.truncate(1);
             this.next_id = 2;
-            this.import_media(window, cx);
+            this.import_media(crate::editor::media::ImportKind::Image, window, cx);
         })
         .unwrap();
     let mut visual = VisualTestContext::from_window(handle.into(), cx);

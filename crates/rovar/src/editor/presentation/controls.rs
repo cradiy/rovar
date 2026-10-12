@@ -1,6 +1,13 @@
 use super::*;
 use uic::components::dropdown::{DropdownPlacement, dropdown};
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Menu {
+    Action,
+    Target,
+    MediaControl,
+}
+
 fn action_label(action: Option<Action>) -> &'static str {
     match action {
         None => "prototype-none",
@@ -9,7 +16,7 @@ fn action_label(action: Option<Action>) -> &'static str {
         Some(Action::CloseOverlay) => "prototype-close-overlay",
         Some(Action::Back) => "prototype-back",
         Some(Action::ChangeVariant { .. }) => "prototype-variant-action",
-        Some(Action::Media { command, .. }) => media::label(command),
+        Some(Action::Media { .. }) => "prototype-media-control",
     }
 }
 
@@ -62,10 +69,10 @@ impl Workspace {
             || action.is_some_and(|a| {
                 a.remap(|target| {
                     match a {
-                        Action::Media { .. } => self
+                        Action::Media { command, .. } => self
                             .shapes
                             .iter()
-                            .any(|s| s.id == target && s.kind == ShapeKind::Video),
+                            .any(|s| s.id == target && command.supports(s.kind)),
                         _ => self.boards.iter().any(|b| b.id == target),
                     }
                     .then_some(target)
@@ -93,18 +100,19 @@ impl Workspace {
     ) -> impl IntoElement + use<> {
         let ids = self.selection_ids();
         let selected = (ids.len() == 1).then(|| *ids.first().unwrap());
-        let mut section = div()
-            .id("prototype-controls")
-            .debug_selector(|| "prototype-controls".into())
-            .flex_1()
-            .min_h_0()
-            .overflow_y_scroll()
-            .flex()
-            .flex_col()
-            .child(
-                inspector::inspector_section(t("prototype-start"))
-                    .child(self.presentation_menu(None, false, cx)),
-            );
+        let mut section =
+            div()
+                .id("prototype-controls")
+                .debug_selector(|| "prototype-controls".into())
+                .flex_1()
+                .min_h_0()
+                .overflow_y_scroll()
+                .flex()
+                .flex_col()
+                .child(
+                    inspector::inspector_section(t("prototype-start"))
+                        .child(self.presentation_menu(None, Menu::Action, cx)),
+                );
         if let Some(id) = selected {
             let trigger = self.presentation.trigger;
             let action = self
@@ -182,7 +190,7 @@ impl Workspace {
                                 .gap(px(4.))
                                 .child(div().flex_1().min_w_0().child(self.presentation_menu(
                                     Some(id),
-                                    false,
+                                    Menu::Action,
                                     cx,
                                 )))
                                 .when(action.is_some(), |row| {
@@ -223,7 +231,7 @@ impl Workspace {
                                         "prototype-frame-target"
                                     }),
                                 ))
-                                .child(self.presentation_menu(Some(id), true, cx))
+                                .child(self.presentation_menu(Some(id), Menu::Target, cx))
                             },
                         )
                         .child(self.overlay_controls(id, trigger, cx))
@@ -248,13 +256,17 @@ impl Workspace {
         section
     }
 
-    fn presentation_menu(
+    pub(super) fn presentation_menu(
         &self,
         source: Option<usize>,
-        target_menu: bool,
+        menu: Menu,
         cx: &mut Context<Self>,
     ) -> impl IntoElement + use<> {
-        let index = if target_menu {
+        let target_menu = menu == Menu::Target;
+        let control_menu = menu == Menu::MediaControl;
+        let index = if control_menu {
+            5
+        } else if target_menu {
             4
         } else {
             usize::from(source.is_some())
@@ -283,7 +295,9 @@ impl Workspace {
         } else {
             "prototype-none"
         });
-        let label = if source.is_some() && !target_menu {
+        let label = if control_menu && let Some(Action::Media { command, .. }) = action {
+            t(media::label(command)).to_owned()
+        } else if source.is_some() && !target_menu {
             t(action_label(action)).to_owned()
         } else if let Some(Action::ChangeVariant { target }) = action {
             self.components
@@ -332,15 +346,44 @@ impl Workspace {
         }
         if let Some(source) = source {
             let variants = self.prototype_variants(source);
-            if target_menu && let Some(Action::Media { command, .. }) = action {
+            if control_menu && let Some(Action::Media { target, command }) = action {
                 options.extend(
-                    self.prototype_videos(cx)
+                    media::COMMANDS
                         .into_iter()
                         .enumerate()
-                        .map(|(i, (target, name))| {
-                            (i, name, Some(Action::Media { target, command }))
+                        .filter(|(_, default)| {
+                            self.shapes
+                                .iter()
+                                .any(|s| s.id == target && default.supports(s.kind))
+                        })
+                        .map(|(key, default)| {
+                            let command = if media::label(default) == media::label(command) {
+                                command
+                            } else {
+                                default
+                            };
+                            (
+                                key,
+                                t(media::label(command)).to_owned(),
+                                Some(Action::Media { target, command }),
+                            )
                         }),
                 );
+            } else if target_menu && let Some(Action::Media { command, .. }) = action {
+                options.extend(self.prototype_media(cx).into_iter().enumerate().map(
+                    |(i, (target, name))| {
+                        let command = if self
+                            .shapes
+                            .iter()
+                            .any(|s| s.id == target && command.supports(s.kind))
+                        {
+                            command
+                        } else {
+                            MediaCommand::Toggle
+                        };
+                        (i, name, Some(Action::Media { target, command }))
+                    },
+                ));
             } else if target_menu && matches!(action, Some(Action::ChangeVariant { .. })) {
                 options.extend(
                     variants.into_iter().enumerate().map(|(i, (target, name))| {
@@ -395,31 +438,25 @@ impl Workspace {
                         Some(Action::ChangeVariant { target }),
                     ));
                 }
-                let videos = self.prototype_videos(cx);
-                let video = match action {
+                let targets = self.prototype_media(cx);
+                let media_target = match action {
                     Some(Action::Media { target, .. })
-                        if videos.iter().any(|(id, _)| *id == target) =>
+                        if targets.iter().any(|(id, _)| *id == target) =>
                     {
                         Some(target)
                     }
-                    _ => videos.first().map(|(id, _)| *id),
+                    _ => targets.first().map(|(id, _)| *id),
                 };
-                if let Some(target) = video {
-                    options.extend(media::COMMANDS.into_iter().enumerate().map(|(i, default)| {
-                        let command = match action {
-                            Some(Action::Media { command, .. })
-                                if media::label(command) == media::label(default) =>
-                            {
-                                command
-                            }
-                            _ => default,
-                        };
-                        (
-                            6 + i,
-                            t(media::label(command)).to_owned(),
-                            Some(Action::Media { target, command }),
-                        )
-                    }));
+                if let Some(target) = media_target {
+                    let command = match action {
+                        Some(Action::Media { command, .. }) => command,
+                        _ => MediaCommand::Play,
+                    };
+                    options.push((
+                        6,
+                        t("prototype-media-control").to_owned(),
+                        Some(Action::Media { target, command }),
+                    ));
                 }
             }
         }
@@ -436,7 +473,9 @@ impl Workspace {
             .text_color(TEXT.color())
             .trigger(
                 div()
-                    .id(if target_menu {
+                    .id(if control_menu {
+                        "prototype-media-menu"
+                    } else if target_menu {
                         "prototype-target-menu"
                     } else if source.is_some() {
                         "prototype-click-menu"
@@ -444,7 +483,9 @@ impl Workspace {
                         "prototype-start-menu"
                     })
                     .debug_selector(move || {
-                        if target_menu {
+                        if control_menu {
+                            "prototype-media-menu".into()
+                        } else if target_menu {
                             "prototype-target-menu".into()
                         } else if source.is_some() {
                             "prototype-click-menu".into()
@@ -479,7 +520,9 @@ impl Workspace {
                     .flex_col()
                     .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
                     .children(options.into_iter().map(|(key, label, option)| {
-                        let current = if source.is_some() && !target_menu {
+                        let current = if control_menu {
+                            option == action
+                        } else if source.is_some() && !target_menu {
                             action_label(option) == action_label(action)
                         } else if source.is_some() {
                             option == action

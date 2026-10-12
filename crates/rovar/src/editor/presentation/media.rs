@@ -67,12 +67,10 @@ impl State {
 }
 
 impl Workspace {
-    pub(super) fn prototype_videos(&self, cx: &gpui::App) -> Vec<(usize, String)> {
+    pub(super) fn prototype_media(&self, cx: &gpui::App) -> Vec<(usize, String)> {
         self.shapes
             .iter()
-            .filter(|s| {
-                s.kind == ShapeKind::Video && !self.effective_layer(s.layer, s.board).hidden
-            })
+            .filter(|s| s.kind.is_playable() && !self.effective_layer(s.layer, s.board).hidden)
             .map(|s| (s.id, self.layer_name(s.id, cx)))
             .collect()
     }
@@ -161,9 +159,17 @@ impl Workspace {
             self.presentation.media.target.set(None);
             return None;
         };
+        el = el
+            .child(
+                div()
+                    .text_size(px(12.))
+                    .text_color(MUTED.color())
+                    .child(t("prototype-media-operation")),
+            )
+            .child(self.presentation_menu(Some(id), controls::Menu::MediaControl, cx));
         let Some((label, value)) = parameter(command) else {
             self.presentation.media.target.set(None);
-            return None;
+            return Some(el);
         };
         let key = Some((self.pages.generation, id, trigger, action));
         if self.presentation.media.target.replace(key) != key {

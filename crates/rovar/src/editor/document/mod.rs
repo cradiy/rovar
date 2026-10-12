@@ -409,7 +409,7 @@ impl Workspace {
         self.zoom_menu
             .popover
             .update(cx, |p, cx| p.close(window, cx));
-        self.pause_videos(cx);
+        self.pause_media(cx);
     }
     fn finish_inspector_input(&mut self, cx: &mut Context<Self>) {
         self.history.borrow_mut().break_group();

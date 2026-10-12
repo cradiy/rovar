@@ -37,7 +37,7 @@ pub(super) fn menu(width: f32, selector: &'static str) -> ContextMenu {
 #[derive(Clone, Copy)]
 enum Command {
     Create(DrawTool, Point<f32>),
-    ImportImage(Point<f32>),
+    ImportMedia(media::ImportKind, Point<f32>),
     ImportSvg(Point<f32>),
     SaveAsset,
     Export(crate::document::export::Format),
@@ -218,15 +218,31 @@ impl Workspace {
                                 t("shape-image"),
                                 LucideIcons::Image,
                                 "",
-                                Command::ImportImage(origin),
+                                Command::ImportMedia(media::ImportKind::Image, origin),
                                 true,
                             ))
                             .item(item(
                                 "context-create-svg",
-                                t("svg-import"),
+                                "SVG",
                                 LucideIcons::FileCode,
                                 "",
                                 Command::ImportSvg(origin),
+                                true,
+                            ))
+                            .item(item(
+                                "context-create-video",
+                                t("shape-video"),
+                                LucideIcons::Film,
+                                "",
+                                Command::ImportMedia(media::ImportKind::Video, origin),
+                                true,
+                            ))
+                            .item(item(
+                                "context-create-audio",
+                                t("shape-audio"),
+                                LucideIcons::Music,
+                                "",
+                                Command::ImportMedia(media::ImportKind::Audio, origin),
                                 true,
                             ))
                     },
@@ -677,7 +693,9 @@ impl Workspace {
         self.choose_tool(toolbar::Tool::Move, window, cx);
         match command {
             Command::Create(tool, origin) => self.create_at(tool, origin, window, cx),
-            Command::ImportImage(origin) => self.import_media_at(Some(origin), window, cx),
+            Command::ImportMedia(kind, origin) => {
+                self.import_media_at(kind, Some(origin), window, cx)
+            }
             Command::ImportSvg(origin) => self.import_svg_at(Some(origin), window, cx),
             Command::SaveAsset => self.begin_save_asset(window, cx),
             Command::Export(format) => self.export_selection(Some(format), window, cx),

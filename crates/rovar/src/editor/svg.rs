@@ -77,15 +77,7 @@ impl Workspace {
         let view = self.view;
         let size = self.bounds.get().size.map(f32::from);
         let (left, right) = self.canvas_insets();
-        let dialog = crate::platform::prompt_for_paths(
-            cx,
-            gpui::PathPromptOptions {
-                files: true,
-                directories: false,
-                multiple: false,
-                prompt: Some(t("svg-import").into()),
-            },
-        );
+        let dialog = crate::platform::prompt_for_files(cx, false, &["image/svg+xml"]);
         cx.spawn_in(window, async move |this, cx| {
             let Ok(Ok(Some(paths))) = dialog.await else {
                 return;

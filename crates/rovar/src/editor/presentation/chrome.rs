@@ -98,7 +98,7 @@ impl Workspace {
                             p.transition = Transition::Instant;
                             p.visual = transition::Visual::default();
                             p.overlay = None;
-                            this.pause_videos(cx);
+                            this.pause_media(cx);
                             cx.notify();
                         })),
                     ),

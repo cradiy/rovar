@@ -33,7 +33,7 @@ impl Workspace {
             if self
                 .shapes
                 .iter()
-                .any(|s| s.id == id && s.kind == ShapeKind::Video)
+                .any(|s| s.id == id && s.kind.is_playable())
             {
                 return Some((
                     id,
@@ -90,7 +90,18 @@ impl Workspace {
                     Action::OpenOverlay { target, settings }
                 }
                 (Action::Media { target, .. }, Some(Action::Media { command, .. })) => {
-                    Action::Media { target, command }
+                    Action::Media {
+                        target,
+                        command: if self
+                            .shapes
+                            .iter()
+                            .any(|s| s.id == target && command.supports(s.kind))
+                        {
+                            command
+                        } else {
+                            MediaCommand::Toggle
+                        },
+                    }
                 }
                 (action, _) => action,
             };

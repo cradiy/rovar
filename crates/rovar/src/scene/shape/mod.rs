@@ -15,6 +15,7 @@ pub(crate) enum ShapeKind {
     Image,
     Svg,
     Video,
+    Audio,
     Line,
     Pen,
     Bezier,
@@ -31,7 +32,10 @@ impl ShapeKind {
         matches!(self, Self::Polygon | Self::Star)
     }
     pub fn is_asset(self) -> bool {
-        matches!(self, Self::Image | Self::Video | Self::Svg)
+        matches!(self, Self::Image | Self::Video | Self::Audio | Self::Svg)
+    }
+    pub fn is_playable(self) -> bool {
+        matches!(self, Self::Video | Self::Audio)
     }
     pub fn supports_corners(self) -> bool {
         matches!(self, Self::Rectangle | Self::Image)
@@ -46,6 +50,7 @@ impl ShapeKind {
             Self::Image => t("shape-image"),
             Self::Svg => "SVG",
             Self::Video => t("shape-video"),
+            Self::Audio => t("shape-audio"),
             Self::Line => t("shape-line"),
             Self::Pen => t("tool-pencil"),
             Self::Bezier => t("tool-pen"),

@@ -129,6 +129,13 @@ impl Workspace {
                 .paint_order()
                 .into_iter()
                 .filter(|id| ids.contains(id))
+                .filter(|id| {
+                    *id == root
+                        || !doc
+                            .shapes
+                            .iter()
+                            .any(|s| s.id == *id && s.kind == ShapeKind::Audio)
+                })
                 .filter(|id| !crate::scene::boolean::consumed(&self.hierarchy, *id, &ids))
                 .filter(|id| !crate::scene::mask::is_source(&self.hierarchy, *id, &ids))
                 .collect();
@@ -136,17 +143,17 @@ impl Workspace {
             if let Some(shape) = doc
                 .shapes
                 .iter()
-                .find(|s| s.id == root && s.kind == ShapeKind::Video)
+                .find(|s| s.id == root && s.kind.is_playable())
             {
                 let asset = doc
                     .assets
                     .iter()
                     .find(|a| a.object == root && !a.fill)
-                    .context("Missing video asset")?;
+                    .context("Missing media asset")?;
                 let source = assets
                     .iter()
                     .find(|a| a.hash == asset.hash)
-                    .context("Missing video source")?
+                    .context("Missing media source")?
                     .clone();
                 jobs.push(Job {
                     preset: Default::default(),
@@ -354,7 +361,7 @@ impl Workspace {
         let ids = self.selection_ids();
         self.shapes
             .iter()
-            .filter(|s| ids.contains(&s.id) && s.kind == ShapeKind::Video)
+            .filter(|s| ids.contains(&s.id) && s.kind.is_playable())
             .count()
     }
 
@@ -363,7 +370,7 @@ impl Workspace {
         let formats: BTreeSet<_> = self
             .shapes
             .iter()
-            .filter(|s| ids.contains(&s.id) && s.kind == ShapeKind::Video)
+            .filter(|s| ids.contains(&s.id) && s.kind.is_playable())
             .filter_map(|s| s.asset.as_ref())
             .filter_map(|asset| asset.path.extension())
             .map(|ext| ext.to_string_lossy().to_uppercase())

@@ -15,6 +15,7 @@ pub(crate) enum AssetContent {
     Image(Arc<RenderImage>),
     Svg(svg::SvgAsset),
     Video(Arc<SurfaceFrame>),
+    Audio,
 }
 
 pub(crate) struct FileAsset {
@@ -130,6 +131,8 @@ impl FileAsset {
     pub fn kind(&self) -> crate::scene::shape::ShapeKind {
         if svg::is_svg(&self.path) {
             crate::scene::shape::ShapeKind::Svg
+        } else if is_audio(&self.path) {
+            crate::scene::shape::ShapeKind::Audio
         } else if self.video {
             crate::scene::shape::ShapeKind::Video
         } else {
@@ -229,6 +232,10 @@ impl FileAsset {
         Self::from_cached(path.to_owned(), source, hash)
     }
     fn decode(path: &Path, source: &Source) -> Result<(u32, u32, AssetContent)> {
+        if is_audio(path) {
+            source.verify()?;
+            return Ok((64, 64, AssetContent::Audio));
+        }
         if is_video(path) {
             gpui_media_backend::SystemBackend::initialize()?;
             let cache = source.cached_path()?;
@@ -285,5 +292,16 @@ fn is_video(path: &Path) -> bool {
             .to_ascii_lowercase()
             .as_str(),
         "mp4" | "mov" | "mkv" | "webm" | "avi" | "m4v"
+    )
+}
+
+fn is_audio(path: &Path) -> bool {
+    matches!(
+        path.extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase()
+            .as_str(),
+        "mp3" | "wav" | "flac" | "ogg" | "oga" | "m4a" | "aac"
     )
 }

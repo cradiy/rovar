@@ -13,7 +13,9 @@ pub(super) enum Tool {
     Arrow,
     Polygon,
     Star,
-    Media,
+    Image,
+    Video,
+    Audio,
     Svg,
     Line,
     Bezier,
@@ -41,13 +43,15 @@ impl Tool {
             ),
             Self::Polygon => ("add-polygon", t("shape-polygon"), "", LucideIcons::Triangle),
             Self::Star => ("add-star", t("shape-star"), "", LucideIcons::Star),
-            Self::Media => (
-                "import-media",
-                t("tool-media"),
+            Self::Image => (
+                "import-image",
+                t("shape-image"),
                 "Mod+Shift+K",
                 LucideIcons::Image,
             ),
-            Self::Svg => ("import-svg", t("svg-import"), "", LucideIcons::FileCode),
+            Self::Video => ("import-video", t("shape-video"), "", LucideIcons::Film),
+            Self::Audio => ("import-audio", t("shape-audio"), "", LucideIcons::Music),
+            Self::Svg => ("import-svg", "SVG", "", LucideIcons::FileCode),
             Self::Line => ("draw-line", t("shape-line"), "L", LucideIcons::Minus),
             Self::Bezier => ("draw-bezier", t("tool-pen"), "P", LucideIcons::PenTool),
             Self::Pencil => ("draw-pen", t("tool-pencil"), "Shift+P", LucideIcons::Pencil),
@@ -104,8 +108,13 @@ impl Workspace {
         self.close_tool_menus(window, cx);
         self.cancel_gesture(window, cx);
         self.media.cancel_import();
-        if tool == Tool::Media {
-            self.import_media(window, cx);
+        if let Some(kind) = match tool {
+            Tool::Image => Some(media::ImportKind::Image),
+            Tool::Video => Some(media::ImportKind::Video),
+            Tool::Audio => Some(media::ImportKind::Audio),
+            _ => None,
+        } {
+            self.import_media(kind, window, cx);
             return;
         }
         if tool == Tool::Svg {
@@ -179,7 +188,7 @@ impl Workspace {
             && self.gesture.is_none()
         {
             if !event.is_held {
-                self.choose_tool(Tool::Media, window, cx);
+                self.choose_tool(Tool::Image, window, cx);
             }
             return true;
         }
@@ -265,6 +274,7 @@ impl Workspace {
         let menu = self.toolbar.menus[index].clone();
         let open = menu.read(cx).is_open();
         let id = ["navigation-menu", "shapes-menu", "pen-menu"][index];
+        let menu_height = (f32::from(self.bounds.get().size.height) - 120.).max(80.);
         let rows: Vec<_> = tools
             .iter()
             .copied()
@@ -275,6 +285,7 @@ impl Workspace {
                     .id(("tool-option", tool as usize))
                     .debug_selector(move || format!("option-{id}"))
                     .h(px(36.))
+                    .flex_shrink_0()
                     .px(px(8.))
                     .rounded(px(6.))
                     .flex()
@@ -308,6 +319,7 @@ impl Workspace {
                     .menu_gap(px(14.))
                     .w(px(if index == 1 { 304. } else { 216. }))
                     .min_w(px(if index == 1 { 304. } else { 216. }))
+                    .max_h(px(menu_height))
                     .p(px(6.))
                     .rounded(px(12.))
                     .shadow_lg()
@@ -331,7 +343,10 @@ impl Workspace {
                     )
                     .menu(
                         div()
+                            .id(("tool-menu-content", index))
                             .debug_selector(move || format!("{id}-popup"))
+                            .max_h(px(menu_height - 14.))
+                            .overflow_y_scroll()
                             .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
                             .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
                             .flex()
@@ -394,7 +409,9 @@ impl Workspace {
                             Tool::Polygon,
                             Tool::Star,
                             Tool::Svg,
-                            Tool::Media,
+                            Tool::Image,
+                            Tool::Video,
+                            Tool::Audio,
                         ],
                         cx,
                     ))

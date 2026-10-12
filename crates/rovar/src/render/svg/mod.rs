@@ -80,6 +80,13 @@ impl Scene<'_> {
             clip(&mut defs, &format!("vector-mask-{id}"), &path);
         }
         for id in self.order {
+            if doc
+                .shapes
+                .iter()
+                .any(|s| s.id == *id && s.kind == ShapeKind::Audio)
+            {
+                continue;
+            }
             if crate::scene::boolean::consumed(&doc.hierarchy, *id, &included)
                 || crate::scene::mask::is_source(&doc.hierarchy, *id, &included)
             {

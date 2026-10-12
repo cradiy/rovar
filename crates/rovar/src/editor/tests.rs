@@ -335,7 +335,7 @@ pub(super) fn click(visual: &mut VisualTestContext, selector: &'static str) {
     if bounds.is_none() {
         let group = match selector {
             "add-rectangle" | "add-ellipse" | "draw-line" | "draw-arrow" | "add-polygon"
-            | "add-star" | "import-media" => Some("shapes-menu"),
+            | "add-star" | "import-image" | "import-video" | "import-audio" => Some("shapes-menu"),
             "draw-bezier" | "draw-pen" => Some("pen-menu"),
             "tool-move" | "tool-hand" => Some("navigation-menu"),
             _ => None,
@@ -349,7 +349,9 @@ pub(super) fn click(visual: &mut VisualTestContext, selector: &'static str) {
                 "draw-arrow" => "option-draw-arrow",
                 "add-polygon" => "option-add-polygon",
                 "add-star" => "option-add-star",
-                "import-media" => "option-import-media",
+                "import-image" => "option-import-image",
+                "import-video" => "option-import-video",
+                "import-audio" => "option-import-audio",
                 "draw-bezier" => "option-draw-bezier",
                 "draw-pen" => "option-draw-pen",
                 "tool-move" => "option-tool-move",

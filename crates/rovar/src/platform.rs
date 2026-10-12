@@ -62,15 +62,44 @@ pub fn prompt_for_paths(cx: &App, options: PathPromptOptions) -> Dialog<Vec<Path
                 .map(|_| Some(vec![directory]))
                 .map_err(Into::into)));
         }
-        let receiver = cx.prompt_for_files(gpui::FilePromptOptions {
-            multiple: options.multiple,
-            ..Default::default()
-        });
-        cx.foreground_executor().spawn(async move {
-            let result = async {
-                let Some(files) = receiver.await?? else {
-                    return Ok(None);
-                };
+        prompt_for_files(cx, options.multiple, &[])
+    }
+}
+
+pub fn prompt_for_files(cx: &App, multiple: bool, mime_types: &[&str]) -> Dialog<Vec<PathBuf>> {
+    let options = gpui::FilePromptOptions {
+        multiple,
+        mime_types: mime_types.iter().map(|mime| (*mime).to_owned()).collect(),
+        ..Default::default()
+    };
+    #[cfg(test)]
+    let options = {
+        // TestPlatform only simulates unfiltered path prompts.
+        let filters = options.normalized_mime_types().unwrap();
+        gpui::FilePromptOptions::filter_extensions(&filters).unwrap();
+        gpui::FilePromptOptions {
+            mime_types: Vec::new(),
+            ..options
+        }
+    };
+    let receiver = cx.prompt_for_files(options);
+    cx.foreground_executor().spawn(async move {
+        let result = async {
+            let Some(files) = receiver.await?? else {
+                return Ok(None);
+            };
+            #[cfg(not(target_family = "wasm"))]
+            return files
+                .into_iter()
+                .map(|file| {
+                    file.path()
+                        .map(Path::to_owned)
+                        .ok_or_else(|| anyhow::anyhow!("Selected file has no local path"))
+                })
+                .collect::<anyhow::Result<Vec<_>>>()
+                .map(Some);
+            #[cfg(target_family = "wasm")]
+            {
                 let directory = PathBuf::from(format!("/tmp/import-{}", uuid::Uuid::new_v4()));
                 rovar_storage::fs::create_dir_all(&directory)?;
                 let mut paths = Vec::new();
@@ -84,10 +113,10 @@ pub fn prompt_for_paths(cx: &App, options: PathPromptOptions) -> Dialog<Vec<Path
                 }
                 Ok(Some(paths))
             }
-            .await;
-            Ok(result)
-        })
-    }
+        }
+        .await;
+        Ok(result)
+    })
 }
 
 pub fn prompt_for_new_path(cx: &App, directory: &Path, name: Option<&str>) -> Dialog<PathBuf> {

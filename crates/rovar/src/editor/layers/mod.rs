@@ -143,6 +143,7 @@ impl Workspace {
                 ShapeKind::Image => LucideIcons::Image,
                 ShapeKind::Svg => LucideIcons::FileCode,
                 ShapeKind::Video => LucideIcons::Film,
+                ShapeKind::Audio => LucideIcons::Music,
                 ShapeKind::Line => LucideIcons::Minus,
                 ShapeKind::Pen => LucideIcons::Pencil,
                 ShapeKind::Bezier => LucideIcons::PenTool,

@@ -26,7 +26,7 @@ impl Render for Workspace {
         self.reflow_layout(cx);
         self.sync_components(window, cx);
         self.sync_layout_inputs(cx);
-        self.sync_video_visibility(cx);
+        self.sync_media_visibility(cx);
         self.sync_export_controls(window, cx);
         self.sync_effect_controls(window, cx);
         self.load_visible_media(window, cx);

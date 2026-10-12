@@ -57,7 +57,7 @@ impl Workspace {
         if image
             .asset
             .as_ref()
-            .is_none_or(|a| a.video || a.width == 0 || a.height == 0)
+            .is_none_or(|a| a.kind().is_playable() || a.width == 0 || a.height == 0)
         {
             return false;
         }

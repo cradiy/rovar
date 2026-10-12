@@ -201,6 +201,7 @@ impl Workspace {
                 } else {
                     shapes
                         .get(&id)
+                        .filter(|s| frame.is_none() || s.kind != ShapeKind::Audio)
                         .filter(|s| {
                             self.is_selected(id)
                                 || self.vector_edit == Some(id)
@@ -519,252 +520,260 @@ impl Workspace {
             },
         )
         .size_full();
-        let element =
-            div()
-                .id(("shape", id))
-                .on_mouse_down(
-                    MouseButton::Right,
-                    cx.listener(move |this, _: &gpui::MouseDownEvent, window, cx| {
-                        this.open_context_menu(
-                            Some(id),
-                            false,
-                            window.raw_mouse_position(),
+        let element = div()
+            .id(("shape", id))
+            .on_mouse_down(
+                MouseButton::Right,
+                cx.listener(move |this, _: &gpui::MouseDownEvent, window, cx| {
+                    this.open_context_menu(
+                        Some(id),
+                        false,
+                        window.raw_mouse_position(),
+                        window,
+                        cx,
+                    );
+                    cx.stop_propagation();
+                }),
+            )
+            .debug_selector(move || format!("shape-{id}"))
+            .absolute()
+            .left(px(position.x - outset))
+            .top(px(position.y - outset))
+            .w(px(width + outset * 2.))
+            .h(px(height + outset * 2.))
+            .cursor(CursorStyle::OpenHand)
+            .when(self.vector_edit == Some(id), |el| {
+                el.cursor(CursorStyle::Arrow)
+            })
+            .when(!self.layer_editable(id), |el| el.cursor(CursorStyle::Arrow))
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(move |this, event: &gpui::MouseDownEvent, window, cx| {
+                    let event = &gpui::MouseDownEvent {
+                        position: window.raw_mouse_position(),
+                        ..event.clone()
+                    };
+                    if this.space_down {
+                        this.begin(
+                            GestureKind::Pan {
+                                original: this.view.pan,
+                            },
+                            event.position,
+                            event.button,
                             window,
                             cx,
                         );
-                        cx.stop_propagation();
-                    }),
-                )
-                .debug_selector(move || format!("shape-{id}"))
-                .absolute()
-                .left(px(position.x - outset))
-                .top(px(position.y - outset))
-                .w(px(width + outset * 2.))
-                .h(px(height + outset * 2.))
-                .cursor(CursorStyle::OpenHand)
-                .when(self.vector_edit == Some(id), |el| {
-                    el.cursor(CursorStyle::Arrow)
-                })
-                .when(!self.layer_editable(id), |el| el.cursor(CursorStyle::Arrow))
-                .on_mouse_down(
-                    MouseButton::Left,
-                    cx.listener(move |this, event: &gpui::MouseDownEvent, window, cx| {
-                        let event = &gpui::MouseDownEvent {
-                            position: window.raw_mouse_position(),
-                            ..event.clone()
-                        };
-                        if this.space_down {
-                            this.begin(
-                                GestureKind::Pan {
-                                    original: this.view.pan,
-                                },
-                                event.position,
-                                event.button,
-                                window,
-                                cx,
-                            );
-                        } else if id != 0 {
-                            if !this.layer_editable(id) {
-                                this.focus.focus(window, cx);
-                                this.select(None, cx);
-                                cx.stop_propagation();
-                                return;
-                            }
-                            if crate::scene::boolean::is_boolean(&this.hierarchy, id) {
-                                if event.click_count >= 2 && !event.modifiers.shift {
-                                    if let Some(child) =
-                                        this.ordered_children(Some(id)).last().copied()
-                                    {
-                                        this.set_selection(BTreeSet::from([child]), cx);
-                                    }
-                                } else if !this.selection_pointer(id, event, window, cx) {
-                                    this.set_selection(BTreeSet::from([id]), cx);
-                                    this.batch_before = this.before_geometry();
-                                    this.begin(
-                                        GestureKind::SelectionMove,
-                                        event.position,
-                                        event.button,
-                                        window,
-                                        cx,
-                                    );
-                                }
-                                cx.stop_propagation();
-                                return;
-                            }
-                            if this.vector_edit == Some(id) {
-                                this.vector_pointer(id, event, window, cx);
-                                return;
-                            }
-                            if this.selection_pointer(id, event, window, cx) {
-                                return;
-                            }
+                    } else if id != 0 {
+                        if !this.layer_editable(id) {
+                            this.focus.focus(window, cx);
+                            this.select(None, cx);
+                            cx.stop_propagation();
+                            return;
+                        }
+                        if crate::scene::boolean::is_boolean(&this.hierarchy, id) {
                             if event.click_count >= 2 && !event.modifiers.shift {
-                                if this.start_image_crop(id, window, cx) {
-                                    cx.stop_propagation();
-                                    return;
+                                if let Some(child) = this.ordered_children(Some(id)).last().copied()
+                                {
+                                    this.set_selection(BTreeSet::from([child]), cx);
                                 }
-                                if this.shapes.iter().any(|s| s.id == id && s.kind.is_asset()) {
-                                    this.select_shape(id, cx);
-                                    if this.selected_shape().unwrap().kind == ShapeKind::Video {
-                                        this.play_video(id, window, cx);
-                                    }
-                                    cx.stop_propagation();
-                                    return;
-                                }
-                                this.enter_vector_edit(id, window, cx);
-                                cx.stop_propagation();
-                                return;
-                            }
-                            this.select_shape(id, cx);
-                            if let Some(shape) = this.selected_shape() {
+                            } else if !this.selection_pointer(id, event, window, cx) {
+                                this.set_selection(BTreeSet::from([id]), cx);
+                                this.batch_before = this.before_geometry();
                                 this.begin(
-                                    GestureKind::Shape {
-                                        id,
-                                        original: shape.rect,
-                                        handle: None,
-                                    },
+                                    GestureKind::SelectionMove,
                                     event.position,
                                     event.button,
                                     window,
                                     cx,
                                 );
                             }
+                            cx.stop_propagation();
+                            return;
                         }
-                    }),
-                )
-                .when(shape.kind != ShapeKind::Video, |el| el.child(surface))
-                .when(shape.kind == ShapeKind::Video, |el| {
-                    el.child(self.media_surface(shape, outset))
-                })
-                .when(
-                    selected
-                        && self.vector_edit != Some(id)
-                        && !shape.kind.is_line()
-                        && self.image_crop.is_none(),
-                    |el| {
-                        el.child(
-                            self.mask_overlay(
-                                id,
+                        if this.vector_edit == Some(id) {
+                            this.vector_pointer(id, event, window, cx);
+                            return;
+                        }
+                        if this.selection_pointer(id, event, window, cx) {
+                            return;
+                        }
+                        if event.click_count >= 2 && !event.modifiers.shift {
+                            if this.start_image_crop(id, window, cx) {
+                                cx.stop_propagation();
+                                return;
+                            }
+                            if this.shapes.iter().any(|s| s.id == id && s.kind.is_asset()) {
+                                this.select_shape(id, cx);
+                                if this.selected_shape().unwrap().kind == ShapeKind::Video {
+                                    this.play_video(id, window, cx);
+                                } else if this.selected_shape().unwrap().kind == ShapeKind::Audio {
+                                    this.control_audio(
+                                        id,
+                                        crate::scene::presentation::MediaCommand::Toggle,
+                                        cx,
+                                    );
+                                }
+                                cx.stop_propagation();
+                                return;
+                            }
+                            this.enter_vector_edit(id, window, cx);
+                            cx.stop_propagation();
+                            return;
+                        }
+                        this.select_shape(id, cx);
+                        if let Some(shape) = this.selected_shape() {
+                            this.begin(
+                                GestureKind::Shape {
+                                    id,
+                                    original: shape.rect,
+                                    handle: None,
+                                },
+                                event.position,
+                                event.button,
+                                window,
+                                cx,
+                            );
+                        }
+                    }
+                }),
+            )
+            .when(!shape.kind.is_playable(), |el| el.child(surface))
+            .when(shape.kind.is_playable(), |el| {
+                el.child(self.media_surface(shape, outset))
+            })
+            .when(
+                selected
+                    && self.vector_edit != Some(id)
+                    && !shape.kind.is_line()
+                    && self.image_crop.is_none(),
+                |el| {
+                    el.child(
+                        self.mask_overlay(
+                            id,
+                            div()
+                                .absolute()
+                                .left(px(outset))
+                                .top(px(outset))
+                                .w(px(width))
+                                .h(px(height))
+                                .border_1()
+                                .border_color(ACCENT.color()),
+                        ),
+                    )
+                    .children(
+                        Handle::ALL
+                            .into_iter()
+                            .enumerate()
+                            .map(|(index, handle)| {
+                                let x = (handle.0 as f32 + 1.) * 0.5 * width + outset;
+                                let y = (handle.1 as f32 + 1.) * 0.5 * height + outset;
+                                let cursor = rotation::handle_cursor(handle, shape.layer.rotation);
+                                let corner = handle.0 != 0 && handle.1 != 0;
+                                // Reserve the corner targets; the rest of each edge resizes
+                                // without adding a visible midpoint or changing the hit slop.
+                                let (left, top, hit_width, hit_height) = if handle.0 == 0 {
+                                    (outset + 6., y - 6., (width - 12.).max(0.), 12.)
+                                } else if handle.1 == 0 {
+                                    (x - 6., outset + 6., 12., (height - 12.).max(0.))
+                                } else {
+                                    (x - 6., y - 6., 12., 12.)
+                                };
                                 div()
+                                    .id(("shape-handle", index))
+                                    .debug_selector(move || format!("shape-handle-{index}"))
                                     .absolute()
-                                    .left(px(outset))
-                                    .top(px(outset))
-                                    .w(px(width))
-                                    .h(px(height))
-                                    .border_1()
-                                    .border_color(ACCENT.color()),
-                            ),
-                        )
-                        .children(
-                            Handle::ALL
-                                .into_iter()
-                                .enumerate()
-                                .map(|(index, handle)| {
-                                    let x = (handle.0 as f32 + 1.) * 0.5 * width + outset;
-                                    let y = (handle.1 as f32 + 1.) * 0.5 * height + outset;
-                                    let cursor =
-                                        rotation::handle_cursor(handle, shape.layer.rotation);
-                                    let corner = handle.0 != 0 && handle.1 != 0;
-                                    // Reserve the corner targets; the rest of each edge resizes
-                                    // without adding a visible midpoint or changing the hit slop.
-                                    let (left, top, hit_width, hit_height) = if handle.0 == 0 {
-                                        (outset + 6., y - 6., (width - 12.).max(0.), 12.)
-                                    } else if handle.1 == 0 {
-                                        (x - 6., outset + 6., 12., (height - 12.).max(0.))
-                                    } else {
-                                        (x - 6., y - 6., 12., 12.)
-                                    };
-                                    div()
-                            .id(("shape-handle", index))
-                            .debug_selector(move || format!("shape-handle-{index}"))
-                            .absolute()
-                            .left(px(left))
-                            .top(px(top))
-                            .w(px(hit_width))
-                            .h(px(hit_height))
-                            .cursor(cursor)
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .when(corner, |el| {
-                                el.child(
-                                    div()
-                                        .debug_selector(move || format!("shape-corner-{index}"))
-                                        .size(px(7.))
-                                        .bg(Color::Handle.color())
-                                        .border_1()
-                                        .border_color(ACCENT.color()),
-                                )
+                                    .left(px(left))
+                                    .top(px(top))
+                                    .w(px(hit_width))
+                                    .h(px(hit_height))
+                                    .cursor(cursor)
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .when(corner, |el| {
+                                        el.child(
+                                            div()
+                                                .debug_selector(move || {
+                                                    format!("shape-corner-{index}")
+                                                })
+                                                .size(px(7.))
+                                                .bg(Color::Handle.color())
+                                                .border_1()
+                                                .border_color(ACCENT.color()),
+                                        )
+                                    })
+                                    .on_mouse_down(
+                                        MouseButton::Left,
+                                        cx.listener(
+                                            move |this,
+                                                  event: &gpui::MouseDownEvent,
+                                                  window,
+                                                  cx| {
+                                                let event = &gpui::MouseDownEvent {
+                                                    position: window.raw_mouse_position(),
+                                                    ..event.clone()
+                                                };
+                                                if this.space_down {
+                                                    this.begin(
+                                                        GestureKind::Pan {
+                                                            original: this.view.pan,
+                                                        },
+                                                        event.position,
+                                                        event.button,
+                                                        window,
+                                                        cx,
+                                                    );
+                                                } else if let Some(shape) = this.selected_shape() {
+                                                    this.begin(
+                                                        GestureKind::Shape {
+                                                            id,
+                                                            original: shape.rect,
+                                                            handle: Some(handle),
+                                                        },
+                                                        event.position,
+                                                        event.button,
+                                                        window,
+                                                        cx,
+                                                    );
+                                                }
+                                            },
+                                        ),
+                                    )
                             })
-                            .on_mouse_down(
-                                MouseButton::Left,
-                                cx.listener(
-                                    move |this, event: &gpui::MouseDownEvent, window, cx| {
-                                        let event = &gpui::MouseDownEvent {
-                                            position: window.raw_mouse_position(),
-                                            ..event.clone()
-                                        };
-                                        if this.space_down {
-                                            this.begin(
-                                                GestureKind::Pan {
-                                                    original: this.view.pan,
-                                                },
-                                                event.position,
-                                                event.button,
-                                                window,
-                                                cx,
-                                            );
-                                        } else if let Some(shape) = this.selected_shape() {
-                                            this.begin(
-                                                GestureKind::Shape {
-                                                    id,
-                                                    original: shape.rect,
-                                                    handle: Some(handle),
-                                                },
-                                                event.position,
-                                                event.button,
-                                                window,
-                                                cx,
-                                            );
-                                        }
-                                    },
-                                ),
-                            )
-                                })
-                                .map(|el| self.mask_overlay(id, el)),
-                        )
-                    },
-                )
-                .when(
-                    selected && shape.kind.is_line() && self.vector_edit != Some(id),
-                    |el| {
-                        el.children(
-                            self.line_handles(shape, outset, cx)
-                                .into_iter()
-                                .map(|el| self.mask_overlay(id, el)),
-                        )
-                    },
-                )
-                .when(
-                    self.vector_edit == Some(id) || (shape.kind == ShapeKind::Bezier && id == 0),
-                    |el| {
-                        el.children(
-                            self.bezier_handles(&self.vector_handle_shape(shape), outset, cx)
-                                .into_iter()
-                                .map(|el| self.mask_overlay(id, el)),
-                        )
-                    },
-                )
-                .when(
-                    selected && self.vector_edit != Some(id) && self.image_crop.is_none(),
-                    |el| {
-                        el.children(
-                            self.rotation_handles(id, width, height, outset, cx)
-                                .into_iter()
-                                .map(|el| self.mask_overlay(id, el)),
-                        )
-                    },
-                );
+                            .map(|el| self.mask_overlay(id, el)),
+                    )
+                },
+            )
+            .when(
+                selected && shape.kind.is_line() && self.vector_edit != Some(id),
+                |el| {
+                    el.children(
+                        self.line_handles(shape, outset, cx)
+                            .into_iter()
+                            .map(|el| self.mask_overlay(id, el)),
+                    )
+                },
+            )
+            .when(
+                self.vector_edit == Some(id) || (shape.kind == ShapeKind::Bezier && id == 0),
+                |el| {
+                    el.children(
+                        self.bezier_handles(&self.vector_handle_shape(shape), outset, cx)
+                            .into_iter()
+                            .map(|el| self.mask_overlay(id, el)),
+                    )
+                },
+            )
+            .when(
+                selected && self.vector_edit != Some(id) && self.image_crop.is_none(),
+                |el| {
+                    el.children(
+                        self.rotation_handles(id, width, height, outset, cx)
+                            .into_iter()
+                            .map(|el| self.mask_overlay(id, el)),
+                    )
+                },
+            );
         crate::scene::rotation::surface(
             element,
             shape.layer.rotation,

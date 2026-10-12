@@ -1,6 +1,160 @@
 use super::*;
 use crate::editor::tests::{click, draw, open};
 use gpui::{TestAppContext, VisualTestContext};
+use std::collections::BTreeSet;
+
+#[gpui::test]
+fn audio_import_preserves_source_and_stays_out_of_presented_artwork(cx: &mut TestAppContext) {
+    use crate::scene::presentation::{Action, Trigger};
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("sound.wav");
+    let mut bytes = b"RIFF".to_vec();
+    bytes.extend(38u32.to_le_bytes());
+    bytes.extend(b"WAVEfmt ");
+    bytes.extend(16u32.to_le_bytes());
+    bytes.extend(1u16.to_le_bytes());
+    bytes.extend(1u16.to_le_bytes());
+    bytes.extend(8000u32.to_le_bytes());
+    bytes.extend(16000u32.to_le_bytes());
+    bytes.extend(2u16.to_le_bytes());
+    bytes.extend(16u16.to_le_bytes());
+    bytes.extend(b"data");
+    bytes.extend(2u32.to_le_bytes());
+    bytes.extend(0i16.to_le_bytes());
+    std::fs::write(&path, &bytes).unwrap();
+    let handle = open(cx);
+    let board = handle
+        .update(cx, |w, _, cx| {
+            w.add_artboard(
+                Rect {
+                    x: 0.,
+                    y: 0.,
+                    width: 1000.,
+                    height: 1000.,
+                },
+                cx,
+            );
+            w.boards[0].id
+        })
+        .unwrap();
+    let mut visual = VisualTestContext::from_window(handle.into(), cx);
+    for entry in ["import-image", "import-video"] {
+        click(&mut visual, entry);
+        visual
+            .cx
+            .simulate_path_prompt_response(|_| Some(vec![path.clone()]));
+        draw(&mut visual);
+        handle
+            .update(&mut visual.cx, |w, _, _| {
+                assert!(w.shapes.is_empty());
+                assert!(w.media.error.is_some());
+            })
+            .unwrap();
+    }
+    click(&mut visual, "import-audio");
+    visual
+        .cx
+        .simulate_path_prompt_response(|_| Some(vec![path.clone()]));
+    draw(&mut visual);
+    let audio = handle
+        .update(&mut visual.cx, |w, window, cx| {
+            let audio = w.selected_shape().unwrap().id;
+            assert_eq!(w.selected_shape().unwrap().kind, ShapeKind::Audio);
+            assert_eq!(w.selected_shape().unwrap().board, Some(board));
+            let jobs = w.component_export_jobs(window, cx).unwrap();
+            assert!(jobs[0].original.is_some());
+            assert_eq!(
+                jobs[0]
+                    .extension(crate::document::export::Format::Png)
+                    .unwrap(),
+                "wav"
+            );
+            assert_eq!(
+                std::fs::read(
+                    &*w.selected_shape()
+                        .unwrap()
+                        .asset
+                        .as_ref()
+                        .unwrap()
+                        .source
+                        .cached_path()
+                        .unwrap()
+                )
+                .unwrap(),
+                bytes
+            );
+            w.set_prototype_action(
+                board,
+                Trigger::Click,
+                Some(Action::Media {
+                    target: audio,
+                    command: MediaCommand::Play,
+                }),
+                window,
+                cx,
+            );
+            w.set_prototype_action(
+                board,
+                Trigger::Click,
+                Some(Action::Media {
+                    target: audio,
+                    command: MediaCommand::Rate { percent: 200 },
+                }),
+                window,
+                cx,
+            );
+            assert_eq!(
+                w.hierarchy.interactions[&board].click,
+                Some(Action::Media {
+                    target: audio,
+                    command: MediaCommand::Play
+                })
+            );
+            let page = w.snapshot_page(cx).0;
+            page.validate().unwrap();
+            let doc = crate::document::Document::single(page);
+            crate::document::Document::decode(&serde_json::to_vec(&doc).unwrap()).unwrap();
+            w.set_selection(BTreeSet::from([board]), cx);
+            let svg = w.component_export_jobs(window, cx).unwrap()[0]
+                .svg()
+                .unwrap();
+            assert!(!svg.contains("data:audio") && !svg.contains("<image"));
+            w.set_presentation_tab(true, window, cx);
+            audio
+        })
+        .unwrap();
+    click(&mut visual, "prototype-click-menu");
+    assert!(visual.debug_bounds("prototype-option-1-6").is_some());
+    assert!(visual.debug_bounds("prototype-option-1-7").is_none());
+    visual.simulate_keystrokes("escape");
+    click(&mut visual, "prototype-media-menu");
+    assert!(visual.debug_bounds("prototype-option-5-0").is_some());
+    assert!(visual.debug_bounds("prototype-option-5-7").is_none());
+    click(&mut visual, "prototype-option-5-1");
+    handle
+        .update(&mut visual.cx, |w, _, _| {
+            assert_eq!(
+                w.hierarchy.interactions[&board].click,
+                Some(Action::Media {
+                    target: audio,
+                    command: MediaCommand::Pause
+                })
+            );
+        })
+        .unwrap();
+    handle
+        .update(&mut visual.cx, |w, window, cx| {
+            w.start_presentation(window, cx)
+        })
+        .unwrap();
+    draw(&mut visual);
+    assert!(
+        visual
+            .debug_bounds(format!("shape-{audio}").leak())
+            .is_none()
+    );
+    std::fs::remove_file(path).unwrap();
+}
 
 #[gpui::test]
 fn small_image_import_keeps_intrinsic_size_and_survives_copy_delete_and_source_removal(
@@ -28,7 +182,7 @@ fn small_image_import_keeps_intrinsic_size_and_survives_copy_delete_and_source_r
         })
         .unwrap();
     let mut visual = VisualTestContext::from_window(window.into(), cx);
-    click(&mut visual, "import-media");
+    click(&mut visual, "import-image");
     visual
         .cx
         .simulate_path_prompt_response(|_| Some(vec![path.clone()]));
@@ -101,7 +255,7 @@ fn large_image_fits_visible_canvas_and_corner_edits_survive_undo(cx: &mut TestAp
                 cx.notify();
             })
             .unwrap();
-        click(&mut visual, "import-media");
+        click(&mut visual, "import-image");
         visual
             .cx
             .simulate_path_prompt_response(|_| Some(vec![path.clone()]));
@@ -155,10 +309,10 @@ fn cancelled_invalid_and_stale_imports_do_not_create_objects(cx: &mut TestAppCon
     std::fs::write(&path, b"not an image").unwrap();
     let window = open(cx);
     let mut visual = VisualTestContext::from_window(window.into(), cx);
-    click(&mut visual, "import-media");
+    click(&mut visual, "import-image");
     visual.cx.simulate_path_prompt_response(|_| None);
     draw(&mut visual);
-    click(&mut visual, "import-media");
+    click(&mut visual, "import-image");
     visual
         .cx
         .simulate_path_prompt_response(|_| Some(vec![path.clone()]));
@@ -170,7 +324,7 @@ fn cancelled_invalid_and_stale_imports_do_not_create_objects(cx: &mut TestAppCon
             assert!(!this.media.importing);
         })
         .unwrap();
-    click(&mut visual, "import-media");
+    click(&mut visual, "import-image");
     window
         .update(&mut visual.cx, |this, window, cx| {
             this.choose_tool(toolbar::Tool::Star, window, cx)

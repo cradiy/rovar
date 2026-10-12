@@ -327,7 +327,7 @@ impl Page {
                         || self
                             .shapes
                             .iter()
-                            .any(|s| s.id == *id && s.kind != crate::scene::shape::ShapeKind::Video)
+                            .any(|s| s.id == *id && !s.kind.is_playable())
                         || self.texts.iter().any(|t| t.id == *id),
                     "Layer blur requires a shape, image, or text"
                 );
@@ -368,10 +368,9 @@ impl Page {
                     action
                         .remap(|target| {
                             let valid = match action {
-                                crate::scene::presentation::Action::Media { .. } => {
+                                crate::scene::presentation::Action::Media { command, .. } => {
                                     self.shapes.iter().any(|shape| {
-                                        shape.id == target
-                                            && shape.kind == crate::scene::shape::ShapeKind::Video
+                                        shape.id == target && command.supports(shape.kind)
                                     })
                                 }
                                 _ => boards.contains(&target),
