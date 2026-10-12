@@ -370,6 +370,15 @@ impl Workspace {
     pub(super) fn media_surface(&self, shape: &Shape, outset: f32) -> Div {
         let mut content = div().absolute().inset(px(outset)).overflow_hidden();
         if shape.kind == ShapeKind::Audio {
+            if let Some(AssetContent::Audio(Some(cover))) =
+                shape.asset.as_ref().and_then(|asset| asset.content())
+            {
+                return content.rounded(px(8.)).child(
+                    gpui::img(cover.clone())
+                        .size_full()
+                        .object_fit(gpui::ObjectFit::Cover),
+                );
+            }
             return content
                 .flex()
                 .items_center()
@@ -452,10 +461,12 @@ impl Workspace {
                         .items_center()
                         .justify_center()
                         .child(match asset.content() {
-                            Some(AssetContent::Image(image)) => gpui::img(image.clone())
-                                .size_full()
-                                .object_fit(gpui::ObjectFit::Contain)
-                                .into_any_element(),
+                            Some(AssetContent::Image(image) | AssetContent::Audio(Some(image))) => {
+                                gpui::img(image.clone())
+                                    .size_full()
+                                    .object_fit(gpui::ObjectFit::Contain)
+                                    .into_any_element()
+                            }
                             Some(AssetContent::Video(frame)) => gpui::surface(frame.clone())
                                 .size_full()
                                 .object_fit(gpui::ObjectFit::Contain)

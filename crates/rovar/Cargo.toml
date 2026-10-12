@@ -23,6 +23,7 @@ image = { version = "0.25", default-features = false, features = [
   "tiff",
 ] }
 anyhow = "1"
+symphonia = { version = "0.6.1", default-features = false, features = ["mp3", "flac", "aac", "isomp4", "ogg", "wav", "all-meta"] }
 i_overlay = "9"
 kurbo = "0.13"
 taffy = { version = "0.10.1", default-features = false, features = [

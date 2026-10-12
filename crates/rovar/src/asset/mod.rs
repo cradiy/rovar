@@ -8,6 +8,7 @@ use std::{
     sync::{Arc, OnceLock},
 };
 
+mod audio_cover;
 mod source;
 pub(crate) use source::Source;
 
@@ -15,7 +16,7 @@ pub(crate) enum AssetContent {
     Image(Arc<RenderImage>),
     Svg(svg::SvgAsset),
     Video(Arc<SurfaceFrame>),
-    Audio,
+    Audio(Option<Arc<RenderImage>>),
 }
 
 pub(crate) struct FileAsset {
@@ -234,7 +235,11 @@ impl FileAsset {
     fn decode(path: &Path, source: &Source) -> Result<(u32, u32, AssetContent)> {
         if is_audio(path) {
             source.verify()?;
-            return Ok((64, 64, AssetContent::Audio));
+            return Ok((
+                64,
+                64,
+                AssetContent::Audio(audio_cover::load(source).ok().flatten()),
+            ));
         }
         if is_video(path) {
             gpui_media_backend::SystemBackend::initialize()?;
