@@ -13,7 +13,7 @@ pub(in crate::editor) struct State {
     pub image_loading: Option<usize>,
     pub videos: HashMap<usize, VideoRuntime>,
     pub video_loading: BTreeSet<usize>,
-    pub playback_generation: u64,
+    pub video_commands: HashMap<usize, Vec<crate::scene::presentation::MediaCommand>>,
 }
 
 impl State {
@@ -30,6 +30,7 @@ impl State {
     pub fn clear_page(&mut self) {
         self.videos.clear();
         self.video_loading.clear();
+        self.video_commands.clear();
         self.image_loading = None;
         self.error = None;
     }

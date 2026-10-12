@@ -15,6 +15,7 @@ pub(super) struct Hover {
 }
 
 struct HoverSnapshot {
+    media: Option<(usize, super::super::media::VideoSnapshot)>,
     page: crate::document::Page,
     current: usize,
     history: Vec<usize>,
@@ -66,6 +67,12 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if let Action::Media { target, command } = action {
+            if self.presentation.playback.is_some() {
+                self.control_video(target, command, window, cx);
+            }
+            return;
+        }
         let Action::ChangeVariant { target } = action else {
             self.playback_action(action, cx);
             return;
@@ -179,6 +186,12 @@ impl Workspace {
                     let page = self.snapshot_page(cx).0;
                     let p = self.presentation.playback.as_ref().unwrap();
                     let restore = Some(HoverSnapshot {
+                        media: match action {
+                            Action::Media { target, .. } => {
+                                Some((target, self.video_snapshot(target, cx)))
+                            }
+                            _ => None,
+                        },
                         page,
                         current: p.current,
                         history: p.history.clone(),
@@ -225,6 +238,10 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if let Some((target, state)) = snapshot.media {
+            self.restore_video(target, state, window, cx);
+            return;
+        }
         self.pause_videos(cx);
         if self.presentation.playback.as_ref().unwrap().visual != snapshot.visual {
             self.freeze_playback_visual(window, cx);

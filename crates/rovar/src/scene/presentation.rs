@@ -23,6 +23,10 @@ pub(crate) enum Action {
     ChangeVariant {
         target: uuid::Uuid,
     },
+    Media {
+        target: usize,
+        command: MediaCommand,
+    },
 }
 
 impl Action {
@@ -35,6 +39,36 @@ impl Action {
             Self::CloseOverlay => Some(self),
             Self::Back => Some(Self::Back),
             Self::ChangeVariant { target } => (!target.is_nil()).then_some(self),
+            Self::Media { target, command } => command
+                .valid()
+                .then_some(())
+                .and_then(|_| map(target))
+                .map(|target| Self::Media { target, command }),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub(crate) enum MediaCommand {
+    Play,
+    Pause,
+    Toggle,
+    Restart,
+    SeekBy { seconds: i32 },
+    SeekTo { seconds: u32 },
+    Rate { percent: u16 },
+    Volume { percent: u8 },
+    Mute,
+    Unmute,
+}
+
+impl MediaCommand {
+    pub fn valid(self) -> bool {
+        match self {
+            Self::Rate { percent } => (25..=400).contains(&percent),
+            Self::Volume { percent } => percent <= 100,
+            _ => true,
         }
     }
 }

@@ -3,7 +3,7 @@
 use super::*;
 use crate::{
     i18n::t,
-    scene::presentation::{Action, HoverExit, Transition, Trigger},
+    scene::presentation::{Action, HoverExit, MediaCommand, Transition, Trigger},
     ui::theme::Color,
 };
 use std::collections::BTreeSet;
@@ -12,6 +12,7 @@ mod chrome;
 mod connections;
 mod controls;
 mod hover_exit;
+mod media;
 mod overlay;
 #[cfg(test)]
 mod tests;
@@ -25,6 +26,7 @@ pub(super) struct State {
     pub player: Option<Entity<Workspace>>,
     pub playback: Option<Playback>,
     menus: [Entity<DropdownState>; 5],
+    media: media::State,
 }
 
 pub(super) struct Playback {
@@ -53,6 +55,7 @@ impl State {
             player: None,
             playback: None,
             menus: std::array::from_fn(|_| cx.new(|cx| DropdownState::new(window, cx))),
+            media: media::State::new(window, cx),
         }
     }
 }
@@ -378,6 +381,7 @@ impl Workspace {
             .w_full()
             .flex()
             .flex_col()
+            .relative()
             .child(self.playback_toolbar(cx))
             .child(
                 div()
@@ -442,5 +446,8 @@ impl Workspace {
                             ),
                     ),
             )
+            .when(self.media.error.is_some(), |el| {
+                el.child(self.media_status(cx))
+            })
     }
 }

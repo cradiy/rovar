@@ -366,7 +366,18 @@ impl Page {
             for action in [interaction.click, interaction.hover].into_iter().flatten() {
                 ensure!(
                     action
-                        .remap(|target| boards.contains(&target).then_some(target))
+                        .remap(|target| {
+                            let valid = match action {
+                                crate::scene::presentation::Action::Media { .. } => {
+                                    self.shapes.iter().any(|shape| {
+                                        shape.id == target
+                                            && shape.kind == crate::scene::shape::ShapeKind::Video
+                                    })
+                                }
+                                _ => boards.contains(&target),
+                            };
+                            valid.then_some(target)
+                        })
                         .is_some(),
                     "Invalid interaction target"
                 );

@@ -4,6 +4,114 @@ use crate::scene::presentation::{OverlayPosition, OverlaySettings};
 use gpui::{TestAppContext, VisualTestContext};
 
 #[gpui::test]
+fn video_actions_author_roundtrip_and_remap_with_their_targets(cx: &mut TestAppContext) {
+    let handle = open(cx);
+    let (frame, button, video) = handle
+        .update(cx, |w, window, cx| {
+            let (frame, _, button) = setup(w, window, cx);
+            let video = w.next_id;
+            w.next_id += 1;
+            let mut shape = Shape::new(
+                video,
+                Some(frame),
+                ShapeKind::Video,
+                Rect {
+                    x: 20.,
+                    y: 100.,
+                    width: 160.,
+                    height: 90.,
+                },
+            );
+            shape.asset = Some(std::sync::Arc::new(crate::asset::FileAsset {
+                path: "video.mp4".into(),
+                source: crate::asset::Source::file(
+                    tempfile::NamedTempFile::new().unwrap().into_temp_path(),
+                ),
+                hash: "0".repeat(64),
+                width: 160,
+                height: 90,
+                content: std::sync::OnceLock::from(Err("No decoder in authoring test".into())),
+                video: true,
+            }));
+            w.shapes.push(shape);
+            w.set_selection(BTreeSet::from([button]), cx);
+            w.set_presentation_tab(true, window, cx);
+            (frame, button, video)
+        })
+        .unwrap();
+    let mut visual = VisualTestContext::from_window(handle.into(), cx);
+    click(&mut visual, "prototype-click-menu");
+    click(&mut visual, "prototype-option-1-6");
+    assert!(visual.debug_bounds("prototype-target-menu").is_some());
+    assert!(visual.debug_bounds("prototype-instant").is_none());
+    handle
+        .update(&mut visual.cx, |w, window, cx| {
+            assert_eq!(
+                w.hierarchy.interactions[&button].click,
+                Some(Action::Media {
+                    target: video,
+                    command: MediaCommand::Play
+                })
+            );
+            w.set_prototype_action(
+                button,
+                Trigger::Click,
+                Some(Action::Media {
+                    target: frame,
+                    command: MediaCommand::Pause,
+                }),
+                window,
+                cx,
+            );
+            assert_eq!(
+                w.hierarchy.interactions[&button].click,
+                Some(Action::Media {
+                    target: video,
+                    command: MediaCommand::Play
+                })
+            );
+            let page = w.snapshot_page(cx).0;
+            page.validate().unwrap();
+            let document = crate::document::Document::single(page);
+            let decoded =
+                crate::document::Document::decode(&serde_json::to_vec(&document).unwrap()).unwrap();
+            assert_eq!(
+                decoded.pages[0].hierarchy.interactions[&button].click,
+                w.hierarchy.interactions[&button].click
+            );
+            w.set_selection(BTreeSet::from([frame]), cx);
+            w.duplicate_selection(window, cx);
+            let copied_video = w
+                .shapes
+                .iter()
+                .find(|s| s.id != video && s.kind == ShapeKind::Video)
+                .unwrap()
+                .id;
+            let copied_button = w
+                .shapes
+                .iter()
+                .find(|s| s.id != button && s.kind == ShapeKind::Rectangle)
+                .unwrap()
+                .id;
+            assert_eq!(
+                w.hierarchy.interactions[&copied_button].click,
+                Some(Action::Media {
+                    target: copied_video,
+                    command: MediaCommand::Play
+                })
+            );
+            let mut page = w.snapshot_page(cx).0;
+            page.validate().unwrap();
+            page.shapes.retain(|shape| shape.id != copied_video);
+            let ids = crate::scene::components::ids(&page);
+            page.hierarchy.retain_interactions(&ids);
+            assert!(!page.hierarchy.interactions.contains_key(&copied_button));
+            assert!(page.hierarchy.interactions.contains_key(&button));
+        })
+        .unwrap();
+}
+
+#[gpui::test]
 fn overlay_authoring_roundtrips_and_duplicate_targets_remain_internal(cx: &mut TestAppContext) {
     let handle = open(cx);
     let (first, second, button) = handle

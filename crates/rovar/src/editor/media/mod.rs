@@ -9,13 +9,20 @@ mod state;
 #[cfg(test)]
 mod tests;
 mod video;
+use crate::scene::presentation::MediaCommand;
 pub(super) use state::State;
 use video::{VideoControls, VideoPreview};
+
+pub(super) struct VideoSnapshot {
+    state: Option<video::Snapshot>,
+    pending: Vec<MediaCommand>,
+}
 
 #[derive(Clone)]
 pub(super) struct VideoRuntime {
     view: Entity<VideoPreview>,
     controls: Entity<VideoControls>,
+    _subscription: Rc<Subscription>,
 }
 
 impl Workspace {
@@ -92,7 +99,7 @@ impl Workspace {
     }
 
     pub(crate) fn pause_videos(&mut self, cx: &mut Context<Self>) {
-        self.media.playback_generation += 1;
+        self.media.video_commands.clear();
         for runtime in self.media.videos.values() {
             runtime.view.update(cx, |video, cx| video.pause(cx));
         }
@@ -521,7 +528,11 @@ impl Workspace {
                             })),
                     ),
             );
-        let (left, right) = self.canvas_insets();
+        let (left, right) = if self.presentation.playback.is_some() {
+            (0., 0.)
+        } else {
+            self.canvas_insets()
+        };
         div()
             .absolute()
             .top(px(64.))
@@ -541,10 +552,73 @@ impl Workspace {
                 runtime.view.update(cx, |view, cx| view.pause(cx));
             }
         }
-        if let Some(runtime) = self.media.videos.get(&id) {
-            runtime.view.update(cx, |view, cx| view.toggle(cx));
+        self.media.video_commands.retain(|other, _| *other == id);
+        self.control_video(id, MediaCommand::Toggle, window, cx);
+    }
+
+    pub(super) fn video_snapshot(&self, id: usize, cx: &gpui::App) -> VideoSnapshot {
+        VideoSnapshot {
+            state: self
+                .media
+                .videos
+                .get(&id)
+                .map(|runtime| runtime.view.read(cx).snapshot()),
+            pending: self
+                .media
+                .video_commands
+                .get(&id)
+                .cloned()
+                .unwrap_or_default(),
+        }
+    }
+
+    pub(super) fn restore_video(
+        &mut self,
+        id: usize,
+        snapshot: VideoSnapshot,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.media.video_commands.remove(&id);
+        if let Some(snapshot) = snapshot.state {
+            if let Some(runtime) = self.media.videos.get(&id) {
+                runtime
+                    .view
+                    .update(cx, |view, cx| view.restore(snapshot, cx));
+            }
+        } else if let Some(runtime) = self.media.videos.remove(&id) {
+            runtime.view.update(cx, |view, cx| view.pause(cx));
+        }
+        for command in snapshot.pending {
+            self.control_video(id, command, window, cx);
+        }
+        cx.notify();
+    }
+
+    pub(super) fn control_video(
+        &mut self,
+        id: usize,
+        command: MediaCommand,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if !command.valid()
+            || !self
+                .shapes
+                .iter()
+                .any(|s| s.id == id && s.kind == ShapeKind::Video)
+        {
             return;
         }
+        if let Some(runtime) = self.media.videos.get(&id) {
+            runtime.view.update(cx, |view, cx| view.apply(command, cx));
+            return;
+        }
+        self.media
+            .video_commands
+            .entry(id)
+            .or_default()
+            .push(command);
         if !self.media.video_loading.insert(id) {
             return;
         }
@@ -555,10 +629,10 @@ impl Workspace {
             .and_then(|s| s.asset.clone())
         else {
             self.media.video_loading.remove(&id);
+            self.media.video_commands.remove(&id);
             return;
         };
         let expected = asset.clone();
-        let playback_generation = self.media.playback_generation;
         let page = self.pages.active.clone();
         let page_generation = self.pages.generation;
         cx.spawn_in(window, async move |this, cx| {
@@ -590,26 +664,50 @@ impl Workspace {
                     return;
                 }
                 this.media.video_loading.remove(&id);
-                if !this.layer_editable(id)
+                let commands = this.media.video_commands.remove(&id).unwrap_or_default();
+                if commands.is_empty()
                     || !this.shapes.iter().any(|s| {
-                        s.id == id && s.asset.as_ref().is_some_and(|a| Arc::ptr_eq(a, &expected))
+                        s.id == id
+                            && s.kind == ShapeKind::Video
+                            && !this.effective_layer(s.layer, s.board).hidden
+                            && s.asset.as_ref().is_some_and(|a| Arc::ptr_eq(a, &expected))
                     })
                 {
                     return;
                 }
                 match opened {
                     Ok((playback, output)) => {
-                        for runtime in this.media.videos.values() {
-                            runtime.view.update(cx, |v, cx| v.pause(cx));
-                        }
                         let view = cx.new(|cx| VideoPreview::new(playback, output, cx));
                         let controls = cx.new(|cx| VideoControls::new(view.clone(), cx));
-                        if this.media.playback_generation == playback_generation {
-                            view.update(cx, |v, cx| v.toggle(cx));
+                        let mut reported_error = None;
+                        let subscription = Rc::new(cx.subscribe(
+                            &view,
+                            move |this, view, _: &video::PlaybackChanged, cx| {
+                                let error = view.read(cx).error().map(str::to_owned);
+                                if reported_error == error {
+                                    return;
+                                }
+                                reported_error.clone_from(&error);
+                                if let Some(error) = error {
+                                    this.media.error = Some(crate::i18n::message(
+                                        "media-play-error",
+                                        &[("error", error)],
+                                    ));
+                                    cx.notify();
+                                }
+                            },
+                        ));
+                        for command in commands {
+                            view.update(cx, |v, cx| v.apply(command, cx));
                         }
-                        this.media
-                            .videos
-                            .insert(id, VideoRuntime { view, controls });
+                        this.media.videos.insert(
+                            id,
+                            VideoRuntime {
+                                view,
+                                controls,
+                                _subscription: subscription,
+                            },
+                        );
                     }
                     Err(error) => {
                         this.media.error = Some(crate::i18n::message(

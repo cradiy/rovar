@@ -1,4 +1,5 @@
 use super::*;
+use crate::scene::presentation::MediaCommand;
 use crate::ui::theme::Color;
 use gpui_media::{
     MediaBackendEvent, MediaOutput, MediaPlaybackSession, PlaybackTimeline, SeekMode, VideoSurface,
@@ -12,11 +13,18 @@ pub(super) struct VideoPreview {
     playing: bool,
     ended: bool,
     muted: bool,
+    rate: f64,
+    volume: f64,
+    ready: bool,
+    pending: Vec<MediaCommand>,
     error: Option<String>,
     _tasks: Vec<gpui::Task<()>>,
 }
 impl gpui::EventEmitter<PlaybackChanged> for VideoPreview {}
 impl VideoPreview {
+    pub fn error(&self) -> Option<&str> {
+        self.error.as_deref()
+    }
     pub fn new(
         playback: Box<dyn MediaPlaybackSession>,
         output: MediaOutput,
@@ -43,11 +51,18 @@ impl VideoPreview {
                 if this
                     .update(cx, |this, cx| {
                         match event {
+                            MediaBackendEvent::Ready => {
+                                this.ready = true;
+                                for command in std::mem::take(&mut this.pending) {
+                                    this.apply(command, cx);
+                                }
+                            }
                             MediaBackendEvent::Ended => {
                                 this.playing = false;
                                 this.ended = true;
                             }
                             MediaBackendEvent::Error(error) => {
+                                this.pending.clear();
                                 this.error = Some(error.to_string());
                                 this.playing = false;
                             }
@@ -81,20 +96,27 @@ impl VideoPreview {
             }
         });
         Self {
+            ready: playback.timeline().duration().is_some(),
+            pending: Vec::new(),
             timeline: playback.timeline(),
             playback,
             surface: VideoSurface::new(),
             playing: false,
             ended: false,
             muted: false,
+            rate: 1.,
+            volume: 1.,
             error: None,
             _tasks: vec![frames, events, timeline],
         }
     }
     pub fn pause(&mut self, cx: &mut Context<Self>) {
+        self.pending.clear();
         if self.playing {
             if let Err(e) = self.playback.pause() {
                 self.error = Some(e.to_string());
+                cx.emit(PlaybackChanged);
+                return;
             }
             self.playing = false;
             self.timeline = self.playback.timeline();
@@ -118,6 +140,147 @@ impl VideoPreview {
                 self.error = None;
             }
             Err(e) => self.error = Some(e.to_string()),
+        }
+        cx.emit(PlaybackChanged);
+    }
+
+    pub fn apply(&mut self, command: MediaCommand, cx: &mut Context<Self>) {
+        if !command.valid() {
+            return;
+        }
+        if !self.ready
+            && (!self.pending.is_empty()
+                || matches!(
+                    command,
+                    MediaCommand::SeekBy { .. }
+                        | MediaCommand::SeekTo { .. }
+                        | MediaCommand::Restart
+                ))
+        {
+            self.pending.push(command);
+            return;
+        }
+        let result = match command {
+            MediaCommand::Play => {
+                if !self.playing {
+                    self.toggle(cx);
+                }
+                return;
+            }
+            MediaCommand::Pause => {
+                self.pause(cx);
+                return;
+            }
+            MediaCommand::Toggle => {
+                self.toggle(cx);
+                return;
+            }
+            MediaCommand::Restart => self.playback.restart().map(|()| {
+                self.playing = true;
+                self.ended = false;
+            }),
+            MediaCommand::SeekBy { seconds } => {
+                let position = self.timeline.position().as_secs_f64();
+                self.seek_position(
+                    Duration::from_secs_f64((position + f64::from(seconds)).max(0.)),
+                    cx,
+                );
+                return;
+            }
+            MediaCommand::SeekTo { seconds } => {
+                self.seek_position(Duration::from_secs(u64::from(seconds)), cx);
+                return;
+            }
+            MediaCommand::Rate { percent } => {
+                let rate = f64::from(percent) / 100.;
+                self.playback
+                    .set_playback_rate(rate)
+                    .map(|()| self.rate = rate)
+            }
+            MediaCommand::Volume { percent } => {
+                self.volume = f64::from(percent) / 100.;
+                self.playback.set_volume(self.volume);
+                Ok(())
+            }
+            MediaCommand::Mute | MediaCommand::Unmute => {
+                self.muted = command == MediaCommand::Mute;
+                self.playback.set_muted(self.muted);
+                Ok(())
+            }
+        };
+        self.error = result.err().map(|e| e.to_string());
+        self.timeline = self.playback.timeline();
+        cx.emit(PlaybackChanged);
+    }
+
+    pub fn snapshot(&self) -> Snapshot {
+        Snapshot {
+            ended: self.ended,
+            pending: self.pending.clone(),
+            playing: self.playing,
+            position: self.playback.timeline().position(),
+            rate: self.rate,
+            volume: self.volume,
+            muted: self.muted,
+        }
+    }
+
+    pub fn restore(&mut self, state: Snapshot, cx: &mut Context<Self>) {
+        self.pause(cx);
+        if self.ready {
+            self.seek_position(state.position, cx);
+        } else {
+            self.apply(
+                MediaCommand::SeekTo {
+                    seconds: state.position.as_secs().min(u64::from(u32::MAX)) as u32,
+                },
+                cx,
+            );
+        }
+        if self.rate != state.rate {
+            self.apply(
+                MediaCommand::Rate {
+                    percent: (state.rate * 100.).round() as u16,
+                },
+                cx,
+            );
+        }
+        self.apply(
+            MediaCommand::Volume {
+                percent: (state.volume * 100.).round() as u8,
+            },
+            cx,
+        );
+        self.apply(
+            if state.muted {
+                MediaCommand::Mute
+            } else {
+                MediaCommand::Unmute
+            },
+            cx,
+        );
+        if state.playing {
+            self.apply(MediaCommand::Play, cx);
+        }
+        self.ended = state.ended;
+        for command in state.pending {
+            self.apply(command, cx);
+        }
+    }
+
+    fn seek_position(&mut self, position: Duration, cx: &mut Context<Self>) {
+        let timeline = self.playback.timeline();
+        let position = timeline
+            .duration()
+            .map_or(position, |duration| position.min(duration));
+        match self.playback.seek_to(position, SeekMode::Accurate) {
+            Ok(()) => {
+                self.ended = false;
+                self.error = None;
+                self.timeline =
+                    PlaybackTimeline::new(position, timeline.duration(), timeline.is_seekable());
+            }
+            Err(error) => self.error = Some(error.to_string()),
         }
         cx.emit(PlaybackChanged);
     }
@@ -145,6 +308,17 @@ impl VideoPreview {
         }
         cx.emit(PlaybackChanged);
     }
+}
+
+#[derive(Clone)]
+pub(in crate::editor) struct Snapshot {
+    ended: bool,
+    pending: Vec<MediaCommand>,
+    playing: bool,
+    position: Duration,
+    rate: f64,
+    volume: f64,
+    muted: bool,
 }
 impl Render for VideoPreview {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
@@ -306,6 +480,9 @@ mod tests {
         play: usize,
         pause: usize,
         seeks: Vec<(Duration, SeekMode)>,
+        rate: f64,
+        volume: f64,
+        muted: bool,
     }
     struct Session(Arc<Mutex<Calls>>);
     impl MediaPlaybackSession for Session {
@@ -313,7 +490,14 @@ mod tests {
             MediaCapabilities::default()
         }
         fn timeline(&self) -> PlaybackTimeline {
-            PlaybackTimeline::new(Duration::ZERO, Some(Duration::from_secs(20)), true)
+            let position = self
+                .0
+                .lock()
+                .unwrap()
+                .seeks
+                .last()
+                .map_or(Duration::ZERO, |(position, _)| *position);
+            PlaybackTimeline::new(position, Some(Duration::from_secs(20)), true)
         }
         fn play(&mut self) -> MediaResult<()> {
             self.0.lock().unwrap().play += 1;
@@ -326,6 +510,16 @@ mod tests {
         fn seek_to(&mut self, t: Duration, mode: SeekMode) -> MediaResult<()> {
             self.0.lock().unwrap().seeks.push((t, mode));
             Ok(())
+        }
+        fn set_playback_rate(&mut self, rate: f64) -> MediaResult<()> {
+            self.0.lock().unwrap().rate = rate;
+            Ok(())
+        }
+        fn set_volume(&mut self, volume: f64) {
+            self.0.lock().unwrap().volume = volume;
+        }
+        fn set_muted(&mut self, muted: bool) {
+            self.0.lock().unwrap().muted = muted;
         }
     }
     #[gpui::test]
@@ -360,8 +554,59 @@ mod tests {
         crate::editor::tests::draw(&mut visual);
         visual.simulate_click(button, Default::default());
         crate::editor::tests::draw(&mut visual);
-        let calls = calls.lock().unwrap();
-        assert_eq!(calls.play, 2);
-        assert_eq!(calls.seeks[1], (Duration::ZERO, SeekMode::KeyFrame));
+        let recorded = calls.lock().unwrap();
+        assert_eq!(recorded.play, 2);
+        assert_eq!(recorded.seeks[1], (Duration::ZERO, SeekMode::KeyFrame));
+        drop(recorded);
+        view.update(&mut visual.cx, |view, cx| {
+            // Prototype commands share this session and restore the pre-hover state.
+            view.apply(MediaCommand::Play, cx);
+            view.apply(MediaCommand::SeekTo { seconds: 12 }, cx);
+            let before = view.snapshot();
+            view.apply(MediaCommand::SeekBy { seconds: 30 }, cx);
+            assert_eq!(view.timeline.position(), Duration::from_secs(20));
+            view.apply(MediaCommand::SeekBy { seconds: -30 }, cx);
+            assert_eq!(view.timeline.position(), Duration::ZERO);
+            view.apply(MediaCommand::Rate { percent: 200 }, cx);
+            view.apply(MediaCommand::Volume { percent: 35 }, cx);
+            view.apply(MediaCommand::Mute, cx);
+            view.apply(MediaCommand::Pause, cx);
+            view.restore(before, cx);
+            assert!(view.playing);
+            assert_eq!(view.timeline.position(), Duration::from_secs(12));
+            assert_eq!((view.rate, view.volume, view.muted), (1., 1., false));
+        });
+        let recorded = calls.lock().unwrap();
+        assert_eq!(recorded.play, 3);
+        assert_eq!(
+            (recorded.rate, recorded.volume, recorded.muted),
+            (1., 1., false)
+        );
+        drop(recorded);
+        view.update(&mut visual.cx, |view, cx| {
+            view.pause(cx);
+            view.ready = false;
+            view.apply(MediaCommand::SeekTo { seconds: 4 }, cx);
+            view.apply(MediaCommand::Play, cx);
+            // Leaving the frame cancels a play queued behind initial readiness.
+            view.pause(cx);
+        });
+        sink.emit(MediaBackendEvent::Ready);
+        crate::editor::tests::draw(&mut visual);
+        assert_eq!(calls.lock().unwrap().play, 3);
+        view.update(&mut visual.cx, |view, cx| {
+            view.ready = false;
+            view.apply(MediaCommand::SeekTo { seconds: 4 }, cx);
+            view.apply(MediaCommand::SeekBy { seconds: 3 }, cx);
+            view.apply(MediaCommand::Play, cx);
+        });
+        sink.emit(MediaBackendEvent::Ready);
+        crate::editor::tests::draw(&mut visual);
+        let recorded = calls.lock().unwrap();
+        assert_eq!(recorded.play, 4);
+        assert_eq!(
+            recorded.seeks.last(),
+            Some(&(Duration::from_secs(7), SeekMode::Accurate))
+        );
     }
 }

@@ -269,7 +269,16 @@ fn hidden_video_pauses_and_deletion_drops_playback_without_putting_it_in_history
             let view = cx.new(|cx| VideoPreview::new(Box::new(Session(calls.clone())), output, cx));
             let controls = cx.new(|cx| VideoControls::new(view.clone(), cx));
             view.update(cx, |v, cx| v.toggle(cx));
-            this.media.videos.insert(1, VideoRuntime { view, controls });
+            let subscription =
+                Rc::new(cx.subscribe(&view, |_, _, _: &video::PlaybackChanged, _| {}));
+            this.media.videos.insert(
+                1,
+                VideoRuntime {
+                    view,
+                    controls,
+                    _subscription: subscription,
+                },
+            );
         })
         .unwrap();
     draw(&mut visual);

@@ -30,6 +30,19 @@ impl Workspace {
             {
                 return Some((id, Action::ChangeVariant { target }));
             }
+            if self
+                .shapes
+                .iter()
+                .any(|s| s.id == id && s.kind == ShapeKind::Video)
+            {
+                return Some((
+                    id,
+                    Action::Media {
+                        target: id,
+                        command: MediaCommand::Toggle,
+                    },
+                ));
+            }
             self.boards
                 .iter()
                 .any(|b| b.id == id)
@@ -76,6 +89,9 @@ impl Workspace {
                 (Action::Navigate { target }, Some(Action::OpenOverlay { settings, .. })) => {
                     Action::OpenOverlay { target, settings }
                 }
+                (Action::Media { target, .. }, Some(Action::Media { command, .. })) => {
+                    Action::Media { target, command }
+                }
                 (action, _) => action,
             };
             self.set_prototype_action(
@@ -120,9 +136,9 @@ impl Workspace {
 
     fn connection_end(&self, action: Action) -> Option<Rect> {
         match action {
-            Action::Navigate { target } | Action::OpenOverlay { target, .. } => {
-                self.world_bounds(target)
-            }
+            Action::Navigate { target }
+            | Action::OpenOverlay { target, .. }
+            | Action::Media { target, .. } => self.world_bounds(target),
             Action::ChangeVariant { target } => self
                 .hierarchy
                 .components

@@ -9,6 +9,7 @@ fn action_label(action: Option<Action>) -> &'static str {
         Some(Action::CloseOverlay) => "prototype-close-overlay",
         Some(Action::Back) => "prototype-back",
         Some(Action::ChangeVariant { .. }) => "prototype-variant-action",
+        Some(Action::Media { command, .. }) => media::label(command),
     }
 }
 
@@ -59,8 +60,17 @@ impl Workspace {
                 .and_then(|i| i.get(trigger))
                 == action
             || action.is_some_and(|a| {
-                a.remap(|target| self.boards.iter().any(|b| b.id == target).then_some(target))
-                    .is_none()
+                a.remap(|target| {
+                    match a {
+                        Action::Media { .. } => self
+                            .shapes
+                            .iter()
+                            .any(|s| s.id == target && s.kind == ShapeKind::Video),
+                        _ => self.boards.iter().any(|b| b.id == target),
+                    }
+                    .then_some(target)
+                })
+                .is_none()
             })
             || matches!(action, Some(Action::ChangeVariant { target }) if !self.prototype_variants(id).iter().any(|(id, _)| *id == target))
         {
@@ -200,12 +210,15 @@ impl Workspace {
                                     Action::Navigate { .. }
                                         | Action::OpenOverlay { .. }
                                         | Action::ChangeVariant { .. }
+                                        | Action::Media { .. }
                                 )
                             ),
                             |el| {
                                 el.child(div().text_size(px(12.)).text_color(MUTED.color()).child(
                                     t(if matches!(action, Some(Action::ChangeVariant { .. })) {
                                         "prototype-variant-target"
+                                    } else if matches!(action, Some(Action::Media { .. })) {
+                                        "prototype-video-target"
                                     } else {
                                         "prototype-frame-target"
                                     }),
@@ -214,9 +227,11 @@ impl Workspace {
                             },
                         )
                         .child(self.overlay_controls(id, trigger, cx))
-                        .when(action.is_some(), |el| {
-                            el.child(self.transition_controls(id, trigger, cx))
-                        })
+                        .children(self.media_action_controls(id, trigger, action, cx))
+                        .when(
+                            action.is_some() && !matches!(action, Some(Action::Media { .. })),
+                            |el| el.child(self.transition_controls(id, trigger, cx)),
+                        )
                         .when(trigger == Trigger::Hover && action.is_some(), |el| {
                             el.child(self.hover_exit_controls(id, cx))
                         }),
@@ -253,8 +268,11 @@ impl Workspace {
         });
         let target = if source.is_none() {
             self.hierarchy.start
-        } else if let Some(Action::Navigate { target } | Action::OpenOverlay { target, .. }) =
-            action
+        } else if let Some(
+            Action::Navigate { target }
+            | Action::OpenOverlay { target, .. }
+            | Action::Media { target, .. },
+        ) = action
         {
             Some(target)
         } else {
@@ -274,6 +292,8 @@ impl Workspace {
                 .find_map(|set| set.variants.get(&target.to_string()))
                 .cloned()
                 .unwrap_or_else(|| t("prototype-missing-variant").into())
+        } else if let Some(Action::Media { target, .. }) = action {
+            self.layer_name(target, cx)
         } else {
             target
                 .and_then(|id| self.boards.iter().find(|b| b.id == id))
@@ -284,7 +304,11 @@ impl Workspace {
             options.push((0usize, empty.to_owned(), None));
         }
         if source.is_none()
-            || (target_menu && !matches!(action, Some(Action::ChangeVariant { .. })))
+            || (target_menu
+                && !matches!(
+                    action,
+                    Some(Action::ChangeVariant { .. } | Action::Media { .. })
+                ))
         {
             options.extend(
                 self.boards
@@ -308,7 +332,16 @@ impl Workspace {
         }
         if let Some(source) = source {
             let variants = self.prototype_variants(source);
-            if target_menu && matches!(action, Some(Action::ChangeVariant { .. })) {
+            if target_menu && let Some(Action::Media { command, .. }) = action {
+                options.extend(
+                    self.prototype_videos(cx)
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, (target, name))| {
+                            (i, name, Some(Action::Media { target, command }))
+                        }),
+                );
+            } else if target_menu && matches!(action, Some(Action::ChangeVariant { .. })) {
                 options.extend(
                     variants.into_iter().enumerate().map(|(i, (target, name))| {
                         (i, name, Some(Action::ChangeVariant { target }))
@@ -361,6 +394,32 @@ impl Workspace {
                         t("prototype-variant-action").to_owned(),
                         Some(Action::ChangeVariant { target }),
                     ));
+                }
+                let videos = self.prototype_videos(cx);
+                let video = match action {
+                    Some(Action::Media { target, .. })
+                        if videos.iter().any(|(id, _)| *id == target) =>
+                    {
+                        Some(target)
+                    }
+                    _ => videos.first().map(|(id, _)| *id),
+                };
+                if let Some(target) = video {
+                    options.extend(media::COMMANDS.into_iter().enumerate().map(|(i, default)| {
+                        let command = match action {
+                            Some(Action::Media { command, .. })
+                                if media::label(command) == media::label(default) =>
+                            {
+                                command
+                            }
+                            _ => default,
+                        };
+                        (
+                            6 + i,
+                            t(media::label(command)).to_owned(),
+                            Some(Action::Media { target, command }),
+                        )
+                    }));
                 }
             }
         }
