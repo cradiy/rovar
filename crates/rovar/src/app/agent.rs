@@ -97,7 +97,9 @@ fn dispatch(request: &Request, cx: &mut gpui::App) -> protocol::Result<protocol:
             json!({"sessions":sessions,"capabilities":{
                 "methods":["session.describe","schema.get","nodes.get","nodes.find","document.apply","canvas.capture","selection.set","canvas.focus","canvas.fit"],
                 "create_types":["frame","rectangle","ellipse","text","group"],
-                "operations":["create","update","delete"],
+                "operations":["create","update","delete","set_interaction","set_start_frame"],
+                "interaction_triggers":["click","hover"],
+                "interaction_actions":["none","navigate","back","open_overlay","close_overlay","change_variant","media"],
                 "coordinates":"page","atomic_apply":true,"undo":"one apply per undo entry",
                 "max_operations":protocol::MAX_OPERATIONS,"max_read_nodes":protocol::MAX_NODES,
                 "max_apply_receipts":protocol::MAX_RECEIPTS,"max_request_bytes":transport::MAX_REQUEST_BYTES,

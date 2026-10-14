@@ -1,5 +1,6 @@
 use super::*;
 use gpui::TestAppContext;
+use std::collections::BTreeSet;
 
 fn request(this: &Workspace, method: &str, params: Value) -> Request {
     Request {
@@ -25,6 +26,97 @@ fn execute(
     cx: &mut Context<Workspace>,
 ) -> Result<Value> {
     this.agent_request(r, w, cx)?.finish()
+}
+
+#[gpui::test]
+fn interactions_resolve_targets_preserve_other_triggers_and_undo_atomically(
+    cx: &mut TestAppContext,
+) {
+    use crate::scene::presentation::{Action, HoverExit, Transition};
+    let handle = crate::editor::tests::open(cx);
+    handle.update(cx, |this, window, cx| {
+        let setup = apply(this, json!([
+            {"op":"create","ref":"$frame","type":"frame","properties":{"rect":{"x":0,"y":0,"width":320,"height":200}}},
+            {"op":"create","ref":"$button","type":"rectangle","parent":"$frame","properties":{"rect":{"x":10,"y":10,"width":40,"height":40}}},
+            {"op":"set_start_frame","target":"$frame"},
+            {"op":"set_interaction","id":"$button","trigger":"hover","action":{"type":"navigate","target":"$frame"},
+                "hover_exit":{"type":"restore"},"transition":{"type":"dissolve","duration_ms":200}},
+            {"op":"set_interaction","id":"$button","trigger":"click","action":{"type":"back"}}
+        ]));
+        let result = execute(this, &setup, window, cx).unwrap();
+        let frame = this.boards[0].id;
+        let button = this.shapes[0].id;
+        let uid = result["created"]["$button"].clone();
+        assert_eq!(result["start_frame_id"], result["created"]["$frame"]);
+        let node = result["nodes"].as_array().unwrap().iter().find(|n| n["id"] == uid).unwrap();
+        assert_eq!(node["interactions"]["hover"]["action"]["target"], result["created"]["$frame"]);
+        let original = this.snapshot_page(cx).0;
+        let revision = this.document_revision();
+        let undo_len = this.history.borrow().undo_len();
+        let invalid = apply(this, json!([
+            {"op":"set_interaction","id":uid,"trigger":"click","action":{"type":"close_overlay"}},
+            {"op":"set_interaction","id":uid,"trigger":"hover","action":{"type":"navigate","target":uid}}
+        ]));
+        assert_eq!(execute(this, &invalid, window, cx).unwrap_err().operation, Some(1));
+        assert!(this.snapshot_page(cx).0 == original);
+        assert_eq!(this.document_revision(), revision);
+        assert_eq!(this.history.borrow().undo_len(), undo_len);
+        let clear = apply(this, json!([{"op":"set_interaction","id":uid,"trigger":"click","action":{"type":"none"}}]));
+        execute(this, &clear, window, cx).unwrap();
+        let interaction = this.hierarchy.interactions[&button];
+        assert_eq!(interaction.click, None);
+        assert_eq!(interaction.hover, Some(Action::Navigate { target: frame }));
+        assert_eq!(interaction.hover_exit, HoverExit::Restore);
+        assert_eq!(interaction.hover_transition, Transition::Dissolve { duration_ms: 200 });
+        this.undo_redo(false, window, cx);
+        assert!(this.snapshot_page(cx).0 == original);
+
+        // Media nodes allow interaction edits, but unsupported commands and geometry stay protected.
+        this.shapes[0].kind = ShapeKind::Audio;
+        this.shapes[0].asset = Some(std::sync::Arc::new(crate::asset::FileAsset {
+            path: "audio.mp3".into(),
+            source: crate::asset::Source::file(tempfile::NamedTempFile::new().unwrap().into_temp_path()),
+            hash: "0".repeat(64), width: 40, height: 40,
+            content: std::sync::OnceLock::from(Err("No decoder in authoring test".into())),
+            video: false,
+        }));
+        let media = apply(this, json!([{"op":"set_interaction","id":uid,"trigger":"click",
+            "action":{"type":"media","target":uid,"command":{"type":"toggle"}}}]));
+        execute(this, &media, window, cx).unwrap();
+        let before = this.snapshot_page(cx).0;
+        let rate = apply(this, json!([{"op":"set_interaction","id":uid,"trigger":"click",
+            "action":{"type":"media","target":uid,"command":{"type":"rate","percent":150}}}]));
+        assert!(execute(this, &rate, window, cx).is_err());
+        assert!(this.snapshot_page(cx).0 == before);
+        let geometry = apply(this, json!([{"op":"update","id":uid,"properties":{"opacity":0.5}}]));
+        assert_eq!(execute(this, &geometry, window, cx).unwrap_err().code, "UNSUPPORTED");
+        this.shapes[0].layer.locked = true;
+        let locked = apply(this, json!([{"op":"set_interaction","id":uid,"trigger":"click","action":{"type":"back"}}]));
+        assert_eq!(execute(this, &locked, window, cx).unwrap_err().code, "LOCKED");
+        this.shapes[0].layer.locked = false;
+
+        // Variant choices come from the source component's own set, not arbitrary UUIDs.
+        this.set_selection(BTreeSet::from([frame]), cx);
+        this.create_component(window, cx);
+        let component = this.hierarchy.components[&frame].component.clone();
+        let variant = uuid::Uuid::new_v4().to_string();
+        let definition = this.components.definitions[&component].clone();
+        this.components.definitions.insert(variant.clone(), definition);
+        this.components.sets.insert(uuid::Uuid::new_v4().to_string(), crate::scene::components::variants::ComponentSet {
+            name: "Button".into(), variants: BTreeMap::from([(component, "Default".into()), (variant.clone(), "Active".into())]),
+        });
+        let read = request(this, "nodes.get", json!({"page_id":this.pages.active,"revision":this.document_revision().to_string(),"ids":[uid]}));
+        let nodes = execute(this, &read, window, cx).unwrap();
+        assert_eq!(nodes["nodes"][0]["available_variants"][0]["id"], variant);
+        let change = apply(this, json!([{"op":"set_interaction","id":uid,"trigger":"hover",
+            "action":{"type":"change_variant","target":variant},"hover_exit":{"type":"restore"}}]));
+        execute(this, &change, window, cx).unwrap();
+        let before = this.snapshot_page(cx).0;
+        let invalid = apply(this, json!([{"op":"set_interaction","id":uid,"trigger":"hover",
+            "action":{"type":"change_variant","target":uuid::Uuid::new_v4()}}]));
+        assert!(execute(this, &invalid, window, cx).is_err());
+        assert!(this.snapshot_page(cx).0 == before);
+    }).unwrap();
 }
 
 #[gpui::test]

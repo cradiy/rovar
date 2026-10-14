@@ -40,7 +40,7 @@ not expose this transport.
 ## Discover before editing
 
 `session.describe` returns active sessions, their document/page IDs, revision,
-selection UUIDs, busy state, remaining receipt slots, and supported capabilities.
+selection UUIDs, `start_frame_id`, busy state, remaining receipt slots, and supported capabilities.
 Selection is observable and can be set explicitly; document mutations always name
 their targets and never implicitly operate on the current selection.
 
@@ -79,7 +79,7 @@ IDs are opaque UUIDs, not names or numeric indices. Revisions are opaque strings
 | `schema.get` | Get the envelope or a method's input schema. |
 | `nodes.get` | Read specified UUIDs, or a page's nodes; returns parent UUIDs, properties, total, and next offset. |
 | `nodes.find` | Same read contract, with an optional case-insensitive name substring and exact node type filter. |
-| `document.apply` | Apply ordered `create`, `update`, and subtree `delete` operations atomically. |
+| `document.apply` | Apply ordered node edits and prototype interaction settings atomically. |
 | `canvas.capture` | Render one node's subtree as a PNG using the export renderer. |
 | `selection.set` | Replace the selection with explicit UUIDs; an empty array clears it. |
 | `canvas.focus` | Center explicit UUIDs in the available canvas area, keeping the zoom. |
@@ -127,13 +127,61 @@ and `view` (`zoom` and `pan` in logical pixels relative to the canvas origin).
 document content or undo history. They re-execute on retry using the current view;
 the successful-apply receipt cache described below applies only to `document.apply`.
 
+## Prototype interactions
+
+Node reads return `interactions.click` and `interactions.hover`, including the action
+and transition. Hover also returns `hover_exit`. `available_variants` lists the
+source component's other variants as `{id, name}`; these IDs identify component
+definitions, not page nodes. An empty list means variant switching is unavailable.
+
+Use `set_interaction` within `document.apply` to replace one trigger's action:
+
+```json
+{
+  "op": "set_interaction",
+  "id": "SOURCE_NODE_UUID",
+  "trigger": "hover",
+  "action": {"type": "navigate", "target": "FRAME_UUID"},
+  "hover_exit": {"type": "restore"},
+  "transition": {"type": "dissolve", "duration_ms": 200}
+}
+```
+
+- Triggers are `click` and `hover`. Changing one preserves the other.
+- Actions are `none`, `navigate`, `back`, `open_overlay`, `close_overlay`,
+  `change_variant`, and `media`. Query `document.apply`'s schema for their fields.
+- Frame and media targets use active-page node UUIDs or earlier batch `$references`.
+  Variant targets must be among the source's `available_variants`.
+- `open_overlay` requires `settings`: `position` (`center`, `bottom`, `right`),
+  `backdrop`, and `dismiss_outside`.
+- `media` requires an existing audio/video target and a `command`: play, pause,
+  toggle, restart, seek_by, seek_to, rate, volume, mute, or unmute. Rate is video-only
+  and accepts 25–400 percent; volume accepts 0–100 percent. Setting the action does
+  not start media playback; the trigger executes it in Present mode.
+- Omitted/null `transition` and `hover_exit` preserve their current values.
+  Transitions are `instant` or `dissolve` (50–2000 ms), using the editor's existing
+  playback behavior. Hover exit is `restore`, `keep`, or `change_variant` with an
+  available variant UUID. It may only be supplied for a nonempty hover action.
+- `{"type":"none"}` clears that trigger and resets its transition. Clearing hover
+  also resets its exit behavior to `restore`. Do not supply transition/exit settings
+  when clearing an action.
+- Locked sources and descendants of locked nodes reject interaction changes.
+  Target type, media command, and variant membership are validated before committing
+  the batch. The same revision, retry, and undo contracts apply as for node edits.
+
+`{"op":"set_start_frame","target":"FRAME_UUID"}` sets the active page's starting
+frame. A null target clears the explicit starting frame. Apply responses and
+`session.describe` return `start_frame_id`.
+
 ## Apply
 
 The current write surface includes frames, rectangles, ellipses, text, and layout
 groups. Properties cover names, geometry, solid fills, opacity, rotation, visibility,
 rectangle corner radius, whole-box text/font styling, and horizontal/vertical layout.
-Other node types can be read. Components, masks, boolean groups, asset import,
-reparenting, duplication, and prototype/media actions are not exposed for mutation.
+Other node types can be read and have interactions configured. Component, mask,
+boolean, and media geometry, asset import, reparenting, and duplication are not
+exposed for mutation. `editable` describes property editing; `interaction_editable`
+separately describes whether a node's interaction settings can be changed.
 
 ```json
 {

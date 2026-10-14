@@ -1,6 +1,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+pub(crate) mod interaction;
 
 pub(crate) const MAX_OPERATIONS: usize = 128;
 pub(crate) const MAX_RECEIPTS: usize = 256;
@@ -213,6 +214,20 @@ pub(crate) struct Properties {
 #[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub(crate) enum Operation {
+    /// Change one trigger without replacing the node's other interaction.
+    SetInteraction {
+        id: String,
+        trigger: interaction::Trigger,
+        action: interaction::Action,
+        /// Omit to preserve the transition; clearing an action resets it.
+        transition: Option<interaction::Transition>,
+        /// Only valid for a nonempty hover action. Omit to preserve it.
+        hover_exit: Option<interaction::HoverExit>,
+    },
+    /// Set the prototype starting frame; null restores the editor default.
+    SetStartFrame {
+        target: Option<String>,
+    },
     Create {
         /// Unique batch-local reference, beginning with $. Later operations may use it.
         #[serde(rename = "ref")]

@@ -91,6 +91,15 @@ returned by discovery. Save the exact request until its outcome is known.
 Each changed apply is one ordinary undo entry. Its acknowledgement confirms an
 in-memory edit, not completion of saving or synchronization.
 
+For prototype behavior, read the node's `interactions`, `interaction_editable`, and
+`available_variants` before editing. Use `set_interaction` for only the requested
+trigger; preserve the other trigger and omit unchanged transition/hover-exit settings.
+Variant targets are the returned component definition IDs, not arbitrary node IDs.
+Navigation and media targets are existing page nodes or earlier batch references.
+Configure hover exit explicitly when the task calls for restoration or persistence.
+Setting an action configures Present-mode behavior; a static capture does not verify
+that navigation, variant switching, or media playback actually executed.
+
 ## Verify and present
 
 Use the returned revision to read changed nodes and capture their containing frame.

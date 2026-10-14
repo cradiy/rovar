@@ -32,7 +32,7 @@ pub(super) fn lookup(
         })
 }
 
-fn layer(page: &Page, id: usize) -> Option<LayerState> {
+pub(super) fn layer(page: &Page, id: usize) -> Option<LayerState> {
     page.boards
         .iter()
         .find(|n| n.id == id)
@@ -146,7 +146,9 @@ pub(super) fn node(page: &Page, id: usize, identities: &BTreeMap<usize, uuid::Uu
     }
     json!({"id":identities[&id],"type":kind,
         "parent_id":components::parent(page,id).and_then(|id| identities.get(&id)),
-        "locked":state.locked,"editable":editable(page,id).is_ok(),"properties":properties})
+        "locked":state.locked,"editable":editable(page,id).is_ok(),"properties":properties,
+        "interaction_editable":super::interaction::editable(page,id).is_ok(),
+        "interactions":super::interaction::describe(page,id,identities)})
 }
 
 pub(super) fn apply(
@@ -155,6 +157,11 @@ pub(super) fn apply(
     refs: &mut BTreeMap<String, String>,
 ) -> Result<()> {
     match op {
+        p::Operation::SetInteraction { .. } | p::Operation::SetStartFrame { .. } => {
+            return Err(Error::invalid(
+                "Interaction operation requires document context",
+            ));
+        }
         p::Operation::Create {
             reference,
             kind,
@@ -516,10 +523,19 @@ pub(super) fn protect(before: &Page, after: &Page) -> Result<()> {
     let previous = before.node_ids();
     let remaining = after.node_ids();
     for id in previous.keys().copied() {
-        if let Err(error) = editable(before, id)
-            && (!remaining.contains_key(&id)
-                || node(before, id, &previous) != node(after, id, &remaining))
-        {
+        let Err(error) = editable(before, id) else {
+            continue;
+        };
+        let unchanged = remaining.contains_key(&id) && {
+            let mut old = node(before, id, &previous);
+            let mut new = node(after, id, &remaining);
+            if super::interaction::editable(before, id).is_ok() {
+                old.as_object_mut().unwrap().remove("interactions");
+                new.as_object_mut().unwrap().remove("interactions");
+            }
+            old == new
+        };
+        if !unchanged {
             return Err(error);
         }
     }

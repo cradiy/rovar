@@ -2,6 +2,7 @@ use super::*;
 use crate::agent::protocol::{self as p, Error, Request, Result};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
+mod interaction;
 mod model;
 #[cfg(test)]
 mod tests;
@@ -37,6 +38,7 @@ impl Workspace {
             "pages":self.pages.entries.iter().map(|p| json!({"id":p.page.id,"name":p.page.name})).collect::<Vec<_>>(),
             "selection":self.selection_ids().iter().filter_map(|id| identities.get(id)).collect::<Vec<_>>(),
             "view":self.agent_view(),
+            "start_frame_id":page.hierarchy.start.and_then(|id| identities.get(&id)),
             "busy":self.agent_busy(window,cx),"remaining_apply_receipts":p::MAX_RECEIPTS-self.agent.receipts.len(),
             "remaining_receipt_bytes":p::MAX_RECEIPT_BYTES-self.agent.receipt_bytes})
     }
@@ -138,7 +140,16 @@ impl Workspace {
                 let name = params.name.as_ref().map(|name| name.to_lowercase());
                 for node in ids
                     .into_iter()
-                    .map(|id| model::node(&page, id, &identities))
+                    .map(|id| {
+                        let mut node = model::node(&page, id, &identities);
+                        node["available_variants"] = json!(
+                            interaction::variants(&page, id, &self.components.sets)
+                                .into_iter()
+                                .map(|(id, name)| json!({"id":id,"name":name}))
+                                .collect::<Vec<_>>()
+                        );
+                        node
+                    })
                     .filter(|node| {
                         name.as_ref().is_none_or(|name| {
                             node["properties"]["name"]
@@ -236,10 +247,12 @@ impl Workspace {
                 error.operation = Some(index);
                 return Err(error);
             }
-            model::apply(&mut page, op, &mut refs).map_err(|mut e| {
-                e.operation = Some(index);
-                e
-            })?;
+            interaction::apply(&mut page, op, &mut refs, &self.components.sets).map_err(
+                |mut e| {
+                    e.operation = Some(index);
+                    e
+                },
+            )?;
         }
         page.validate().map_err(|e| Error::invalid(e.to_string()))?;
         crate::scene::auto_layout::resolve(&mut page, window.text_system())
@@ -289,6 +302,7 @@ impl Workspace {
             .ok_or_else(|| Error::new("LIMIT_REACHED", "Document revision exhausted"))?;
         let result = json!({"revision":revision.to_string(),"page_id":page.id,
             "changed":changed,"created":refs,"nodes":updated,
+            "start_frame_id":page.hierarchy.start.and_then(|id| after_ids.get(&id)),
             "deleted":before_ids.iter().filter_map(|(id,uid)|(!after_ids.contains_key(id)).then_some(uid)).collect::<Vec<_>>()});
         let receipt_bytes = serde_json::to_vec(&(request, &result))
             .map_err(|e| Error::invalid(e.to_string()))?
