@@ -54,6 +54,20 @@ Open **Prototype** in the right panel, choose a starting frame, and select a lay
 cargo run --locked -p rovar
 ```
 
+## AI design skill
+
+Install the [Rovar design skill](skills/rovar-design/SKILL.md) with `just` and Nushell:
+
+```sh
+just install-skill
+```
+
+This installs or updates `rovar-design` in `~/.agents/skills`. To use a different
+skills directory, run `just install-skill-to /path/to/skills`. Start a new agent session to load the skill,
+open Rovar normally, and ask the agent to create or refine a design with `rovar-design`.
+The skill discovers the running Unix desktop editor's current protocol and guides
+incremental edits with visual checks. See the [local protocol](docs/agent-protocol.md).
+
 ## Build
 
 Install [just](https://github.com/casey/just) and [Nushell](https://www.nushell.sh/). Run `just` to list all build commands.

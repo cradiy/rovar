@@ -1,3 +1,5 @@
+#[cfg(unix)]
+mod agent;
 mod app;
 mod asset;
 mod document;
@@ -16,6 +18,8 @@ mod web;
 pub fn run() {
     #[cfg(target_family = "wasm")]
     web::start();
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(unix)]
+    agent::run();
+    #[cfg(all(not(target_family = "wasm"), not(unix)))]
     app::start();
 }

@@ -40,6 +40,10 @@ pub(crate) fn start() {
             return;
         }
         i18n::init();
+        #[cfg(unix)]
+        if let Err(error) = super::agent::start(&crate::agent::transport::directory(), cx) {
+            eprintln!("Could not start agent socket: {error:#}");
+        }
         #[cfg(target_os = "macos")]
         super::native_menu::init(cx);
         if let Err(error) = font::init(cx) {

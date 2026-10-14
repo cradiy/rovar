@@ -147,6 +147,10 @@ impl History {
     pub fn revision(&self) -> u64 {
         self.revision
     }
+    #[cfg(unix)]
+    pub fn is_previewing(&self) -> bool {
+        self.preview.is_some()
+    }
     pub fn mark_changed(&mut self) {
         self.revision = self
             .revision

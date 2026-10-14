@@ -1,6 +1,8 @@
 //! Application windows, document tabs, session lifecycle, and account UI.
 
 use crate::ui::theme::Color;
+#[cfg(unix)]
+mod agent;
 mod comparison;
 mod export;
 mod files;

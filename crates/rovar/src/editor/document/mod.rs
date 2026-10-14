@@ -287,6 +287,10 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> String {
+        #[cfg(unix)]
+        {
+            self.agent = Default::default();
+        }
         self.presentation.player = None;
         self.colors.palette = document.colors;
         self.components.definitions = document.components;

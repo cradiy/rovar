@@ -368,13 +368,19 @@ impl Workspace {
         let Some(rect) = rect else {
             return;
         };
+        self.frame_canvas_rect(rect, true, cx);
+    }
+
+    pub(super) fn frame_canvas_rect(&mut self, rect: Rect, fit: bool, cx: &mut Context<Self>) {
         let size = self.bounds.get().size;
         let (left, right) = self.canvas_insets();
         let width = (f32::from(size.width) - left - right).max(1.);
         let height = f32::from(size.height);
-        self.view.zoom = ((width - 48.).max(1.) / rect.width.max(1.))
-            .min((height - 144.).max(1.) / rect.height.max(1.))
-            .clamp(0.1, 1.);
+        if fit {
+            self.view.zoom = ((width - 48.).max(1.) / rect.width.max(1.))
+                .min((height - 144.).max(1.) / rect.height.max(1.))
+                .clamp(0.1, 1.);
+        }
         self.view.pan = point(
             left + width / 2. - (rect.x + rect.width / 2.) * self.view.zoom,
             height / 2. - 16. - (rect.y + rect.height / 2.) * self.view.zoom,

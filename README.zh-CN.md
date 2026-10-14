@@ -68,6 +68,22 @@ just build-server      # 内嵌 Web 编辑器的服务器
 打包产物位于 `dist/`。macOS 构建需要 Apple Silicon 和 Xcode Command Line Tools，详见 [macOS 打包说明](packaging/macos/README.md)。
 Windows 打包需要 x64 MSVC、7-Zip 和 Inno Setup，详见 [Windows 打包说明](packaging/windows/README.md)。
 
+## AI 设计 skill
+
+安装 `just` 和 Nushell 后运行：
+
+```sh
+just install-skill
+```
+
+命令会将 [rovar-design](skills/rovar-design/SKILL.md) 安装或更新到
+`~/.agents/skills`。也可以指定其他目录：
+`just install-skill-to /path/to/skills`。
+
+新建一个 agent 会话以加载 skill，正常打开 Rovar，然后让 agent 使用
+`rovar-design` 创建或调整设计。skill 会查询运行中 Unix 桌面编辑器的最新协议，
+优先增量修改现有元素，逐步检查和完善。详见[本地协议](docs/agent-protocol.md)。
+
 ## Web 与服务器
 
 Web 编辑器目前为实验性功能，使用支持 WebGPU 的浏览器，通过 HTTPS 或 localhost 打开服务器地址。
