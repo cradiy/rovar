@@ -12,7 +12,7 @@ members = [
 default-members = ["crates/rovar"]
 
 [workspace.package]
-version = "0.2.0"
+version = "0.3.0"
 authors = ["cradiy <cradiy.rs@gmail.com>"]
 
 [profile.dev]

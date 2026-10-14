@@ -6432,7 +6432,7 @@ dependencies = [
 
 [[package]]
 name = "rovar"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "base64 0.23.1",
@@ -6490,14 +6490,14 @@ dependencies = [
 
 [[package]]
 name = "rovar-api"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "rovar-format"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -6510,7 +6510,7 @@ dependencies = [
 
 [[package]]
 name = "rovar-render"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "resvg 0.48.1",
  "rovar-svg",
@@ -6520,7 +6520,7 @@ dependencies = [
 
 [[package]]
 name = "rovar-server"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -6546,7 +6546,7 @@ dependencies = [
 
 [[package]]
 name = "rovar-storage"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "tempfile",
  "web-time",
@@ -6554,7 +6554,7 @@ dependencies = [
 
 [[package]]
 name = "rovar-svg"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "usvg 0.48.1",
