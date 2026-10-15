@@ -349,7 +349,7 @@ mod tests {
         let mut visual = VisualTestContext::from_window(window.into(), cx);
         draw(&mut visual);
         window
-            .update(&mut visual.cx, |w, _, cx| {
+            .update(&mut visual.cx, |w, window, cx| {
                 assert!(!failed.read(cx).playing);
                 assert!(!w.media.audios.contains_key(&id));
                 assert!(!w.media.audio_errors.contains_key(&id));
@@ -357,6 +357,26 @@ mod tests {
                 w.control_audio(id, MediaCommand::Play, cx);
                 assert_ne!(w.media.audios[&id].entity_id(), failed.entity_id());
                 assert!(w.media.error.is_none());
+                let recovered = w.media.audios[&id].clone();
+                let path = temp.path().join("replacement.mp3");
+                std::fs::write(&path, b"different audio source").unwrap();
+                let asset = FileAsset::load(path).unwrap();
+                let (mut page, _) = w.snapshot_page(cx);
+                page.shapes
+                    .iter_mut()
+                    .find(|shape| shape.id == id)
+                    .unwrap()
+                    .asset = Some(asset.clone());
+                page.assets
+                    .iter_mut()
+                    .find(|usage| usage.object == id && !usage.fill)
+                    .unwrap()
+                    .hash = asset.hash.clone();
+                w.load_page(page, window, cx);
+                assert!(!w.media.audios.contains_key(&id));
+                assert!(!w.media.audio_errors.contains_key(&id));
+                w.control_audio(id, MediaCommand::Play, cx);
+                assert_ne!(w.media.audios[&id].entity_id(), recovered.entity_id());
             })
             .unwrap();
     }

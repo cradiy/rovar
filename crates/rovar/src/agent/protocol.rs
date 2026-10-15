@@ -194,9 +194,11 @@ pub(crate) struct Layout {
 #[serde(deny_unknown_fields)]
 pub(crate) struct Properties {
     pub name: Option<String>,
-    /// Unrotated rectangle in page coordinates, independent of viewport zoom.
+    /// Unrotated rectangle in page coordinates. Plain groups transform their members;
+    /// fonts and stroke widths do not scale. Both dimensions are explicit.
     pub rect: Option<Rect>,
     /// Solid sRGB color, exactly #RRGGBBAA. Text applies to the whole text box.
+    /// Assets and open paths have no solid fill.
     pub fill: Option<String>,
     /// Layer opacity in [0, 1].
     pub opacity: Option<f32>,
@@ -220,6 +222,12 @@ pub(crate) struct Properties {
 #[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub(crate) enum Operation {
+    /// Replace an asset source with the same kind, preserving node identity and styling.
+    /// SVG must remain a vector asset (editable: false).
+    ReplaceSource {
+        id: String,
+        source: import::Source,
+    },
     Import {
         #[serde(rename = "ref")]
         reference: String,

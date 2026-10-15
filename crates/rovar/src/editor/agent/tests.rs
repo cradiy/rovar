@@ -50,8 +50,9 @@ fn imports_are_revision_guarded_atomic_and_owned_by_the_document(cx: &mut TestAp
     let handle = crate::editor::tests::open(cx);
     handle.update(cx, |this, window, cx| {
         let import = |reference: &str, source: Value| json!({"op":"import","ref":reference,
-            "rect":{"x":20,"y":30,"width":80,"height":60},"source":source});
+            "parent":"$frame","rect":{"x":120,"y":230,"width":80,"height":60},"source":source});
         let operations = json!([
+            {"op":"create","ref":"$frame","type":"frame","properties":{"rect":{"x":100,"y":200,"width":600,"height":600}}},
             import("$image_file", json!({"type":"image","source":{"type":"path","path":image_path}})),
             import("$image_data", json!({"type":"image","source":{"type":"data","base64":image_data}})),
             import("$svg_file", json!({"type":"svg","source":{"type":"path","path":svg_path}})),
@@ -71,7 +72,7 @@ fn imports_are_revision_guarded_atomic_and_owned_by_the_document(cx: &mut TestAp
         invalid_ops.as_array_mut().unwrap().push(json!({"op":"set_interaction","id":"$image_data",
             "trigger":"click","action":{"type":"navigate","target":"$image_file"}}));
         let invalid = apply(this, invalid_ops);
-        assert_eq!(execute(this, &invalid, window, cx).unwrap_err().operation, Some(5));
+        assert_eq!(execute(this, &invalid, window, cx).unwrap_err().operation, Some(6));
         assert!(this.snapshot_page(cx).0 == before);
         assert_eq!(this.document_revision(), revision);
 
@@ -96,6 +97,77 @@ fn imports_are_revision_guarded_atomic_and_owned_by_the_document(cx: &mut TestAp
         for shape in &loaded.pages[0].shapes {
             if let Some(asset) = &shape.asset { asset.ensure_decoded().unwrap(); }
         }
+        let original = this.snapshot_page(cx).0;
+        let image_uid = result["created"]["$image_data"].as_str().unwrap();
+        let svg_uid = result["created"]["$svg_data"].as_str().unwrap();
+        let image_id = model::lookup(&original, image_uid, &BTreeMap::new()).unwrap();
+        let svg_id = model::lookup(&original, svg_uid, &BTreeMap::new()).unwrap();
+        let path = original.shapes.iter().find(|s| s.kind == ShapeKind::Bezier).unwrap();
+        let path_id = path.id;
+        let update = apply(this, json!([
+            {"op":"update","id":image_uid,"properties":{"name":"Cover","rect":{"x":300,"y":350,"width":160,"height":120},"opacity":0.6,"rotation":15}},
+            {"op":"update","id":svg_uid,"properties":{"rect":{"x":400,"y":500,"width":160,"height":120}}}
+        ]));
+        execute(this, &update, window, cx).unwrap();
+        let edited = this.snapshot_page(cx).0;
+        let image = edited.shapes.iter().find(|s| s.id == image_id).unwrap();
+        let old_image = original.shapes.iter().find(|s| s.id == image_id).unwrap();
+        assert_eq!(image.uid, old_image.uid);
+        assert!(std::sync::Arc::ptr_eq(image.asset.as_ref().unwrap(), old_image.asset.as_ref().unwrap()));
+        assert!(edited.hierarchy.interactions == original.hierarchy.interactions);
+        assert_eq!((image.rect.x, image.rect.y, image.rect.width, image.rect.height), (200.,150.,160.,120.));
+        let new_path = edited.shapes.iter().find(|s| s.id == path_id).unwrap();
+        assert_eq!(new_path.uid, path.uid);
+        assert!(new_path.nodes == path.nodes);
+        assert_eq!((new_path.rect.x, new_path.rect.y, new_path.rect.width, new_path.rect.height), (300.,300.,160.,120.));
+        let bounds = crate::scene::components::bounds(&edited, svg_id).unwrap();
+        assert_eq!((bounds.x,bounds.y,bounds.width,bounds.height), (400.,500.,160.,120.));
+        this.undo_redo(false, window, cx);
+        assert!(this.snapshot_page(cx).0 == original);
+        this.undo_redo(true, window, cx);
+        this.shapes.iter_mut().find(|s| s.id == path_id).unwrap().layer.locked = true;
+        let locked_before = this.snapshot_page(cx).0;
+        let blocked = apply(this, json!([
+            {"op":"update","id":image_uid,"properties":{"name":"Should roll back"}},
+            {"op":"update","id":svg_uid,"properties":{"rect":{"x":0,"y":0,"width":80,"height":60}}}
+        ]));
+        assert_eq!(execute(this, &blocked, window, cx).unwrap_err().code, "LOCKED");
+        assert!(this.snapshot_page(cx).0 == locked_before);
+        this.shapes.iter_mut().find(|s| s.id == path_id).unwrap().layer.locked = false;
+        let delete = apply(this, json!([{"op":"delete","id":image_uid},{"op":"delete","id":svg_uid}]));
+        execute(this, &delete, window, cx).unwrap();
+        assert!(!this.shapes.iter().any(|s| s.id == image_id || s.id == path_id));
+        assert!(!this.hierarchy.interactions.contains_key(&image_id));
+        this.undo_redo(false, window, cx);
+        assert!(this.snapshot_page(cx).0 == edited);
+        let mut bytes = std::io::Cursor::new(Vec::new());
+        image::RgbaImage::from_pixel(8, 6, image::Rgba([240, 20, 40, 255]))
+            .write_to(&mut bytes, image::ImageFormat::Png).unwrap();
+        let source = json!({"type":"image","source":{"type":"data",
+            "base64":base64::engine::general_purpose::STANDARD.encode(bytes.into_inner())}});
+        let replace = apply(this, json!([{"op":"replace_source","id":image_uid,"source":source}]));
+        let replaced = execute(this, &replace, window, cx).unwrap();
+        assert_eq!(replaced["nodes"].as_array().unwrap().len(), 1);
+        assert_eq!(replaced["nodes"][0]["id"], image_uid);
+        let current = this.snapshot_page(cx).0;
+        let old = edited.shapes.iter().find(|s| s.id == image_id).unwrap();
+        let new = current.shapes.iter().find(|s| s.id == image_id).unwrap();
+        assert!(old.layer == new.layer && old.rect == new.rect && old.name == new.name);
+        assert!(current.hierarchy == edited.hierarchy);
+        assert_ne!(old.asset.as_ref().unwrap().hash, new.asset.as_ref().unwrap().hash);
+        assert_eq!(replaced["nodes"][0]["asset"]["hash"], new.asset.as_ref().unwrap().hash);
+        let same = apply(this, replace.params["operations"].clone());
+        assert_eq!(execute(this, &same, window, cx).unwrap()["changed"], false);
+        let wrong = apply(this, json!([
+            {"op":"update","id":image_uid,"properties":{"name":"Must roll back"}},
+            {"op":"replace_source","id":image_uid,"source":{"type":"svg","source":{"type":"data","svg":svg}}}
+        ]));
+        assert_eq!(execute(this, &wrong, window, cx).unwrap_err().operation, Some(1));
+        assert!(this.snapshot_page(cx).0 == current);
+        this.undo_redo(false, window, cx);
+        assert!(this.snapshot_page(cx).0 == edited);
+        this.undo_redo(true, window, cx);
+        assert!(this.snapshot_page(cx).0 == current);
     }).unwrap();
 }
 
@@ -142,7 +214,7 @@ fn interactions_resolve_targets_preserve_other_triggers_and_undo_atomically(
         this.undo_redo(false, window, cx);
         assert!(this.snapshot_page(cx).0 == original);
 
-        // Media nodes allow interaction edits, but unsupported commands and geometry stay protected.
+        // Media nodes allow basic edits while unsupported playback commands remain rejected.
         this.shapes[0].kind = ShapeKind::Audio;
         this.shapes[0].asset = Some(std::sync::Arc::new(crate::asset::FileAsset {
             path: "audio.mp3".into(),
@@ -160,7 +232,8 @@ fn interactions_resolve_targets_preserve_other_triggers_and_undo_atomically(
         assert!(execute(this, &rate, window, cx).is_err());
         assert!(this.snapshot_page(cx).0 == before);
         let geometry = apply(this, json!([{"op":"update","id":uid,"properties":{"opacity":0.5}}]));
-        assert_eq!(execute(this, &geometry, window, cx).unwrap_err().code, "UNSUPPORTED");
+        execute(this, &geometry, window, cx).unwrap();
+        assert_eq!(this.shapes[0].layer.opacity, 0.5);
         this.shapes[0].layer.locked = true;
         let locked = apply(this, json!([{"op":"set_interaction","id":uid,"trigger":"click","action":{"type":"back"}}]));
         assert_eq!(execute(this, &locked, window, cx).unwrap_err().code, "LOCKED");

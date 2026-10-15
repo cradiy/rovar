@@ -43,11 +43,14 @@ pub(super) fn layer(page: &Page, id: usize) -> Option<LayerState> {
 }
 
 pub(super) fn editable(page: &Page, id: usize) -> Result<()> {
-    if page
-        .shapes
-        .iter()
-        .any(|n| n.id == id && !matches!(n.kind, ShapeKind::Rectangle | ShapeKind::Ellipse))
-    {
+    if page.shapes.iter().any(|n| {
+        n.id == id
+            && !matches!(
+                n.kind,
+                ShapeKind::Rectangle | ShapeKind::Ellipse | ShapeKind::Bezier
+            )
+            && !n.kind.is_asset()
+    }) {
         return Err(Error::new(
             "UNSUPPORTED",
             "This shape type is read-only in the agent protocol",
@@ -104,7 +107,7 @@ pub(super) fn node(page: &Page, id: usize, identities: &BTreeMap<usize, uuid::Uu
         (
             format!("{:?}", n.kind).to_lowercase(),
             n.name.clone(),
-            Some((n.color, n.fill_mode)),
+            (n.fill_enabled && n.can_fill()).then_some((n.color, n.fill_mode)),
         )
     } else if let Some(n) = page.texts.iter().find(|n| n.id == id) {
         (
@@ -150,7 +153,7 @@ pub(super) fn node(page: &Page, id: usize, identities: &BTreeMap<usize, uuid::Uu
         .find(|node| node.id == id)
         .and_then(|node| node.asset.as_ref())
         .map(|asset| {
-            let mut info = json!({"name":asset.name(),"width":asset.width,"height":asset.height});
+            let mut info = json!({"name":asset.name(),"hash":asset.hash,"width":asset.width,"height":asset.height});
             if let Some(crate::asset::AssetContent::Svg(svg)) = asset.content() {
                 info["svg_editable"] = json!(svg.editable.is_ok());
                 info["svg_conversion_error"] = json!(svg.editable.as_ref().err());
@@ -172,7 +175,8 @@ pub(super) fn apply(
     match op {
         p::Operation::SetInteraction { .. }
         | p::Operation::SetStartFrame { .. }
-        | p::Operation::Import { .. } => {
+        | p::Operation::Import { .. }
+        | p::Operation::ReplaceSource { .. } => {
             return Err(Error::invalid(
                 "Interaction operation requires document context",
             ));
@@ -358,6 +362,14 @@ fn update(page: &mut Page, id: usize, props: p::Properties, creating: bool) -> R
     if is_group && props.fill.is_some() {
         return Err(Error::invalid("Groups have no fill"));
     }
+    if props.fill.is_some()
+        && page
+            .shapes
+            .iter()
+            .any(|shape| shape.id == id && !shape.can_fill())
+    {
+        return Err(Error::invalid("This shape does not support a solid fill"));
+    }
     if props.layout.is_some() && props.remove_layout {
         return Err(Error::invalid("layout conflicts with remove_layout"));
     }
@@ -404,13 +416,10 @@ fn update(page: &mut Page, id: usize, props: p::Properties, creating: bool) -> R
                 "Node geometry is controlled by parent auto layout",
             ));
         }
-        let rect = local_rect(page, board(page, id), rect);
         if is_group && !page.hierarchy.layouts.contains_key(&id) && props.layout.is_none() {
-            return Err(Error::new(
-                "UNSUPPORTED",
-                "Group bounds are derived; enable layout to set rect",
-            ));
+            super::geometry::transform_group(page, id, rect)?;
         }
+        let rect = local_rect(page, board(page, id), rect);
         if let Some(n) = page.boards.iter_mut().find(|n| n.id == id) {
             n.rect = rect;
         }

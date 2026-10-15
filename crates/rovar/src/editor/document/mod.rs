@@ -367,6 +367,26 @@ impl Workspace {
     }
 
     pub(super) fn load_page(&mut self, page: Page, window: &mut Window, cx: &mut Context<Self>) {
+        let changed_media: Vec<_> = self
+            .shapes
+            .iter()
+            .filter(|old| old.kind.is_playable())
+            .filter(|old| {
+                !page.shapes.iter().any(|new| {
+                    new.id == old.id
+                        && new.kind == old.kind
+                        && match (&old.asset, &new.asset) {
+                            (Some(old), Some(new)) => std::sync::Arc::ptr_eq(old, new),
+                            (None, None) => true,
+                            _ => false,
+                        }
+                })
+            })
+            .map(|shape| shape.id)
+            .collect();
+        for id in changed_media {
+            self.invalidate_media_source(id, cx);
+        }
         self.auto_layout.grid.tracks.borrow_mut().clear();
         self.auto_layout.revision = None;
         self.boards = page.boards;

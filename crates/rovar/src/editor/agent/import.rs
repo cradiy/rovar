@@ -7,6 +7,45 @@ use crate::{
 };
 use std::{collections::BTreeMap, sync::Arc};
 
+pub(super) fn replace(
+    page: &mut Page,
+    reference: &str,
+    source: p::import::Source,
+    asset: Arc<FileAsset>,
+    refs: &BTreeMap<String, String>,
+) -> Result<()> {
+    if matches!(source, p::import::Source::Svg { editable: true, .. }) {
+        return Err(Error::invalid(
+            "Replacing SVG requires editable: false; the node must remain an asset",
+        ));
+    }
+    let id = model::lookup(page, reference, refs)?;
+    model::editable(page, id)?;
+    let shape = page
+        .shapes
+        .iter_mut()
+        .find(|shape| shape.id == id && shape.kind.is_asset())
+        .ok_or_else(|| Error::invalid("Source replacement requires an asset node"))?;
+    if shape.kind != asset.kind() {
+        return Err(Error::invalid("Replacement must have the same asset type"));
+    }
+    if shape
+        .asset
+        .as_ref()
+        .is_some_and(|old| old.hash == asset.hash && old.name() == asset.name())
+    {
+        return Ok(());
+    }
+    let usage = page
+        .assets
+        .iter_mut()
+        .find(|usage| usage.object == id && !usage.fill)
+        .ok_or_else(|| Error::invalid("Missing source asset reference"))?;
+    usage.hash = asset.hash.clone();
+    shape.asset = Some(asset);
+    Ok(())
+}
+
 pub(super) fn insert(
     page: &mut Page,
     operation: p::Operation,

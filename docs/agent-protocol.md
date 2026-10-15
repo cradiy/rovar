@@ -178,9 +178,11 @@ frame. A null target clears the explicit starting frame. Apply responses and
 The current write surface includes frames, rectangles, ellipses, text, and layout
 groups. Properties cover names, geometry, solid fills, opacity, rotation, visibility,
 rectangle corner radius, whole-box text/font styling, and horizontal/vertical layout.
-Other node types can be read and have interactions configured. Component, mask,
-boolean, and media geometry, reparenting, and duplication are not
-exposed for mutation. `editable` describes property editing; `interaction_editable`
+Existing image, SVG, video, audio, and Bezier nodes support basic property edits and
+deletion. Source replacement is supported for asset nodes of the same kind;
+path control-point editing is not exposed.
+Component, mask, boolean geometry, reparenting, and duplication are not exposed
+for mutation. `editable` describes property editing; `interaction_editable`
 separately describes whether a node's interaction settings can be changed.
 
 ```json
@@ -234,6 +236,16 @@ separately describes whether a node's interaction settings can be changed.
   requires direction, gap, padding `[top,right,bottom,left]`, main alignment and cross
   alignment. Alignments are `start`, `center`, or `end`. Layout-controlled child
   positions are resolved by the editor; updates cannot set their `rect` directly.
+- Updating an existing plain group's `rect` moves/scales its members together in
+  page coordinates, including nested plain groups and converted SVG paths. Node
+  UUIDs, source assets, normalized path points, interactions, and style values stay
+  intact. Fonts and stroke widths do not scale. All members must be editable and
+  remain within the geometry limits; groups containing auto layout return
+  `LAYOUT_CONTROLLED` so their layout frames can be edited explicitly instead.
+- Image, SVG, video, and audio nodes accept name, rect, opacity, rotation, and hidden
+  updates. `rect` supplies both dimensions explicitly; preserve the source aspect
+  ratio when that is desired. Assets have no solid fill. Bezier nodes accept basic
+  transforms and layer styling; solid fill is available only for closed paths.
 - Omitted/null property values leave the property unchanged. Supplied compound
   properties such as `rect` and `layout` replace that complete property. Use
   `remove_layout:true` to remove layout; it conflicts with a supplied layout.
@@ -322,7 +334,29 @@ Retrying an already successful request returns its receipt without rereading fil
 
 Later operations in the same batch may use the import's `$reference`, including
 setting its prototype interactions. The entire batch is one undo entry. Importing
-does not expand property editing support for media or converted path geometry.
+preserves source data during subsequent basic property edits. To adjust a converted
+SVG as a whole, update its returned root group's rectangle instead of reimporting it.
+
+Use `replace_source` to change an existing asset without rebuilding its node:
+
+```json
+{
+  "op": "replace_source",
+  "id": "EXISTING_IMAGE_UUID",
+  "source": {"type": "image", "source": {"type": "path", "path": "/absolute/new-cover.png"}}
+}
+```
+
+It accepts the same typed source structures and limits as import, including earlier
+batch references in `id`. The replacement must have the same kind (image, SVG, video,
+or audio). SVG must remain a vector asset; `editable: true` is rejected. Converted
+path groups do not have a replaceable source. Node identity, name, geometry, crop,
+layer styling, and interactions are preserved. Different source proportions keep
+the current rectangle and placement settings; adjust those separately if desired.
+Reads expose `asset.hash` so changed content is observable even when its name and
+dimensions stay the same. Equal source content and name make replacement a no-op.
+Undo restores the old source. Changing a media source invalidates its old player
+and pending commands; playback position is not transferred to the new file.
 
 ## Capture and verification
 

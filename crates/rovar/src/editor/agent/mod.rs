@@ -2,6 +2,7 @@ use super::*;
 use crate::agent::protocol::{self as p, Error, Request, Result};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
+mod geometry;
 mod import;
 mod interaction;
 mod model;
@@ -241,7 +242,9 @@ impl Workspace {
                 .iter()
                 .enumerate()
                 .filter_map(|(index, operation)| {
-                    if let p::Operation::Import { source, .. } = operation {
+                    if let p::Operation::Import { source, .. }
+                    | p::Operation::ReplaceSource { source, .. } = operation
+                    {
                         Some((index, source.clone()))
                     } else {
                         None
@@ -276,11 +279,18 @@ impl Workspace {
                 error.operation = Some(index);
                 return Err(error);
             }
-            let result = if matches!(op, p::Operation::Import { .. }) {
+            let result = if matches!(
+                op,
+                p::Operation::Import { .. } | p::Operation::ReplaceSource { .. }
+            ) {
                 let asset = imports
                     .and_then(|assets| assets.get(&index))
                     .ok_or_else(|| Error::new("INTERNAL", "Missing prepared asset"))?;
-                import::insert(&mut page, op, asset.clone(), &mut refs)
+                if let p::Operation::ReplaceSource { id, source } = op {
+                    import::replace(&mut page, &id, source, asset.clone(), &refs)
+                } else {
+                    import::insert(&mut page, op, asset.clone(), &mut refs)
+                }
             } else {
                 interaction::apply(&mut page, op, &mut refs, &self.components.sets)
             };

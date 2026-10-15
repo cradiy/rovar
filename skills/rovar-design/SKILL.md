@@ -108,6 +108,16 @@ a vector asset unless `editable: true` is requested; conversion failure rejects 
 batch. Respect that choice instead of silently changing the requested representation.
 Use the returned UUID or batch reference to attach interactions, and distinguish
 successful import from verified media playback.
+Move, resize, rename, or restyle imported assets by updating their existing UUIDs.
+Adjust a converted SVG as a whole through its root group's `rect`; do not regenerate
+the SVG just to change placement. Supply both dimensions to preserve the desired
+aspect ratio. Plain-group transforms retain stroke widths and font sizes and reject
+locked members or nested auto layout instead of partially transforming the group.
+Use `replace_source` when only an asset's content changes. It preserves the existing
+UUID, placement, styling, and actions and requires the same asset kind. SVG replacement
+keeps a vector asset; do not pass `editable: true` or use it on converted path groups.
+Check the returned `asset.hash` to confirm the source changed, then inspect the visual
+result, especially when the new source has different proportions.
 
 ## Verify and present
 
