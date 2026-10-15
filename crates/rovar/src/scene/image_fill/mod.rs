@@ -73,37 +73,16 @@ impl ImageFill {
             [asset.width, asset.height],
             self.fit,
         );
-        if let AssetContent::Svg(svg) = content {
-            let width = f32::from(bounds.size.width);
-            let height = f32::from(bounds.size.height);
-            if width <= 0. || height <= 0. {
-                return;
+        let image = match content {
+            AssetContent::Svg(svg) => {
+                let Some(image) = svg.image(size(px(rect.width), px(rect.height)), window, cx)
+                else {
+                    return;
+                };
+                image
             }
-            let x = (rect.x - f32::from(bounds.origin.x)) / width;
-            let y = (rect.y - f32::from(bounds.origin.y)) / height;
-            let w = rect.width / width;
-            let h = rect.height / height;
-            let data = format!(
-                "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1\" height=\"1\" viewBox=\"0 0 1 1\" preserveAspectRatio=\"none\"><image x=\"{x}\" y=\"{y}\" width=\"{w}\" height=\"{h}\" preserveAspectRatio=\"none\" href=\"{}\"/></svg>",
-                svg.uri
-            );
-            let key = format!("rovar-svg-{}-{x}-{y}-{w}-{h}", asset.hash);
-            let _ = window.paint_color_svg_with_fit(
-                bounds,
-                key.into(),
-                Some(data.as_bytes()),
-                Default::default(),
-                radii,
-                None,
-                None,
-                None,
-                gpui::ObjectFit::Fill,
-                cx,
-            );
-            return;
-        }
-        let AssetContent::Image(image) = content else {
-            return;
+            AssetContent::Image(image) => image.clone(),
+            _ => return,
         };
         let _ = window.paint_image_with_clip(
             Bounds::new(
@@ -112,7 +91,7 @@ impl ImageFill {
             ),
             bounds,
             radii,
-            image.clone(),
+            image,
             0,
             false,
         );
