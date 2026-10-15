@@ -75,7 +75,7 @@ pub(super) fn editable(page: &Page, id: usize) -> Result<()> {
     Ok(())
 }
 
-fn board(page: &Page, id: usize) -> Option<usize> {
+pub(super) fn board(page: &Page, id: usize) -> Option<usize> {
     page.shapes
         .iter()
         .find(|n| n.id == id)
@@ -84,7 +84,7 @@ fn board(page: &Page, id: usize) -> Option<usize> {
         .or_else(|| page.hierarchy.groups.get(&id).and_then(|n| n.board))
 }
 
-fn local_rect(page: &Page, board: Option<usize>, mut rect: Rect) -> Rect {
+pub(super) fn local_rect(page: &Page, board: Option<usize>, mut rect: Rect) -> Rect {
     if let Some(b) = board.and_then(|id| page.boards.iter().find(|b| b.id == id)) {
         rect.x -= b.rect.x;
         rect.y -= b.rect.y;
@@ -144,7 +144,20 @@ pub(super) fn node(page: &Page, id: usize, identities: &BTreeMap<usize, uuid::Uu
             "main_align":format!("{:?}",layout.main).to_lowercase(),
             "cross_align":format!("{:?}",layout.cross).to_lowercase()});
     }
-    json!({"id":identities[&id],"type":kind,
+    let asset = page
+        .shapes
+        .iter()
+        .find(|node| node.id == id)
+        .and_then(|node| node.asset.as_ref())
+        .map(|asset| {
+            let mut info = json!({"name":asset.name(),"width":asset.width,"height":asset.height});
+            if let Some(crate::asset::AssetContent::Svg(svg)) = asset.content() {
+                info["svg_editable"] = json!(svg.editable.is_ok());
+                info["svg_conversion_error"] = json!(svg.editable.as_ref().err());
+            }
+            info
+        });
+    json!({"id":identities[&id],"type":kind,"asset":asset,
         "parent_id":components::parent(page,id).and_then(|id| identities.get(&id)),
         "locked":state.locked,"editable":editable(page,id).is_ok(),"properties":properties,
         "interaction_editable":super::interaction::editable(page,id).is_ok(),
@@ -157,7 +170,9 @@ pub(super) fn apply(
     refs: &mut BTreeMap<String, String>,
 ) -> Result<()> {
     match op {
-        p::Operation::SetInteraction { .. } | p::Operation::SetStartFrame { .. } => {
+        p::Operation::SetInteraction { .. }
+        | p::Operation::SetStartFrame { .. }
+        | p::Operation::Import { .. } => {
             return Err(Error::invalid(
                 "Interaction operation requires document context",
             ));
@@ -168,15 +183,7 @@ pub(super) fn apply(
             parent,
             properties,
         } => {
-            if !reference.starts_with('$')
-                || reference.len() < 2
-                || reference.len() > 80
-                || refs.contains_key(&reference)
-            {
-                return Err(Error::invalid(
-                    "Create ref must be a unique $name (2 to 80 bytes)",
-                ));
-            }
+            validate_reference(&reference, refs)?;
             let parent = parent
                 .as_deref()
                 .map(|id| lookup(page, id, refs))
@@ -303,7 +310,18 @@ pub(super) fn apply(
     Ok(())
 }
 
-fn validate_rect(r: Rect) -> Result<()> {
+pub(super) fn validate_reference(reference: &str, refs: &BTreeMap<String, String>) -> Result<()> {
+    if !reference.starts_with('$')
+        || reference.len() < 2
+        || reference.len() > 80
+        || refs.contains_key(reference)
+    {
+        return Err(Error::invalid("ref must be a unique $name (2 to 80 bytes)"));
+    }
+    Ok(())
+}
+
+pub(super) fn validate_rect(r: Rect) -> Result<()> {
     if ![r.x, r.y, r.width, r.height]
         .iter()
         .all(|v| v.is_finite() && v.abs() <= 1_000_000.)

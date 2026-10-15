@@ -96,13 +96,16 @@ fn socket_routes_only_to_the_named_active_editor(cx: &mut TestAppContext) {
     let edit = json!({"request_id":"create","method":"document.apply", "session_id":session["session_id"],
         "document_id":session["document_id"],"params":{"page_id":session["page_id"],"base_revision":session["revision"],
             "operations":[{"op":"create","ref":"$rect","type":"rectangle","properties":{
-                "rect":{"x":20,"y":30,"width":40,"height":50}}}]}});
+                "rect":{"x":20,"y":30,"width":40,"height":50}}},
+                {"op":"import","ref":"$svg","rect":{"x":100,"y":30,"width":40,"height":50},
+                    "source":{"type":"svg","source":{"type":"data","svg":"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"40\" height=\"50\"><rect width=\"40\" height=\"50\"/></svg>"}}}]}});
     let committed = call(&path, edit.clone(), cx);
     assert!(
         committed["result"]["created"]["$rect"].is_string(),
         "{committed}"
     );
     assert_eq!(call(&path, edit.clone(), cx), committed);
+    assert!(committed["result"]["created"]["$svg"].is_string());
     handle
         .update(cx, |studio, window, cx| studio.new_document(window, cx))
         .unwrap();

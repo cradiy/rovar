@@ -19,15 +19,32 @@ pub(super) fn start(base: &std::path::Path, cx: &mut gpui::App) -> anyhow::Resul
     .detach();
     cx.spawn(async move |cx| {
         while let Some(pending) = requests.next().await {
-            let prepared = cx.update(|cx| {
+            let mut prepared = cx.update(|cx| {
                 if stop.load(std::sync::atomic::Ordering::Acquire) {
                     return Err(Error::new("SESSION_CLOSED", "Editor endpoint has closed"));
                 }
                 if std::time::Instant::now() >= pending.deadline {
                     return Err(Error::new("BUSY", "Request expired before execution"));
                 }
-                dispatch(&pending.request, cx)
+                dispatch(&pending.request, None, cx)
             });
+            if let Ok(protocol::Reply::PrepareImports(sources)) = prepared {
+                let imports = cx
+                    .background_executor()
+                    .spawn(async move { crate::agent::imports::prepare(sources) })
+                    .await;
+                prepared = imports.and_then(|imports| {
+                    cx.update(|cx| {
+                        if stop.load(std::sync::atomic::Ordering::Acquire) {
+                            return Err(Error::new("SESSION_CLOSED", "Editor endpoint has closed"));
+                        }
+                        if std::time::Instant::now() >= pending.deadline {
+                            return Err(Error::new("BUSY", "Import expired before execution"));
+                        }
+                        dispatch(&pending.request, Some(&imports), cx)
+                    })
+                });
+            }
             let result = match prepared {
                 Ok(protocol::Reply::Ready(value)) => Ok(value),
                 Ok(capture) => {
@@ -46,7 +63,11 @@ pub(super) fn start(base: &std::path::Path, cx: &mut gpui::App) -> anyhow::Resul
     Ok(())
 }
 
-fn dispatch(request: &Request, cx: &mut gpui::App) -> protocol::Result<protocol::Reply> {
+fn dispatch(
+    request: &Request,
+    imports: Option<&crate::agent::imports::Prepared>,
+    cx: &mut gpui::App,
+) -> protocol::Result<protocol::Reply> {
     if request.request_id.is_empty() || request.request_id.len() > 128 {
         return Err(Error::invalid("request_id must contain 1 to 128 bytes"));
     }
@@ -97,7 +118,9 @@ fn dispatch(request: &Request, cx: &mut gpui::App) -> protocol::Result<protocol:
             json!({"sessions":sessions,"capabilities":{
                 "methods":["session.describe","schema.get","nodes.get","nodes.find","document.apply","canvas.capture","selection.set","canvas.focus","canvas.fit"],
                 "create_types":["frame","rectangle","ellipse","text","group"],
-                "operations":["create","update","delete","set_interaction","set_start_frame"],
+                "operations":["create","update","delete","set_interaction","set_start_frame","import"],
+                "import_types":["image","svg","video","audio"],
+                "import_data_types":["image","svg"],"max_import_data_bytes":crate::agent::imports::MAX_DATA_BYTES,
                 "interaction_triggers":["click","hover"],
                 "interaction_actions":["none","navigate","back","open_overlay","close_overlay","change_variant","media"],
                 "coordinates":"page","atomic_apply":true,"undo":"one apply per undo entry",
@@ -105,7 +128,7 @@ fn dispatch(request: &Request, cx: &mut gpui::App) -> protocol::Result<protocol:
                 "max_apply_receipts":protocol::MAX_RECEIPTS,"max_request_bytes":transport::MAX_REQUEST_BYTES,
             "max_receipt_bytes":protocol::MAX_RECEIPT_BYTES,
                 "capture_renderer":"export","capture_media":false,
-                "scope":"active tabs and their active pages","assets_import":false
+                "scope":"active tabs and their active pages","assets_import":true
             }}),
         ));
     }
@@ -113,7 +136,9 @@ fn dispatch(request: &Request, cx: &mut gpui::App) -> protocol::Result<protocol:
         "No matching active session; call session.describe and use its document_id and session_id"))?;
     handle
         .update(cx, |_, window, cx| {
-            editor.update(cx, |editor, cx| editor.agent_request(request, window, cx))
+            editor.update(cx, |editor, cx| {
+                editor.agent_request(request, imports, window, cx)
+            })
         })
         .map_err(|e| Error::new("SESSION_CLOSED", e.to_string()))?
 }

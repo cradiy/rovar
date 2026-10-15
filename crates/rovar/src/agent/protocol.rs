@@ -1,6 +1,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+pub(crate) mod import;
 pub(crate) mod interaction;
 
 pub(crate) const MAX_OPERATIONS: usize = 128;
@@ -47,6 +48,7 @@ pub(crate) type Result<T> = std::result::Result<T, Error>;
 
 pub(crate) enum Reply {
     Ready(Value),
+    PrepareImports(Vec<(usize, import::Source)>),
     Capture {
         job: Box<crate::render::export::Job>,
         scale: u32,
@@ -59,6 +61,10 @@ impl Reply {
         use base64::Engine as _;
         match self {
             Self::Ready(value) => Ok(value),
+            Self::PrepareImports(_) => Err(Error::new(
+                "INTERNAL",
+                "Imports require background preparation",
+            )),
             Self::Capture {
                 job,
                 scale,
@@ -214,6 +220,15 @@ pub(crate) struct Properties {
 #[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub(crate) enum Operation {
+    Import {
+        #[serde(rename = "ref")]
+        reference: String,
+        parent: Option<String>,
+        /// Explicit destination in page coordinates.
+        rect: Rect,
+        name: Option<String>,
+        source: import::Source,
+    },
     /// Change one trigger without replacing the node's other interaction.
     SetInteraction {
         id: String,

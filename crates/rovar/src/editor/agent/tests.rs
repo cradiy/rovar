@@ -25,7 +25,78 @@ fn execute(
     w: &mut Window,
     cx: &mut Context<Workspace>,
 ) -> Result<Value> {
-    this.agent_request(r, w, cx)?.finish()
+    match this.agent_request(r, None, w, cx)? {
+        p::Reply::PrepareImports(sources) => {
+            let imports = crate::agent::imports::prepare(sources)?;
+            this.agent_request(r, Some(&imports), w, cx)?.finish()
+        }
+        reply => reply.finish(),
+    }
+}
+
+#[gpui::test]
+fn imports_are_revision_guarded_atomic_and_owned_by_the_document(cx: &mut TestAppContext) {
+    use base64::Engine as _;
+    let directory = tempfile::tempdir().unwrap();
+    let image_path = directory.path().join("photo.png");
+    image::RgbaImage::from_pixel(8, 6, image::Rgba([20, 80, 120, 255]))
+        .save(&image_path)
+        .unwrap();
+    let image_data =
+        base64::engine::general_purpose::STANDARD.encode(std::fs::read(&image_path).unwrap());
+    let svg = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"8\" height=\"6\"><rect width=\"8\" height=\"6\" fill=\"red\"/></svg>";
+    let svg_path = directory.path().join("icon.svg");
+    std::fs::write(&svg_path, svg).unwrap();
+    let handle = crate::editor::tests::open(cx);
+    handle.update(cx, |this, window, cx| {
+        let import = |reference: &str, source: Value| json!({"op":"import","ref":reference,
+            "rect":{"x":20,"y":30,"width":80,"height":60},"source":source});
+        let operations = json!([
+            import("$image_file", json!({"type":"image","source":{"type":"path","path":image_path}})),
+            import("$image_data", json!({"type":"image","source":{"type":"data","base64":image_data}})),
+            import("$svg_file", json!({"type":"svg","source":{"type":"path","path":svg_path}})),
+            import("$svg_data", json!({"type":"svg","source":{"type":"data","svg":svg},"editable":true})),
+            {"op":"set_interaction","id":"$image_data","trigger":"click","action":{"type":"back"}}
+        ]);
+        let stale = apply(this, operations.clone());
+        let p::Reply::PrepareImports(sources) = this.agent_request(&stale, None, window, cx).unwrap() else { panic!("Expected background import"); };
+        let prepared = crate::agent::imports::prepare(sources).unwrap();
+        let edit = apply(this, json!([{"op":"create","ref":"$rect","type":"rectangle",
+            "properties":{"rect":{"x":0,"y":0,"width":10,"height":10}}}]));
+        execute(this, &edit, window, cx).unwrap();
+        assert_eq!(this.agent_request(&stale, Some(&prepared), window, cx).err().unwrap().code, "REVISION_CONFLICT");
+        let before = this.snapshot_page(cx).0;
+        let revision = this.document_revision();
+        let mut invalid_ops = operations.clone();
+        invalid_ops.as_array_mut().unwrap().push(json!({"op":"set_interaction","id":"$image_data",
+            "trigger":"click","action":{"type":"navigate","target":"$image_file"}}));
+        let invalid = apply(this, invalid_ops);
+        assert_eq!(execute(this, &invalid, window, cx).unwrap_err().operation, Some(5));
+        assert!(this.snapshot_page(cx).0 == before);
+        assert_eq!(this.document_revision(), revision);
+
+        let valid = apply(this, operations);
+        let result = execute(this, &valid, window, cx).unwrap();
+        let nodes = result["nodes"].as_array().unwrap();
+        assert_eq!(nodes.iter().filter(|n| n["type"] == "image").count(), 2);
+        assert!(nodes.iter().any(|n| n["type"] == "bezier"));
+        assert!(nodes.iter().any(|n| n["type"] == "svg" && n["asset"]["svg_editable"] == true));
+        std::fs::remove_file(&image_path).unwrap();
+        std::fs::remove_file(&svg_path).unwrap();
+        // Acknowledged retries do not reload now-missing files or add undo entries.
+        assert_eq!(execute(this, &valid, window, cx).unwrap(), result);
+        this.undo_redo(false, window, cx);
+        assert!(this.snapshot_page(cx).0 == before);
+        this.undo_redo(true, window, cx);
+        let (document, assets) = this.snapshot_document(valid.document_id.as_deref().unwrap(), cx).unwrap();
+        let destination = directory.path().join("imported.rovar");
+        crate::document::save(&destination, &document, &assets, &[], window.text_system()).unwrap();
+        let loaded = crate::document::load(&destination).unwrap().into_document().unwrap();
+        assert_eq!(loaded.pages[0].assets.len(), 3);
+        for shape in &loaded.pages[0].shapes {
+            if let Some(asset) = &shape.asset { asset.ensure_decoded().unwrap(); }
+        }
+    }).unwrap();
 }
 
 #[gpui::test]

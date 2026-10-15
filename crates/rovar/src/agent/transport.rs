@@ -16,7 +16,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-pub(crate) const MAX_REQUEST_BYTES: usize = 1024 * 1024;
+pub(crate) const MAX_REQUEST_BYTES: usize = 24 * 1024 * 1024;
 pub(crate) struct Pending {
     pub request: Request,
     pub deadline: Instant,
@@ -141,7 +141,7 @@ pub(crate) fn read_line(reader: &mut impl BufRead) -> anyhow::Result<Option<Vec<
     if length == 0 {
         return Ok(None);
     }
-    ensure!(length <= MAX_REQUEST_BYTES, "Request exceeds 1 MiB");
+    ensure!(length <= MAX_REQUEST_BYTES, "Request exceeds 24 MiB");
     ensure!(
         bytes.last() == Some(&b'\n'),
         "Request must end with a newline"

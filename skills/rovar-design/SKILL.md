@@ -100,6 +100,15 @@ Configure hover exit explicitly when the task calls for restoration or persisten
 Setting an action configures Present-mode behavior; a static capture does not verify
 that navigation, variant switching, or media playback actually executed.
 
+Import assets with `document.apply`'s `import` operation and an explicit destination
+rectangle. Images accept Base64 file bytes or absolute local paths; SVG accepts XML
+text or absolute local paths. Audio/video require paths on the editor's machine.
+Prefer paths for large payloads and inspect the live request/data limits. SVG remains
+a vector asset unless `editable: true` is requested; conversion failure rejects the
+batch. Respect that choice instead of silently changing the requested representation.
+Use the returned UUID or batch reference to attach interactions, and distinguish
+successful import from verified media playback.
+
 ## Verify and present
 
 Use the returned revision to read changed nodes and capture their containing frame.

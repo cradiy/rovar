@@ -179,7 +179,7 @@ The current write surface includes frames, rectangles, ellipses, text, and layou
 groups. Properties cover names, geometry, solid fills, opacity, rotation, visibility,
 rectangle corner radius, whole-box text/font styling, and horizontal/vertical layout.
 Other node types can be read and have interactions configured. Component, mask,
-boolean, and media geometry, asset import, reparenting, and duplication are not
+boolean, and media geometry, reparenting, and duplication are not
 exposed for mutation. `editable` describes property editing; `interaction_editable`
 separately describes whether a node's interaction settings can be changed.
 
@@ -261,10 +261,68 @@ Reread before continuing. Failed requests make no edit, except `TIMEOUT`, whose 
 is unknown: retry the identical request while the session is still available.
 After session loss, rediscover and inspect instead of blindly submitting a new edit.
 
-Requests are limited to 1 MiB and applies to 128 operations. Receipts are retained
-without eviction up to 256 successful requests or 16 MiB of serialized requests and
-results. At capacity, new applies fail before commit with `LIMIT_REACHED`; existing
+Requests are limited to 24 MiB and applies to 128 operations. Receipts are retained
+without eviction up to 256 successful requests or 16 MiB of request fingerprints and
+results; inline asset bytes are not retained in the receipt cache.
+At capacity, new applies fail before commit with `LIMIT_REACHED`; existing
 receipts remain retryable. Reopen the saved document to start a new session.
+
+## Import images, SVG, video, and audio
+
+Use `import` inside `document.apply`. Each import requires a unique batch `ref`, a
+destination `rect` in page coordinates, and a typed `source`. Optional `parent`
+accepts a frame/group UUID or earlier batch reference. Optional `name` labels the
+imported node; it defaults to the file name. Placement never depends on selection,
+zoom, or the file's intrinsic dimensions.
+
+```json
+{
+  "op": "import",
+  "ref": "$photo",
+  "parent": "FRAME_UUID",
+  "name": "Cover",
+  "rect": {"x": 120, "y": 140, "width": 320, "height": 240},
+  "source": {
+    "type": "image",
+    "source": {"type": "data", "base64": "ENCODED_IMAGE_FILE_BYTES"}
+  }
+}
+```
+
+Supported `source` structures:
+
+| Kind | Local file | Direct data |
+| --- | --- | --- |
+| Image | `{"type":"image","source":{"type":"path","path":"/absolute/photo.png"}}` | `{"type":"image","source":{"type":"data","base64":"..."}}` |
+| SVG | `{"type":"svg","source":{"type":"path","path":"/absolute/icon.svg"}}` | `{"type":"svg","source":{"type":"data","svg":"<svg ...>...</svg>"}}` |
+| Video | `{"type":"video","path":"/absolute/clip.mp4"}` | Not supported |
+| Audio | `{"type":"audio","path":"/absolute/music.mp3"}` | Not supported |
+
+Paths must identify existing absolute local files accessible to the editor process.
+URLs, directories, and relative paths are rejected. Video/audio use the editor's
+existing formats and platform decoders. A successful import is not playback verification.
+Images use standard Base64 of the encoded file; SVG uses XML text. Neither accepts
+a data URI prefix. Direct data is limited to 16 MiB decoded per asset, within the
+24 MiB total JSON request limit; use a file path for larger images. Existing image
+decoder limits and the SVG parser's 16 MiB source limit also apply.
+
+SVG defaults to a vector asset. Set `editable: true` on its outer `source` object
+to require conversion into editable paths/groups. Unsupported conversion returns
+`SVG_NOT_EDITABLE` with the reason and leaves the entire batch unchanged; it does
+not silently substitute an asset. SVG asset nodes report `asset.svg_editable` and
+`asset.svg_conversion_error`; other asset metadata includes name, width, and height.
+The returned root UUID references the converted group or preserved asset.
+
+File reads, decoding, and SVG parsing run in the background. Before committing, the
+editor checks session, active page, document revision, busy state, and request
+deadline again. Failure or stale state leaves the document and history unchanged.
+Imported source bytes are owned by the document and embedded by normal saving;
+removing the original path afterwards does not break undo/redo or saved documents.
+Retrying an already successful request returns its receipt without rereading files.
+
+Later operations in the same batch may use the import's `$reference`, including
+setting its prototype interactions. The entire batch is one undo entry. Importing
+does not expand property editing support for media or converted path geometry.
 
 ## Capture and verification
 
@@ -285,6 +343,7 @@ After apply, use the returned revision to read affected nodes or capture their
 containing frame. On `REVISION_CONFLICT`, rediscover and reread before constructing a
 new request. Never replace just the revision to force a stale edit through.
 
-Errors contain `code`, `message`, and, when attributable to an operation, its zero-based
+Import read/decode failures return `IMPORT_FAILED`; type/placement errors return
+`INVALID_ARGUMENT`. Errors contain `code`, `message`, and, when attributable to an operation, its zero-based
 `operation` index. Other codes include `INVALID_ARGUMENT`, `NODE_NOT_FOUND`, `LOCKED`,
 `LAYOUT_CONTROLLED`, `PAGE_NOT_ACTIVE`, and `SESSION_CLOSED`.

@@ -2,6 +2,7 @@ use super::*;
 use crate::agent::protocol::{self as p, Error, Request, Result};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
+mod import;
 mod interaction;
 mod model;
 #[cfg(test)]
@@ -10,8 +11,17 @@ mod view;
 
 pub(super) struct State {
     session: String,
-    receipts: BTreeMap<String, (Request, Value)>,
+    receipts: BTreeMap<String, ([u8; 32], Value)>,
     receipt_bytes: usize,
+}
+
+fn fingerprint(request: &Request) -> Result<[u8; 32]> {
+    use sha2::{Digest, Sha256};
+    let mut value =
+        serde_json::to_value(request).map_err(|error| Error::invalid(error.to_string()))?;
+    value.sort_all_objects();
+    let bytes = serde_json::to_vec(&value).map_err(|error| Error::invalid(error.to_string()))?;
+    Ok(Sha256::digest(bytes).into())
 }
 impl Default for State {
     fn default() -> Self {
@@ -74,6 +84,7 @@ impl Workspace {
     pub(crate) fn agent_request(
         &mut self,
         request: &Request,
+        imports: Option<&crate::agent::imports::Prepared>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Result<p::Reply> {
@@ -86,7 +97,7 @@ impl Workspace {
         if request.method == "document.apply"
             && let Some((original, result)) = self.agent.receipts.get(&request.request_id)
         {
-            if original != request {
+            if *original != fingerprint(request)? {
                 return Err(Error::new(
                     "REQUEST_ID_REUSED",
                     "Use a new request_id for a different request",
@@ -175,7 +186,7 @@ impl Workspace {
                     "total":total,"next_offset":(end<total).then_some(end)}),
                 ))
             }
-            "document.apply" => self.agent_apply(request, window, cx).map(p::Reply::Ready),
+            "document.apply" => self.agent_apply(request, imports, window, cx),
             "canvas.capture" => self.agent_capture(p::parse(request.params.clone())?, window, cx),
             "selection.set" | "canvas.focus" | "canvas.fit" => self
                 .agent_view_request(&request.method, p::parse(request.params.clone())?, cx)
@@ -209,9 +220,10 @@ impl Workspace {
     fn agent_apply(
         &mut self,
         request: &Request,
+        imports: Option<&crate::agent::imports::Prepared>,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> Result<Value> {
+    ) -> Result<p::Reply> {
         let params: p::Apply = p::parse(request.params.clone())?;
         self.agent_guard(&params.page_id, &params.base_revision)?;
         if params.operations.is_empty() || params.operations.len() > p::MAX_OPERATIONS {
@@ -222,6 +234,23 @@ impl Workspace {
                 "LIMIT_REACHED",
                 "Session receipt capacity reached; reopen the document for a new session",
             ));
+        }
+        if imports.is_none() {
+            let sources: Vec<_> = params
+                .operations
+                .iter()
+                .enumerate()
+                .filter_map(|(index, operation)| {
+                    if let p::Operation::Import { source, .. } = operation {
+                        Some((index, source.clone()))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            if !sources.is_empty() {
+                return Ok(p::Reply::PrepareImports(sources));
+            }
         }
         let (original, _) = self.snapshot_page(cx);
         let mut page = original.clone();
@@ -247,12 +276,18 @@ impl Workspace {
                 error.operation = Some(index);
                 return Err(error);
             }
-            interaction::apply(&mut page, op, &mut refs, &self.components.sets).map_err(
-                |mut e| {
-                    e.operation = Some(index);
-                    e
-                },
-            )?;
+            let result = if matches!(op, p::Operation::Import { .. }) {
+                let asset = imports
+                    .and_then(|assets| assets.get(&index))
+                    .ok_or_else(|| Error::new("INTERNAL", "Missing prepared asset"))?;
+                import::insert(&mut page, op, asset.clone(), &mut refs)
+            } else {
+                interaction::apply(&mut page, op, &mut refs, &self.components.sets)
+            };
+            result.map_err(|mut e| {
+                e.operation = Some(index);
+                e
+            })?;
         }
         page.validate().map_err(|e| Error::invalid(e.to_string()))?;
         crate::scene::auto_layout::resolve(&mut page, window.text_system())
@@ -304,7 +339,8 @@ impl Workspace {
             "changed":changed,"created":refs,"nodes":updated,
             "start_frame_id":page.hierarchy.start.and_then(|id| after_ids.get(&id)),
             "deleted":before_ids.iter().filter_map(|(id,uid)|(!after_ids.contains_key(id)).then_some(uid)).collect::<Vec<_>>()});
-        let receipt_bytes = serde_json::to_vec(&(request, &result))
+        let fingerprint = fingerprint(request)?;
+        let receipt_bytes = serde_json::to_vec(&(fingerprint, &result))
             .map_err(|e| Error::invalid(e.to_string()))?
             .len();
         if self.agent.receipt_bytes.saturating_add(receipt_bytes) > p::MAX_RECEIPT_BYTES {
@@ -328,11 +364,10 @@ impl Workspace {
             cx.notify();
         }
         self.agent.receipt_bytes += receipt_bytes;
-        self.agent.receipts.insert(
-            request.request_id.clone(),
-            (request.clone(), result.clone()),
-        );
-        Ok(result)
+        self.agent
+            .receipts
+            .insert(request.request_id.clone(), (fingerprint, result.clone()));
+        Ok(p::Reply::Ready(result))
     }
 
     fn agent_capture(
