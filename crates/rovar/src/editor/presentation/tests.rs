@@ -197,6 +197,116 @@ fn action_image_crop_and_archive_keep_assets_without_editing_the_target(cx: &mut
 }
 
 #[gpui::test]
+fn design_and_action_numeric_inputs_keep_extended_values_when_scrubbing(cx: &mut TestAppContext) {
+    use crate::scene::presentation::property::Property;
+    let handle = open(cx);
+    let text = handle
+        .update(cx, |w, window, cx| {
+            let (frame, _, _) = setup(w, window, cx);
+            let id = w.next_id;
+            w.next_id += 1;
+            let text = w.make_text(
+                id,
+                Some(frame),
+                Rect {
+                    x: 20.,
+                    y: 100.,
+                    width: 200.,
+                    height: 40.,
+                },
+                window,
+                cx,
+            );
+            w.texts.push(text);
+            w.set_selection(BTreeSet::from([id]), cx);
+            id
+        })
+        .unwrap();
+    let mut visual = VisualTestContext::from_window(handle.into(), cx);
+    for (property, input, drag, keys, expected) in [
+        (
+            Property::LetterSpacing(-10.),
+            "property-9",
+            "property-drag-9",
+            "secondary-a - 1 0 enter",
+            -9.,
+        ),
+        (
+            Property::LineHeight(8.),
+            "property-8",
+            "property-drag-8",
+            "secondary-a 8 enter",
+            8.1,
+        ),
+    ] {
+        handle
+            .update(&mut visual.cx, |w, window, cx| {
+                w.set_presentation_tab(false, window, cx);
+            })
+            .unwrap();
+        draw(&mut visual);
+        click(&mut visual, input);
+        visual.simulate_keystrokes(keys);
+        draw(&mut visual);
+        for action in [false, true] {
+            if action {
+                handle
+                    .update(&mut visual.cx, |w, window, cx| {
+                        w.set_click(
+                            text,
+                            Some(Action::SetProperty {
+                                target: text,
+                                property: property.clone(),
+                            }),
+                            window,
+                            cx,
+                        );
+                        w.set_presentation_tab(true, window, cx);
+                    })
+                    .unwrap();
+                draw(&mut visual);
+                click(&mut visual, "property-18");
+                visual.simulate_keystrokes(keys);
+                draw(&mut visual);
+            }
+            let origin = visual
+                .debug_bounds(if action { "property-drag-18" } else { drag })
+                .unwrap()
+                .center();
+            let end = origin + point(px(10.), px(0.));
+            visual.simulate_mouse_down(origin, MouseButton::Left, Default::default());
+            visual.simulate_mouse_move(end, MouseButton::Left, Default::default());
+            visual.simulate_mouse_up(end, MouseButton::Left, Default::default());
+            draw(&mut visual);
+            handle
+                .update(&mut visual.cx, |w, _, cx| {
+                    let style = w
+                        .texts
+                        .iter()
+                        .find(|t| t.id == text)
+                        .unwrap()
+                        .editor
+                        .read(cx)
+                        .effective_style();
+                    let design = match property {
+                        Property::LetterSpacing(_) => style.spacing,
+                        _ => style.line_height,
+                    };
+                    assert!((design - expected).abs() < 0.001);
+                    if action {
+                        assert!(
+                            (w.prototype_property_number(text, Trigger::Click).unwrap() - expected)
+                                .abs()
+                                < 0.001
+                        );
+                    }
+                })
+                .unwrap();
+        }
+    }
+}
+
+#[gpui::test]
 fn property_action_drag_previews_commits_once_and_cancels_without_losing_redo(
     cx: &mut TestAppContext,
 ) {

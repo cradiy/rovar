@@ -2,25 +2,6 @@ use super::properties::{apply_field, apply_shape_field, apply_text_field};
 use super::*;
 
 impl Workspace {
-    pub(in crate::editor) fn numeric_limits(property: Property) -> (f32, f32, f32, f32) {
-        use Property::*;
-        // Minimum, maximum, units per screen pixel, quantization.
-        match property {
-            X | Y | StartX | StartY | EndX | EndY | Rotation => (-1_000_000., 1_000_000., 1., 1.),
-            Width | Height => (MIN_SIZE, MAX_SIZE, 1., 1.),
-            Opacity | LayerOpacity | GradientPosition | PointX | PointY => (0., 100., 1., 1.),
-            PointRadius => (1., 400., 1., 1.),
-            GradientAngle => (0., 360., 1., 1.),
-            FontSize => (1., 1000., 1., 1.),
-            LineHeight => (0.5, 5., 0.01, 0.01),
-            LetterSpacing => (0., 200., 0.1, 0.1),
-            FontWeight => (100., 900., 10., 100.),
-            Vertices => (3., 60., 0.1, 1.),
-            InnerRadius => (1., 99., 1., 1.),
-            _ => (0., MAX_SIZE / 2., 1., 1.),
-        }
-    }
-
     pub(in crate::editor) fn begin_property_scrub(
         &mut self,
         index: usize,
@@ -76,7 +57,7 @@ impl Workspace {
         let Some(property) = self.field_property(index) else {
             return;
         };
-        let (min, max, step, quantum) = Self::numeric_limits(property);
+        let (min, max, step, quantum) = property.numeric_limits();
         let delta = (delta * step * if shift { 10. } else { 1. } / quantum).round() * quantum;
         let value = number((original + delta).clamp(min, max));
         if self.field_value(index, cx).as_deref() == Some(value.as_str()) {

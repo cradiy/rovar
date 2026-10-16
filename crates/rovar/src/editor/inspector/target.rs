@@ -207,14 +207,7 @@ impl Workspace {
 
     pub(in crate::editor) fn action_field_value(&self, index: usize) -> Option<String> {
         if index == 18 {
-            let p = self.inspector_action()?.2;
-            let encoded = serde_json::to_value(p).ok()?;
-            let v = encoded.get("value")?.as_f64()? as f32;
-            return Some(number(if matches!(p, ActionProperty::Opacity(_)) {
-                v * 100.
-            } else {
-                v
-            }));
+            return self.inspector_action()?.2.numeric().map(|(_, v)| number(v));
         }
         let paint = self.action_paint()?;
         let board = paint.board();
@@ -283,23 +276,9 @@ impl Workspace {
     }
 
     pub(in crate::editor) fn action_numeric_property(&self) -> Option<Property> {
-        Some(match self.inspector_action()?.2 {
-            ActionProperty::Opacity(_) => Property::LayerOpacity,
-            ActionProperty::X(_) => Property::X,
-            ActionProperty::Y(_) => Property::Y,
-            ActionProperty::Width(_) => Property::Width,
-            ActionProperty::Height(_) => Property::Height,
-            ActionProperty::Rotation(_) => Property::Rotation,
-            ActionProperty::StrokeWidth(_) => Property::StrokeWidth,
-            ActionProperty::Radius(_) => Property::Radius,
-            ActionProperty::FontSize(_) => Property::FontSize,
-            ActionProperty::FontWeight(_) => Property::FontWeight,
-            ActionProperty::LineHeight(_) => Property::LineHeight,
-            ActionProperty::LetterSpacing(_) => Property::LetterSpacing,
-            ActionProperty::Gap(_) | ActionProperty::LineGap(_) | ActionProperty::Padding(_) => {
-                Property::Radius
-            }
-            _ => return None,
-        })
+        self.inspector_action()?
+            .2
+            .numeric()
+            .map(|(property, _)| property)
     }
 }

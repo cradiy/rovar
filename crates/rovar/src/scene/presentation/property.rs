@@ -148,26 +148,38 @@ impl Property {
     }
 
     pub fn valid(&self) -> bool {
-        let range = |v: f32, min, max| v.is_finite() && (min..=max).contains(&v);
+        if let Some((property, value)) = self.numeric() {
+            return property.accepts_number(value);
+        }
         match self {
-            Self::Opacity(v) => range(*v, 0., 1.),
-            Self::X(v) | Self::Y(v) => range(*v, -1_000_000., 1_000_000.),
-            Self::Width(v) | Self::Height(v) => range(*v, 1., 100_000.),
-            Self::Rotation(v) => range(*v, -1_000_000., 1_000_000.),
-            Self::StrokeWidth(v)
-            | Self::Radius(v)
-            | Self::Gap(v)
-            | Self::LineGap(v)
-            | Self::Padding(v) => range(*v, 0., 100_000.),
-            Self::FontSize(v) => range(*v, 1., 1000.),
-            Self::FontWeight(v) => range(*v, 100., 900.),
-            Self::LineHeight(v) => range(*v, 0.5, 10.),
-            Self::LetterSpacing(v) => range(*v, -1000., 1000.),
             Self::Fill(v) | Self::Stroke(v) => v.valid(),
             Self::FontFamily(v) => !v.trim().is_empty() && v.len() <= 200,
             Self::Content(v) => v.len() <= 65536,
             _ => true,
         }
+    }
+
+    /// Shared inspector property and its value in display units.
+    pub fn numeric(&self) -> Option<(crate::scene::property::Property, f32)> {
+        use crate::scene::property::Property as P;
+        Some(match self {
+            Self::Opacity(v) => (P::LayerOpacity, *v * 100.),
+            Self::X(v) => (P::X, *v),
+            Self::Y(v) => (P::Y, *v),
+            Self::Width(v) => (P::Width, *v),
+            Self::Height(v) => (P::Height, *v),
+            Self::Rotation(v) => (P::Rotation, *v),
+            Self::StrokeWidth(v) => (P::StrokeWidth, *v),
+            Self::Radius(v) => (P::Radius, *v),
+            Self::FontSize(v) => (P::FontSize, *v),
+            Self::FontWeight(v) => (P::FontWeight, *v),
+            Self::LineHeight(v) => (P::LineHeight, *v),
+            Self::LetterSpacing(v) => (P::LetterSpacing, *v),
+            Self::Gap(v) => (P::Gap, *v),
+            Self::LineGap(v) => (P::LineGap, *v),
+            Self::Padding(v) => (P::Padding, *v),
+            _ => return None,
+        })
     }
 
     pub fn supports(&self, page: &Page, id: usize) -> bool {

@@ -98,7 +98,7 @@ impl Workspace {
         } else {
             Property::GradientPosition
         };
-        let (min, max, step, _) = Self::numeric_limits(property);
+        let (min, max, step, _) = property.numeric_limits();
         let scale = if fine {
             0.1
         } else if shift {
