@@ -44,16 +44,17 @@ pub(super) fn describe(page: &Page, id: usize, ids: &BTreeMap<usize, uuid::Uuid>
         .hierarchy
         .interactions
         .get(&id)
-        .copied()
+        .cloned()
         .unwrap_or_default();
     let action = |action: Option<scene::Action>| {
         let Some(action) = action else {
             return json!({"type":"none"});
         };
-        let mut value = serde_json::to_value(action).expect("Action serialization is infallible");
+        let mut value = serde_json::to_value(&action).expect("Action serialization is infallible");
         if let scene::Action::Navigate { target }
         | scene::Action::OpenOverlay { target, .. }
-        | scene::Action::Media { target, .. } = action
+        | scene::Action::Media { target, .. }
+        | scene::Action::SetProperty { target, .. } = action
         {
             value["target"] = json!(ids.get(&target));
         }
@@ -111,6 +112,38 @@ pub(super) fn apply(
         Ok(uid)
     };
     let action = match action {
+        dto::Action::SetProperty {
+            target,
+            mut property,
+        } => {
+            let target = model::lookup(page, &target, refs)?;
+            if !property.valid() || !property.supports(page, target) {
+                return Err(Error::invalid("Unsupported property or invalid value"));
+            }
+            if let Some(paint) = property.paint_mut()
+                && let Some(hash) = &paint.image_hash
+            {
+                let asset = page
+                    .boards
+                    .iter()
+                    .filter_map(|b| b.image_fill.asset.as_ref())
+                    .chain(page.shapes.iter().flat_map(|s| {
+                        [s.asset.as_ref(), s.image_fill.asset.as_ref()]
+                            .into_iter()
+                            .flatten()
+                    }))
+                    .chain(page.action_images())
+                    .find(|a| &a.hash == hash && !a.kind().is_playable())
+                    .cloned()
+                    .ok_or_else(|| {
+                        Error::invalid(
+                            "Image hash must reference an existing image on the active page",
+                        )
+                    })?;
+                paint.image.asset = Some(asset);
+            }
+            Some(scene::Action::SetProperty { target, property })
+        }
         dto::Action::None => None,
         dto::Action::Back => Some(scene::Action::Back),
         dto::Action::CloseOverlay => Some(scene::Action::CloseOverlay),
@@ -180,7 +213,7 @@ pub(super) fn apply(
         dto::Trigger::Hover => scene::Trigger::Hover,
     };
     let interaction = page.hierarchy.interactions.entry(id).or_default();
-    interaction.set(trigger, action);
+    interaction.set(trigger, action.clone());
     if let Some(transition) = transition {
         interaction.set_transition(trigger, transition);
     }

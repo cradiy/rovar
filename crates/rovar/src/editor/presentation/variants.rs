@@ -67,6 +67,19 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if let Action::SetProperty { target, property } = &action {
+            if self.presentation.playback.is_some() {
+                let (mut page, _) = self.snapshot_page(cx);
+                if property.apply(&mut page, *target).is_ok() {
+                    self.freeze_playback_visual(window, cx);
+                    self.apply_component_page(page, window, cx);
+                    self.presentation.playback.as_mut().unwrap().visual =
+                        transition::Visual::default();
+                    cx.notify();
+                }
+            }
+            return;
+        }
         if let Action::Media { target, command } = action {
             if self.presentation.playback.is_some() {
                 if self
@@ -139,7 +152,9 @@ impl Workspace {
         self.playback_hover(click.is_some() || hover.is_some(), cx);
         // Keep the entry latch across a variant swap so two hover variants cannot
         // repeatedly switch each other while the pointer remains on the component.
-        let entered = hover.map(|(id, _)| self.prototype_component(id).unwrap_or(id));
+        let entered = hover
+            .as_ref()
+            .map(|(id, _)| self.prototype_component(*id).unwrap_or(*id));
         let Some(playback) = &mut self.presentation.playback else {
             return;
         };

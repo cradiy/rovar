@@ -144,8 +144,13 @@ impl Workspace {
                     .flatten()
                     .map(move |asset| (s.id, asset))
             }))
+            .chain(
+                self.action_paint()
+                    .and_then(|p| p.image.asset.as_ref())
+                    .map(|asset| (usize::MAX, asset)),
+            )
             .filter(|(_, asset)| asset.is_pending() && !self.media.decoding.contains(&asset.hash))
-            .filter(|(id, _)| visible(*id))
+            .filter(|(id, _)| *id == usize::MAX || visible(*id))
             .map(|(_, asset)| asset.clone())
             .collect();
         for asset in candidates {

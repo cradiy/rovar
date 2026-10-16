@@ -34,6 +34,9 @@ impl Workspace {
         &self,
         cx: &gpui::App,
     ) -> Option<(FillMode, LinearGradient)> {
+        if let Some(paint) = self.action_paint() {
+            return Some((paint.mode, paint.gradient.clone()));
+        }
         if let Some(text) = self.selected_text() {
             let editor = text.editor.read(cx);
             let style = editor.effective_style();
@@ -56,7 +59,9 @@ impl Workspace {
         self.history.borrow_mut().break_group();
         let (_, mut gradient) = self.fill_state(cx)?;
         let result = change(&mut gradient);
-        if self.selected_text.is_some() {
+        if self.action_paint().is_some() {
+            self.edit_action_paint(|board| board.gradient = gradient, cx);
+        } else if self.selected_text.is_some() {
             self.change_text_style(StyleChange::Gradient(gradient), cx);
         } else if self.selected_shape.is_some() {
             let stroke = self.inspector.stroke_editing;
@@ -171,17 +176,24 @@ impl Workspace {
         let Some((mode, gradient)) = self.fill_state(cx) else {
             return div();
         };
-        let text_selected = self.selected_text.is_some();
-        let color_index = if self.selected_shape.is_some() && self.inspector.stroke_editing {
-            16
+        let action = self.action_paint().is_some();
+        let text_selected = if action {
+            self.action_paint_text()
         } else {
-            5
+            self.selected_text.is_some()
         };
-        let alpha_index = if self.selected_shape.is_some() && self.inspector.stroke_editing {
-            17
-        } else {
-            6
-        };
+        let color_index =
+            if !action && self.selected_shape.is_some() && self.inspector.stroke_editing {
+                16
+            } else {
+                5
+            };
+        let alpha_index =
+            if !action && self.selected_shape.is_some() && self.inspector.stroke_editing {
+                17
+            } else {
+                6
+            };
         let stop_count = gradient.stops().len();
         // Reserve room for the picker, controls, and the panel's viewport margin.
         let reserved_height = if gradient.kind == gpui::GradientKind::Angular {
@@ -191,13 +203,18 @@ impl Workspace {
         };
         let stop_list_height =
             (window.viewport_size().height - px(reserved_height)).clamp(px(38.), px(374.));
-        let image_allowed = !text_selected
-            && (self.selected_shape.is_none() || !self.inspector.stroke_editing)
-            && self.current_image_fill().is_some()
-            && self.selected_shape().is_none_or(|s| s.can_fill());
-        let mixed_mode = self
-            .selected_text()
-            .is_some_and(|t| t.editor.read(cx).mixed(TextProperty::FillMode));
+        let image_allowed = if action {
+            self.action_paint_image_allowed()
+        } else {
+            !text_selected
+                && (self.selected_shape.is_none() || !self.inspector.stroke_editing)
+                && self.current_image_fill().is_some()
+                && self.selected_shape().is_none_or(|s| s.can_fill())
+        };
+        let mixed_mode = !action
+            && self
+                .selected_text()
+                .is_some_and(|t| t.editor.read(cx).mixed(TextProperty::FillMode));
         let modes = [
             (
                 FillMode::Solid,
@@ -244,12 +261,16 @@ impl Workspace {
                             .filter(|(m, _, _, _)| *m != FillMode::Image || image_allowed)
                             .filter(|(m, _, _, _)| {
                                 !matches!(m, FillMode::Points(_))
-                                    || (!text_selected
-                                        && (self.selected_shape.is_none()
-                                            || !self.inspector.stroke_editing)
-                                        && self
-                                            .selected_shape()
-                                            .is_none_or(|s| s.can_fill() && !s.kind.is_asset()))
+                                    || (if action {
+                                        self.action_paint_image_allowed()
+                                    } else {
+                                        !text_selected
+                                            && (self.selected_shape.is_none()
+                                                || !self.inspector.stroke_editing)
+                                            && self
+                                                .selected_shape()
+                                                .is_none_or(|s| s.can_fill() && !s.kind.is_asset())
+                                    })
                             })
                             .map(|(kind, label, id, glyph)| {
                                 icon_button(
@@ -270,14 +291,17 @@ impl Workspace {
                                             return;
                                         }
                                         let surface = usize::from(
-                                            this.selected_shape.is_some()
+                                            this.action_paint().is_none()
+                                                && this.selected_shape.is_some()
                                                 && this.inspector.stroke_editing,
                                         );
                                         this.inspector.paint_popovers[surface]
                                             .focus_handle(cx)
                                             .focus(window, cx);
                                         this.history.borrow_mut().break_group();
-                                        if this.selected_text.is_some() {
+                                        if this.action_paint().is_some() {
+                                            this.edit_action_paint(|b| b.fill_mode = kind, cx);
+                                        } else if this.selected_text.is_some() {
                                             this.change_text_style(StyleChange::FillMode(kind), cx);
                                         } else if this.selected_shape.is_some() {
                                             let stroke = this.inspector.stroke_editing;
@@ -327,7 +351,7 @@ impl Workspace {
                         .child(self.gradient_kind_control(gradient.kind, cx))
                         .when(gradient.kind != gpui::GradientKind::Radial, |el| {
                             el.child(div().w(px(74.)).child(self.paint_input_field(
-                                if text_selected { 12 } else { 7 },
+                                if text_selected && !action { 12 } else { 7 },
                                 t("angle"),
                                 cx,
                             )))
@@ -441,7 +465,7 @@ impl Workspace {
                                 )
                                 .when(active, |el| {
                                     el.child(div().w(px(78.)).child(self.paint_input_field(
-                                        if text_selected { 13 } else { 8 },
+                                        if text_selected && !action { 13 } else { 8 },
                                         t("stop-position"),
                                         cx,
                                     )))
@@ -587,7 +611,7 @@ impl Workspace {
     pub(in crate::editor) fn color_picker(&self) -> impl IntoElement {
         inspector_color_picker(&self.inspector.picker)
     }
-    pub(super) fn color_panel(
+    pub(in crate::editor) fn color_panel(
         &self,
         window: &Window,
         cx: &mut Context<Self>,
@@ -608,38 +632,42 @@ impl Workspace {
             .flex()
             .flex_col()
             .gap(px(8.))
-            .when(!self.multi_selection.is_empty(), |el| {
-                el.child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .justify_between()
-                        .text_size(px(12.))
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .child(
-                            if self.selected_shape.is_some() && self.inspector.stroke_editing {
-                                t("stroke")
-                            } else {
-                                t("fill")
-                            },
-                        )
-                        .child(
-                            icon_button("color-close", t("close"), LucideIcons::X, false).on_click(
-                                cx.listener(|this, _, window, cx| {
-                                    for popover in &this.inspector.paint_popovers {
-                                        popover.update(cx, |state, cx| state.close(window, cx));
-                                    }
-                                }),
+            .when(
+                self.action_paint().is_none() && !self.multi_selection.is_empty(),
+                |el| {
+                    el.child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .justify_between()
+                            .text_size(px(12.))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .child(
+                                if self.selected_shape.is_some() && self.inspector.stroke_editing {
+                                    t("stroke")
+                                } else {
+                                    t("fill")
+                                },
+                            )
+                            .child(
+                                icon_button("color-close", t("close"), LucideIcons::X, false)
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        for popover in &this.inspector.paint_popovers {
+                                            popover.update(cx, |state, cx| state.close(window, cx));
+                                        }
+                                    })),
                             ),
-                        ),
-                )
-            })
-            .when(!self.multi_selection.is_empty(), |el| {
-                el.child(self.color_picker())
-            })
-            .when(self.multi_selection.is_empty(), |el| {
-                el.child(self.fill_controls(window, cx))
-            })
+                    )
+                },
+            )
+            .when(
+                self.action_paint().is_none() && !self.multi_selection.is_empty(),
+                |el| el.child(self.color_picker()),
+            )
+            .when(
+                self.action_paint().is_some() || self.multi_selection.is_empty(),
+                |el| el.child(self.fill_controls(window, cx)),
+            )
     }
 }
 

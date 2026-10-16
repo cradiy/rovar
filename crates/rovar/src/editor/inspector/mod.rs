@@ -17,6 +17,7 @@ mod points;
 mod properties;
 mod scrub;
 mod state;
+mod target;
 mod view;
 
 use super::*;
@@ -43,7 +44,7 @@ fn inspector_input(state: &Entity<TextInput>) -> Input {
         })
 }
 
-fn inspector_color_picker(state: &Entity<ColorPickerState>) -> ColorPicker {
+pub(super) fn inspector_color_picker(state: &Entity<ColorPickerState>) -> ColorPicker {
     ColorPicker::new(state)
         .horizontal_hue(true)
         .gap(px(10.))

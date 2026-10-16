@@ -31,13 +31,16 @@ impl Workspace {
         if self.gesture.is_some() {
             return;
         }
-        if !self.multi_selection.is_empty() && index != 18 {
+        if self.inspector_action().is_none() && !self.multi_selection.is_empty() && index != 18 {
             if let Some(property) = self.field_property(index) {
                 self.begin_multi_property(property, event, window, cx);
             }
             return;
         }
-        if self.selected_shape.is_some() && matches!(index, 5 | 6 | 14 | 16 | 17) {
+        if self.inspector_action().is_none()
+            && self.selected_shape.is_some()
+            && matches!(index, 5 | 6 | 14 | 16 | 17)
+        {
             let stroke = self.field_edits_stroke(index);
             self.activate_paint(stroke, cx);
         }
@@ -80,7 +83,9 @@ impl Workspace {
             return;
         }
         let stop = self.inspector.active_stop;
-        if property == Property::LayerOpacity {
+        if self.inspector_action().is_some() {
+            self.edit_action_field(index, &value, cx);
+        } else if property == Property::LayerOpacity {
             self.edit_layer_opacity(&value);
         } else if property == Property::Rotation {
             self.edit_rotation(&value);

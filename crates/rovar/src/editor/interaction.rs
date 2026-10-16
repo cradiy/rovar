@@ -264,7 +264,7 @@ impl Workspace {
                 self.move_rotation(id, original, gesture.start, position, shift, cx)
             }
             GestureKind::LayerSort => self.move_layer_sort(position),
-            GestureKind::PrototypeConnection => self.move_connection(position),
+            GestureKind::PrototypeConnection => self.move_connection(position, cx),
             GestureKind::Marquee => self.move_marquee(position, cx),
             GestureKind::SelectionMove => self.move_selection(snapped),
             GestureKind::CornerRadius => self.move_corner_radius(delta / self.view.zoom, cx),

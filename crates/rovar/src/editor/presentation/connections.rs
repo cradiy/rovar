@@ -9,7 +9,15 @@ pub(super) struct Connection {
 }
 
 impl Workspace {
-    fn connection_target(&self, source: usize, world: Point<f32>) -> Option<(usize, Action)> {
+    fn connection_target(
+        &self,
+        source: usize,
+        world: Point<f32>,
+        property: Option<(
+            &crate::scene::presentation::property::Property,
+            &crate::document::Page,
+        )>,
+    ) -> Option<(usize, Action)> {
         let variants = self.prototype_variants(source);
         self.canvas_layer_order().into_iter().rev().find_map(|id| {
             if id == source {
@@ -22,6 +30,17 @@ impl Workspace {
                 || world.y > rect.y + rect.height
             {
                 return None;
+            }
+            if let Some((property, page)) = property {
+                return property.supports(page, id).then(|| {
+                    (
+                        id,
+                        Action::SetProperty {
+                            target: id,
+                            property: property.clone(),
+                        },
+                    )
+                });
             }
             if let Some(binding) = self.hierarchy.components.get(&id)
                 && binding.master
@@ -50,11 +69,21 @@ impl Workspace {
         })
     }
 
-    pub(in crate::editor) fn move_connection(&mut self, position: Point<Pixels>) {
+    pub(in crate::editor) fn move_connection(&mut self, position: Point<Pixels>, cx: &gpui::App) {
         let Some(connection) = &self.presentation.connection else {
             return;
         };
         let source = connection.source;
+        let property = self
+            .hierarchy
+            .interactions
+            .get(&source)
+            .and_then(|i| i.get(connection.trigger))
+            .and_then(|action| match action {
+                Action::SetProperty { property, .. } => Some(property),
+                _ => None,
+            });
+        let page = property.as_ref().map(|_| self.snapshot_page(cx).0);
         let end = self.board_point(None, position);
         let (left, right) = self.canvas_insets();
         let bounds = self.bounds.get();
@@ -63,7 +92,7 @@ impl Workspace {
             && f32::from(local.x) >= left
             && f32::from(local.x) <= f32::from(bounds.size.width) - right;
         let target = over_canvas
-            .then(|| self.connection_target(source, end))
+            .then(|| self.connection_target(source, end, property.as_ref().zip(page.as_ref())))
             .flatten();
         if let Some(connection) = &mut self.presentation.connection {
             connection.end = end;
@@ -149,7 +178,8 @@ impl Workspace {
         match action {
             Action::Navigate { target }
             | Action::OpenOverlay { target, .. }
-            | Action::Media { target, .. } => self.world_bounds(target),
+            | Action::Media { target, .. }
+            | Action::SetProperty { target, .. } => self.world_bounds(target),
             Action::ChangeVariant { target } => self
                 .hierarchy
                 .components
@@ -219,7 +249,8 @@ impl Workspace {
             let from = port(rect);
             let (to, direction) = c
                 .target
-                .and_then(|(id, _)| self.world_bounds(id))
+                .as_ref()
+                .and_then(|(id, _)| self.world_bounds(*id))
                 .map_or((screen(c.end), -1.), |r| end_point(from, r));
             wires.push((from, to, direction, c.trigger, true, 0.));
         }
@@ -270,7 +301,7 @@ impl Workspace {
             .presentation
             .connection
             .as_ref()
-            .and_then(|c| c.target)
+            .and_then(|c| c.target.clone())
             .and_then(|(id, _)| self.world_bounds(id))
         {
             let p = screen(point(rect.x, rect.y));

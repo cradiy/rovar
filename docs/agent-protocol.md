@@ -149,8 +149,8 @@ Use `set_interaction` within `document.apply` to replace one trigger's action:
 
 - Triggers are `click` and `hover`. Changing one preserves the other.
 - Actions are `none`, `navigate`, `back`, `open_overlay`, `close_overlay`,
-  `change_variant`, and `media`. Query `document.apply`'s schema for their fields.
-- Frame and media targets use active-page node UUIDs or earlier batch `$references`.
+  `change_variant`, `media`, and `set_property`. Query `document.apply`'s schema for their fields.
+- Frame, media, and property targets use active-page node UUIDs or earlier batch `$references`.
   Variant targets must be among the source's `available_variants`.
 - `open_overlay` requires `settings`: `position` (`center`, `bottom`, `right`),
   `backdrop`, and `dismiss_outside`.
@@ -158,6 +158,24 @@ Use `set_interaction` within `document.apply` to replace one trigger's action:
   toggle, restart, seek_by, seek_to, rate, volume, mute, or unmute. Rate is video-only
   and accepts 25–400 percent; volume accepts 0–100 percent. Setting the action does
   not start media playback; the trigger executes it in Present mode.
+- `set_property` changes one property of a target element in Present mode. For example,
+  `{"type":"set_property","target":"NODE_UUID","property":{"property":"visible","value":false}}`
+  hides an element; `{"property":"visible","value":"toggle"}` toggles its visibility.
+  Boolean properties (`visible`, `fill_enabled`, `stroke_enabled`, `layout_wrap`)
+  accept `true`, `false`, or `"toggle"`. Toggle resolves against the current playback
+  value each time the action runs; authoring never changes the target value.
+  Node reads return `action_properties`, listing supported properties with current values.
+  Hidden targets are allowed. Coordinates are local to the containing frame; auto-layout
+  positions and plain group geometry are unavailable. Width/height changes use fixed sizing.
+  Rotation is available for shapes and text, using the same angle normalization as Design.
+  Fill and stroke values use the complete paint structure returned by `action_properties`:
+  `color` (`#RRGGBB` or `#RRGGBBAA`), `mode`, `gradient`, `image`, and `image_hash`.
+  Edit that returned value incrementally. Fill supports solid, gradient, image, and point
+  paints where supported by the target; text and strokes support solid and gradient paints.
+  Image hashes must reference an existing image on the active page. Layer opacity is 0–1,
+  and font families must be installed.
+  Properties affect the isolated playback scene, restore on hover exit when configured,
+  and reset on restart. They never edit the source document or component definition.
 - Omitted/null `transition` and `hover_exit` preserve their current values.
   Transitions are `instant` or `dissolve` (50–2000 ms), using the editor's existing
   playback behavior. Hover exit is `restore`, `keep`, or `change_variant` with an

@@ -206,13 +206,27 @@ fn interactions_resolve_targets_preserve_other_triggers_and_undo_atomically(
         assert_eq!(this.history.borrow().undo_len(), undo_len);
         let clear = apply(this, json!([{"op":"set_interaction","id":uid,"trigger":"click","action":{"type":"none"}}]));
         execute(this, &clear, window, cx).unwrap();
-        let interaction = this.hierarchy.interactions[&button];
+        let interaction = this.hierarchy.interactions[&button].clone();
         assert_eq!(interaction.click, None);
         assert_eq!(interaction.hover, Some(Action::Navigate { target: frame }));
         assert_eq!(interaction.hover_exit, HoverExit::Restore);
         assert_eq!(interaction.hover_transition, Transition::Dissolve { duration_ms: 200 });
         this.undo_redo(false, window, cx);
         assert!(this.snapshot_page(cx).0 == original);
+
+        let property = apply(this, json!([{"op":"set_interaction","id":uid,"trigger":"click",
+            "action":{"type":"set_property","target":uid,"property":{"property":"visible","value":false}}}]));
+        let changed = execute(this, &property, window, cx).unwrap();
+        let node = changed["nodes"].as_array().unwrap().iter().find(|n| n["id"] == uid).unwrap();
+        assert_eq!(node["interactions"]["click"]["action"]["target"], uid);
+        assert!(!this.shapes[0].layer.hidden);
+        let before = this.snapshot_page(cx).0;
+        let unsupported = apply(this, json!([
+            {"op":"set_interaction","id":uid,"trigger":"click","action":{"type":"set_property","target":uid,"property":{"property":"opacity","value":0.5}}},
+            {"op":"set_interaction","id":uid,"trigger":"hover","action":{"type":"set_property","target":uid,"property":{"property":"content","value":"Wrong target"}}}
+        ]));
+        assert_eq!(execute(this, &unsupported, window, cx).unwrap_err().operation, Some(1));
+        assert!(this.snapshot_page(cx).0 == before);
 
         // Media nodes allow basic edits while unsupported playback commands remain rejected.
         this.shapes[0].kind = ShapeKind::Audio;

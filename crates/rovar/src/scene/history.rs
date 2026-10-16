@@ -93,6 +93,7 @@ pub(crate) enum Change {
 
 #[derive(Clone, PartialEq, Eq)]
 pub(crate) enum Group {
+    PrototypeColor(usize, super::presentation::Trigger),
     Effect(Vec<usize>, usize, usize),
     ExportSuffix(Vec<usize>, usize),
     SelectionProperty(Vec<usize>, Property),

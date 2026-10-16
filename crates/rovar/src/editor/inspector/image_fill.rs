@@ -5,6 +5,9 @@ use crate::ui::theme::Color;
 
 impl Workspace {
     pub(in crate::editor) fn current_image_fill(&self) -> Option<&ImageFill> {
+        if let Some(paint) = self.action_paint() {
+            return Some(&paint.image);
+        }
         if self.selected_text.is_some()
             || (self.selected_shape.is_some() && self.inspector.stroke_editing)
         {
@@ -16,6 +19,10 @@ impl Workspace {
     }
 
     fn import_image_fill(&mut self, cx: &mut Context<Self>) {
+        if self.action_paint().is_some() {
+            self.import_action_image_fill(cx);
+            return;
+        }
         let Some(id) = self.selected_shape.or(self.selected) else {
             return;
         };
@@ -169,7 +176,11 @@ impl Workspace {
         let Some(fill) = self.current_image_fill() else {
             return div();
         };
-        let loading = self.media.image_loading == self.selected_shape.or(self.selected);
+        let loading = self.action_paint().is_none()
+            && self
+                .media
+                .image_loading
+                .is_some_and(|id| Some(id) == self.selected_shape.or(self.selected));
         div()
             .flex()
             .flex_col()
@@ -200,7 +211,9 @@ impl Workspace {
                             .child(label)
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 this.history.borrow_mut().break_group();
-                                if this.selected_shape.is_some() {
+                                if this.action_paint().is_some() {
+                                    this.edit_action_paint(|b| b.image_fill.fit = fit, cx);
+                                } else if this.selected_shape.is_some() {
                                     this.edit_shape(|s| s.image_fill.fit = fit);
                                 } else {
                                     this.edit_board(None, |b| b.image_fill.fit = fit);
@@ -249,7 +262,15 @@ impl Workspace {
             )
             .child(self.paint_input_field(6, t("opacity"), cx))
             .when(fill.asset.is_some(), |el| {
-                el.child(self.image_crop_button(self.selected_shape.or(self.selected).unwrap(), cx))
+                el.child(
+                    self.image_crop_button(
+                        self.action_property_target()
+                            .or(self.selected_shape)
+                            .or(self.selected)
+                            .unwrap(),
+                        cx,
+                    ),
+                )
             })
     }
 }

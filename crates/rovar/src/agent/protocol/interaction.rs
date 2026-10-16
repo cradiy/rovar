@@ -11,6 +11,10 @@ pub(crate) enum Trigger {
 #[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub(crate) enum Action {
+    SetProperty {
+        target: String,
+        property: crate::scene::presentation::property::Property,
+    },
     None,
     Navigate {
         target: String,

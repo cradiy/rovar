@@ -164,6 +164,7 @@ pub(super) fn node(page: &Page, id: usize, identities: &BTreeMap<usize, uuid::Uu
         "parent_id":components::parent(page,id).and_then(|id| identities.get(&id)),
         "locked":state.locked,"editable":editable(page,id).is_ok(),"properties":properties,
         "interaction_editable":super::interaction::editable(page,id).is_ok(),
+        "action_properties":crate::scene::presentation::property::defaults(page,id),
         "interactions":super::interaction::describe(page,id,identities)})
 }
 

@@ -92,6 +92,7 @@ impl Workspace {
                         .into_iter()
                         .flatten()
                 }))
+                .chain(page.action_images())
             {
                 assets.insert(asset.hash.clone(), asset.clone());
             }
@@ -254,6 +255,7 @@ impl Workspace {
                         .into_iter()
                         .flatten()
                 }))
+                .chain(page.action_images())
             {
                 sources
                     .entry(asset.hash.clone())
@@ -356,6 +358,14 @@ impl Workspace {
             assets,
         };
         let text_system = gpui::WindowTextSystem::new(cx.text_system().clone());
+        for asset in page.action_images() {
+            sources.push(AssetSource {
+                hash: asset.hash.clone(),
+                name: asset.name(),
+                path: asset.source.clone(),
+                size: [asset.width, asset.height],
+            });
+        }
         match crate::scene::auto_layout::resolve(&mut page, &text_system) {
             Ok(tracks) => *self.auto_layout.grid.tracks.borrow_mut() = tracks,
             Err(error) => {

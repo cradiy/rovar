@@ -5,6 +5,7 @@ mod placement;
 pub use placement::Placement;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(unix, derive(schemars::JsonSchema))]
 pub enum ImageFit {
     #[default]
     Cover,
@@ -12,6 +13,7 @@ pub enum ImageFit {
 }
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(unix, derive(schemars::JsonSchema))]
 pub struct ImageFill {
     #[serde(skip)]
     pub asset: Option<Arc<FileAsset>>,

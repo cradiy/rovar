@@ -5,6 +5,21 @@ impl Workspace {
     // Slots belong to persistent UI inputs, not to document properties. Resolve
     // their meaning once at the inspector boundary before editing any object.
     pub(in crate::editor) fn field_property(&self, slot: usize) -> Option<Property> {
+        if slot == 18 && self.inspector_action().is_some() {
+            return self.action_numeric_property();
+        }
+        if self.action_paint().is_some() {
+            return match slot {
+                5 => Some(Color),
+                6 => Some(Opacity),
+                7 => Some(GradientAngle),
+                8 => Some(GradientPosition),
+                19 => Some(PointX),
+                20 => Some(PointY),
+                21 => Some(PointRadius),
+                _ => None,
+            };
+        }
         if slot == 18 {
             return Some(LayerOpacity);
         }

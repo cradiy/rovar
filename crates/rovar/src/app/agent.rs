@@ -122,7 +122,7 @@ fn dispatch(
                 "import_types":["image","svg","video","audio"],
                 "import_data_types":["image","svg"],"max_import_data_bytes":crate::agent::imports::MAX_DATA_BYTES,
                 "interaction_triggers":["click","hover"],
-                "interaction_actions":["none","navigate","back","open_overlay","close_overlay","change_variant","media"],
+                "interaction_actions":["none","navigate","back","open_overlay","close_overlay","change_variant","media","set_property"],
                 "coordinates":"page","atomic_apply":true,"undo":"one apply per undo entry",
                 "max_operations":protocol::MAX_OPERATIONS,"max_read_nodes":protocol::MAX_NODES,
                 "max_apply_receipts":protocol::MAX_RECEIPTS,"max_request_bytes":transport::MAX_REQUEST_BYTES,

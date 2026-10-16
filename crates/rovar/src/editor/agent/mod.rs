@@ -264,7 +264,19 @@ impl Workspace {
                 | p::Operation::Update { properties, .. } => Some(properties),
                 _ => None,
             };
-            if let Some(family) = props.and_then(|p| p.font_family.as_ref())
+            let family = match &op {
+                p::Operation::SetInteraction {
+                    action:
+                        p::interaction::Action::SetProperty {
+                            property:
+                                crate::scene::presentation::property::Property::FontFamily(family),
+                            ..
+                        },
+                    ..
+                } => Some(family),
+                _ => props.and_then(|p| p.font_family.as_ref()),
+            };
+            if let Some(family) = family
                 && family != crate::ui::font::SYSTEM
                 && !cx
                     .text_system()

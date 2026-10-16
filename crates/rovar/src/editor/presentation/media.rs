@@ -1,4 +1,5 @@
 use super::*;
+use std::cell::RefCell;
 use uic::components::input::{Input, InputAppearance};
 
 pub(super) const COMMANDS: [MediaCommand; 11] = [
@@ -43,7 +44,7 @@ fn parameter(command: MediaCommand) -> Option<(&'static str, f64)> {
 
 pub(super) struct State {
     input: Entity<TextInput>,
-    target: Cell<Option<(usize, usize, Trigger, Action)>>,
+    target: RefCell<Option<(usize, usize, Trigger, Action)>>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -60,7 +61,7 @@ impl State {
         });
         Self {
             input,
-            target: Cell::new(None),
+            target: RefCell::new(None),
             _subscriptions: vec![submit, blur],
         }
     }
@@ -77,7 +78,7 @@ impl Workspace {
 
     fn apply_media_parameter(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some((generation, id, trigger, action @ Action::Media { target, command })) =
-            self.presentation.media.target.get()
+            self.presentation.media.target.borrow().clone()
         else {
             return;
         };
@@ -156,7 +157,7 @@ impl Workspace {
     ) -> Option<Div> {
         let mut el = div().flex().flex_col().gap(px(6.));
         let Some(action @ Action::Media { command, .. }) = action else {
-            self.presentation.media.target.set(None);
+            self.presentation.media.target.replace(None);
             return None;
         };
         el = el
@@ -168,11 +169,11 @@ impl Workspace {
             )
             .child(self.presentation_menu(Some(id), controls::Menu::MediaControl, cx));
         let Some((label, value)) = parameter(command) else {
-            self.presentation.media.target.set(None);
+            self.presentation.media.target.replace(None);
             return Some(el);
         };
         let key = Some((self.pages.generation, id, trigger, action));
-        if self.presentation.media.target.replace(key) != key {
+        if self.presentation.media.target.replace(key.clone()) != key {
             self.presentation
                 .media
                 .input
@@ -187,6 +188,12 @@ impl Workspace {
             )
             .child(
                 Input::new(&self.presentation.media.input)
+                    .w_full()
+                    .h(px(32.))
+                    .px(px(8.))
+                    .rounded(px(6.))
+                    .bg(Color::Input.color())
+                    .border_color(Color::Hover.color())
                     .text_size(px(12.))
                     .text_color(TEXT.color())
                     .appearance(InputAppearance {

@@ -1,4 +1,5 @@
 use super::*;
+use crate::scene::presentation::property::Boolean;
 use uic::components::dropdown::{DropdownPlacement, dropdown};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -8,7 +9,7 @@ pub(super) enum Menu {
     MediaControl,
 }
 
-fn action_label(action: Option<Action>) -> &'static str {
+fn action_label(action: &Option<Action>) -> &'static str {
     match action {
         None => "prototype-none",
         Some(Action::Navigate { .. }) => "prototype-navigate",
@@ -17,6 +18,7 @@ fn action_label(action: Option<Action>) -> &'static str {
         Some(Action::Back) => "prototype-back",
         Some(Action::ChangeVariant { .. }) => "prototype-variant-action",
         Some(Action::Media { .. }) => "prototype-media-control",
+        Some(Action::SetProperty { .. }) => "prototype-set-property",
     }
 }
 
@@ -66,9 +68,12 @@ impl Workspace {
                 .get(&id)
                 .and_then(|i| i.get(trigger))
                 == action
-            || action.is_some_and(|a| {
+            || action.as_ref().is_some_and(|a| {
                 a.remap(|target| {
                     match a {
+                        Action::SetProperty { property, .. } => {
+                            property.supports(&self.snapshot_page(cx).0, target)
+                        }
                         Action::Media { command, .. } => self
                             .shapes
                             .iter()
@@ -219,6 +224,7 @@ impl Workspace {
                                         | Action::OpenOverlay { .. }
                                         | Action::ChangeVariant { .. }
                                         | Action::Media { .. }
+                                        | Action::SetProperty { .. }
                                 )
                             ),
                             |el| {
@@ -227,6 +233,8 @@ impl Workspace {
                                         "prototype-variant-target"
                                     } else if matches!(action, Some(Action::Media { .. })) {
                                         "prototype-video-target"
+                                    } else if matches!(action, Some(Action::SetProperty { .. })) {
+                                        "prototype-element-target"
                                     } else {
                                         "prototype-frame-target"
                                     }),
@@ -235,7 +243,8 @@ impl Workspace {
                             },
                         )
                         .child(self.overlay_controls(id, trigger, cx))
-                        .children(self.media_action_controls(id, trigger, action, cx))
+                        .children(self.media_action_controls(id, trigger, action.clone(), cx))
+                        .children(self.property_action_controls(id, trigger, &action, cx))
                         .when(
                             action.is_some() && !matches!(action, Some(Action::Media { .. })),
                             |el| el.child(self.transition_controls(id, trigger, cx)),
@@ -283,7 +292,8 @@ impl Workspace {
         } else if let Some(
             Action::Navigate { target }
             | Action::OpenOverlay { target, .. }
-            | Action::Media { target, .. },
+            | Action::Media { target, .. }
+            | Action::SetProperty { target, .. },
         ) = action
         {
             Some(target)
@@ -298,7 +308,7 @@ impl Workspace {
         let label = if control_menu && let Some(Action::Media { command, .. }) = action {
             t(media::label(command)).to_owned()
         } else if source.is_some() && !target_menu {
-            t(action_label(action)).to_owned()
+            t(action_label(&action)).to_owned()
         } else if let Some(Action::ChangeVariant { target }) = action {
             self.components
                 .sets
@@ -306,7 +316,9 @@ impl Workspace {
                 .find_map(|set| set.variants.get(&target.to_string()))
                 .cloned()
                 .unwrap_or_else(|| t("prototype-missing-variant").into())
-        } else if let Some(Action::Media { target, .. }) = action {
+        } else if let Some(Action::Media { target, .. } | Action::SetProperty { target, .. }) =
+            action
+        {
             self.layer_name(target, cx)
         } else {
             target
@@ -321,7 +333,11 @@ impl Workspace {
             || (target_menu
                 && !matches!(
                     action,
-                    Some(Action::ChangeVariant { .. } | Action::Media { .. })
+                    Some(
+                        Action::ChangeVariant { .. }
+                            | Action::Media { .. }
+                            | Action::SetProperty { .. }
+                    )
                 ))
         {
             options.extend(
@@ -369,6 +385,23 @@ impl Workspace {
                             )
                         }),
                 );
+            } else if target_menu && let Some(Action::SetProperty { ref property, .. }) = action {
+                let page = self.snapshot_page(cx).0;
+                options.extend(
+                    self.prototype_property_targets(cx)
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, (target, name))| {
+                            let property = if property.supports(&page, target) {
+                                property.clone()
+                            } else {
+                                crate::scene::presentation::property::Property::Visible(
+                                    Boolean::Set(true),
+                                )
+                            };
+                            (i, name, Some(Action::SetProperty { target, property }))
+                        }),
+                );
             } else if target_menu && let Some(Action::Media { command, .. }) = action {
                 options.extend(self.prototype_media(cx).into_iter().enumerate().map(
                     |(i, (target, name))| {
@@ -391,6 +424,20 @@ impl Workspace {
                     }),
                 );
             } else if !target_menu {
+                let property_action = match &action {
+                    Some(action @ Action::SetProperty { .. }) => action.clone(),
+                    _ => Action::SetProperty {
+                        target: source,
+                        property: crate::scene::presentation::property::Property::Visible(
+                            Boolean::Set(false),
+                        ),
+                    },
+                };
+                options.push((
+                    7,
+                    t("prototype-set-property").to_owned(),
+                    Some(property_action),
+                ));
                 options.push((0, t("prototype-none").to_owned(), None));
                 options.push((1, t("prototype-back").to_owned(), Some(Action::Back)));
                 let board = target
@@ -523,7 +570,7 @@ impl Workspace {
                         let current = if control_menu {
                             option == action
                         } else if source.is_some() && !target_menu {
-                            action_label(option) == action_label(action)
+                            action_label(&option) == action_label(&action)
                         } else if source.is_some() {
                             option == action
                         } else {
@@ -555,15 +602,21 @@ impl Workspace {
                                     .update(cx, |menu, cx| menu.close(window, cx));
                                 if let Some(id) = source {
                                     if trigger == Trigger::Click {
-                                        this.set_click(id, option, window, cx);
+                                        this.set_click(id, option.clone(), window, cx);
                                     } else {
-                                        this.set_prototype_action(id, trigger, option, window, cx);
+                                        this.set_prototype_action(
+                                            id,
+                                            trigger,
+                                            option.clone(),
+                                            window,
+                                            cx,
+                                        );
                                     }
                                 } else {
                                     this.set_start(
-                                        option.and_then(|a| {
+                                        option.as_ref().and_then(|a| {
                                             if let Action::Navigate { target } = a {
-                                                Some(target)
+                                                Some(*target)
                                             } else {
                                                 None
                                             }

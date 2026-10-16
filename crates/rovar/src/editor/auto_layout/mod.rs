@@ -62,6 +62,91 @@ impl State {
 }
 
 impl Workspace {
+    pub(super) fn layout_wrap_control(
+        &self,
+        wrap: bool,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement + use<> {
+        div()
+            .id("layout-wrap")
+            .debug_selector(|| "layout-wrap".into())
+            .h(px(28.))
+            .px(px(8.))
+            .rounded(px(6.))
+            .flex()
+            .items_center()
+            .justify_between()
+            .cursor_pointer()
+            .bg(if wrap {
+                Color::Selected.color()
+            } else {
+                Color::Input.color()
+            })
+            .text_color(if wrap { ACCENT.color() } else { TEXT.color() })
+            .child(t("layout-wrap"))
+            .child(icon(
+                if wrap {
+                    LucideIcons::Check
+                } else {
+                    LucideIcons::Plus
+                },
+                14.,
+            ))
+            .on_click(cx.listener(|this, _, _, cx| this.toggle_layout_wrap(cx)))
+    }
+    pub(super) fn layout_direction_control(&self, current: Axis, cx: &mut Context<Self>) -> Div {
+        div().flex().gap(px(6.)).children(
+            [Axis::Horizontal, Axis::Vertical, Axis::Grid]
+                .into_iter()
+                .map(|axis| {
+                    let active = axis == current;
+                    let (label, glyph) = match axis {
+                        Axis::Horizontal => ("layout-horizontal", LucideIcons::ArrowRight),
+                        Axis::Vertical => ("layout-vertical", LucideIcons::ArrowDown),
+                        Axis::Grid => ("layout-grid", LucideIcons::Grid2x2),
+                    };
+                    div()
+                        .id(label)
+                        .debug_selector(move || label.into())
+                        .h(px(28.))
+                        .flex_1()
+                        .rounded(px(6.))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .gap(px(6.))
+                        .cursor_pointer()
+                        .bg(if active {
+                            Color::Selected.color()
+                        } else {
+                            Color::Input.color()
+                        })
+                        .text_color(if active { ACCENT.color() } else { TEXT.color() })
+                        .child(icon(glyph, 14.))
+                        .child(t(label))
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            use crate::scene::presentation::property::{Direction, Property as P};
+                            if matches!(
+                                this.inspector_action().map(|a| a.2),
+                                Some(P::LayoutDirection(_))
+                            ) {
+                                this.history.borrow_mut().break_group();
+                                this.edit_action_property(
+                                    P::LayoutDirection(match axis {
+                                        Axis::Horizontal => Direction::Horizontal,
+                                        Axis::Vertical => Direction::Vertical,
+                                        Axis::Grid => Direction::Grid,
+                                    }),
+                                    false,
+                                    cx,
+                                );
+                            } else {
+                                this.edit_layout(|l| l.axis = axis, cx);
+                            }
+                        }))
+                }),
+        )
+    }
     pub(super) fn fix_layout_size(
         &mut self,
         id: usize,
@@ -761,77 +846,11 @@ impl Workspace {
         .font_weight(FontWeight::NORMAL)
         .line_height(px(16.));
         if let Some(layout) = layout {
-            section = section.child(
-                div().flex().gap(px(6.)).children(
-                    [Axis::Horizontal, Axis::Vertical, Axis::Grid]
-                        .into_iter()
-                        .map(|axis| {
-                            let active = axis == layout.axis;
-                            let (label, glyph) = match axis {
-                                Axis::Horizontal => ("layout-horizontal", LucideIcons::ArrowRight),
-                                Axis::Vertical => ("layout-vertical", LucideIcons::ArrowDown),
-                                Axis::Grid => ("layout-grid", LucideIcons::Grid2x2),
-                            };
-                            div()
-                                .id(label)
-                                .debug_selector(move || label.into())
-                                .h(px(28.))
-                                .flex_1()
-                                .rounded(px(6.))
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .gap(px(6.))
-                                .cursor_pointer()
-                                .bg(if active {
-                                    Color::Selected.color()
-                                } else {
-                                    Color::Input.color()
-                                })
-                                .text_color(if active { ACCENT.color() } else { TEXT.color() })
-                                .child(icon(glyph, 14.))
-                                .child(t(label))
-                                .on_click(cx.listener(move |this, _, _, cx| {
-                                    this.edit_layout(|l| l.axis = axis, cx)
-                                }))
-                        }),
-                ),
-            );
+            section = section.child(self.layout_direction_control(layout.axis, cx));
             if layout.axis == Axis::Grid {
                 section = section.child(self.grid_container_controls(layout, cx));
             } else {
-                section = section.child(
-                    div()
-                        .id("layout-wrap")
-                        .debug_selector(|| "layout-wrap".into())
-                        .h(px(28.))
-                        .px(px(8.))
-                        .rounded(px(6.))
-                        .flex()
-                        .items_center()
-                        .justify_between()
-                        .cursor_pointer()
-                        .bg(if layout.wrap {
-                            Color::Selected.color()
-                        } else {
-                            Color::Input.color()
-                        })
-                        .text_color(if layout.wrap {
-                            ACCENT.color()
-                        } else {
-                            TEXT.color()
-                        })
-                        .child(t("layout-wrap"))
-                        .child(icon(
-                            if layout.wrap {
-                                LucideIcons::Check
-                            } else {
-                                LucideIcons::Plus
-                            },
-                            14.,
-                        ))
-                        .on_click(cx.listener(|this, _, _, cx| this.toggle_layout_wrap(cx))),
-                );
+                section = section.child(self.layout_wrap_control(layout.wrap, cx));
             }
             for cross in [false, true] {
                 section = section.child(
