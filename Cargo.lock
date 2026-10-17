@@ -798,12 +798,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "block"
-version = "0.1.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d8c1fef690941d3e7788d328517591fecc684c084084702d6ff1641e993699a"
-
-[[package]]
 name = "block-buffer"
 version = "0.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -845,7 +839,7 @@ version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cdeb9d870516001442e364c5220d3574d2da8dc765554b4a617230d33fa58ef5"
 dependencies = [
- "objc2 0.6.4",
+ "objc2 0.6.5",
 ]
 
 [[package]]
@@ -1024,15 +1018,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f079e83a288787bcd14a6aea84cee5c87a67c5a3e660c30f557a3d24761b3527"
 
 [[package]]
-name = "cgl"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ced0551234e87afee12411d535648dd89d2e7f34c78b753395567aff3d447ff"
-dependencies = [
- "libc",
-]
-
-[[package]]
 name = "chacha20"
 version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1146,66 +1131,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c9ea0ac24bc397ab3c98583a3c9ba74fa56b09a4449bbe172b9b1ddb016027a"
 
 [[package]]
-name = "cocoa"
-version = "0.25.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f6140449f97a6e97f9511815c5632d84c8aacf8ac271ad77c559218161a1373c"
-dependencies = [
- "bitflags 1.3.2",
- "block",
- "cocoa-foundation 0.1.2",
- "core-foundation 0.9.4",
- "core-graphics 0.23.2",
- "foreign-types",
- "libc",
- "objc",
-]
-
-[[package]]
-name = "cocoa"
-version = "0.26.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f79398230a6e2c08f5c9760610eb6924b52aa9e7950a619602baba59dcbbdbb2"
-dependencies = [
- "bitflags 2.13.2",
- "block",
- "cocoa-foundation 0.2.0",
- "core-foundation 0.10.0",
- "core-graphics 0.24.0",
- "foreign-types",
- "libc",
- "objc",
-]
-
-[[package]]
-name = "cocoa-foundation"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8c6234cbb2e4c785b456c0644748b1ac416dd045799740356f8363dfe00c93f7"
-dependencies = [
- "bitflags 1.3.2",
- "block",
- "core-foundation 0.9.4",
- "core-graphics-types 0.1.3",
- "libc",
- "objc",
-]
-
-[[package]]
-name = "cocoa-foundation"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e14045fb83be07b5acf1c0884b2180461635b433455fa35d1cd6f17f1450679d"
-dependencies = [
- "bitflags 2.13.2",
- "block",
- "core-foundation 0.10.0",
- "core-graphics-types 0.2.0",
- "libc",
- "objc",
-]
-
-[[package]]
 name = "codespan-reporting"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1219,7 +1144,7 @@ dependencies = [
 [[package]]
 name = "collections"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=5480951172839b4e7e137f3798a7455ab32d38a4#5480951172839b4e7e137f3798a7455ab32d38a4"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26#a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26"
 dependencies = [
  "gpui_util",
  "indexmap",
@@ -1355,9 +1280,9 @@ dependencies = [
 
 [[package]]
 name = "core-foundation"
-version = "0.10.0"
+version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b55271e5c8c478ad3f38ad24ef34923091e0548492a266d19b3c0b4d82574c63"
+checksum = "b2a6cd9ae233e7f62ba4e9353e81a88df7fc8a5987b8d445b4d90c879bd156f6"
 dependencies = [
  "core-foundation-sys",
  "libc",
@@ -1371,25 +1296,25 @@ checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
 
 [[package]]
 name = "core-graphics"
-version = "0.23.2"
+version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c07782be35f9e1140080c6b96f0d44b739e2278479f64e02fdab4e32dfd8b081"
+checksum = "fa95a34622365fa5bbf40b20b75dba8dfa8c94c734aea8ac9a5ca38af14316f1"
 dependencies = [
- "bitflags 1.3.2",
- "core-foundation 0.9.4",
- "core-graphics-types 0.1.3",
+ "bitflags 2.13.2",
+ "core-foundation 0.10.1",
+ "core-graphics-types 0.2.0",
  "foreign-types",
  "libc",
 ]
 
 [[package]]
 name = "core-graphics"
-version = "0.24.0"
+version = "0.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa95a34622365fa5bbf40b20b75dba8dfa8c94c734aea8ac9a5ca38af14316f1"
+checksum = "064badf302c3194842cf2c5d61f56cc88e54a759313879cdf03abdd27d0c3b97"
 dependencies = [
  "bitflags 2.13.2",
- "core-foundation 0.10.0",
+ "core-foundation 0.10.1",
  "core-graphics-types 0.2.0",
  "foreign-types",
  "libc",
@@ -1426,20 +1351,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3d44a101f213f6c4cdc1853d4b78aef6db6bdfa3468798cc1d9912f4735013eb"
 dependencies = [
  "bitflags 2.13.2",
- "core-foundation 0.10.0",
- "libc",
-]
-
-[[package]]
-name = "core-graphics2"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4416167a69126e617f8d0a214af0e3c1dbdeffcb100ddf72dcd1a1ac9893c146"
-dependencies = [
- "bitflags 2.13.2",
- "block",
- "cfg-if",
- "core-foundation 0.10.0",
+ "core-foundation 0.10.1",
  "libc",
 ]
 
@@ -1449,24 +1361,21 @@ version = "21.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a593227b66cbd4007b2a050dfdd9e1d1318311409c8d600dc82ba1b15ca9c130"
 dependencies = [
- "core-foundation 0.10.0",
+ "core-foundation 0.10.1",
  "core-graphics 0.24.0",
  "foreign-types",
  "libc",
 ]
 
 [[package]]
-name = "core-video"
-version = "0.5.2"
+name = "core-text"
+version = "22.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "139679cc63eb9504bdbe37e37874b0247136177655f0008588781e90863afa62"
+checksum = "333dab512ce710ca2d08574c373d246dbeac8b22769e47da4c0e72730ce442b7"
 dependencies = [
- "block",
- "core-foundation 0.10.0",
- "core-graphics2",
- "io-surface",
- "libc",
- "metal",
+ "core-foundation 0.10.1",
+ "core-graphics 0.25.0",
+ "foreign-types",
 ]
 
 [[package]]
@@ -1534,12 +1443,12 @@ dependencies = [
  "jni 0.21.1",
  "js-sys",
  "libc",
- "mach2",
+ "mach2 0.5.0",
  "ndk",
  "ndk-context",
  "num-derive",
  "num-traits",
- "objc2 0.6.4",
+ "objc2 0.6.5",
  "objc2-audio-toolbox",
  "objc2-avf-audio",
  "objc2-core-audio",
@@ -1737,7 +1646,7 @@ dependencies = [
 [[package]]
 name = "derive_refineable"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=5480951172839b4e7e137f3798a7455ab32d38a4#5480951172839b4e7e137f3798a7455ab32d38a4"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26#a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1798,12 +1707,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dispatch"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bd0c93bb4b0c6d9b77f4435b0ae98c24d17f1c45b2ff844c6151a07256ca923b"
-
-[[package]]
 name = "dispatch2"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1812,7 +1715,7 @@ dependencies = [
  "bitflags 2.13.2",
  "block2 0.6.2",
  "libc",
- "objc2 0.6.4",
+ "objc2 0.6.5",
 ]
 
 [[package]]
@@ -2682,7 +2585,7 @@ dependencies = [
 [[package]]
 name = "gpui"
 version = "0.2.2"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=5480951172839b4e7e137f3798a7455ab32d38a4#5480951172839b4e7e137f3798a7455ab32d38a4"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26#a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26"
 dependencies = [
  "accesskit",
  "anyhow",
@@ -2690,17 +2593,13 @@ dependencies = [
  "async-task",
  "backtrace",
  "bitflags 2.13.2",
- "block",
  "bytemuck",
  "chrono",
- "cocoa 0.26.0",
- "cocoa-foundation 0.2.0",
  "collections",
- "core-foundation 0.10.0",
+ "core-foundation 0.10.1",
  "core-foundation-sys",
- "core-graphics 0.24.0",
- "core-text",
- "core-video",
+ "core-graphics 0.25.0",
+ "core-text 22.0.0",
  "ctor",
  "derive_more",
  "embed-resource",
@@ -2725,12 +2624,12 @@ dependencies = [
  "libc",
  "log",
  "lyon",
- "mach2",
- "metal",
+ "mach2 0.6.0",
  "mime_guess",
  "moxcms",
  "num_cpus",
- "objc",
+ "objc2-core-foundation",
+ "objc2-core-video",
  "parking",
  "parking_lot",
  "pathfinder_geometry",
@@ -2773,25 +2672,28 @@ dependencies = [
 [[package]]
 name = "gpui-scap"
 version = "0.0.9-gpui"
-source = "git+https://github.com/cradiy/scap.git?rev=3b96a5a74114a5327143542998b16a43289c9c0f#3b96a5a74114a5327143542998b16a43289c9c0f"
+source = "git+https://github.com/cradiy/scap.git?rev=c94020e8542415fe676e4cfb804f4b5edcb1fe3d#c94020e8542415fe676e4cfb804f4b5edcb1fe3d"
 dependencies = [
  "anyhow",
- "cocoa 0.25.0",
- "core-foundation 0.10.0",
+ "block2 0.6.2",
+ "core-foundation 0.10.1",
  "core-graphics-helmer-fork",
- "core-video",
  "dbus",
+ "dispatch2",
  "glow 0.18.0",
  "khronos-egl",
  "libc",
  "log",
- "objc",
+ "objc2 0.6.5",
+ "objc2-app-kit 0.3.2",
+ "objc2-core-foundation",
+ "objc2-core-media",
+ "objc2-core-video",
+ "objc2-foundation 0.3.2",
+ "objc2-screen-capture-kit",
  "pipewire",
  "rand 0.10.2",
- "screencapturekit",
- "screencapturekit-sys",
  "sysinfo",
- "tao-core-video-sys",
  "windows 0.61.3",
  "windows-capture",
  "x11",
@@ -2801,7 +2703,7 @@ dependencies = [
 [[package]]
 name = "gpui_android"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=5480951172839b4e7e137f3798a7455ab32d38a4#5480951172839b4e7e137f3798a7455ab32d38a4"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26#a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26"
 dependencies = [
  "accesskit",
  "accesskit_android",
@@ -2823,7 +2725,7 @@ dependencies = [
 [[package]]
 name = "gpui_effects"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=5480951172839b4e7e137f3798a7455ab32d38a4#5480951172839b4e7e137f3798a7455ab32d38a4"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26#a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26"
 dependencies = [
  "accesskit",
  "anyhow",
@@ -2838,16 +2740,17 @@ dependencies = [
 [[package]]
 name = "gpui_io"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=5480951172839b4e7e137f3798a7455ab32d38a4#5480951172839b4e7e137f3798a7455ab32d38a4"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26#a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26"
 dependencies = [
  "anyhow",
  "dirs 6.0.0",
  "futures",
  "log",
- "objc2 0.6.4",
+ "objc2 0.6.5",
  "objc2-foundation 0.3.2",
  "rustix 1.1.5",
  "serde",
+ "tempfile",
  "trash",
  "windows 0.61.3",
  "windows-sys 0.61.2",
@@ -2856,7 +2759,7 @@ dependencies = [
 [[package]]
 name = "gpui_linux"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=5480951172839b4e7e137f3798a7455ab32d38a4#5480951172839b4e7e137f3798a7455ab32d38a4"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26#a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26"
 dependencies = [
  "accesskit",
  "accesskit_unix",
@@ -2908,20 +2811,18 @@ dependencies = [
 [[package]]
 name = "gpui_macos"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=5480951172839b4e7e137f3798a7455ab32d38a4#5480951172839b4e7e137f3798a7455ab32d38a4"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26#a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26"
 dependencies = [
  "accesskit",
  "accesskit_macos",
  "anyhow",
  "async-task",
- "block",
- "cocoa 0.26.0",
+ "block2 0.6.2",
  "collections",
- "core-foundation 0.10.0",
+ "core-foundation 0.10.1",
  "core-foundation-sys",
- "core-graphics 0.24.0",
- "core-text",
- "core-video",
+ "core-graphics 0.25.0",
+ "core-text 22.0.0",
  "ctor",
  "derive_more",
  "dispatch2",
@@ -2936,12 +2837,14 @@ dependencies = [
  "itertools 0.14.0",
  "libc",
  "log",
- "mach2",
- "metal",
- "objc",
- "objc2 0.6.4",
+ "mach2 0.6.0",
+ "objc2 0.6.5",
  "objc2-app-kit 0.3.2",
+ "objc2-core-foundation",
+ "objc2-core-video",
  "objc2-foundation 0.3.2",
+ "objc2-metal 0.3.2",
+ "objc2-quartz-core 0.3.2",
  "parking_lot",
  "pathfinder_geometry",
  "raw-window-handle",
@@ -2955,7 +2858,7 @@ dependencies = [
 [[package]]
 name = "gpui_macros"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=5480951172839b4e7e137f3798a7455ab32d38a4#5480951172839b4e7e137f3798a7455ab32d38a4"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26#a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26"
 dependencies = [
  "heck",
  "proc-macro2",
@@ -2966,7 +2869,7 @@ dependencies = [
 [[package]]
 name = "gpui_media"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=5480951172839b4e7e137f3798a7455ab32d38a4#5480951172839b4e7e137f3798a7455ab32d38a4"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26#a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26"
 dependencies = [
  "async-channel",
  "base64 0.22.1",
@@ -2987,11 +2890,10 @@ dependencies = [
 [[package]]
 name = "gpui_media_backend"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=5480951172839b4e7e137f3798a7455ab32d38a4#5480951172839b4e7e137f3798a7455ab32d38a4"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26#a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26"
 dependencies = [
  "anyhow",
- "core-foundation 0.10.0",
- "core-video",
+ "core-foundation 0.10.1",
  "gpui_media_core",
  "gpui_util",
  "gstreamer",
@@ -3001,6 +2903,8 @@ dependencies = [
  "jni 0.21.1",
  "js-sys",
  "log",
+ "objc2-core-foundation",
+ "objc2-core-video",
  "serde",
  "serde_json",
  "url",
@@ -3014,12 +2918,13 @@ dependencies = [
 [[package]]
 name = "gpui_media_core"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=5480951172839b4e7e137f3798a7455ab32d38a4#5480951172839b4e7e137f3798a7455ab32d38a4"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26#a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26"
 dependencies = [
  "async-channel",
- "core-video",
  "gpui_util",
  "log",
+ "objc2-core-foundation",
+ "objc2-core-video",
  "url",
  "wasm-bindgen-futures",
 ]
@@ -3027,7 +2932,7 @@ dependencies = [
 [[package]]
 name = "gpui_notifications"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=5480951172839b4e7e137f3798a7455ab32d38a4#5480951172839b4e7e137f3798a7455ab32d38a4"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26#a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26"
 dependencies = [
  "anyhow",
  "async-channel",
@@ -3037,7 +2942,7 @@ dependencies = [
  "futures",
  "image",
  "js-sys",
- "objc2 0.6.4",
+ "objc2 0.6.5",
  "objc2-app-kit 0.3.2",
  "objc2-foundation 0.3.2",
  "objc2-media-player",
@@ -3059,7 +2964,7 @@ dependencies = [
 [[package]]
 name = "gpui_platform"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=5480951172839b4e7e137f3798a7455ab32d38a4#5480951172839b4e7e137f3798a7455ab32d38a4"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26#a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26"
 dependencies = [
  "console_error_panic_hook",
  "gpui",
@@ -3074,7 +2979,7 @@ dependencies = [
 [[package]]
 name = "gpui_render"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=5480951172839b4e7e137f3798a7455ab32d38a4#5480951172839b4e7e137f3798a7455ab32d38a4"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26#a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -3084,7 +2989,7 @@ dependencies = [
 [[package]]
 name = "gpui_shared_string"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=5480951172839b4e7e137f3798a7455ab32d38a4#5480951172839b4e7e137f3798a7455ab32d38a4"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26#a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26"
 dependencies = [
  "schemars",
  "serde",
@@ -3094,7 +2999,7 @@ dependencies = [
 [[package]]
 name = "gpui_util"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=5480951172839b4e7e137f3798a7455ab32d38a4#5480951172839b4e7e137f3798a7455ab32d38a4"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26#a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26"
 dependencies = [
  "anyhow",
  "async-channel",
@@ -3109,7 +3014,7 @@ dependencies = [
 [[package]]
 name = "gpui_wayland_source"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=5480951172839b4e7e137f3798a7455ab32d38a4#5480951172839b4e7e137f3798a7455ab32d38a4"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26#a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26"
 dependencies = [
  "calloop",
  "wayland-client",
@@ -3118,7 +3023,7 @@ dependencies = [
 [[package]]
 name = "gpui_web"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=5480951172839b4e7e137f3798a7455ab32d38a4#5480951172839b4e7e137f3798a7455ab32d38a4"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26#a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26"
 dependencies = [
  "anyhow",
  "futures",
@@ -3143,15 +3048,14 @@ dependencies = [
 [[package]]
 name = "gpui_wgpu"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=5480951172839b4e7e137f3798a7455ab32d38a4#5480951172839b4e7e137f3798a7455ab32d38a4"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26#a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26"
 dependencies = [
  "anyhow",
  "ash",
  "bitflags 2.13.2",
  "bytemuck",
  "collections",
- "core-foundation 0.10.0",
- "core-video",
+ "core-foundation 0.10.1",
  "cosmic-text",
  "etagere",
  "foreign-types",
@@ -3162,9 +3066,10 @@ dependencies = [
  "itertools 0.14.0",
  "js-sys",
  "log",
- "metal",
  "naga",
- "objc2 0.6.4",
+ "objc2 0.6.5",
+ "objc2-core-foundation",
+ "objc2-core-video",
  "objc2-metal 0.3.2",
  "parking_lot",
  "pollster 0.4.0",
@@ -3183,7 +3088,7 @@ dependencies = [
 [[package]]
 name = "gpui_windows"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=5480951172839b4e7e137f3798a7455ab32d38a4#5480951172839b4e7e137f3798a7455ab32d38a4"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26#a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26"
 dependencies = [
  "accesskit",
  "accesskit_windows",
@@ -3597,7 +3502,7 @@ dependencies = [
 [[package]]
 name = "http_client"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=5480951172839b4e7e137f3798a7455ab32d38a4#5480951172839b4e7e137f3798a7455ab32d38a4"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26#a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26"
 dependencies = [
  "anyhow",
  "bytes",
@@ -3994,18 +3899,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "io-surface"
-version = "0.16.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "554b8c5d64ec09a3a520fe58e4d48a73e00ff32899cdcbe32a4877afd4968b8e"
-dependencies = [
- "cgl",
- "core-foundation 0.10.0",
- "core-foundation-sys",
- "leaky-cow",
-]
-
-[[package]]
 name = "ipnet"
 version = "2.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4227,25 +4120,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 
 [[package]]
-name = "leak"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bd100e01f1154f2908dfa7d02219aeab25d0b9c7fa955164192e3245255a0c73"
-
-[[package]]
-name = "leaky-cow"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "40a8225d44241fd324a8af2806ba635fc7c8a7e9a7de4d5cf3ef54e71f5926fc"
-dependencies = [
- "leak",
-]
-
-[[package]]
 name = "lebe"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a79a3332a6609480d7d0c9eab957bca6b455b91bb84e66d19f5ff66294b85b8"
+
+[[package]]
+name = "lhash"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "744a4c881f502e98c2241d2e5f50040ac73b30194d64452bb6260393b53f0dc9"
 
 [[package]]
 name = "libc"
@@ -4469,6 +4353,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "mach-dxcompiler-rs"
+version = "0.1.6+2026.09.16-48d5a66.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "699d5b85d279d172f6ea742c6c47342fdd7c388872cea2e137e2c6721ef2e6d6"
+dependencies = [
+ "lhash",
+]
+
+[[package]]
 name = "mach2"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4478,13 +4371,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "malloc_buf"
-version = "0.0.6"
+name = "mach2"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "62bb907fe88d54d8d9ce32a3cceab4218ed2f6b7d35617cafe9adf84e43919cb"
-dependencies = [
- "libc",
-]
+checksum = "dae608c151f68243f2b000364e1f7b186d9c29845f7d2d85bd31b9ad77ad552b"
 
 [[package]]
 name = "maybe-rayon"
@@ -4538,21 +4428,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "488016bfae457b036d996092f6cb448677611ce4449e970ceaf42695203f218a"
 dependencies = [
  "autocfg",
-]
-
-[[package]]
-name = "metal"
-version = "0.33.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c7047791b5bc903b8cd963014b355f71dc9864a9a0b727057676c1dcae5cbc15"
-dependencies = [
- "bitflags 2.13.2",
- "block",
- "core-graphics-types 0.2.0",
- "foreign-types",
- "log",
- "objc",
- "paste",
 ]
 
 [[package]]
@@ -4951,27 +4826,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "objc"
-version = "0.2.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "915b1b472bc21c53464d6c8461c9d3af805ba1ef837e1cac254428f4a77177b1"
-dependencies = [
- "malloc_buf",
- "objc_exception",
-]
-
-[[package]]
-name = "objc-foundation"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1add1b659e36c9607c7aab864a76c7a4c2760cd0cd2e120f3fb8b952c7e22bf9"
-dependencies = [
- "block",
- "objc",
- "objc_id",
-]
-
-[[package]]
 name = "objc-sys"
 version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4989,9 +4843,9 @@ dependencies = [
 
 [[package]]
 name = "objc2"
-version = "0.6.4"
+version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3a12a8ed07aefc768292f076dc3ac8c48f3781c8f2d5851dd3d98950e8c5a89f"
+checksum = "08849bbd4767dfae9457696856ae1c84fe4e0281bbe4a7abff2d0e06fb7981f8"
 dependencies = [
  "objc2-encode",
 ]
@@ -5019,7 +4873,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d49e936b501e5c5bf01fda3a9452ff86dc3ea98ad5f283e1455153142d97518c"
 dependencies = [
  "bitflags 2.13.2",
- "objc2 0.6.4",
+ "objc2 0.6.5",
  "objc2-core-foundation",
  "objc2-foundation 0.3.2",
 ]
@@ -5032,7 +4886,7 @@ checksum = "6948501a91121d6399b79abaa33a8aa4ea7857fe019f341b8c23ad6e81b79b08"
 dependencies = [
  "bitflags 2.13.2",
  "libc",
- "objc2 0.6.4",
+ "objc2 0.6.5",
  "objc2-core-audio",
  "objc2-core-audio-types",
  "objc2-core-foundation",
@@ -5045,7 +4899,7 @@ version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13a380031deed8e99db00065c45937da434ca987c034e13b87e4441f9e4090be"
 dependencies = [
- "objc2 0.6.4",
+ "objc2 0.6.5",
  "objc2-foundation 0.3.2",
 ]
 
@@ -5056,7 +4910,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e1eebcea8b0dbff5f7c8504f3107c68fc061a3eb44932051c8cf8a68d969c3b2"
 dependencies = [
  "dispatch2",
- "objc2 0.6.4",
+ "objc2 0.6.5",
  "objc2-core-audio-types",
  "objc2-core-foundation",
  "objc2-foundation 0.3.2",
@@ -5069,7 +4923,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5a89f2ec274a0cf4a32642b2991e8b351a404d290da87bb6a9a9d8632490bd1c"
 dependencies = [
  "bitflags 2.13.2",
- "objc2 0.6.4",
+ "objc2 0.6.5",
 ]
 
 [[package]]
@@ -5094,7 +4948,7 @@ dependencies = [
  "block2 0.6.2",
  "dispatch2",
  "libc",
- "objc2 0.6.4",
+ "objc2 0.6.5",
 ]
 
 [[package]]
@@ -5103,8 +4957,9 @@ version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e022c9d066895efa1345f8e33e584b9f958da2fd4cd116792e15e07e4720a807"
 dependencies = [
+ "bitflags 2.13.2",
  "dispatch2",
- "objc2 0.6.4",
+ "objc2 0.6.5",
  "objc2-core-foundation",
  "objc2-io-surface",
 ]
@@ -5119,6 +4974,37 @@ dependencies = [
  "objc2 0.5.2",
  "objc2-foundation 0.2.2",
  "objc2-metal 0.2.2",
+]
+
+[[package]]
+name = "objc2-core-media"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "05ec576860167a15dd9fce7fbee7512beb4e31f532159d3482d1f9c6caedf31d"
+dependencies = [
+ "bitflags 2.13.2",
+ "block2 0.6.2",
+ "dispatch2",
+ "objc2 0.6.5",
+ "objc2-core-audio",
+ "objc2-core-audio-types",
+ "objc2-core-foundation",
+ "objc2-core-video",
+]
+
+[[package]]
+name = "objc2-core-video"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d425caf1df73233f29fd8a5c3e5edbc30d2d4307870f802d18f00d83dc5141a6"
+dependencies = [
+ "bitflags 2.13.2",
+ "block2 0.6.2",
+ "objc2 0.6.5",
+ "objc2-core-foundation",
+ "objc2-core-graphics",
+ "objc2-io-surface",
+ "objc2-metal 0.3.2",
 ]
 
 [[package]]
@@ -5148,7 +5034,7 @@ dependencies = [
  "bitflags 2.13.2",
  "block2 0.6.2",
  "libc",
- "objc2 0.6.4",
+ "objc2 0.6.5",
  "objc2-core-foundation",
 ]
 
@@ -5169,7 +5055,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "180788110936d59bab6bd83b6060ffdfffb3b922ba1396b312ae795e1de9d81d"
 dependencies = [
  "bitflags 2.13.2",
- "objc2 0.6.4",
+ "objc2 0.6.5",
  "objc2-core-foundation",
 ]
 
@@ -5181,7 +5067,7 @@ checksum = "85f2a98483f6e76313cb85a5a185eaa3cda86a177b13a8852d56cbd0085bf635"
 dependencies = [
  "bitflags 2.13.2",
  "block2 0.6.2",
- "objc2 0.6.4",
+ "objc2 0.6.5",
  "objc2-app-kit 0.3.2",
  "objc2-core-foundation",
  "objc2-foundation 0.3.2",
@@ -5208,7 +5094,7 @@ dependencies = [
  "bitflags 2.13.2",
  "block2 0.6.2",
  "dispatch2",
- "objc2 0.6.4",
+ "objc2 0.6.5",
  "objc2-core-foundation",
  "objc2-foundation 0.3.2",
 ]
@@ -5219,7 +5105,7 @@ version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bb82bed227edf5201dfedf072bba4015a33d3d4a98519837295a90f0a23f676d"
 dependencies = [
- "objc2 0.6.4",
+ "objc2 0.6.5",
  "objc2-core-foundation",
  "objc2-foundation 0.3.2",
 ]
@@ -5244,11 +5130,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "96c1358452b371bf9f104e21ec536d37a650eb10f7ee379fff67d2e08d537f1f"
 dependencies = [
  "bitflags 2.13.2",
- "objc2 0.6.4",
+ "objc2 0.6.5",
  "objc2-core-foundation",
  "objc2-core-graphics",
  "objc2-foundation 0.3.2",
  "objc2-metal 0.3.2",
+]
+
+[[package]]
+name = "objc2-screen-capture-kit"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "74b7c5390f477482f001bc354d6571a70db7e4f8d5288e860c45521fbce11394"
+dependencies = [
+ "block2 0.6.2",
+ "dispatch2",
+ "objc2 0.6.5",
+ "objc2-core-foundation",
+ "objc2-core-graphics",
+ "objc2-core-media",
+ "objc2-foundation 0.3.2",
 ]
 
 [[package]]
@@ -5268,26 +5169,8 @@ checksum = "9df9128cbbfef73cda168416ccf7f837b62737d748333bfe9ab71c245d76613e"
 dependencies = [
  "bitflags 2.13.2",
  "block2 0.6.2",
- "objc2 0.6.4",
+ "objc2 0.6.5",
  "objc2-foundation 0.3.2",
-]
-
-[[package]]
-name = "objc_exception"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ad970fb455818ad6cba4c122ad012fae53ae8b4795f86378bce65e4f6bab2ca4"
-dependencies = [
- "cc",
-]
-
-[[package]]
-name = "objc_id"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c92d4ddb4bd7b50d730c215ff871754d0da6b2178849f8a2a2ab69712d0c073b"
-dependencies = [
- "objc",
 ]
 
 [[package]]
@@ -6147,7 +6030,7 @@ version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40d213455a5f1dc59214213c7330e074ddf8114c9a42411eb890c767357ce135"
 dependencies = [
- "objc2 0.6.4",
+ "objc2 0.6.5",
  "objc2-core-foundation",
  "objc2-foundation 0.3.2",
  "objc2-quartz-core 0.3.2",
@@ -6244,7 +6127,7 @@ dependencies = [
 [[package]]
 name = "refineable"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=5480951172839b4e7e137f3798a7455ab32d38a4#5480951172839b4e7e137f3798a7455ab32d38a4"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26#a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26"
 dependencies = [
  "derive_refineable",
 ]
@@ -6484,6 +6367,7 @@ dependencies = [
  "wasm-bindgen-futures",
  "web-sys",
  "web-time",
+ "wgpu",
  "whoami",
  "windows-sys 0.61.2",
  "zed-font-kit 0.14.1-zed (git+https://github.com/cradiy/font-kit?rev=94b0f28166665e8fd2f53ff6d268a14955c82269)",
@@ -6709,7 +6593,7 @@ version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1167586491e2b18b8bfbb293e8180ec17c201c4f076d7cb3070ca964e7598f98"
 dependencies = [
- "core-foundation 0.10.0",
+ "core-foundation 0.10.1",
  "core-foundation-sys",
  "jni 0.22.4",
  "log",
@@ -6908,7 +6792,7 @@ dependencies = [
 [[package]]
 name = "scheduler"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=5480951172839b4e7e137f3798a7455ab32d38a4#5480951172839b4e7e137f3798a7455ab32d38a4"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26#a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26"
 dependencies = [
  "async-task",
  "backtrace",
@@ -6959,29 +6843,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
-name = "screencapturekit"
-version = "0.2.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1a5eeeb57ac94960cfe5ff4c402be6585ae4c8d29a2cf41b276048c2e849d64e"
-dependencies = [
- "screencapturekit-sys",
-]
-
-[[package]]
-name = "screencapturekit-sys"
-version = "0.2.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22411b57f7d49e7fe08025198813ee6fd65e1ee5eff4ebc7880c12c82bde4c60"
-dependencies = [
- "block",
- "dispatch",
- "objc",
- "objc-foundation",
- "objc_id",
- "once_cell",
-]
-
-[[package]]
 name = "seahash"
 version = "4.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6994,7 +6855,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b7f4bc775c73d9a02cde8bf7b2ec4c9d12743edf609006c7facc23998404cd1d"
 dependencies = [
  "bitflags 2.13.2",
- "core-foundation 0.10.0",
+ "core-foundation 0.10.1",
  "core-foundation-sys",
  "libc",
  "security-framework-sys",
@@ -7643,7 +7504,7 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 [[package]]
 name = "sum_tree"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=5480951172839b4e7e137f3798a7455ab32d38a4#5480951172839b4e7e137f3798a7455ab32d38a4"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26#a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26"
 dependencies = [
  "heapless",
  "log",
@@ -8046,18 +7907,6 @@ dependencies = [
  "grid",
  "serde",
  "slotmap",
-]
-
-[[package]]
-name = "tao-core-video-sys"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "271450eb289cb4d8d0720c6ce70c72c8c858c93dd61fc625881616752e6b98f6"
-dependencies = [
- "cfg-if",
- "core-foundation-sys",
- "libc",
- "objc",
 ]
 
 [[package]]
@@ -8466,7 +8315,7 @@ dependencies = [
  "chrono",
  "libc",
  "log",
- "objc2 0.6.4",
+ "objc2 0.6.5",
  "objc2-foundation 0.3.2",
  "once_cell",
  "percent-encoding",
@@ -8525,7 +8374,7 @@ dependencies = [
 [[package]]
 name = "uic"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=5480951172839b4e7e137f3798a7455ab32d38a4#5480951172839b4e7e137f3798a7455ab32d38a4"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26#a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26"
 dependencies = [
  "anyhow",
  "chrono",
@@ -8542,7 +8391,7 @@ dependencies = [
 [[package]]
 name = "uic-macros"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=5480951172839b4e7e137f3798a7455ab32d38a4#5480951172839b4e7e137f3798a7455ab32d38a4"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26#a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26"
 dependencies = [
  "heck",
  "proc-macro2",
@@ -8793,7 +8642,7 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 [[package]]
 name = "util_macros"
 version = "0.1.0"
-source = "git+https://github.com/cradiy/gpui-fusion.git?rev=5480951172839b4e7e137f3798a7455ab32d38a4#5480951172839b4e7e137f3798a7455ab32d38a4"
+source = "git+https://github.com/cradiy/gpui-fusion.git?rev=a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26#a9a9e80c19e9a6065fdfac3dd3d0faae591bfb26"
 dependencies = [
  "quote",
  "syn 2.0.119",
@@ -9314,10 +9163,11 @@ dependencies = [
  "libc",
  "libloading",
  "log",
+ "mach-dxcompiler-rs",
  "naga",
  "naga-types",
  "ndk-sys",
- "objc2 0.6.4",
+ "objc2 0.6.5",
  "objc2-core-foundation",
  "objc2-core-graphics",
  "objc2-foundation 0.3.2",
@@ -10129,9 +9979,9 @@ source = "git+https://github.com/cradiy/font-kit?rev=94b0f28166665e8fd2f53ff6d26
 dependencies = [
  "bitflags 2.13.2",
  "byteorder",
- "core-foundation 0.10.0",
+ "core-foundation 0.10.1",
  "core-graphics 0.24.0",
- "core-text",
+ "core-text 21.0.0",
  "dirs 6.0.0",
  "dwrote",
  "float-ord",
@@ -10153,9 +10003,9 @@ source = "git+https://github.com/zed-industries/font-kit?rev=94b0f28166665e8fd2f
 dependencies = [
  "bitflags 2.13.2",
  "byteorder",
- "core-foundation 0.10.0",
+ "core-foundation 0.10.1",
  "core-graphics 0.24.0",
- "core-text",
+ "core-text 21.0.0",
  "dirs 6.0.0",
  "dwrote",
  "float-ord",
