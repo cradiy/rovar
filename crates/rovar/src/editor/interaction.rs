@@ -225,18 +225,21 @@ impl Workspace {
         .then(|| {
             self.inspector.paint_popovers.iter().find_map(|popover| {
                 let state = popover.read(cx);
-                let focus = state.focus_handle(cx);
-                (state.is_open() && focus.contains_focused(window, cx)).then_some(focus)
+                // Clicking a drag label may already have blurred its sibling input.
+                state.is_open().then(|| state.focus_handle(cx))
             })
         })
         .flatten();
-        if !matches!(
+        if matches!(
             kind,
             GestureKind::ColorStyleProperty { .. }
                 | GestureKind::ColorStyleStop { .. }
                 | GestureKind::GradientMidpoint { style: true, .. }
                 | GestureKind::GradientSeam { style: true, .. }
         ) {
+            // Keep Escape routed through the dialog after its input loses focus.
+            self.colors.focus.focus(window, cx);
+        } else {
             popover_focus
                 .unwrap_or_else(|| self.focus.clone())
                 .focus(window, cx);

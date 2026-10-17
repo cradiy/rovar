@@ -493,6 +493,7 @@ impl Workspace {
             .child(
                 div()
                     .id("color-style-dialog")
+                    .track_focus(&self.colors.focus)
                     .debug_selector(|| "color-style-dialog".into())
                     .w(px(360.))
                     .max_h(window.viewport_size().height - px(48.))

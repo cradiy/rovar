@@ -324,6 +324,11 @@ fn gradient_numbers_scrub_clamp_and_cancel_without_editing_document(cx: &mut Tes
         MouseButton::Left,
         Default::default(),
     );
+    window
+        .update(&mut visual.cx, |w, window, _| {
+            assert!(w.colors.focus.is_focused(window));
+        })
+        .unwrap();
     visual.simulate_keystrokes("escape");
     crate::editor::tests::draw(&mut visual);
     window
