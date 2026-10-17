@@ -5,6 +5,9 @@ use super::*;
 
 impl Workspace {
     pub(in crate::editor) fn field_value(&self, index: usize, cx: &gpui::App) -> Option<String> {
+        if self.inspector_action().is_some() {
+            return self.action_field_value(index);
+        }
         use Property::*;
         let property = self.field_property(index)?;
         if matches!(property, PointX | PointY | PointRadius) {
@@ -199,6 +202,11 @@ impl Workspace {
         for index in 0..PROPERTY_COUNT {
             self.sync_field(index, cx);
         }
+        if let Some(paint) = self.action_paint() {
+            let color = paint.board().editable_color(self.inspector.active_stop);
+            self.sync_picker(color, cx);
+            return;
+        }
         if !self.multi_selection.is_empty() {
             if let Some(color) = self.multi_picker_color(cx) {
                 self.sync_picker(color, cx);
@@ -285,6 +293,19 @@ impl Workspace {
             }
         }
         if slot >= PROPERTY_COUNT && slot / PROPERTY_COUNT != self.paint_surface(cx) {
+            return;
+        }
+        if self.inspector_action().is_some() {
+            self.inspector.invalid[slot] = !self.edit_action_field(index, value, cx);
+            if matches!(event, InputEvent::Submit(_)) {
+                self.history.borrow_mut().break_group();
+                self.sync_field(index, cx);
+            }
+            if let Some(paint) = self.action_paint() {
+                self.sync_picker(paint.board().editable_color(self.inspector.active_stop), cx);
+            }
+            self.sync_input_peers(slot, cx);
+            cx.notify();
             return;
         }
         if property == Property::LayerOpacity {

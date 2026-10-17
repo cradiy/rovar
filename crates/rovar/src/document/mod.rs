@@ -151,11 +151,30 @@ impl Document {
     pub fn first_page(&self) -> &Page {
         self.pages.first().expect("validated nonempty document")
     }
-    pub fn assets(&self) -> impl Iterator<Item = &AssetUse> {
+    pub fn asset_hashes(&self) -> impl Iterator<Item = &str> {
         self.pages
             .iter()
             .chain(self.components.values().map(|c| &c.page))
-            .flat_map(|page| &page.assets)
+            .flat_map(|page| {
+                page.assets.iter().map(|asset| asset.hash.as_str()).chain(
+                    page.hierarchy.interactions.values().flat_map(|i| {
+                        [i.click.as_ref(), i.hover.as_ref()]
+                            .into_iter()
+                            .flatten()
+                            .filter_map(|action| {
+                                if let crate::scene::presentation::Action::SetProperty {
+                                    property,
+                                    ..
+                                } = action
+                                {
+                                    property.paint()?.image_hash.as_deref()
+                                } else {
+                                    None
+                                }
+                            })
+                    }),
+                )
+            })
     }
 }
 
@@ -198,6 +217,24 @@ impl Loaded {
                     shape.asset = Some(asset);
                 }
             }
+            for interaction in page.hierarchy.interactions.values_mut() {
+                for action in [&mut interaction.click, &mut interaction.hover]
+                    .into_iter()
+                    .flatten()
+                {
+                    if let crate::scene::presentation::Action::SetProperty { property, .. } = action
+                        && let Some(paint) = property.paint_mut()
+                        && let Some(hash) = &paint.image_hash
+                    {
+                        paint.image.asset = Some(
+                            self.assets
+                                .get(hash)
+                                .ok_or_else(|| anyhow::anyhow!("Missing action image"))?
+                                .clone(),
+                        );
+                    }
+                }
+            }
         }
         Ok(document)
     }
@@ -229,6 +266,19 @@ pub(crate) fn import(
 }
 
 impl Page {
+    pub fn action_images(&self) -> impl Iterator<Item = &Arc<crate::asset::FileAsset>> {
+        self.hierarchy
+            .interactions
+            .values()
+            .flat_map(|i| [i.click.as_ref(), i.hover.as_ref()].into_iter().flatten())
+            .filter_map(|action| {
+                if let crate::scene::presentation::Action::SetProperty { property, .. } = action {
+                    property.paint()?.image.asset.as_ref()
+                } else {
+                    None
+                }
+            })
+    }
     pub fn empty(name: String) -> Self {
         Self {
             id: uuid::Uuid::new_v4().to_string(),
@@ -363,11 +413,18 @@ impl Page {
             {
                 ensure!(!target.is_nil(), "Invalid hover exit target");
             }
-            for action in [interaction.click, interaction.hover].into_iter().flatten() {
+            for action in [&interaction.click, &interaction.hover]
+                .into_iter()
+                .flatten()
+            {
                 ensure!(
                     action
                         .remap(|target| {
                             let valid = match action {
+                                crate::scene::presentation::Action::SetProperty {
+                                    property,
+                                    ..
+                                } => property.valid_target(self, target),
                                 crate::scene::presentation::Action::Media { command, .. } => {
                                     self.shapes.iter().any(|shape| {
                                         shape.id == target && command.supports(shape.kind)

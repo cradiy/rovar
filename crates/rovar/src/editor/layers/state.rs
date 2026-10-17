@@ -5,15 +5,13 @@ use crate::ui::theme::Color;
 
 impl Workspace {
     pub(in crate::editor) fn layer_info(&self, id: usize) -> Option<(LayerState, Option<usize>)> {
-        let own = self
+        let (own, board) = self
             .hierarchy
             .groups
             .get(&id)
-            .map(|g| g.layer)
-            .or_else(|| self.boards.iter().find(|b| b.id == id).map(|b| b.layer))
-            .or_else(|| self.shapes.iter().find(|s| s.id == id).map(|s| s.layer))
-            .or_else(|| self.texts.iter().find(|t| t.id == id).map(|t| t.layer))?;
-        Some((own, self.layer_parent(id)))
+            .map(|g| (g.layer, g.board))
+            .or_else(|| self.object_info(id).map(|(board, _, layer)| (layer, board)))?;
+        Some((own, self.hierarchy.parents.get(&id).copied().or(board)))
     }
 
     pub(in crate::editor) fn layer_state_mut(&mut self, id: usize) -> Option<&mut LayerState> {

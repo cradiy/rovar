@@ -93,6 +93,18 @@ pub(super) struct VideoRuntime {
 }
 
 impl Workspace {
+    pub(super) fn invalidate_media_source(&mut self, id: usize, cx: &mut Context<Self>) {
+        if let Some(runtime) = self.media.audios.remove(&id) {
+            runtime.update(cx, |player, cx| player.pause(cx));
+        }
+        if let Some(runtime) = self.media.videos.remove(&id) {
+            runtime.view.update(cx, |video, cx| video.pause(cx));
+        }
+        self.media.audio_errors.remove(&id);
+        self.media.video_loading.remove(&id);
+        self.media.video_commands.remove(&id);
+    }
+
     pub(super) fn load_visible_media(&mut self, window: &Window, cx: &mut Context<Self>) {
         if self.media.decoding.len() >= 2 {
             return;
@@ -132,8 +144,13 @@ impl Workspace {
                     .flatten()
                     .map(move |asset| (s.id, asset))
             }))
+            .chain(
+                self.action_paint()
+                    .and_then(|p| p.image.asset.as_ref())
+                    .map(|asset| (usize::MAX, asset)),
+            )
             .filter(|(_, asset)| asset.is_pending() && !self.media.decoding.contains(&asset.hash))
-            .filter(|(id, _)| visible(*id))
+            .filter(|(id, _)| *id == usize::MAX || visible(*id))
             .map(|(_, asset)| asset.clone())
             .collect();
         for asset in candidates {
@@ -810,6 +827,21 @@ impl Workspace {
                 .await;
             let _ = this.update(cx, |this, cx| {
                 if this.pages.active != page || this.pages.generation != page_generation {
+                    return;
+                }
+                if !this.shapes.iter().any(|shape| shape.id == id) {
+                    this.media.video_loading.remove(&id);
+                    this.media.video_commands.remove(&id);
+                    return;
+                }
+                // A source replacement may already have queued a new load for this ID.
+                if !this.shapes.iter().any(|shape| {
+                    shape.id == id
+                        && shape
+                            .asset
+                            .as_ref()
+                            .is_some_and(|asset| Arc::ptr_eq(asset, &expected))
+                }) {
                     return;
                 }
                 this.media.video_loading.remove(&id);

@@ -365,7 +365,7 @@ impl Workspace {
     }
 }
 
-fn add_group(
+pub(in crate::editor) fn add_group(
     page: &mut Page,
     name: &str,
     opacity: f32,
@@ -399,7 +399,7 @@ fn add_group(
     id
 }
 
-fn insert_nodes(
+pub(in crate::editor) fn insert_nodes(
     page: &mut Page,
     nodes: &[rovar_svg::Node],
     board: Option<usize>,

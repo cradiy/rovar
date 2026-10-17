@@ -14,6 +14,7 @@ mod controls;
 mod hover_exit;
 mod media;
 mod overlay;
+mod properties;
 #[cfg(test)]
 mod tests;
 mod transition;
@@ -21,12 +22,13 @@ mod variants;
 
 pub(super) struct State {
     pub tab: bool,
-    trigger: Trigger,
+    pub(in crate::editor) trigger: Trigger,
     connection: Option<connections::Connection>,
     pub player: Option<Entity<Workspace>>,
     pub playback: Option<Playback>,
     menus: [Entity<DropdownState>; 6],
     media: media::State,
+    properties: properties::State,
 }
 
 pub(super) struct Playback {
@@ -56,6 +58,7 @@ impl State {
             playback: None,
             menus: std::array::from_fn(|_| cx.new(|cx| DropdownState::new(window, cx))),
             media: media::State::new(window, cx),
+            properties: properties::State::new(window, cx),
         }
     }
 }

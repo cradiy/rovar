@@ -74,6 +74,9 @@ impl Workspace {
             .h(px(height))
             .border_1()
             .border_color(ACCENT.color())
+            .when(crop.action.is_some(), |el| {
+                el.child(crop.image.element().absolute().inset_0())
+            })
             .children([1., 2.].into_iter().flat_map(|i| {
                 [
                     div()

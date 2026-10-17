@@ -243,7 +243,7 @@ fn write_document(
         keys.insert("component".into());
     }
     let mut media = BTreeMap::new();
-    let used: BTreeSet<_> = document.assets().map(|a| a.hash.as_str()).collect();
+    let used: BTreeSet<_> = document.asset_hashes().collect();
     for source in sources {
         let digest: [u8; 32] = decode_hash(&source.hash)?;
         ensure!(
@@ -402,27 +402,24 @@ pub(crate) fn load(path: &Path) -> Result<Loaded> {
     let document = read_document(&reader)?;
     let json = serde_json::to_vec(&document)?;
     let mut assets = BTreeMap::new();
-    for asset in document.assets() {
-        if assets.contains_key(&asset.hash) {
+    for hash in document.asset_hashes() {
+        if assets.contains_key(hash) {
             continue;
         }
-        let meta = info
-            .media()
-            .get(&asset.hash)
-            .context("Missing media metadata")?;
+        let meta = info.media().get(hash).context("Missing media metadata")?;
         ensure!(meta.size.iter().all(|v| *v > 0), "Invalid media dimensions");
-        let block = reader.block(&format!("media/{}", asset.hash))?;
+        let block = reader.block(&format!("media/{hash}"))?;
         ensure!(
-            block.info.kind == "media" && block.info.hash == decode_hash(&asset.hash)?,
+            block.info.kind == "media" && block.info.hash == decode_hash(hash)?,
             "Invalid media block"
         );
         let source = crate::asset::Source::block(block, &meta.name);
         assets.insert(
-            asset.hash.clone(),
+            hash.to_owned(),
             crate::asset::FileAsset::deferred(
                 meta.name.clone().into(),
                 source,
-                asset.hash.clone(),
+                hash.to_owned(),
                 meta.size,
             ),
         );

@@ -6,6 +6,56 @@ use crate::ui::theme::Color;
 use gpui::{CursorStyle, TextAlign};
 
 impl Workspace {
+    pub(super) fn text_alignment_control(
+        &self,
+        align: Option<TextAlign>,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        div().flex_shrink_0().flex().gap(px(4.)).children(
+            [
+                (
+                    TextAlign::Left,
+                    t("text-align-left"),
+                    "align-left",
+                    LucideIcons::TextAlignStart,
+                ),
+                (
+                    TextAlign::Center,
+                    t("text-align-center"),
+                    "align-center",
+                    LucideIcons::TextAlignCenter,
+                ),
+                (
+                    TextAlign::Right,
+                    t("text-align-right"),
+                    "align-right",
+                    LucideIcons::TextAlignEnd,
+                ),
+            ]
+            .into_iter()
+            .map(|(value, label, id, glyph)| {
+                icon_button(id, label, glyph, align == Some(value))
+                    .flex_1()
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        use crate::scene::presentation::property::{Align, Property as P};
+                        if matches!(this.inspector_action().map(|a| a.2), Some(P::TextAlign(_))) {
+                            this.history.borrow_mut().break_group();
+                            this.edit_action_property(
+                                P::TextAlign(match value {
+                                    TextAlign::Center => Align::Center,
+                                    TextAlign::Right => Align::Right,
+                                    _ => Align::Left,
+                                }),
+                                false,
+                                cx,
+                            );
+                        } else {
+                            this.change_text_style(StyleChange::Align(value), cx);
+                        }
+                    }))
+            }),
+        )
+    }
     pub(super) fn change_text_color(
         &mut self,
         color: gpui::Rgba,
@@ -357,38 +407,7 @@ impl Workspace {
                             .child(self.property_field(8, t("line-height"), cx))
                             .child(self.property_field(9, t("letter-spacing"), cx)),
                     )
-                    .child(
-                        div().flex_shrink_0().flex().gap(px(4.)).children(
-                            [
-                                (
-                                    TextAlign::Left,
-                                    t("text-align-left"),
-                                    "align-left",
-                                    LucideIcons::TextAlignStart,
-                                ),
-                                (
-                                    TextAlign::Center,
-                                    t("text-align-center"),
-                                    "align-center",
-                                    LucideIcons::TextAlignCenter,
-                                ),
-                                (
-                                    TextAlign::Right,
-                                    t("text-align-right"),
-                                    "align-right",
-                                    LucideIcons::TextAlignEnd,
-                                ),
-                            ]
-                            .into_iter()
-                            .map(|(value, label, id, glyph)| {
-                                icon_button(id, label, glyph, align == Some(value))
-                                    .flex_1()
-                                    .on_click(cx.listener(move |this, _, _, cx| {
-                                        this.change_text_style(StyleChange::Align(value), cx);
-                                    }))
-                            }),
-                        ),
-                    )
+                    .child(self.text_alignment_control(align, cx))
                     .child(
                         div()
                             .flex_shrink_0()

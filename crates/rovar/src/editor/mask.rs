@@ -15,16 +15,7 @@ impl Workspace {
         }
         // A later blended layer can capture any preceding artwork. Keep editor
         // controls outside those captures, including controls on other layers.
-        let blending = self
-            .hierarchy
-            .effects
-            .values()
-            .any(|effects| crate::scene::effects::backdrop::radius(effects) > 0.)
-            || self.shapes.iter().any(|s| s.layer.composited())
-            || self.boards.iter().any(|b| b.layer.composited())
-            || self.texts.iter().any(|t| t.layer.composited())
-            || self.hierarchy.groups.values().any(|g| g.layer.composited());
-        if blending
+        if self.scene_index.borrow().defer_overlays
             || self
                 .ancestors(id)
                 .iter()

@@ -5,6 +5,21 @@ impl Workspace {
     // Slots belong to persistent UI inputs, not to document properties. Resolve
     // their meaning once at the inspector boundary before editing any object.
     pub(in crate::editor) fn field_property(&self, slot: usize) -> Option<Property> {
+        if slot == 18 && self.inspector_action().is_some() {
+            return self.action_numeric_property();
+        }
+        if self.action_paint().is_some() {
+            return match slot {
+                5 => Some(Color),
+                6 => Some(Opacity),
+                7 => Some(GradientAngle),
+                8 => Some(GradientPosition),
+                19 => Some(PointX),
+                20 => Some(PointY),
+                21 => Some(PointRadius),
+                _ => None,
+            };
+        }
         if slot == 18 {
             return Some(LayerOpacity);
         }
@@ -181,7 +196,7 @@ pub(super) fn apply_shape_field(
                 _ => false,
             };
         }
-        Radius if shape.kind.supports_corners() && (0. ..=MAX_SIZE / 2.).contains(&value) => {
+        Radius if shape.kind.supports_corners() && property.accepts_number(value) => {
             shape.radius = value
         }
         Vertices
@@ -192,12 +207,10 @@ pub(super) fn apply_shape_field(
         InnerRadius if shape.kind == ShapeKind::Star && (1. ..=99.).contains(&value) => {
             shape.inner_radius = value / 100.
         }
-        Corner(corner)
-            if shape.kind.supports_corners() && (0. ..=MAX_SIZE / 2.).contains(&value) =>
-        {
+        Corner(corner) if shape.kind.supports_corners() && property.accepts_number(value) => {
             shape.corners.get_or_insert([shape.radius; 4])[corner.index()] = value;
         }
-        StrokeWidth if (0. ..=MAX_SIZE / 2.).contains(&value) => shape.stroke.width = value,
+        StrokeWidth if property.accepts_number(value) => shape.stroke.width = value,
         _ => return false,
     }
     true
@@ -245,16 +258,16 @@ pub(super) fn apply_text_field(
             color.a = value / 100.;
             editor.apply_color(color, stop, true, cx);
         }),
-        FontSize if (1. ..=1000.).contains(&value) => text
+        FontSize if property.accepts_number(value) => text
             .editor
             .update(cx, |e, cx| e.apply_style(StyleChange::Size(value), cx)),
-        LineHeight if (0.5..=5.).contains(&value) => text.editor.update(cx, |e, cx| {
+        LineHeight if property.accepts_number(value) => text.editor.update(cx, |e, cx| {
             e.apply_style(StyleChange::LineHeight(value), cx)
         }),
-        LetterSpacing if (0. ..=200.).contains(&value) => text
+        LetterSpacing if property.accepts_number(value) => text
             .editor
             .update(cx, |e, cx| e.apply_style(StyleChange::Spacing(value), cx)),
-        Property::FontWeight if (100. ..=900.).contains(&value) && value % 100. == 0. => text
+        Property::FontWeight if property.accepts_number(value) => text
             .editor
             .update(cx, |e, cx| e.apply_style(StyleChange::Weight(value), cx)),
         GradientAngle if (0. ..=360.).contains(&value) => text.editor.update(cx, |e, cx| {

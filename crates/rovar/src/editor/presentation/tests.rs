@@ -4,6 +4,767 @@ use crate::scene::presentation::{OverlayPosition, OverlaySettings};
 use gpui::{TestAppContext, VisualTestContext};
 
 #[gpui::test]
+fn property_paint_reuses_inspector_and_preserves_canvas_color(cx: &mut TestAppContext) {
+    use crate::scene::presentation::property::Property;
+    let handle = open(cx);
+    let (button, original, undo) = handle
+        .update(cx, |w, window, cx| {
+            let (_, _, button) = setup(w, window, cx);
+            w.set_click(
+                button,
+                Some(Action::SetProperty {
+                    target: button,
+                    property: Property::Fill("#FF000080".into()),
+                }),
+                window,
+                cx,
+            );
+            w.set_selection(BTreeSet::from([button]), cx);
+            w.set_presentation_tab(true, window, cx);
+            (
+                button,
+                w.shapes.iter().find(|s| s.id == button).unwrap().color,
+                w.history.borrow().undo_len(),
+            )
+        })
+        .unwrap();
+    let mut visual = VisualTestContext::from_window(handle.into(), cx);
+    draw(&mut visual);
+    click(&mut visual, "property-drag-5");
+    draw(&mut visual);
+    assert!(visual.debug_bounds("color-panel").is_some());
+    handle
+        .update(&mut visual.cx, |w, _, cx| {
+            assert!((w.inspector.picker.read(cx).value().a - 128. / 255.).abs() < 0.001);
+            for event in [
+                ColorPickerEvent::Preview(gpui::rgba(0x00ff0080)),
+                ColorPickerEvent::Preview(gpui::rgba(0x0000ff40)),
+                ColorPickerEvent::Commit(gpui::rgba(0x0000ff40)),
+            ] {
+                w.inspector.picker.update(cx, |_, cx| cx.emit(event));
+            }
+        })
+        .unwrap();
+    draw(&mut visual);
+    handle
+        .update(&mut visual.cx, |w, _, _| {
+            assert_eq!(
+                w.hierarchy.interactions[&button].get(Trigger::Click),
+                Some(Action::SetProperty {
+                    target: button,
+                    property: Property::Fill("#0000FF80".into()),
+                })
+            );
+            assert_eq!(
+                w.shapes.iter().find(|s| s.id == button).unwrap().color,
+                original
+            );
+            assert_eq!(w.history.borrow().undo_len(), undo + 1);
+        })
+        .unwrap();
+    visual.simulate_keystrokes("escape secondary-z");
+    draw(&mut visual);
+    handle
+        .update(&mut visual.cx, |w, _, _| {
+            assert_eq!(
+                w.hierarchy.interactions[&button].get(Trigger::Click),
+                Some(Action::SetProperty {
+                    target: button,
+                    property: Property::Fill("#FF000080".into()),
+                })
+            );
+        })
+        .unwrap();
+    click(&mut visual, "property-drag-5");
+    click(&mut visual, "fill-linear");
+    click(&mut visual, "gradient-add");
+    click(&mut visual, "gradient-kind");
+    click(&mut visual, "gradient-angular");
+    handle
+        .update(&mut visual.cx, |w, _, cx| {
+            let paint = w.action_paint().unwrap();
+            assert_eq!(paint.mode, FillMode::Linear);
+            assert_eq!(paint.gradient.kind, gpui::GradientKind::Angular);
+            assert_eq!(paint.gradient.stops().len(), 3);
+            let property = w.inspector_action().unwrap().2.clone();
+            let mut playback = w.snapshot_page(cx).0;
+            property.apply(&mut playback, button).unwrap();
+            assert_eq!(
+                playback
+                    .shapes
+                    .iter()
+                    .find(|s| s.id == button)
+                    .unwrap()
+                    .fill_mode,
+                FillMode::Linear
+            );
+            assert_eq!(
+                w.shapes.iter().find(|s| s.id == button).unwrap().color,
+                original
+            );
+            assert_eq!(
+                w.shapes.iter().find(|s| s.id == button).unwrap().fill_mode,
+                FillMode::Solid
+            );
+        })
+        .unwrap();
+    click(&mut visual, "fill-points");
+    click(&mut visual, "property-19");
+    visual.simulate_keystrokes("secondary-a 4 2 enter");
+    draw(&mut visual);
+    handle
+        .update(&mut visual.cx, |w, _, _| {
+            let FillMode::Points(g) = w.action_paint().unwrap().mode else {
+                panic!("Expected point paint")
+            };
+            assert_eq!(g.points[w.inspector.active_stop].position.x, 0.42);
+        })
+        .unwrap();
+}
+
+#[gpui::test]
+fn action_image_crop_and_archive_keep_assets_without_editing_the_target(cx: &mut TestAppContext) {
+    use crate::scene::presentation::{paint::Paint, property::Property};
+    let directory = tempfile::tempdir().unwrap();
+    let source = directory.path().join("paint.png");
+    image::RgbaImage::from_pixel(20, 10, image::Rgba([42, 70, 90, 255]))
+        .save(&source)
+        .unwrap();
+    let asset = crate::asset::FileAsset::load(source.clone()).unwrap();
+    std::fs::remove_file(&source).unwrap();
+    let handle = open(cx);
+    handle
+        .update(cx, |w, window, cx| {
+            let (_, target, button) = setup(w, window, cx);
+            w.set_click(
+                button,
+                Some(Action::SetProperty {
+                    target,
+                    property: Property::Fill(Paint::new(
+                        rgb(0xffffff),
+                        FillMode::Image,
+                        Default::default(),
+                        crate::scene::image_fill::ImageFill {
+                            asset: Some(asset.clone()),
+                            ..Default::default()
+                        },
+                    )),
+                }),
+                window,
+                cx,
+            );
+            w.set_selection(BTreeSet::from([button]), cx);
+            w.set_presentation_tab(true, window, cx);
+            let before = w.boards.iter().find(|b| b.id == target).unwrap().clone();
+            let undo = w.history.borrow().undo_len();
+            assert!(w.start_image_crop(target, window, cx));
+            w.zoom_image_crop(2., None, cx);
+            w.finish_image_crop(false, window, cx);
+            assert_eq!(w.action_paint().unwrap().image.placement.zoom, 1.);
+            assert_eq!(w.history.borrow().undo_len(), undo);
+            assert!(w.start_image_crop(target, window, cx));
+            w.zoom_image_crop(2., None, cx);
+            w.finish_image_crop(true, window, cx);
+            assert_eq!(w.action_paint().unwrap().image.placement.zoom, 2.);
+            assert_eq!(w.history.borrow().undo_len(), undo + 1);
+            assert_eq!(w.boards.iter().find(|b| b.id == target).unwrap(), &before);
+            let (json, sources) = w
+                .snapshot_document(&uuid::Uuid::new_v4().to_string(), cx)
+                .unwrap();
+            assert_eq!(sources.len(), 1);
+            let path = directory.path().join("action.rovar");
+            crate::document::save_as(&path, &json, &sources, cx.text_system()).unwrap();
+            let decoded = crate::document::load(&path)
+                .unwrap()
+                .into_document()
+                .unwrap();
+            let mut page = decoded.pages[0].clone();
+            let Action::SetProperty { property, .. } =
+                page.hierarchy.interactions[&button].click.clone().unwrap()
+            else {
+                panic!("Missing action")
+            };
+            assert_eq!(
+                property.paint().unwrap().image.asset.as_ref().unwrap().hash,
+                asset.hash
+            );
+            property.apply(&mut page, target).unwrap();
+            let board = page.boards.iter().find(|b| b.id == target).unwrap();
+            assert_eq!(board.image_fill.placement.zoom, 2.);
+            assert_eq!(board.image_fill.asset.as_ref().unwrap().hash, asset.hash);
+        })
+        .unwrap();
+}
+
+#[gpui::test]
+fn design_and_action_numeric_inputs_keep_extended_values_when_scrubbing(cx: &mut TestAppContext) {
+    use crate::scene::presentation::property::Property;
+    let handle = open(cx);
+    let text = handle
+        .update(cx, |w, window, cx| {
+            let (frame, _, _) = setup(w, window, cx);
+            let id = w.next_id;
+            w.next_id += 1;
+            let text = w.make_text(
+                id,
+                Some(frame),
+                Rect {
+                    x: 20.,
+                    y: 100.,
+                    width: 200.,
+                    height: 40.,
+                },
+                window,
+                cx,
+            );
+            w.texts.push(text);
+            w.set_selection(BTreeSet::from([id]), cx);
+            id
+        })
+        .unwrap();
+    let mut visual = VisualTestContext::from_window(handle.into(), cx);
+    for (property, input, drag, keys, expected) in [
+        (
+            Property::LetterSpacing(-10.),
+            "property-9",
+            "property-drag-9",
+            "secondary-a - 1 0 enter",
+            -9.,
+        ),
+        (
+            Property::LineHeight(8.),
+            "property-8",
+            "property-drag-8",
+            "secondary-a 8 enter",
+            8.1,
+        ),
+    ] {
+        handle
+            .update(&mut visual.cx, |w, window, cx| {
+                w.set_presentation_tab(false, window, cx);
+            })
+            .unwrap();
+        draw(&mut visual);
+        click(&mut visual, input);
+        visual.simulate_keystrokes(keys);
+        draw(&mut visual);
+        for action in [false, true] {
+            if action {
+                handle
+                    .update(&mut visual.cx, |w, window, cx| {
+                        w.set_click(
+                            text,
+                            Some(Action::SetProperty {
+                                target: text,
+                                property: property.clone(),
+                            }),
+                            window,
+                            cx,
+                        );
+                        w.set_presentation_tab(true, window, cx);
+                    })
+                    .unwrap();
+                draw(&mut visual);
+                click(&mut visual, "property-18");
+                visual.simulate_keystrokes(keys);
+                draw(&mut visual);
+            }
+            let origin = visual
+                .debug_bounds(if action { "property-drag-18" } else { drag })
+                .unwrap()
+                .center();
+            let end = origin + point(px(10.), px(0.));
+            visual.simulate_mouse_down(origin, MouseButton::Left, Default::default());
+            visual.simulate_mouse_move(end, MouseButton::Left, Default::default());
+            visual.simulate_mouse_up(end, MouseButton::Left, Default::default());
+            draw(&mut visual);
+            handle
+                .update(&mut visual.cx, |w, _, cx| {
+                    let style = w
+                        .texts
+                        .iter()
+                        .find(|t| t.id == text)
+                        .unwrap()
+                        .editor
+                        .read(cx)
+                        .effective_style();
+                    let design = match property {
+                        Property::LetterSpacing(_) => style.spacing,
+                        _ => style.line_height,
+                    };
+                    assert!((design - expected).abs() < 0.001);
+                    if action {
+                        assert!(
+                            (w.prototype_property_number(text, Trigger::Click).unwrap() - expected)
+                                .abs()
+                                < 0.001
+                        );
+                    }
+                })
+                .unwrap();
+        }
+    }
+}
+
+#[gpui::test]
+fn property_action_drag_previews_commits_once_and_cancels_without_losing_redo(
+    cx: &mut TestAppContext,
+) {
+    use crate::scene::presentation::property::Property;
+    let handle = open(cx);
+    let (button, undo) = handle
+        .update(cx, |w, window, cx| {
+            let (_, _, button) = setup(w, window, cx);
+            w.set_click(
+                button,
+                Some(Action::SetProperty {
+                    target: button,
+                    property: Property::Opacity(0.5),
+                }),
+                window,
+                cx,
+            );
+            w.set_selection(BTreeSet::from([button]), cx);
+            w.set_presentation_tab(true, window, cx);
+            (button, w.history.borrow().undo_len())
+        })
+        .unwrap();
+    let mut visual = VisualTestContext::from_window(handle.into(), cx);
+    draw(&mut visual);
+    let point = visual.debug_bounds("property-drag-18").unwrap().center();
+    let drag = |visual: &mut VisualTestContext, delta: f32, shift: bool| {
+        visual.simulate_mouse_move(
+            point + gpui::point(px(delta), px(0.)),
+            MouseButton::Left,
+            gpui::Modifiers {
+                shift,
+                ..Default::default()
+            },
+        );
+        draw(visual);
+    };
+    visual.simulate_mouse_down(point, MouseButton::Left, Default::default());
+    drag(&mut visual, 10., false);
+    drag(&mut visual, 25., false);
+    handle
+        .update(&mut visual.cx, |w, _, _| {
+            assert_eq!(
+                w.prototype_property_number(button, Trigger::Click),
+                Some(75.)
+            );
+            assert_eq!(w.history.borrow().undo_len(), undo);
+            assert_eq!(
+                w.shapes
+                    .iter()
+                    .find(|n| n.id == button)
+                    .unwrap()
+                    .layer
+                    .opacity,
+                1.
+            );
+        })
+        .unwrap();
+    visual.simulate_mouse_up(
+        point + gpui::point(px(25.), px(0.)),
+        MouseButton::Left,
+        Default::default(),
+    );
+    draw(&mut visual);
+    handle
+        .update(&mut visual.cx, |w, _, _| {
+            assert_eq!(w.history.borrow().undo_len(), undo + 1)
+        })
+        .unwrap();
+    visual.simulate_keystrokes("secondary-z");
+    draw(&mut visual);
+    visual.simulate_mouse_down(point, MouseButton::Left, Default::default());
+    drag(&mut visual, 10., true);
+    handle
+        .update(&mut visual.cx, |w, _, _| {
+            assert_eq!(
+                w.prototype_property_number(button, Trigger::Click),
+                Some(100.)
+            )
+        })
+        .unwrap();
+    visual.simulate_keystrokes("escape");
+    visual.simulate_mouse_up(point, MouseButton::Left, Default::default());
+    draw(&mut visual);
+    handle
+        .update(&mut visual.cx, |w, _, _| {
+            assert_eq!(
+                w.prototype_property_number(button, Trigger::Click),
+                Some(50.)
+            )
+        })
+        .unwrap();
+    visual.simulate_keystrokes("secondary-shift-z");
+    draw(&mut visual);
+    handle
+        .update(&mut visual.cx, |w, _, _| {
+            assert_eq!(
+                w.prototype_property_number(button, Trigger::Click),
+                Some(75.)
+            )
+        })
+        .unwrap();
+    visual.simulate_mouse_down(point, MouseButton::Left, Default::default());
+    drag(&mut visual, -10., false);
+    drag(&mut visual, 0., false);
+    visual.simulate_mouse_up(point, MouseButton::Left, Default::default());
+    draw(&mut visual);
+    handle
+        .update(&mut visual.cx, |w, _, _| {
+            assert_eq!(w.history.borrow().undo_len(), undo + 1)
+        })
+        .unwrap();
+    click(&mut visual, "property-18");
+    visual.simulate_keystrokes("secondary-a 4 2 enter");
+    draw(&mut visual);
+    handle
+        .update(&mut visual.cx, |w, _, _| {
+            assert_eq!(
+                w.prototype_property_number(button, Trigger::Click),
+                Some(42.)
+            )
+        })
+        .unwrap();
+}
+
+#[gpui::test]
+fn property_actions_author_hidden_targets_and_remap_on_duplicate(cx: &mut TestAppContext) {
+    use crate::scene::presentation::property::{Boolean, Property};
+    let handle = open(cx);
+    let (frame, button, target) = handle
+        .update(cx, |w, window, cx| {
+            let (frame, _, button) = setup(w, window, cx);
+            let target = w.next_id;
+            w.next_id += 1;
+            let mut shape = Shape::new(
+                target,
+                Some(frame),
+                ShapeKind::Rectangle,
+                Rect {
+                    x: 20.,
+                    y: 100.,
+                    width: 80.,
+                    height: 40.,
+                },
+            );
+            shape.layer.hidden = true;
+            w.shapes.push(shape);
+            w.set_selection(BTreeSet::from([button]), cx);
+            w.set_presentation_tab(true, window, cx);
+            (frame, button, target)
+        })
+        .unwrap();
+    let mut visual = VisualTestContext::from_window(handle.into(), cx);
+    click(&mut visual, "prototype-click-menu");
+    click(&mut visual, "prototype-option-1-7");
+    assert!(visual.debug_bounds("prototype-property-menu-0").is_some());
+    let target_index = handle
+        .update(&mut visual.cx, |w, _, cx| {
+            w.prototype_property_targets(cx)
+                .iter()
+                .position(|(id, _)| *id == target)
+                .unwrap()
+        })
+        .unwrap();
+    click(&mut visual, "prototype-target-menu");
+    let target_selector: &'static str = format!("prototype-option-4-{target_index}").leak();
+    click(&mut visual, target_selector);
+    click(&mut visual, "prototype-property-menu-1");
+    click(&mut visual, "prototype-property-option-1-2");
+    handle
+        .update(&mut visual.cx, |w, window, cx| {
+            assert_eq!(
+                w.hierarchy.interactions[&button].click,
+                Some(Action::SetProperty {
+                    target,
+                    property: Property::Visible(Boolean::Toggle)
+                })
+            );
+            assert!(
+                w.shapes
+                    .iter()
+                    .find(|n| n.id == target)
+                    .unwrap()
+                    .layer
+                    .hidden,
+                "Authoring must not execute actions"
+            );
+            let page = w.snapshot_page(cx).0;
+            let decoded =
+                crate::document::Page::decode(&serde_json::to_vec(&page).unwrap()).unwrap();
+            assert_eq!(
+                decoded.hierarchy.interactions[&button],
+                w.hierarchy.interactions[&button]
+            );
+            w.set_selection(BTreeSet::from([frame]), cx);
+            w.duplicate_selection(window, cx);
+            let copy = *w.selection_ids().first().unwrap();
+            let copy_button = w
+                .shapes
+                .iter()
+                .find(|n| n.board == Some(copy) && !n.layer.hidden)
+                .unwrap()
+                .id;
+            let copy_target = w
+                .shapes
+                .iter()
+                .find(|n| n.board == Some(copy) && n.layer.hidden)
+                .unwrap()
+                .id;
+            assert_eq!(
+                w.hierarchy.interactions[&copy_button].click,
+                Some(Action::SetProperty {
+                    target: copy_target,
+                    property: Property::Visible(Boolean::Toggle)
+                })
+            );
+            w.shapes
+                .iter_mut()
+                .find(|n| n.id == target)
+                .unwrap()
+                .layer
+                .hidden = false;
+            w.set_selection(BTreeSet::from([target]), cx);
+            w.delete_selected(cx);
+            assert!(!w.hierarchy.interactions.contains_key(&button));
+            w.replay_history(false, window, cx);
+            assert_eq!(
+                w.hierarchy.interactions[&button].click,
+                Some(Action::SetProperty {
+                    target,
+                    property: Property::Visible(Boolean::Toggle)
+                })
+            );
+        })
+        .unwrap();
+}
+
+#[gpui::test]
+fn property_playback_restores_self_hiding_hover_and_resets_text_and_layout(
+    cx: &mut TestAppContext,
+) {
+    use crate::scene::{
+        auto_layout,
+        presentation::property::{Boolean, Property},
+    };
+    let handle = open(cx);
+    let (frame, button, text, saved, undo) = handle
+        .update(cx, |w, window, cx| {
+            let (frame, _, button) = setup(w, window, cx);
+            let text = w.next_id;
+            w.next_id += 1;
+            let item = w.make_text(
+                text,
+                Some(frame),
+                Rect {
+                    x: 20.,
+                    y: 100.,
+                    width: 200.,
+                    height: 40.,
+                },
+                window,
+                cx,
+            );
+            w.texts.push(item);
+            let mut layout = auto_layout::Container::new(w.boards[0].rect);
+            layout.gap = 12.;
+            w.hierarchy.layouts.insert(frame, layout);
+            w.reflow_layout(cx);
+            w.set_prototype_action(
+                button,
+                Trigger::Hover,
+                Some(Action::SetProperty {
+                    target: button,
+                    property: Property::Visible(Boolean::Toggle),
+                }),
+                window,
+                cx,
+            );
+            w.set_click(
+                button,
+                Some(Action::SetProperty {
+                    target: text,
+                    property: Property::Content("Playing now".into()),
+                }),
+                window,
+                cx,
+            );
+            w.set_selection(BTreeSet::from([frame]), cx);
+            w.create_component(window, cx);
+            let saved = serde_json::to_value(w.snapshot_page(cx).0).unwrap();
+            let undo = w.history.borrow().undo_len();
+            w.start_presentation(window, cx);
+            (frame, button, text, saved, undo)
+        })
+        .unwrap();
+    let mut visual = VisualTestContext::from_window(handle.into(), cx);
+    draw(&mut visual);
+    draw(&mut visual);
+    let (hotspot, outside) = handle
+        .update(&mut visual.cx, |w, _, cx| {
+            let p = w.presentation.player.as_ref().unwrap().read(cx);
+            let rect = p.world_rect(button).unwrap();
+            let (view, bounds) = p.playback_coordinates();
+            (
+                bounds.origin
+                    + view
+                        .screen(point(rect.x + rect.width / 2., rect.y + rect.height / 2.))
+                        .map(px),
+                bounds.origin - point(px(5.), px(5.)),
+            )
+        })
+        .unwrap();
+    visual.simulate_mouse_move(hotspot, None, Default::default());
+    draw(&mut visual);
+    handle
+        .update(&mut visual.cx, |w, _, cx| {
+            let p = w.presentation.player.as_ref().unwrap().read(cx);
+            assert!(
+                p.shapes
+                    .iter()
+                    .find(|n| n.id == button)
+                    .unwrap()
+                    .layer
+                    .hidden
+            );
+            assert!(p.presentation.playback.as_ref().unwrap().hover.is_some());
+        })
+        .unwrap();
+    visual.simulate_mouse_move(hotspot + point(px(1.), px(1.)), None, Default::default());
+    draw(&mut visual);
+    handle
+        .update(&mut visual.cx, |w, _, cx| {
+            assert!(
+                w.presentation
+                    .player
+                    .as_ref()
+                    .unwrap()
+                    .read(cx)
+                    .shapes
+                    .iter()
+                    .find(|n| n.id == button)
+                    .unwrap()
+                    .layer
+                    .hidden
+            )
+        })
+        .unwrap();
+    visual.simulate_mouse_move(outside, None, Default::default());
+    draw(&mut visual);
+    handle
+        .update(&mut visual.cx, |w, window, cx| {
+            let player = w.presentation.player.as_ref().unwrap().clone();
+            player.update(cx, |p, cx| {
+                assert!(
+                    !p.shapes
+                        .iter()
+                        .find(|n| n.id == button)
+                        .unwrap()
+                        .layer
+                        .hidden
+                );
+                let action = p.hierarchy.interactions[&button]
+                    .get(Trigger::Click)
+                    .unwrap();
+                p.playback_click(button, action, window, cx);
+                p.activate_prototype(
+                    button,
+                    Action::SetProperty {
+                        target: frame,
+                        property: Property::Gap(40.),
+                    },
+                    window,
+                    cx,
+                );
+                p.activate_prototype(
+                    button,
+                    Action::SetProperty {
+                        target: text,
+                        property: Property::Width(250.),
+                    },
+                    window,
+                    cx,
+                );
+                p.activate_prototype(
+                    button,
+                    Action::SetProperty {
+                        target: text,
+                        property: Property::FontSize(32.),
+                    },
+                    window,
+                    cx,
+                );
+                let page = p.snapshot_page(cx).0;
+                page.validate().unwrap();
+                let node = page.texts.iter().find(|n| n.id == text).unwrap();
+                assert_eq!(node.content, "Playing now");
+                assert_eq!(node.styles.default.size, 32.);
+                assert_eq!(page.hierarchy.layouts[&frame].gap, 40.);
+                assert_eq!(page.hierarchy.sizing[&text].width, auto_layout::Mode::Fixed);
+                p.activate_prototype(
+                    button,
+                    Action::SetProperty {
+                        target: button,
+                        property: Property::Rotation(405.),
+                    },
+                    window,
+                    cx,
+                );
+                assert_eq!(p.object_rotation(button), 45.);
+                for (value, expected) in [
+                    (Boolean::Set(false), false),
+                    (Boolean::Toggle, true),
+                    (Boolean::Toggle, false),
+                    (Boolean::Set(true), true),
+                ] {
+                    for (target, property) in [
+                        (text, Property::Visible(value)),
+                        (button, Property::FillEnabled(value)),
+                        (button, Property::StrokeEnabled(value)),
+                        (frame, Property::LayoutWrap(value)),
+                    ] {
+                        let action = Action::SetProperty { target, property };
+                        let action =
+                            serde_json::from_value(serde_json::to_value(action).unwrap()).unwrap();
+                        p.activate_prototype(button, action, window, cx);
+                    }
+                    let page = p.snapshot_page(cx).0;
+                    let shape = page.shapes.iter().find(|n| n.id == button).unwrap();
+                    let text = page.texts.iter().find(|n| n.id == text).unwrap();
+                    assert_eq!(!text.layer.hidden, expected);
+                    assert_eq!(shape.fill_enabled, expected);
+                    assert_eq!(shape.stroke.enabled, expected);
+                    assert_eq!(page.hierarchy.layouts[&frame].wrap, expected);
+                }
+            });
+            assert_eq!(serde_json::to_value(w.snapshot_page(cx).0).unwrap(), saved);
+            assert_eq!(w.history.borrow().undo_len(), undo);
+        })
+        .unwrap();
+    click(&mut visual, "playback-restart");
+    handle
+        .update(&mut visual.cx, |w, _, cx| {
+            let p = w.presentation.player.as_ref().unwrap().read(cx);
+            let page = p.snapshot_page(cx).0;
+            assert_eq!(page.hierarchy.layouts[&frame].gap, 12.);
+            assert!(
+                page.texts
+                    .iter()
+                    .find(|n| n.id == text)
+                    .unwrap()
+                    .content
+                    .is_empty()
+            );
+            assert_eq!(serde_json::to_value(w.snapshot_page(cx).0).unwrap(), saved);
+        })
+        .unwrap();
+}
+
+#[gpui::test]
 fn video_actions_author_roundtrip_and_remap_with_their_targets(cx: &mut TestAppContext) {
     let handle = open(cx);
     let (frame, button, video) = handle
@@ -448,7 +1209,7 @@ fn transition_controls_persist_per_trigger_with_undo_and_validation(cx: &mut Tes
     click(&mut visual, "prototype-dissolve");
     handle
         .update(&mut visual.cx, |w, window, cx| {
-            let settings = w.hierarchy.interactions[&button];
+            let settings = w.hierarchy.interactions[&button].clone();
             assert_eq!(
                 settings.click_transition,
                 Transition::Dissolve { duration_ms: 500 }
@@ -762,7 +1523,10 @@ fn navigation_persists_and_delete_undo_restores_references(cx: &mut TestAppConte
                 crate::document::Page::decode(&serde_json::to_vec(&page).unwrap()).unwrap();
             assert_eq!(decoded.hierarchy.start, Some(first));
             assert_eq!(
-                decoded.hierarchy.interactions[&button].click.unwrap(),
+                decoded.hierarchy.interactions[&button]
+                    .click
+                    .clone()
+                    .unwrap(),
                 Action::Navigate { target: second }
             );
             w.set_selection(BTreeSet::from([second]), cx);
@@ -772,7 +1536,7 @@ fn navigation_persists_and_delete_undo_restores_references(cx: &mut TestAppConte
             w.snapshot_page(cx).0.validate().unwrap();
             w.replay_history(false, window, cx);
             assert_eq!(
-                w.hierarchy.interactions[&button].click.unwrap(),
+                w.hierarchy.interactions[&button].click.clone().unwrap(),
                 Action::Navigate { target: second }
             );
             w.set_selection(BTreeSet::from([first]), cx);
@@ -784,7 +1548,7 @@ fn navigation_persists_and_delete_undo_restores_references(cx: &mut TestAppConte
             w.duplicate_selection(window, cx);
             let copy = *w.selection_ids().first().unwrap();
             assert_eq!(
-                w.hierarchy.interactions[&copy].click.unwrap(),
+                w.hierarchy.interactions[&copy].click.clone().unwrap(),
                 Action::Navigate { target: second }
             );
             w.snapshot_page(cx).0.validate().unwrap();
@@ -1235,7 +1999,10 @@ fn copied_flows_remap_internal_targets_and_drop_cross_page_links(cx: &mut TestAp
             w.set_selection(BTreeSet::from([first, second]), cx);
             w.duplicate_selection(window, cx);
             let copied_button = w.shapes.iter().find(|s| s.id != button).unwrap();
-            let action = w.hierarchy.interactions[&copied_button.id].click.unwrap();
+            let action = w.hierarchy.interactions[&copied_button.id]
+                .click
+                .clone()
+                .unwrap();
             let Action::Navigate { target } = action else {
                 panic!("Expected navigation")
             };
@@ -1296,7 +2063,7 @@ fn navigation_merge_aligns_handles_before_merging(cx: &mut TestAppContext) {
             let page = &document.pages[0];
             assert_eq!(page.hierarchy.start, Some(first));
             assert_eq!(
-                page.hierarchy.interactions[&button].click.unwrap(),
+                page.hierarchy.interactions[&button].click.clone().unwrap(),
                 Action::Navigate { target: second }
             );
             assert_eq!(page.shapes[0].color, rgb(0x00ff00));

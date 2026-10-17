@@ -19,7 +19,7 @@ export def preflight-windows [formats: list<string>] {
     if "setup" in $formats { installer-compiler | ignore }
 }
 
-export def package-windows [ctx: record, formats: list<string>, destination: path, keep_work: bool] {
+export def package-windows [ctx: record, formats: list<string>, destination: path] {
     if $ctx.arch != "x86_64" { error make {msg: "Windows packages require x86_64 MSVC."} }
     let target_directory = ($ctx.target_directory | path expand)
     let work = ($target_directory | path join $"rovar-package-windows-(random uuid)")
@@ -66,14 +66,10 @@ export def package-windows [ctx: record, formats: list<string>, destination: pat
         print --stderr $"Packaging failed. Intermediate files: ($work)"
         error make {msg: $error.msg}
     }
-    if $keep_work {
-        print $"Intermediate files: ($work)"
-    } else {
-        # Verify the resolved cleanup target stays directly inside Cargo's output.
-        let resolved = ($work | path expand)
-        if ($resolved | path dirname) != $target_directory or not (($resolved | path basename) | str starts-with "rovar-package-windows-") {
-            error make {msg: $"Refusing to remove unexpected packaging directory: ($resolved)"}
-        }
-        rm -rf $resolved
+    # Verify the resolved cleanup target stays directly inside Cargo's output.
+    let resolved = ($work | path expand)
+    if ($resolved | path dirname) != $target_directory or not (($resolved | path basename) | str starts-with "rovar-package-windows-") {
+        error make {msg: $"Refusing to remove unexpected packaging directory: ($resolved)"}
     }
+    rm -rf $resolved
 }

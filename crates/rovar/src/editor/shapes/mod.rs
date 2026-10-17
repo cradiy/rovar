@@ -14,7 +14,8 @@ mod inspector;
 mod nodes;
 mod vector_edit;
 pub(super) use drawing::Draft;
-use geometry::{Geometry, GeometryKey};
+use geometry::Geometry;
+pub(super) use geometry::GeometryKey;
 pub(super) use nodes::NodeAction;
 use std::{
     cell::RefCell,
@@ -113,9 +114,10 @@ impl Workspace {
         cx: &mut Context<Self>,
         frame: Option<usize>,
     ) -> Vec<AnyElement> {
-        let boards: HashMap<_, _> = self.boards.iter().map(|b| (b.id, b)).collect();
-        let texts: HashMap<_, _> = self.texts.iter().map(|t| (t.id, t)).collect();
-        let shapes: HashMap<_, _> = self.shapes.iter().map(|s| (s.id, s)).collect();
+        let index = self.scene_index();
+        let board_at = |id: &usize| index.boards.get(id).map(|i| &self.boards[*i]);
+        let text_at = |id: &usize| index.texts.get(id).map(|i| &self.texts[*i]);
+        let shape_at = |id: &usize| index.shapes.get(id).map(|i| &self.shapes[*i]);
         // Use this frame's window size: canvas bounds still describe the previous
         // layout when the window is resized. The larger viewport is conservative.
         let viewport_size = window.viewport_size();
@@ -131,7 +133,7 @@ impl Workspace {
             if viewport.width <= 0. || viewport.height <= 0. {
                 return true;
             }
-            if let Some(board) = board.and_then(|id| boards.get(&id)) {
+            if let Some(board) = board.and_then(|id| board_at(&id)) {
                 rect.x += board.rect.x;
                 rect.y += board.rect.y;
             }
@@ -142,33 +144,75 @@ impl Workspace {
             rect.height += margin * 2.;
             crate::scene::rotation::intersects(rect, rotation, viewport)
         };
-        let mut order = self.canvas_layer_order();
+        let mut order = std::borrow::Cow::Borrowed(&index.order);
         if let Some(frame) = frame {
-            order.retain(|id| *id == frame || self.ancestors(*id).contains(&frame));
+            order
+                .to_mut()
+                .retain(|id| *id == frame || self.ancestors(*id).contains(&frame));
         }
-        let included = order.iter().copied().collect();
+        let frame_included = frame.map(|_| order.iter().copied().collect());
+        let included = frame_included.as_ref().unwrap_or(&index.included);
+        let has_booleans = self.hierarchy.groups.values().any(|g| g.boolean.is_some());
+        let has_masks = self.hierarchy.groups.values().any(|g| g.mask.is_some());
+        let consumed =
+            |id| has_booleans && crate::scene::boolean::consumed(&self.hierarchy, id, included);
+        let mask_source =
+            |id| has_masks && crate::scene::mask::is_source(&self.hierarchy, id, included);
         let masks = crate::scene::mask::outlines(
             &self.hierarchy,
             &self.shapes,
             &self.boards,
             &mut self.boolean_cache.borrow_mut(),
         );
-        let mut elements: Vec<_> = order
+        let mut compositing = false;
+        let scopes: std::collections::BTreeSet<_> = self
+            .boards
+            .iter()
+            .map(|b| (b.id, b.layer))
+            .chain(self.shapes.iter().map(|s| (s.id, s.layer)))
+            .chain(self.texts.iter().map(|t| (t.id, t.layer)))
+            .chain(self.hierarchy.groups.iter().map(|(id, g)| (*id, g.layer)))
+            .filter(|(id, layer)| {
+                let composited = layer.composited();
+                compositing |= composited;
+                composited || masks.contains_key(id)
+            })
+            .map(|(id, _)| id)
+            .filter(|id| included.contains(id))
+            .collect();
+        self.scene_index.borrow_mut().defer_overlays = compositing
+            || self
+                .hierarchy
+                .effects
+                .values()
+                .any(|effects| crate::scene::effects::backdrop::radius(effects) > 0.);
+        let retained = self
+            .selection_ids()
+            .into_iter()
+            .chain(self.vector_edit)
+            .chain(
+                self.texts
+                    .iter()
+                    .filter(|t| t.editor.read(cx).editing)
+                    .map(|t| t.id),
+            );
+        let visible_order = index.visible_order(viewport, self.view.zoom, retained);
+        let mut elements: Vec<_> = visible_order
             .iter()
             .copied()
+            .filter(|id| frame.is_none() || included.contains(id))
             .filter_map(|id| {
-                let consumed = crate::scene::boolean::consumed(&self.hierarchy, id, &included)
-                    || crate::scene::mask::is_source(&self.hierarchy, id, &included);
+                let consumed = consumed(id) || mask_source(id);
                 if consumed && !self.is_selected(id) && self.vector_edit != Some(id) {
                     return None;
                 }
                 let shadow_margin = self.effect_padding(id);
-                if let Some(board) = boards.get(&id) {
+                if let Some(board) = board_at(&id) {
                     let mut rect = board.rect;
                     rect.width = rect.width.max(100. / self.view.zoom);
                     (self.is_selected(id) || visible(rect, None, 0., 32. + shadow_margin))
                         .then(|| (id, self.board_element(board, cx).into_any_element()))
-                } else if let Some(text) = texts.get(&id) {
+                } else if let Some(text) = text_at(&id) {
                     (text.editor.read(cx).editing
                         || self.is_selected(id)
                         || visible(
@@ -179,6 +223,20 @@ impl Workspace {
                         ))
                     .then(|| (id, self.text_element(text, cx).into_any_element()))
                 } else if self.hierarchy.groups.contains_key(&id) {
+                    let special = self.hierarchy.layouts.contains_key(&id)
+                        || crate::scene::boolean::is_boolean(&self.hierarchy, id)
+                        || crate::scene::mask::source(&self.hierarchy, id).is_some();
+                    let bounds = if special {
+                        self.group_bounds(id)
+                    } else {
+                        index.groups.get(&id).copied()
+                    }?;
+                    if !special
+                        && !self.is_selected(id)
+                        && !visible(bounds, None, 0., 32. + shadow_margin)
+                    {
+                        return None;
+                    }
                     if crate::scene::boolean::is_boolean(&self.hierarchy, id) && !consumed {
                         self.boolean_geometry(id)
                             .map(|g| {
@@ -194,13 +252,12 @@ impl Workspace {
                                     .into_any_element(),
                                 )
                             })
-                            .or_else(|| self.group_element(id, cx).map(|el| (id, el)))
+                            .or_else(|| self.group_element(id, bounds, cx).map(|el| (id, el)))
                     } else {
-                        self.group_element(id, cx).map(|el| (id, el))
+                        self.group_element(id, bounds, cx).map(|el| (id, el))
                     }
                 } else {
-                    shapes
-                        .get(&id)
+                    shape_at(&id)
                         .filter(|s| frame.is_none() || s.kind != ShapeKind::Audio)
                         .filter(|s| {
                             self.is_selected(id)
@@ -239,20 +296,17 @@ impl Workspace {
                 .groups
                 .get(&id)
                 .map(|g| g.layer)
-                .or_else(|| boards.get(&id).map(|b| b.layer))
-                .or_else(|| shapes.get(&id).map(|s| s.layer))
-                .or_else(|| texts.get(&id).map(|t| t.layer))
+                .or_else(|| board_at(&id).map(|b| b.layer))
+                .or_else(|| shape_at(&id).map(|s| s.layer))
+                .or_else(|| text_at(&id).map(|t| t.layer))
                 .unwrap_or_default()
         };
-        let scopes: std::collections::BTreeSet<_> = order
-            .iter()
-            .copied()
-            .filter(|id| masks.contains_key(id) || layer_state(*id).composited())
-            .collect();
         if scopes.is_empty()
-            && !order
-                .iter()
-                .any(|id| self.background_blur_filter(*id).is_some())
+            && !self
+                .hierarchy
+                .effects
+                .keys()
+                .any(|id| included.contains(id) && self.background_blur_filter(*id).is_some())
         {
             return elements.into_iter().map(|(_, el)| el).collect();
         }
@@ -263,15 +317,15 @@ impl Workspace {
         // The order visits parents before children. Resolve each object's
         // nearest compositing scope once instead of rescanning scene objects.
         let mut scope_parents = HashMap::new();
-        for id in &order {
+        for id in order.iter() {
             let parent = self
                 .hierarchy
                 .parents
                 .get(id)
                 .copied()
                 .or_else(|| self.hierarchy.groups.get(id).and_then(|g| g.board))
-                .or_else(|| shapes.get(id).and_then(|s| s.board))
-                .or_else(|| texts.get(id).and_then(|t| t.board));
+                .or_else(|| shape_at(id).and_then(|s| s.board))
+                .or_else(|| text_at(id).and_then(|t| t.board));
             let scope = parent.and_then(|parent| {
                 if scopes.contains(&parent) {
                     Some(parent)
@@ -287,7 +341,7 @@ impl Workspace {
         let mut overlays = Vec::new();
         for id in order.iter().rev().copied() {
             let mut content = rendered.remove(&id).unwrap_or_default();
-            if crate::scene::mask::is_source(&self.hierarchy, id, &included) {
+            if mask_source(id) {
                 overlays.extend(content);
                 continue;
             }
@@ -316,7 +370,7 @@ impl Workspace {
             } else {
                 &mut roots
             };
-            let backdrop = (!crate::scene::boolean::consumed(&self.hierarchy, id, &included))
+            let backdrop = (!consumed(id))
                 .then(|| self.background_blur_filter(id))
                 .flatten();
             siblings.push((state, content, backdrop));
@@ -404,6 +458,20 @@ impl Workspace {
         if !paint {
             key.stroke_width = 0.;
         }
+        let rounded_rect = (key.contours.is_none()
+            && matches!(
+                shape.kind,
+                ShapeKind::Rectangle | ShapeKind::Image | ShapeKind::Svg
+            ))
+        .then(|| {
+            let [top_left, top_right, bottom_right, bottom_left] = key.radii.map(px);
+            gpui::Corners {
+                top_left,
+                top_right,
+                bottom_right,
+                bottom_left,
+            }
+        });
         let outset = key.outset;
         let fill = (paint && shape.fill_enabled && shape.can_fill() && !shape.kind.is_asset())
             .then(|| shape.background());
@@ -431,54 +499,82 @@ impl Workspace {
             Vec::new()
         };
         let zoom = self.view.zoom;
+        let needs_paths =
+            rounded_rect.is_none() || key.stroke_width > 0. || point_fill.is_some() || edit_hatch;
         let paths = self.shape_paths.clone();
-        let surface = canvas(
-            move |_, _, _| {
+        let surface = move |bounds: Bounds<Pixels>,
+                            _: &gpui::Style,
+                            window: &mut Window,
+                            cx: &mut gpui::App| {
+            let geometry = {
                 let mut paths = paths.borrow_mut();
-                if paths.get(&id).is_none_or(|cached| cached.key != key) {
-                    paths.insert(id, Rc::new(key.clone().build()));
+                if !needs_paths {
+                    paths.remove(&id);
+                    None
+                } else {
+                    if paths.get(&id).is_none_or(|cached| cached.key != key) {
+                        paths.insert(id, Rc::new(key.clone().build()));
+                    }
+                    Some(paths[&id].clone())
                 }
-                paths[&id].clone()
-            },
-            move |bounds, geometry, window, cx| {
-                let mut paint = |window: &mut Window| {
-                    if let Some(fill) = &fill {
+            };
+            let mut paint = |window: &mut Window| {
+                if let Some(fill) = &fill {
+                    if let Some(radii) = rounded_rect {
+                        let rect = Bounds::new(
+                            bounds.origin + point(px(outset), px(outset)),
+                            gpui::size(px(width), px(height)),
+                        );
+                        window.paint_quad(gpui::fill(rect, fill.clone()).corner_radii(radii));
+                    } else if let Some(geometry) = &geometry {
                         paint_path(&geometry.fill, bounds.origin, fill.clone(), window);
                     }
-                    if let Some(gradient) = point_fill {
-                        let surface = Bounds::new(
-                            bounds.origin + point(px(outset), px(outset)),
-                            gpui::size(px(width), px(height)),
+                }
+                if let Some(gradient) = point_fill
+                    && let Some(geometry) = &geometry
+                {
+                    let surface = Bounds::new(
+                        bounds.origin + point(px(outset), px(outset)),
+                        gpui::size(px(width), px(height)),
+                    );
+                    let capture = surface.intersect(&window.content_mask().bounds);
+                    if !capture.is_empty() {
+                        window.with_subtree_pair(
+                            capture,
+                            gpui::EffectShader::wgsl_two_images(include_str!("image_mask.wgsl")),
+                            Default::default(),
+                            0.,
+                            1.,
+                            |input, window| match input {
+                                gpui::SubtreeInput::First => paint_path(
+                                    &geometry.fill,
+                                    bounds.origin,
+                                    gpui::rgb(0xffffff).into(),
+                                    window,
+                                ),
+                                gpui::SubtreeInput::Second => gradient.paint(surface, window),
+                            },
                         );
-                        let capture = surface.intersect(&window.content_mask().bounds);
-                        if !capture.is_empty() {
-                            window.with_subtree_pair(
+                    }
+                }
+                if let Some(image_fill) = &image_fill {
+                    let image_bounds = Bounds::new(
+                        bounds.origin + point(px(outset), px(outset)),
+                        gpui::size(px(width), px(height)),
+                    );
+                    let capture = image_bounds.intersect(&window.content_mask().bounds);
+                    if !capture.is_empty() && image_fill.asset.is_some() {
+                        if let Some(radii) = rounded_rect {
+                            // Native sprite clipping avoids two offscreen captures per image.
+                            window.with_subtree_effect_chain(
                                 capture,
-                                gpui::EffectShader::wgsl_two_images(include_str!(
-                                    "image_mask.wgsl"
-                                )),
-                                Default::default(),
-                                0.,
-                                1.,
-                                |input, window| match input {
-                                    gpui::SubtreeInput::First => paint_path(
-                                        &geometry.fill,
-                                        bounds.origin,
-                                        gpui::rgb(0xffffff).into(),
-                                        window,
-                                    ),
-                                    gpui::SubtreeInput::Second => gradient.paint(surface, window),
+                                &[],
+                                image_fill.opacity,
+                                |window| {
+                                    image_fill.paint_with_radii(image_bounds, radii, window, cx);
                                 },
                             );
-                        }
-                    }
-                    if let Some(image_fill) = &image_fill {
-                        let image_bounds = Bounds::new(
-                            bounds.origin + point(px(outset), px(outset)),
-                            gpui::size(px(width), px(height)),
-                        );
-                        let capture = image_bounds.intersect(&window.content_mask().bounds);
-                        if !capture.is_empty() && image_fill.asset.is_some() {
+                        } else if let Some(geometry) = &geometry {
                             window.with_subtree_pair(
                                 capture,
                                 gpui::EffectShader::wgsl_two_images(include_str!(
@@ -501,26 +597,28 @@ impl Workspace {
                             );
                         }
                     }
-                    if let Some(path) = &geometry.stroke {
-                        paint_path(path, bounds.origin, stroke.clone(), window);
-                    }
-                };
-                crate::scene::effects::paint_effects(bounds, &effects, zoom, window, &mut paint);
-                if edit_hatch {
-                    // Reuse the actual filled contour, including holes and curves.
-                    // This is only a paint overlay; document fills and hitboxes stay intact.
-                    let scale = window.raster_scale_factor();
-                    paint_path(
-                        &geometry.fill,
-                        bounds.origin,
-                        gpui::pattern_slash(ACCENT.color().opacity(0.65), 1.5 * scale, 14. * scale),
-                        window,
-                    );
                 }
-            },
-        )
-        .size_full();
+                if let Some(path) = geometry.as_ref().and_then(|g| g.stroke.as_ref()) {
+                    paint_path(path, bounds.origin, stroke.clone(), window);
+                }
+            };
+            crate::scene::effects::paint_effects(bounds, &effects, zoom, window, &mut paint);
+            if edit_hatch && let Some(geometry) = &geometry {
+                // Reuse the actual filled contour, including holes and curves.
+                // This is only a paint overlay; document fills and hitboxes stay intact.
+                let scale = window.raster_scale_factor();
+                paint_path(
+                    &geometry.fill,
+                    bounds.origin,
+                    gpui::pattern_slash(ACCENT.color().opacity(0.65), 1.5 * scale, 14. * scale),
+                    window,
+                );
+            }
+        };
         let element = div()
+            .when(!shape.kind.is_playable(), |el| {
+                el.on_paint_before_children(surface)
+            })
             .id(("shape", id))
             .on_mouse_down(
                 MouseButton::Right,
@@ -637,7 +735,6 @@ impl Workspace {
                     }
                 }),
             )
-            .when(!shape.kind.is_playable(), |el| el.child(surface))
             .when(shape.kind.is_playable(), |el| {
                 el.child(self.media_surface(shape, outset))
             })

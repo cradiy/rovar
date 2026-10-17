@@ -93,6 +93,7 @@ pub(crate) enum Change {
 
 #[derive(Clone, PartialEq, Eq)]
 pub(crate) enum Group {
+    PrototypeColor(usize, super::presentation::Trigger),
     Effect(Vec<usize>, usize, usize),
     ExportSuffix(Vec<usize>, usize),
     SelectionProperty(Vec<usize>, Property),
@@ -146,6 +147,10 @@ impl History {
     }
     pub fn revision(&self) -> u64 {
         self.revision
+    }
+    #[cfg(any(unix, windows))]
+    pub fn is_previewing(&self) -> bool {
+        self.preview.is_some()
     }
     pub fn mark_changed(&mut self) {
         self.revision = self

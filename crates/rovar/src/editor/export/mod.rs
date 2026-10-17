@@ -107,7 +107,7 @@ impl Workspace {
         self.export_jobs(self.selection_ids(), window, cx)
     }
 
-    fn export_jobs(
+    pub(super) fn export_jobs(
         &self,
         roots: BTreeSet<usize>,
         window: &Window,

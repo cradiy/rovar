@@ -8,47 +8,41 @@ use windows.nu [preflight-windows package-windows]
 def main [
     ...formats: string # Linux: appimage, tar.gz, rpm, deb, arch; macOS: app, zip, dmg; Windows: zip, setup; or all
     --profile: string = "release" # Cargo profile (release or dev)
-    --offline # Do not let Cargo access the network
     --skip-build # Package the existing binary from the selected Cargo profile
     --output: path # Output directory; defaults to dist/ in the checkout
-    --keep-work # Keep intermediate packaging files in target/
 ] {
-    build-rovar $formats $profile $offline $skip_build $output $keep_work
+    build-rovar $formats $profile $skip_build $output
 }
 
 # Build and package the Windows release. Omit formats to produce ZIP and installer.
 def "main windows" [
     ...formats: string # zip or setup
-    --offline # Do not let Cargo access the network
     --skip-build # Package the existing release binary
     --output: path # Output directory; defaults to dist/ in the checkout
-    --keep-work # Keep intermediate packaging files in target/
 ] {
     if $nu.os-info.name != "windows" { error make {msg: "Run Windows builds on Windows."} }
     for format in $formats {
         if $format not-in [zip setup] { error make {msg: $"Unknown Windows package format: ($format)"} }
     }
     let selected = if ($formats | is-empty) { [zip setup] } else { $formats }
-    build-rovar $selected release $offline $skip_build $output $keep_work
+    build-rovar $selected release $skip_build $output
 }
 
 # Build and package the macOS release. Omit formats to produce app, zip and dmg.
 def "main macos" [
     ...formats: string # app, zip, or dmg
-    --offline # Do not let Cargo access the network
     --skip-build # Package the existing release binary
     --output: path # Output directory; defaults to dist/ in the checkout
-    --keep-work # Keep intermediate packaging files in target/
 ] {
     if $nu.os-info.name != "macos" { error make {msg: "Run macOS packaging on macOS."} }
     for format in $formats {
         if $format not-in [app zip dmg] { error make {msg: $"Unknown macOS package format: ($format)"} }
     }
     let selected = if ($formats | is-empty) { [app zip dmg] } else { $formats }
-    build-rovar $selected release $offline $skip_build $output $keep_work
+    build-rovar $selected release $skip_build $output
 }
 
-def build-rovar [formats: list<string>, profile: string, offline: bool, skip_build: bool, output: any, keep_work: bool] {
+def build-rovar [formats: list<string>, profile: string, skip_build: bool, output: any] {
     let macos = $nu.os-info.name == "macos"
     let windows = $nu.os-info.name == "windows"
     if $nu.os-info.name not-in [linux macos windows] { error make {msg: "This build entry supports Linux, macOS and Windows."} }
@@ -65,7 +59,7 @@ def build-rovar [formats: list<string>, profile: string, offline: bool, skip_bui
     if not ($selected | is-empty) {
         if $windows { preflight-windows $selected } else if $macos { preflight-macos $selected } else { preflight $selected }
     }
-    let metadata = (capture cargo metadata --no-deps --format-version 1 --offline | from json)
+    let metadata = (capture cargo metadata --no-deps --format-version 1 | from json)
     let package = ($metadata.packages | where name == rovar | first)
     let host = (capture rustc -vV | lines | parse 'host: {host}' | get host | first)
     let supported_host = if $windows { '^x86_64-pc-windows-msvc$' } else if $macos { '^aarch64-apple-darwin$' } else { '^(x86_64|aarch64)-unknown-linux-gnu$' }
@@ -77,8 +71,7 @@ def build-rovar [formats: list<string>, profile: string, offline: bool, skip_bui
     # An explicit target prevents CARGO_BUILD_TARGET or Cargo config from silently cross-compiling.
     if not $skip_build {
         print $"Building Rovar: ($profile), ($host)"
-        mut args = [build --locked -p rovar --bin rovar --profile $profile --target $host]
-        if $offline { $args = ($args | append "--offline") }
+        let args = [build --locked -p rovar --bin rovar --profile $profile --target $host]
         run-tool cargo ...$args
     }
     let profile_dir = if $profile == "dev" { "debug" } else { "release" }
@@ -95,14 +88,14 @@ def build-rovar [formats: list<string>, profile: string, offline: bool, skip_bui
         package-windows {
             root: $root, binary: $binary, arch: $arch, version: $package.version,
             profile: $profile, target_directory: $metadata.target_directory,
-        } $selected $destination $keep_work
+        } $selected $destination
         return
     }
     if $macos {
         package-macos {
             root: $root, binary: $binary, arch: $arch, version: $package.version,
             profile: $profile, target_directory: $metadata.target_directory,
-        } $selected $destination $keep_work
+        } $selected $destination
         return
     }
     let config = (open ($root | path join packaging linux config.toml))
@@ -139,5 +132,5 @@ def build-rovar [formats: list<string>, profile: string, offline: bool, skip_bui
         print --stderr $"Packaging failed. Intermediate files: ($work)"
         error make {msg: $error.msg}
     }
-    if $keep_work { print $"Intermediate files: ($work)" } else { rm -rf $work }
+    rm -rf $work
 }

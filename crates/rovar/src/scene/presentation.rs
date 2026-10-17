@@ -1,4 +1,6 @@
 //! Prototype triggers and destinations. Frame handles are page-local; variant IDs are stable.
+pub(crate) mod paint;
+pub(crate) mod property;
 
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
 pub(crate) enum Trigger {
@@ -7,9 +9,13 @@ pub(crate) enum Trigger {
     Hover,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub(crate) enum Action {
+    SetProperty {
+        target: usize,
+        property: property::Property,
+    },
     Navigate {
         target: usize,
     },
@@ -30,15 +36,20 @@ pub(crate) enum Action {
 }
 
 impl Action {
-    pub fn remap(self, mut map: impl FnMut(usize) -> Option<usize>) -> Option<Self> {
-        match self {
+    pub fn remap(&self, mut map: impl FnMut(usize) -> Option<usize>) -> Option<Self> {
+        match self.clone() {
+            Self::SetProperty { target, property } => property
+                .valid()
+                .then_some(())
+                .and_then(|_| map(target))
+                .map(|target| Self::SetProperty { target, property }),
             Self::Navigate { target } => map(target).map(|target| Self::Navigate { target }),
             Self::OpenOverlay { target, settings } => {
                 map(target).map(|target| Self::OpenOverlay { target, settings })
             }
-            Self::CloseOverlay => Some(self),
+            Self::CloseOverlay => Some(self.clone()),
             Self::Back => Some(Self::Back),
-            Self::ChangeVariant { target } => (!target.is_nil()).then_some(self),
+            Self::ChangeVariant { target } => (!target.is_nil()).then(|| self.clone()),
             Self::Media { target, command } => command
                 .valid()
                 .then_some(())
@@ -145,7 +156,7 @@ impl Transition {
     }
 }
 
-#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Default, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub(crate) struct Interaction {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub click: Option<Action>,
@@ -160,22 +171,23 @@ pub(crate) struct Interaction {
 }
 
 impl Interaction {
-    pub fn get(self, trigger: Trigger) -> Option<Action> {
+    pub fn get(&self, trigger: Trigger) -> Option<Action> {
         match trigger {
-            Trigger::Click => self.click,
-            Trigger::Hover => self.hover,
+            Trigger::Click => self.click.clone(),
+            Trigger::Hover => self.hover.clone(),
         }
     }
     pub fn set(&mut self, trigger: Trigger, action: Option<Action>) {
+        let empty = action.is_none();
         match trigger {
             Trigger::Click => self.click = action,
             Trigger::Hover => self.hover = action,
         }
-        if action.is_none() {
+        if empty {
             self.set_transition(trigger, Transition::Instant);
         }
     }
-    pub fn transition(self, trigger: Trigger) -> Transition {
+    pub fn transition(&self, trigger: Trigger) -> Transition {
         match trigger {
             Trigger::Click => self.click_transition,
             Trigger::Hover => self.hover_transition,
@@ -187,14 +199,14 @@ impl Interaction {
             Trigger::Hover => self.hover_transition = transition,
         }
     }
-    pub fn is_empty(self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.click.is_none() && self.hover.is_none()
     }
-    pub fn remap(self, mut map: impl FnMut(usize) -> Option<usize>) -> Option<Self> {
+    pub fn remap(&self, mut map: impl FnMut(usize) -> Option<usize>) -> Option<Self> {
         let value = Self {
-            click: self.click.and_then(|a| a.remap(&mut map)),
-            hover: self.hover.and_then(|a| a.remap(&mut map)),
-            ..self
+            click: self.click.as_ref().and_then(|a| a.remap(&mut map)),
+            hover: self.hover.as_ref().and_then(|a| a.remap(&mut map)),
+            ..self.clone()
         };
         (!value.is_empty()).then_some(value)
     }

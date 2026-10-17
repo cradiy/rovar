@@ -1,5 +1,7 @@
 //! Editor state and feature composition. Application windows and shared UI live outside this module.
 
+#[cfg(any(unix, windows))]
+mod agent;
 mod assets;
 mod auto_layout;
 mod blend;
@@ -29,6 +31,7 @@ mod panels;
 mod presentation;
 mod preview;
 mod rotation;
+mod scene_index;
 mod selection;
 mod shapes;
 mod svg;
@@ -64,6 +67,8 @@ use uic::components::{
 };
 
 pub(crate) struct Workspace {
+    #[cfg(any(unix, windows))]
+    agent: agent::State,
     inspector: inspector::State,
     pages: pages::State,
     assets: assets::State,
@@ -100,6 +105,7 @@ pub(crate) struct Workspace {
     vector_bend: bool,
     vector_segment_t: f32,
     shape_paths: shapes::ShapePaths,
+    scene_index: std::cell::RefCell<scene_index::Cache>,
     boolean_cache: std::cell::RefCell<crate::scene::boolean::Cache>,
     media: media::State,
     svg: svg::State,

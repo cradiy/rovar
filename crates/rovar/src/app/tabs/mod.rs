@@ -335,6 +335,7 @@ impl Studio {
                 div()
                     .id(("close-tab", token))
                     .debug_selector(move || format!("close-tab-{token}"))
+                    .cursor_pointer()
                     .size(px(20.))
                     .flex_shrink_0()
                     .rounded(px(4.))

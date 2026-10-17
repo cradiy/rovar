@@ -4,14 +4,21 @@ use gpui::{Point, Rgba, point, rgb};
 mod tests;
 
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(any(unix, windows), derive(schemars::JsonSchema))]
 pub struct GradientPoint {
+    #[cfg_attr(
+        any(unix, windows),
+        schemars(with = "std::collections::BTreeMap<String, f32>")
+    )]
     pub position: Point<f32>,
     #[serde(with = "crate::document::rgba")]
+    #[cfg_attr(any(unix, windows), schemars(with = "[f32; 4]"))]
     pub color: Rgba,
     pub radius: f32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(any(unix, windows), derive(schemars::JsonSchema))]
 pub struct PointGradient {
     pub points: [GradientPoint; 4],
 }

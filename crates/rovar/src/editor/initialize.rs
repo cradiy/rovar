@@ -59,6 +59,8 @@ impl Workspace {
         let history = SharedHistory::default();
         history.borrow_mut().set_page(pages.active.clone());
         Self {
+            #[cfg(any(unix, windows))]
+            agent: agent::State::default(),
             pages,
             inspector,
             assets: assets::State::new(window, cx),
@@ -99,6 +101,7 @@ impl Workspace {
             vector_bend: false,
             vector_segment_t: 0.5,
             shape_paths: Default::default(),
+            scene_index: Default::default(),
             boolean_cache: Default::default(),
             media: Default::default(),
             svg: Default::default(),

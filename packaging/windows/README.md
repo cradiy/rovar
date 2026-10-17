@@ -15,15 +15,3 @@ All commands build release packages. To repackage an existing release or choose 
 ```nu
 nu scripts/build.nu windows --skip-build --output dist
 ```
-
-`--offline` disables Cargo network access. `--keep-work` retains intermediate packaging files. Packaging does not download tools or dependencies.
-
-## Output
-
-- `Rovar-<version>-windows-x64-setup.exe`: per-user installer with a Start menu shortcut and uninstaller.
-- `Rovar-<version>-windows-x64.zip`: extract and run `Rovar/rovar.exe`.
-- SHA-256 checksums and build metadata.
-
-Output defaults to `dist/`. / 产物默认输出到 `dist/`。
-
-Application payloads contain only `rovar.exe` and `LICENSE`. Runtime DLLs, redistributable installers, media plugins, caches, and development files are not bundled. Packages are unsigned. Windows supplies Media Foundation; the target machine must provide the Microsoft Visual C++ x64 runtime. Both distributions use the normal per-user application data directory; the ZIP does not relocate user data beside the executable. Uninstalling preserves user documents and settings.

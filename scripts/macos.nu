@@ -74,7 +74,7 @@ def stage-macos [ctx: record, work: path] {
     {app: $app, minimum_macos: $info.LSMinimumSystemVersion}
 }
 
-export def package-macos [ctx: record, formats: list<string>, destination: path, keep_work: bool] {
+export def package-macos [ctx: record, formats: list<string>, destination: path] {
     if $ctx.arch != "aarch64" { error make {msg: "macOS packages support Apple Silicon only."} }
     let arch = "arm64"
     run-tool lipo $ctx.binary -verify_arch $arch
@@ -88,7 +88,7 @@ export def package-macos [ctx: record, formats: list<string>, destination: path,
         for format in $formats {
             let target = if $format == "app" {
                 let target = ($destination | path join Rovar.app)
-                let kind = ($target | path type)
+                let kind = ($target | path type | default "")
                 if $kind not-in ["" dir] {
                     error make {msg: $"Refusing to replace non-directory app bundle: ($target)"}
                 }
@@ -125,5 +125,5 @@ export def package-macos [ctx: record, formats: list<string>, destination: path,
         print --stderr $"Packaging failed. Intermediate files: ($work)"
         error make {msg: $error.msg}
     }
-    if $keep_work { print $"Intermediate files: ($work)" } else { rm -rf $work }
+    rm -rf $work
 }

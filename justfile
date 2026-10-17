@@ -4,6 +4,14 @@ set windows-shell := ["nu", "-c"]
 default:
     @just --list
 
+# Install or update the AI design skill in ~/.agents/skills.
+install-skill:
+    nu scripts/install-skill.nu
+
+# Install or update the AI design skill in a specified skills directory.
+install-skill-to directory:
+    nu scripts/install-skill.nu {{quote(directory)}}
+
 # Build the Linux release binary.
 build-linux:
     nu scripts/build.nu

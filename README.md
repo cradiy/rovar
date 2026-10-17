@@ -2,9 +2,9 @@
 
 English | [简体中文](README.zh-CN.md)
 
-A design editor built with Rust and GPUI, available on desktop and the Web.
+A design editor built with Rust and GPUI, available on desktop and the Web. Create editable interfaces by hand or with an AI agent in the desktop editor.
 
-Supports artboards, vectors, text, images and video, auto layout, reusable components, multi-page documents, and PNG/SVG export. Use it locally or connect to a server with personal and team workspaces. Available in English and Simplified Chinese.
+Supports artboards, vectors, text, images, audio and video, auto layout, reusable components, interactive prototypes, multi-page documents, and PNG/SVG export. Use it locally or connect to a server with personal and team workspaces. Available in English and Simplified Chinese.
 
 I want to build a beautiful, cross-platform UI design tool that is easy for AI agents to operate, while using the project's real-world needs to improve and extend the GPUI framework.
 
@@ -16,6 +16,7 @@ I want to build a beautiful, cross-platform UI design tool that is easy for AI a
 
 ## Features
 
+- **AI-assisted design** — use an AI agent with the `rovar-design` skill to create editable interfaces, refine selected elements and layouts, import assets, and configure prototype interactions, with visual checks and undo support.
 - **Canvas editing** — artboards, layers, multi-page documents, vector shapes, Bézier paths, and text.
 - **Auto layout** — horizontal and vertical layouts, wrapping, alignment, padding, gaps, fixed/hug/fill sizing, and minimum/maximum dimensions.
 - **Grid layouts** — fixed or equal column widths, row and column gaps, automatic placement, and row/column spans.
@@ -31,8 +32,9 @@ I want to build a beautiful, cross-platform UI design tool that is easy for AI a
 - **Layer blur** — adjustable blur for shapes, images, and text, including shadows, with PNG/SVG export.
 - **Contour glow** — colored light around frame, shape, text, and image outlines, including holes, with adjustable radius, edge width, intensity, and alpha threshold. PNG follows the export scale; SVG embeds the light at 1× and retains the vector artwork.
 - **Background blur** — blur behind frames, rectangles, ellipses, and images, clipped to their rotated outlines and rounded corners. PNG follows the export scale; SVG embeds the blurred background at 1× while retaining vector foregrounds. Converting a primitive to a path removes its background blur; undo restores both.
-- **Images and video** — media import, image fills, non-destructive cropping, and video playback.
-- **Interactive preview** — connect layers to frames or component variants on canvas, with independent click and hover actions for each variant. Playback supports frame navigation, going back, and switching individual instances without changing the document. Leaving a hovered element can restore the previous frame and variant state, keep the current state, or switch to an existing component variant.
+- **SVG import** — keep artwork as a vector asset or convert supported SVGs into editable paths and groups.
+- **Images, audio, and video** — media import, image fills, non-destructive cropping, audio cover artwork, and audio/video playback.
+- **Interactive prototypes** — click and hover actions for frame navigation, component variants, overlays, media controls, and element property changes. Configure dissolve transitions and hover exit behavior, then play the prototype without changing the source design.
 - **Local and self-hosted workspaces** — personal and team spaces, document and library synchronization, and version-conflict comparison.
 - **Export** — `.rovar` documents, PNG, and SVG.
 - **Desktop and Web** — a shared GPUI interface, English and Simplified Chinese; Web support is experimental.
@@ -41,22 +43,40 @@ I want to build a beautiful, cross-platform UI design tool that is easy for AI a
 
 - [ ] **Visual effects** — glass and mixed effect stacks.
 - [ ] **Animation** — keyframes, easing, animated gradients, and layer effects.
-- [ ] **Advanced interactions** — additional triggers, overlays, scrollable areas, and transitions.
+- [ ] **Advanced interactions** — additional triggers, scrollable areas, and more transition styles.
 - [ ] **Presentation sharing** — standalone playback and browser sharing through a self-hosted server.
-- [ ] **AI-assisted design** — natural-language generation, selection editing, layout refinement, and previews of editable results.
 - [ ] **GPUI DSL export** — layouts, styles, components, and assets for GPUI applications.
 
 ## Run
 
-Open **Prototype** in the right panel, choose a starting frame, and select a layer. Choose **On click** or **On hover**, then drag its connection handle to a frame or another main variant in the same component set. You can also choose the destination or **Go back** from the panel; choose **No action** to remove the selected trigger's action. Each variant has its own interactions. Press **Present** beside the inspector tabs to play; press **Esc** to return to editing.
+Open **Prototype** in the right panel, choose a starting frame, and select a layer. Add an **On click** or **On hover** action, then choose its target and settings. Connect frames or variants on canvas, or use the panel to configure overlays, media controls, and property changes. Press **Present** beside the inspector tabs to play; press **Esc** to return to editing.
 
 ```sh
 cargo run --locked -p rovar
 ```
 
+## Design with AI
+
+Use an AI agent that supports skills and local command execution to work in the running Windows, macOS, or Linux desktop editor. The agent can inspect your selection, create and refine editable layers, import assets, set prototype actions, and check rendered previews. Edits participate in the editor's normal undo and save/sync flow.
+
+Install [just](https://github.com/casey/just) and [Nushell](https://www.nushell.sh/), then run from the repository root:
+
+```sh
+just install-skill
+```
+
+This installs or updates the [Rovar design skill](skills/rovar-design/SKILL.md) in `~/.agents/skills`. For an agent that uses a different skills directory, run `just install-skill-to /path/to/skills`.
+
+Start a new agent session to load the skill, open a document in Rovar, and ask the agent to use `rovar-design`. For example:
+
+- "Use rovar-design to create a travel planner with an itinerary and destination cards."
+- "Use rovar-design to improve the spacing and typography of the selected card while keeping its content."
+
+The skill connects to the running editor and checks its supported operations before making changes. This integration is available in desktop builds. See the [local protocol](docs/agent-protocol.md) for custom integrations.
+
 ## Build
 
-Install [just](https://github.com/casey/just) and [Nushell](https://www.nushell.sh/). Run `just` to list all build commands.
+Run `just` to list all build commands.
 
 ```sh
 just build-linux       # Desktop binary

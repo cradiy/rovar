@@ -3,6 +3,12 @@
 use super::*;
 
 pub(in crate::editor) struct State {
+    pub action_target: Option<usize>,
+    pub action_key: Option<(
+        usize,
+        crate::scene::presentation::Trigger,
+        crate::scene::presentation::property::Property,
+    )>,
     pub theme_dark: bool,
     pub effects: super::effects::Controls,
     pub gradient_menu: Entity<uic::components::dropdown::DropdownState>,
@@ -58,7 +64,9 @@ impl State {
                                 cx,
                             )
                         });
-                        if this.selected_shape.is_some() {
+                        if this.action_paint().is_some() {
+                            this.sync_fields(cx);
+                        } else if this.selected_shape.is_some() {
                             this.activate_paint(index == 1, cx);
                         }
                     }
@@ -71,6 +79,21 @@ impl State {
             &font_picker,
             |this, _, event: &font_picker::FontChosen, cx| {
                 this.history.borrow_mut().break_group();
+                if matches!(
+                    this.inspector_action().map(|a| a.2),
+                    Some(crate::scene::presentation::property::Property::FontFamily(
+                        _
+                    ))
+                ) {
+                    this.edit_action_property(
+                        crate::scene::presentation::property::Property::FontFamily(
+                            event.0.to_string(),
+                        ),
+                        false,
+                        cx,
+                    );
+                    return;
+                }
                 if let Some(text) = this.selected_text_mut() {
                     text.editor.update(cx, |editor, cx| {
                         editor.apply_style(StyleChange::Family(event.0.clone()), cx)
@@ -95,6 +118,28 @@ impl State {
                 move |this, _, event: &ColorPickerEvent, cx| {
                     let (ColorPickerEvent::Preview(color) | ColorPickerEvent::Commit(color)) =
                         *event;
+                    if this.action_paint().is_some() {
+                        let stop = this.inspector.active_stop;
+                        this.edit_action_paint(
+                            |board| {
+                                if let Some(target) = board.editable_color_mut(stop) {
+                                    if alpha_only {
+                                        target.a = color.a;
+                                    } else {
+                                        target.r = color.r;
+                                        target.g = color.g;
+                                        target.b = color.b;
+                                    }
+                                }
+                            },
+                            cx,
+                        );
+                        if matches!(event, ColorPickerEvent::Commit(_)) {
+                            this.history.borrow_mut().break_group();
+                        }
+                        this.sync_fields(cx);
+                        return;
+                    }
                     if !this.multi_selection.is_empty() {
                         let index = if alpha_only { 6 } else { 5 };
                         let value = if alpha_only {
@@ -173,6 +218,8 @@ impl State {
             ));
         }
         Self {
+            action_target: None,
+            action_key: None,
             theme_dark: crate::ui::theme::is_dark(),
             effects: Default::default(),
             gradient_menu: cx.new(|cx| uic::components::dropdown::DropdownState::new(window, cx)),

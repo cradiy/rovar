@@ -4,11 +4,9 @@
 def main [
     --serve # Start the development server
     --release # Build optimized WASM
-    --offline # Use cached Cargo dependencies
 ] {
     cd ($env.FILE_PWD | path dirname | path join web)
     hide-env -i NO_COLOR
-    if $offline { $env.CARGO_NET_OFFLINE = "true" }
     mut args = [build --locked --skip-version-check]
     if $serve { $args = [serve --locked --skip-version-check] }
     if $release { $args = ($args | append "--release") }

@@ -40,15 +40,23 @@ impl Workspace {
             } else {
                 PROPERTY_COUNT * self.paint_surface(cx)
             };
-        let image_color = index == 5
-            && self.selected_text.is_none()
-            && (self
-                .selected_shape()
-                .is_some_and(|s| s.fill_mode == FillMode::Image)
-                || (self.selected_shape.is_none()
-                    && self
-                        .selected_board()
-                        .is_some_and(|b| b.fill_mode == FillMode::Image)));
+        let action = self.action_paint().is_some();
+        let image_color = if action {
+            index == 5
+                && self
+                    .action_paint()
+                    .is_some_and(|p| p.mode == FillMode::Image)
+        } else {
+            index == 5
+                && self.selected_text.is_none()
+                && (self
+                    .selected_shape()
+                    .is_some_and(|s| s.fill_mode == FillMode::Image)
+                    || (self.selected_shape.is_none()
+                        && self
+                            .selected_board()
+                            .is_some_and(|b| b.fill_mode == FillMode::Image)))
+        };
         let sidebar_duplicate = popup
             && matches!(index, 5 | 6 | 16 | 17)
             && self.inspector.paint_popovers[usize::from(index >= 16)]
@@ -56,15 +64,17 @@ impl Workspace {
                 .is_open();
         let readonly = image_color || (matches!(index, 3 | 4) && self.boolean_result_empty());
         let numeric = !matches!(index, 0 | 5 | 16);
-        let draggable = if !self.multi_selection.is_empty() && index != 18 {
-            self.field_property(index)
-                .is_some_and(|property| self.multi_can_scrub(property, cx))
-        } else {
-            numeric
-                && self
-                    .field_value(index, cx)
-                    .is_some_and(|value| value.parse::<f32>().is_ok())
-        };
+        let draggable =
+            if self.inspector_action().is_none() && !self.multi_selection.is_empty() && index != 18
+            {
+                self.field_property(index)
+                    .is_some_and(|property| self.multi_can_scrub(property, cx))
+            } else {
+                numeric
+                    && self
+                        .field_value(index, cx)
+                        .is_some_and(|value| value.parse::<f32>().is_ok())
+            };
         let short_label = match label {
             value if value == t("width") => "W",
             value if value == t("height") => "H",
@@ -88,7 +98,15 @@ impl Workspace {
             value if value == t("name") => Some(LucideIcons::Pencil),
             _ => None,
         };
-        let swatch = if index == 5 && !self.multi_selection.is_empty() {
+        let swatch = if is_color && action {
+            self.action_paint().map(|p| {
+                if popup && p.mode == FillMode::Linear {
+                    p.gradient.background()
+                } else {
+                    p.board().editable_color(self.inspector.active_stop).into()
+                }
+            })
+        } else if index == 5 && !self.multi_selection.is_empty() {
             self.multi_field_value(Property::Color, cx)
                 .and_then(|s| u32::from_str_radix(&s, 16).ok())
                 .map(|v| rgb(v).into())
@@ -173,10 +191,13 @@ impl Workspace {
                                     el.child(div().absolute().inset_0().bg(paint))
                                 })
                                 .when(image_color, |el| {
-                                    let fill = self
-                                        .selected_shape()
-                                        .map(|s| &s.image_fill)
-                                        .or_else(|| self.selected_board().map(|b| &b.image_fill));
+                                    let fill = if action {
+                                        self.action_paint().map(|p| &p.image)
+                                    } else {
+                                        self.selected_shape().map(|s| &s.image_fill).or_else(|| {
+                                            self.selected_board().map(|b| &b.image_fill)
+                                        })
+                                    };
                                     el.when_some(fill, |el, fill| {
                                         el.child(fill.element().absolute().inset_0())
                                     })

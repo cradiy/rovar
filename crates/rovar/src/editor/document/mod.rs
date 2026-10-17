@@ -92,6 +92,7 @@ impl Workspace {
                         .into_iter()
                         .flatten()
                 }))
+                .chain(page.action_images())
             {
                 assets.insert(asset.hash.clone(), asset.clone());
             }
@@ -254,6 +255,7 @@ impl Workspace {
                         .into_iter()
                         .flatten()
                 }))
+                .chain(page.action_images())
             {
                 sources
                     .entry(asset.hash.clone())
@@ -287,6 +289,10 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> String {
+        #[cfg(any(unix, windows))]
+        {
+            self.agent = Default::default();
+        }
         self.presentation.player = None;
         self.colors.palette = document.colors;
         self.components.definitions = document.components;
@@ -352,6 +358,14 @@ impl Workspace {
             assets,
         };
         let text_system = gpui::WindowTextSystem::new(cx.text_system().clone());
+        for asset in page.action_images() {
+            sources.push(AssetSource {
+                hash: asset.hash.clone(),
+                name: asset.name(),
+                path: asset.source.clone(),
+                size: [asset.width, asset.height],
+            });
+        }
         match crate::scene::auto_layout::resolve(&mut page, &text_system) {
             Ok(tracks) => *self.auto_layout.grid.tracks.borrow_mut() = tracks,
             Err(error) => {
@@ -363,6 +377,26 @@ impl Workspace {
     }
 
     pub(super) fn load_page(&mut self, page: Page, window: &mut Window, cx: &mut Context<Self>) {
+        let changed_media: Vec<_> = self
+            .shapes
+            .iter()
+            .filter(|old| old.kind.is_playable())
+            .filter(|old| {
+                !page.shapes.iter().any(|new| {
+                    new.id == old.id
+                        && new.kind == old.kind
+                        && match (&old.asset, &new.asset) {
+                            (Some(old), Some(new)) => std::sync::Arc::ptr_eq(old, new),
+                            (None, None) => true,
+                            _ => false,
+                        }
+                })
+            })
+            .map(|shape| shape.id)
+            .collect();
+        for id in changed_media {
+            self.invalidate_media_source(id, cx);
+        }
         self.auto_layout.grid.tracks.borrow_mut().clear();
         self.auto_layout.revision = None;
         self.boards = page.boards;

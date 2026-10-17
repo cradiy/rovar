@@ -17,6 +17,7 @@ mod points;
 mod properties;
 mod scrub;
 mod state;
+mod target;
 mod view;
 
 use super::*;
@@ -35,6 +36,8 @@ pub(super) const PROPERTY_SURFACES: usize = 4;
 
 fn inspector_input(state: &Entity<TextInput>) -> Input {
     Input::new(state)
+        // Inspector controls transfer focus after committing drafts or handling clicks.
+        .blur_on_click_outside(false)
         .text_size(px(12.))
         .text_color(TEXT.color())
         .appearance(InputAppearance {
@@ -43,7 +46,7 @@ fn inspector_input(state: &Entity<TextInput>) -> Input {
         })
 }
 
-fn inspector_color_picker(state: &Entity<ColorPickerState>) -> ColorPicker {
+pub(super) fn inspector_color_picker(state: &Entity<ColorPickerState>) -> ColorPicker {
     ColorPicker::new(state)
         .horizontal_hue(true)
         .gap(px(10.))

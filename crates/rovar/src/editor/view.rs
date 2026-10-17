@@ -5,6 +5,7 @@ use super::*;
 impl Render for Workspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         crate::ui::theme::activate(window, cx);
+        self.sync_action_inspector(window, cx);
         if self.presentation.player.is_some() {
             return self.presentation_view(cx).into_any_element();
         }

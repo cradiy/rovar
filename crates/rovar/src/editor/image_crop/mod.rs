@@ -5,6 +5,12 @@ mod tests;
 mod view;
 
 pub(super) struct State {
+    action: Option<(
+        usize,
+        usize,
+        crate::scene::presentation::Trigger,
+        crate::scene::presentation::property::Property,
+    )>,
     id: usize,
     media: bool,
     frame: Rect,
@@ -21,6 +27,12 @@ impl State {
 
 impl Workspace {
     fn crop_source(&self, id: usize) -> Option<(ImageFill, bool)> {
+        if self.action_property_target() == Some(id) {
+            return self
+                .action_paint()
+                .filter(|p| p.mode == FillMode::Image)
+                .map(|p| (p.image.clone(), false));
+        }
         if let Some(shape) = self.shapes.iter().find(|s| s.id == id) {
             if shape.kind == ShapeKind::Image {
                 return Some((
@@ -48,7 +60,16 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
-        if self.preview_read_only() || !self.layer_editable(id) || self.gesture.is_some() {
+        let action = self
+            .inspector_action()
+            .filter(|_| self.action_paint().is_some())
+            .map(|(source, trigger, property)| {
+                (self.pages.generation, source, trigger, property.clone())
+            });
+        if self.preview_read_only()
+            || !self.layer_editable(action.as_ref().map_or(id, |a| a.1))
+            || self.gesture.is_some()
+        {
             return false;
         }
         let Some((image, media)) = self.crop_source(id) else {
@@ -66,7 +87,9 @@ impl Workspace {
         };
         self.finish_bezier(cx);
         self.exit_vector_edit(cx);
-        if self.shapes.iter().any(|s| s.id == id) {
+        if action.is_some() {
+            self.seal_text_edits(cx);
+        } else if self.shapes.iter().any(|s| s.id == id) {
             self.select_shape(id, cx);
         } else {
             self.select(Some(id), cx);
@@ -79,6 +102,7 @@ impl Workspace {
             popover.update(cx, |p, cx| p.close(window, cx));
         }
         self.image_crop = Some(State {
+            action,
             id,
             media,
             frame,
@@ -93,14 +117,14 @@ impl Workspace {
     pub(super) fn cropped_fill(&self, id: usize, fill: &ImageFill) -> ImageFill {
         self.image_crop
             .as_ref()
-            .filter(|c| c.id == id && !c.media)
+            .filter(|c| c.action.is_none() && c.id == id && !c.media)
             .map_or_else(|| fill.clone(), |c| c.image.clone())
     }
 
     pub(super) fn cropped_media(&self, shape: &Shape) -> ImageFill {
         self.image_crop
             .as_ref()
-            .filter(|c| c.id == shape.id && c.media)
+            .filter(|c| c.action.is_none() && c.id == shape.id && c.media)
             .map_or_else(
                 || ImageFill {
                     asset: shape.asset.clone(),
@@ -210,6 +234,20 @@ impl Workspace {
         let Some(crop) = self.image_crop.take() else {
             return;
         };
+        if let Some((generation, id, trigger, property)) = crop.action {
+            if commit
+                && self.pages.generation == generation
+                && self.action_property_target() == Some(crop.id)
+                && self.inspector_action() == Some((id, trigger, &property))
+            {
+                self.history.borrow_mut().break_group();
+                self.edit_action_paint(|b| b.image_fill.placement = crop.image.placement, cx);
+                self.sync_fields(cx);
+            }
+            self.focus.focus(window, cx);
+            cx.notify();
+            return;
+        }
         let unchanged_source = self
             .crop_source(crop.id)
             .is_some_and(|(fill, media)| media == crop.media && fill.asset == crop.image.asset);
