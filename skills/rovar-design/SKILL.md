@@ -16,12 +16,21 @@ executable path explicitly supplied by the user; otherwise first check
 `%LOCALAPPDATA%\Programs\Rovar\rovar.exe`, the default installation path. If it is
 missing, resolve `rovar.exe` from PATH. If neither is available, ask the user to
 add the directory containing `rovar.exe` to PATH or provide its full path, then
-pause connection attempts. Do not search the disk, build the application, or
-fall back to checkout artifacts unless the user explicitly requests that.
+pause connection attempts.
 
-On macOS/Linux, use the installed `rovar` binary, or an existing build in the
-user's checkout (`target/debug/rovar` or `target/release/rovar`).
-Run `--help` if the CLI differs.
+On macOS, honor an executable path explicitly supplied by the user; otherwise
+first check `/Applications/Rovar.app/Contents/MacOS/rovar`. If it is missing or
+not executable, resolve `rovar` from PATH. If neither is available, ask the user
+for the location of `Rovar.app` or the full path to the `rovar` executable, then
+pause connection attempts. For an application bundle, use its
+`Contents/MacOS/rovar` executable for CLI commands.
+
+On Linux, honor an executable path explicitly supplied by the user; otherwise
+resolve `rovar` from PATH. If it is unavailable, ask the user to add its directory
+to PATH or provide the full executable path, then pause connection attempts.
+
+In the commands below, replace `rovar` with the resolved executable path, quoted
+when needed. Run `--help` if the CLI differs.
 Normal application startup automatically exposes a local interface on Windows,
 macOS and Linux; no agent startup flag is needed. Web does not expose this transport.
 

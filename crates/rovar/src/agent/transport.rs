@@ -7,6 +7,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[cfg(all(test, unix))]
+mod tests;
 #[cfg(windows)]
 mod windows;
 #[cfg(unix)]
@@ -93,9 +95,12 @@ pub(crate) fn listen(base: &Path) -> anyhow::Result<(Server, mpsc::Receiver<Pend
                         let spawned = std::thread::Builder::new()
                             .name("rovar-agent-client".into())
                             .spawn(move || {
-                                if stream
-                                    .set_read_timeout(Some(Duration::from_secs(10)))
-                                    .is_ok()
+                                // macOS inherits the listener's nonblocking flag.
+                                // Each worker uses blocking I/O with timeouts.
+                                if stream.set_nonblocking(false).is_ok()
+                                    && stream
+                                        .set_read_timeout(Some(Duration::from_secs(10)))
+                                        .is_ok()
                                     && stream
                                         .set_write_timeout(Some(Duration::from_secs(10)))
                                         .is_ok()
