@@ -164,6 +164,28 @@ impl Workspace {
             &self.boards,
             &mut self.boolean_cache.borrow_mut(),
         );
+        let mut compositing = false;
+        let scopes: std::collections::BTreeSet<_> = self
+            .boards
+            .iter()
+            .map(|b| (b.id, b.layer))
+            .chain(self.shapes.iter().map(|s| (s.id, s.layer)))
+            .chain(self.texts.iter().map(|t| (t.id, t.layer)))
+            .chain(self.hierarchy.groups.iter().map(|(id, g)| (*id, g.layer)))
+            .filter(|(id, layer)| {
+                let composited = layer.composited();
+                compositing |= composited;
+                composited || masks.contains_key(id)
+            })
+            .map(|(id, _)| id)
+            .filter(|id| included.contains(id))
+            .collect();
+        self.scene_index.borrow_mut().defer_overlays = compositing
+            || self
+                .hierarchy
+                .effects
+                .values()
+                .any(|effects| crate::scene::effects::backdrop::radius(effects) > 0.);
         let retained = self
             .selection_ids()
             .into_iter()
@@ -279,17 +301,6 @@ impl Workspace {
                 .or_else(|| text_at(&id).map(|t| t.layer))
                 .unwrap_or_default()
         };
-        let scopes: std::collections::BTreeSet<_> = self
-            .boards
-            .iter()
-            .map(|b| (b.id, b.layer))
-            .chain(self.shapes.iter().map(|s| (s.id, s.layer)))
-            .chain(self.texts.iter().map(|t| (t.id, t.layer)))
-            .chain(self.hierarchy.groups.iter().map(|(id, g)| (*id, g.layer)))
-            .filter(|(id, layer)| layer.composited() || masks.contains_key(id))
-            .map(|(id, _)| id)
-            .filter(|id| included.contains(id))
-            .collect();
         if scopes.is_empty()
             && !self
                 .hierarchy

@@ -6,7 +6,6 @@ mod spatial;
 struct Node {
     kind: u8,
     id: usize,
-    parent: Option<usize>,
     board: Option<usize>,
     rect: Option<Rect>,
     rotation: f32,
@@ -226,7 +225,10 @@ impl Index {
 pub(super) struct Cache {
     nodes: Vec<Node>,
     order: Vec<usize>,
+    parents: std::collections::BTreeMap<usize, usize>,
     index: Option<Rc<Index>>,
+    // Refreshed before constructing artwork and its editing controls each frame.
+    pub defer_overlays: bool,
 }
 
 impl Workspace {
@@ -298,12 +300,14 @@ impl Workspace {
         let mut cache = self.scene_index.borrow_mut();
         if let Some(index) = &cache.index
             && cache.order == self.hierarchy.order
+            && cache.parents == self.hierarchy.parents
             && self.geometry_nodes().eq(cache.nodes.iter().cloned())
         {
             return index.clone();
         }
         cache.nodes = self.geometry_nodes().collect();
         cache.order.clone_from(&self.hierarchy.order);
+        cache.parents.clone_from(&self.hierarchy.parents);
         let order = self.canvas_layer_order();
         let mut index = Index {
             boards: self
@@ -396,7 +400,6 @@ impl Workspace {
             .map(|(kind, id, board, rect, layer, outset)| Node {
                 kind,
                 id,
-                parent: self.hierarchy.parents.get(&id).copied().or(board),
                 board,
                 rect,
                 rotation: layer.rotation,

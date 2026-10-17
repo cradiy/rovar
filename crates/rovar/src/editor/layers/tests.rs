@@ -35,7 +35,7 @@ fn layers_select_children_fold_without_changing_selection_and_delete_with_undo(
             assert!(this.focus.is_focused(window));
         })
         .unwrap();
-    click(&mut visual, "fold-layer-1");
+    click(&mut visual, "collapse-all-layers");
     assert!(visual.debug_bounds("layer-2").is_none());
     assert!(visual.debug_bounds("layer-3").is_none());
     window

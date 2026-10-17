@@ -1,3 +1,4 @@
+use super::inspector::icon_button;
 use super::*;
 use crate::i18n::t;
 use crate::ui::theme::Color;
@@ -60,6 +61,40 @@ struct Layer {
 }
 
 impl Workspace {
+    fn layer_summary(&self, cx: &mut Context<Self>) -> Div {
+        div()
+            .h(px(34.))
+            .px(px(14.))
+            .flex_shrink_0()
+            .flex()
+            .items_center()
+            .gap(px(6.))
+            .text_size(px(11.))
+            .text_color(MUTED.color())
+            .child(icon(LucideIcons::Frame, 14.))
+            .child(crate::i18n::message(
+                "frames-count",
+                &[("count", self.boards.len().to_string())],
+            ))
+            .child(div().flex_1())
+            .child(
+                icon_button(
+                    "collapse-all-layers",
+                    t("collapse-all-layers"),
+                    LucideIcons::ListCollapse,
+                    false,
+                )
+                .size(px(26.))
+                .on_click(cx.listener(|this, _, window, cx| {
+                    this.finish_rename(true, window, cx);
+                    this.sidebar.folded = this.hierarchy_children().into_keys().flatten().collect();
+                    this.focus.focus(window, cx);
+                    cx.stop_propagation();
+                    cx.notify();
+                })),
+            )
+    }
+
     fn layer_rows(&self) -> Vec<Layer> {
         use std::collections::HashMap;
         let children = self.hierarchy_children();
@@ -446,7 +481,8 @@ impl Workspace {
             .when(!self.sidebar.resources, |el| {
                 let el = el
                     .child(self.pages_panel(cx))
-                    .child(self.organization_actions(cx));
+                    .child(self.organization_actions(cx))
+                    .child(self.layer_summary(cx));
                 let rows = self.layer_rows();
                 if rows.is_empty() {
                     el.child(
