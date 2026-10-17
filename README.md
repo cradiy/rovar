@@ -10,7 +10,7 @@ I want to build a beautiful, cross-platform UI design tool that is easy for AI a
 
 ![Forma analytics dashboard](docs/screenshots/analytics.png)
 
-![Morrow music player](docs/screenshots/music.png)
+![Still music player](docs/screenshots/music.png)
 
 ![Sora interface components](docs/screenshots/components.png)
 
@@ -41,6 +41,7 @@ I want to build a beautiful, cross-platform UI design tool that is easy for AI a
 
 ## Planned
 
+- [ ] **Android support**.
 - [ ] **Visual effects** — glass and mixed effect stacks.
 - [ ] **Animation** — keyframes, easing, animated gradients, and layer effects.
 - [ ] **Advanced interactions** — additional triggers, scrollable areas, and more transition styles.

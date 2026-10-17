@@ -10,7 +10,7 @@
 
 ![Forma 数据面板](docs/screenshots/analytics.png)
 
-![Morrow 音乐播放器](docs/screenshots/music.png)
+![Still 音乐播放器](docs/screenshots/music.png)
 
 ![Sora 界面组件](docs/screenshots/components.png)
 
@@ -41,6 +41,7 @@
 
 ## 计划
 
+- [ ] **Android 端支持**。
 - [ ] **视觉特效** — 玻璃与混合特效叠加。
 - [ ] **动画** — 关键帧、缓动、动态渐变与图层特效。
 - [ ] **高级交互** — 更多事件触发、滚动区域与过渡样式。

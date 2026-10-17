@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.0 (Unreleased)
+## 0.3.0 (Released)
 
 AI agents can now create and refine editable designs in the running desktop editor, with a local protocol and the `rovar-design` skill.
 
@@ -29,7 +29,7 @@ AI agents can now create and refine editable designs in the running desktop edit
 - Preserve keyboard focus when scrubbing gradients or clicking inspector and font controls.
 - Fix first-time macOS app packaging when the destination application bundle does not exist.
 
-## 0.2.0 (Released)
+## 0.2.0
 
 ### Added
 
