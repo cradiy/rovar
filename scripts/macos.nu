@@ -88,7 +88,7 @@ export def package-macos [ctx: record, formats: list<string>, destination: path]
         for format in $formats {
             let target = if $format == "app" {
                 let target = ($destination | path join Rovar.app)
-                let kind = ($target | path type)
+                let kind = ($target | path type | default "")
                 if $kind not-in ["" dir] {
                     error make {msg: $"Refusing to replace non-directory app bundle: ($target)"}
                 }
