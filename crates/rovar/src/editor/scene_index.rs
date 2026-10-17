@@ -1,5 +1,6 @@
 use super::*;
 use std::{collections::HashMap, rc::Rc};
+mod spatial;
 
 #[derive(Clone, PartialEq)]
 struct Node {
@@ -10,11 +11,92 @@ struct Node {
     rect: Option<Rect>,
     rotation: f32,
     hidden: bool,
+    outset: f32,
+    unbounded: bool,
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[gpui::test]
+    fn viewport_queries_keep_order_and_refresh_stroke_and_effect_extents(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let handle = crate::editor::tests::open(cx);
+        handle
+            .update(cx, |w, _, cx| {
+                let viewport = Rect {
+                    x: 0.,
+                    y: 0.,
+                    width: 100.,
+                    height: 100.,
+                };
+                // The frame is offscreen, but its first child extends into the viewport.
+                w.add_artboard(
+                    Rect {
+                        x: 10000.,
+                        ..viewport
+                    },
+                    cx,
+                );
+                let board = w.boards[0].id;
+                for i in 0..64 {
+                    w.shapes.push(Shape::new(
+                        100 + i,
+                        Some(board),
+                        ShapeKind::Rectangle,
+                        Rect {
+                            x: i as f32 * 1000. - 10000.,
+                            ..viewport
+                        },
+                    ));
+                }
+                w.hierarchy.order = (100..164).rev().collect();
+                let query = |w: &Workspace| {
+                    w.scene_index()
+                        .visible_order(viewport, 1., [163, 100].into_iter())
+                };
+                assert_eq!(query(w), vec![163, 100]);
+
+                w.shapes[1].rect.x = -9500.;
+                w.shapes[1].stroke.enabled = true;
+                w.shapes[1].stroke.align = crate::scene::shape::StrokeAlign::Outside;
+                w.shapes[1].stroke.width = 450.;
+                assert_eq!(query(w), vec![163, 101, 100]);
+                w.shapes[1].stroke.enabled = false;
+                assert_eq!(query(w), vec![163, 100]);
+
+                w.hierarchy.effects.insert(
+                    101,
+                    vec![crate::scene::effects::Effect::Shadow(
+                        crate::scene::effects::Shadow {
+                            x: -450.,
+                            ..Default::default()
+                        },
+                    )],
+                );
+                assert_eq!(query(w), vec![163, 101, 100]);
+                w.hierarchy.effects.clear();
+                w.shapes[1].rect = Rect {
+                    x: -9400.,
+                    y: -500.,
+                    width: 10.,
+                    height: 1000.,
+                };
+                w.shapes[1].layer.rotation = 90.;
+                assert_eq!(query(w), vec![163, 101, 100]);
+                w.shapes[1].layer.hidden = true;
+                assert_eq!(query(w), vec![163, 100]);
+                w.boards[0].rect.x += 10000.;
+                assert_eq!(
+                    w.scene_index()
+                        .visible_order(viewport, 1., std::iter::empty()),
+                    Vec::<usize>::new()
+                );
+            })
+            .unwrap();
+    }
 
     #[gpui::test]
     fn index_tracks_uncommitted_geometry_hierarchy_and_visibility(cx: &mut gpui::TestAppContext) {
@@ -109,6 +191,35 @@ pub(super) struct Index {
     pub groups: HashMap<usize, Rect>,
     pub order: Vec<usize>,
     pub included: std::collections::BTreeSet<usize>,
+    positions: HashMap<usize, usize>,
+    spatial: spatial::SpatialIndex,
+    unbounded: Vec<usize>,
+}
+
+impl Index {
+    pub fn visible_order(
+        &self,
+        mut viewport: Rect,
+        zoom: f32,
+        retained: impl Iterator<Item = usize>,
+    ) -> Vec<usize> {
+        if viewport.width <= 0. || viewport.height <= 0. {
+            return self.order.clone();
+        }
+        // Cover screen-space handles, rotated margins and the 100px frame title
+        // hit area. Exact visibility is still checked when building each element.
+        let margin = 144. / zoom;
+        viewport.x -= margin;
+        viewport.y -= margin;
+        viewport.width += margin * 2.;
+        viewport.height += margin * 2.;
+        let mut positions = self.unbounded.clone();
+        self.spatial.query(viewport, &mut positions);
+        positions.extend(retained.filter_map(|id| self.positions.get(&id).copied()));
+        positions.sort_unstable();
+        positions.dedup();
+        positions.into_iter().map(|i| self.order[i]).collect()
+    }
 }
 
 #[derive(Default)]
@@ -194,7 +305,7 @@ impl Workspace {
         cache.nodes = self.geometry_nodes().collect();
         cache.order.clone_from(&self.hierarchy.order);
         let order = self.canvas_layer_order();
-        let index = Rc::new(Index {
+        let mut index = Index {
             boards: self
                 .boards
                 .iter()
@@ -215,8 +326,44 @@ impl Workspace {
                 .collect(),
             groups: self.group_content_bounds(),
             included: order.iter().copied().collect(),
+            positions: order.iter().enumerate().map(|(i, id)| (*id, i)).collect(),
             order,
-        });
+            spatial: Default::default(),
+            unbounded: Vec::new(),
+        };
+        let mut entries = Vec::new();
+        for node in &cache.nodes {
+            let Some(&position) = index.positions.get(&node.id) else {
+                continue;
+            };
+            if node.unbounded {
+                index.unbounded.push(position);
+                continue;
+            }
+            let mut rect = if let Some(mut rect) = node.rect {
+                if let Some(board) = node.board.and_then(|id| index.boards.get(&id)) {
+                    rect.x += self.boards[*board].rect.x;
+                    rect.y += self.boards[*board].rect.y;
+                }
+                rect
+            } else if let Some(rect) = index.groups.get(&node.id) {
+                *rect
+            } else {
+                continue;
+            };
+            rect.x -= node.outset;
+            rect.y -= node.outset;
+            rect.width += node.outset * 2.;
+            rect.height += node.outset * 2.;
+            let rotation = if matches!(node.kind, 1 | 2) {
+                node.rotation
+            } else {
+                0.
+            };
+            entries.push((position, crate::scene::rotation::bounds(rect, rotation)));
+        }
+        index.spatial = spatial::SpatialIndex::new(entries);
+        let index = Rc::new(index);
         cache.index = Some(index.clone());
         index
     }
@@ -224,24 +371,29 @@ impl Workspace {
     fn geometry_nodes(&self) -> impl Iterator<Item = Node> + '_ {
         self.boards
             .iter()
-            .map(|b| (0, b.id, None, Some(b.rect), b.layer))
-            .chain(
-                self.shapes
-                    .iter()
-                    .map(|s| (1, s.id, s.board, Some(s.rect), s.layer)),
-            )
+            .map(|b| (0, b.id, None, Some(b.rect), b.layer, 0.))
+            .chain(self.shapes.iter().map(|s| {
+                (
+                    1,
+                    s.id,
+                    s.board,
+                    Some(s.rect),
+                    s.layer,
+                    shapes::GeometryKey::outset(s, 1.),
+                )
+            }))
             .chain(
                 self.texts
                     .iter()
-                    .map(|t| (2, t.id, t.board, Some(t.rect), t.layer)),
+                    .map(|t| (2, t.id, t.board, Some(t.rect), t.layer, 0.)),
             )
             .chain(
                 self.hierarchy
                     .groups
                     .iter()
-                    .map(|(id, g)| (3, *id, g.board, None, g.layer)),
+                    .map(|(id, g)| (3, *id, g.board, None, g.layer, 0.)),
             )
-            .map(|(kind, id, board, rect, layer)| Node {
+            .map(|(kind, id, board, rect, layer, outset)| Node {
                 kind,
                 id,
                 parent: self.hierarchy.parents.get(&id).copied().or(board),
@@ -249,6 +401,19 @@ impl Workspace {
                 rect,
                 rotation: layer.rotation,
                 hidden: layer.hidden,
+                outset: outset
+                    + self
+                        .hierarchy
+                        .effects
+                        .get(&id)
+                        .map_or(0., |effects| crate::scene::effects::padding(effects)),
+                unbounded: kind == 3
+                    && (self.hierarchy.layouts.contains_key(&id)
+                        || self
+                            .hierarchy
+                            .groups
+                            .get(&id)
+                            .is_some_and(|g| g.mask.is_some() || g.boolean.is_some())),
             })
     }
 }

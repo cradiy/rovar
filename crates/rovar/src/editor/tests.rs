@@ -104,6 +104,25 @@ fn profile_canvas_document(cx: &mut TestAppContext) {
         }
         eprintln!("zoom frame average={:?}", elapsed / 5);
     }
+    let mut frames = Vec::new();
+    for i in 0..120 {
+        let phase = (i % 60) as f32 / 30.;
+        let zoom = 0.08 * 10_f32.powf(if phase <= 1. { phase } else { 2. - phase });
+        let started = std::time::Instant::now();
+        handle
+            .update(&mut visual.cx, |w, _, cx| {
+                w.view.zoom_at(point(640., 400.), zoom);
+                cx.notify();
+            })
+            .unwrap();
+        visual.update(|window, cx| window.draw(cx).clear());
+        frames.push(started.elapsed());
+    }
+    frames.sort_unstable();
+    eprintln!(
+        "rapid zoom: p50={:?} p95={:?} max={:?}",
+        frames[60], frames[114], frames[119]
+    );
     handle
         .update(&mut visual.cx, |w, window, cx| {
             w.suspend(window, cx);

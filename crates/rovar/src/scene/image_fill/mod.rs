@@ -52,7 +52,7 @@ impl ImageFill {
         self.paint_with_radii(bounds, Default::default(), window, cx);
     }
 
-    fn paint_with_radii(
+    pub(crate) fn paint_with_radii(
         &self,
         bounds: Bounds<Pixels>,
         radii: gpui::Corners<Pixels>,
