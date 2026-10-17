@@ -32,7 +32,7 @@ pub struct Artboard {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
-#[cfg_attr(unix, derive(schemars::JsonSchema))]
+#[cfg_attr(any(unix, windows), derive(schemars::JsonSchema))]
 pub enum FillMode {
     #[default]
     Solid,
@@ -42,7 +42,7 @@ pub enum FillMode {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-#[cfg_attr(unix, derive(schemars::JsonSchema))]
+#[cfg_attr(any(unix, windows), derive(schemars::JsonSchema))]
 pub struct GradientStop {
     pub id: usize,
     pub position: f32,
@@ -50,7 +50,7 @@ pub struct GradientStop {
     #[serde(default = "default_midpoint")]
     pub midpoint: f32,
     #[serde(with = "crate::document::rgba")]
-    #[cfg_attr(unix, schemars(with = "[f32; 4]"))]
+    #[cfg_attr(any(unix, windows), schemars(with = "[f32; 4]"))]
     pub color: Rgba,
 }
 
@@ -72,11 +72,11 @@ pub(crate) fn midpoint_weight(position: f32, midpoint: f32) -> f32 {
 }
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-#[cfg_attr(unix, derive(schemars::JsonSchema))]
+#[cfg_attr(any(unix, windows), derive(schemars::JsonSchema))]
 pub struct LinearGradient {
     pub angle: f32,
     #[serde(with = "crate::document::gradient_kind")]
-    #[cfg_attr(unix, schemars(with = "String"))]
+    #[cfg_attr(any(unix, windows), schemars(with = "String"))]
     pub kind: gpui::GradientKind,
     #[serde(default = "default_seam_width")]
     pub seam_width: f32,

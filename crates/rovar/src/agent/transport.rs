@@ -3,6 +3,14 @@ use anyhow::{Context, ensure};
 use futures_channel::mpsc;
 use std::{
     io::{BufRead, BufReader, Read, Write},
+    sync::mpsc as sync,
+    time::{Duration, Instant},
+};
+
+#[cfg(windows)]
+mod windows;
+#[cfg(unix)]
+use std::{
     os::unix::{
         fs::{MetadataExt, PermissionsExt},
         net::{UnixListener, UnixStream},
@@ -11,10 +19,10 @@ use std::{
     sync::{
         Arc,
         atomic::{AtomicBool, AtomicUsize, Ordering},
-        mpsc as sync,
     },
-    time::{Duration, Instant},
 };
+#[cfg(windows)]
+pub(crate) use windows::{Server, connect, directory, discover, listen};
 
 pub(crate) const MAX_REQUEST_BYTES: usize = 24 * 1024 * 1024;
 pub(crate) struct Pending {
@@ -23,6 +31,7 @@ pub(crate) struct Pending {
     pub reply: sync::SyncSender<serde_json::Value>,
 }
 
+#[cfg(unix)]
 pub(crate) struct Server {
     pub stop: Arc<AtomicBool>,
     path: PathBuf,
@@ -30,6 +39,7 @@ pub(crate) struct Server {
     _directory: tempfile::TempDir,
 }
 impl gpui::Global for Server {}
+#[cfg(unix)]
 impl Drop for Server {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Release);
@@ -39,10 +49,12 @@ impl Drop for Server {
     }
 }
 
+#[cfg(unix)]
 pub(crate) fn directory() -> PathBuf {
     dirs::runtime_dir().unwrap_or_else(std::env::temp_dir)
 }
 
+#[cfg(unix)]
 pub(crate) fn listen(base: &Path) -> anyhow::Result<(Server, mpsc::Receiver<Pending>)> {
     let directory = tempfile::Builder::new()
         .prefix("rovar-live-")
@@ -60,7 +72,7 @@ pub(crate) fn listen(base: &Path) -> anyhow::Result<(Server, mpsc::Receiver<Pend
     std::fs::set_permissions(&guard.path, std::fs::Permissions::from_mode(0o600))?;
     std::fs::write(
         guard._directory.path().join("session.json"),
-        serde_json::to_vec(&serde_json::json!({"pid":std::process::id(),"socket":guard.path}))?,
+        serde_json::to_vec(&serde_json::json!({"pid":std::process::id(),"endpoint":guard.path}))?,
     )?;
     listener.set_nonblocking(true)?;
     let stop = guard.stop.clone();
@@ -81,7 +93,15 @@ pub(crate) fn listen(base: &Path) -> anyhow::Result<(Server, mpsc::Receiver<Pend
                         let spawned = std::thread::Builder::new()
                             .name("rovar-agent-client".into())
                             .spawn(move || {
-                                let _ = serve(stream, sender);
+                                if stream
+                                    .set_read_timeout(Some(Duration::from_secs(10)))
+                                    .is_ok()
+                                    && stream
+                                        .set_write_timeout(Some(Duration::from_secs(10)))
+                                        .is_ok()
+                                {
+                                    let _ = serve(stream, sender);
+                                }
                                 count.fetch_sub(1, Ordering::AcqRel);
                             });
                         if spawned.is_err() {
@@ -98,6 +118,7 @@ pub(crate) fn listen(base: &Path) -> anyhow::Result<(Server, mpsc::Receiver<Pend
     Ok((guard, receiver))
 }
 
+#[cfg(unix)]
 pub(crate) fn discover(base: &Path) -> anyhow::Result<serde_json::Value> {
     let mut sessions = Vec::new();
     let entries = match std::fs::read_dir(base) {
@@ -126,10 +147,10 @@ pub(crate) fn discover(base: &Path) -> anyhow::Result<serde_json::Value> {
         if let Some(pid) = record.and_then(|value| value["pid"].as_u64())
             && UnixStream::connect(&socket).is_ok()
         {
-            sessions.push(serde_json::json!({"pid":pid,"socket":socket}));
+            sessions.push(serde_json::json!({"pid":pid,"endpoint":socket}));
         }
     }
-    sessions.sort_by(|a, b| a["socket"].as_str().cmp(&b["socket"].as_str()));
+    sessions.sort_by(|a, b| a["endpoint"].as_str().cmp(&b["endpoint"].as_str()));
     Ok(serde_json::json!(sessions))
 }
 
@@ -150,10 +171,16 @@ pub(crate) fn read_line(reader: &mut impl BufRead) -> anyhow::Result<Option<Vec<
     Ok(Some(bytes))
 }
 
-fn serve(mut stream: UnixStream, mut sender: mpsc::Sender<Pending>) -> anyhow::Result<()> {
-    stream.set_read_timeout(Some(Duration::from_secs(10)))?;
+#[cfg(unix)]
+pub(crate) fn connect(path: &Path) -> anyhow::Result<UnixStream> {
+    let stream = UnixStream::connect(path)?;
+    stream.set_read_timeout(Some(Duration::from_secs(60)))?;
     stream.set_write_timeout(Some(Duration::from_secs(10)))?;
-    let line = read_line(&mut BufReader::new(stream.try_clone()?))?.context("Empty request")?;
+    Ok(stream)
+}
+
+fn serve(mut stream: impl Read + Write, mut sender: mpsc::Sender<Pending>) -> anyhow::Result<()> {
+    let line = read_line(&mut BufReader::new(&mut stream))?.context("Empty request")?;
     let value = match serde_json::from_slice::<Request>(&line) {
         Err(error) => serde_json::json!({"request_id":null,"error":{
             "code":"INVALID_ARGUMENT","message":error.to_string()}}),
@@ -186,7 +213,8 @@ fn serve(mut stream: UnixStream, mut sender: mpsc::Sender<Pending>) -> anyhow::R
             }
         }
     };
-    serde_json::to_writer(&mut stream, &value)?;
-    stream.write_all(b"\n")?;
+    let mut bytes = serde_json::to_vec(&value)?;
+    bytes.push(b'\n');
+    stream.write_all(&bytes)?;
     Ok(())
 }

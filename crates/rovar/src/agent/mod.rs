@@ -15,7 +15,7 @@ struct Options {
     #[arg(long, conflicts_with = "connect")]
     list_sessions: bool,
     /// Send JSON requests from stdin to a running editor; emit JSON responses.
-    #[arg(long, value_name = "SOCKET")]
+    #[arg(long, value_name = "ENDPOINT")]
     connect: Option<PathBuf>,
 }
 
@@ -42,9 +42,7 @@ fn connect(path: &std::path::Path) -> anyhow::Result<()> {
     while let Some(line) = transport::read_line(&mut input)? {
         let _: protocol::Request = serde_json::from_slice(&line)?;
         // One connection per request keeps idle clients from occupying server slots.
-        let mut stream = std::os::unix::net::UnixStream::connect(path)?;
-        stream.set_read_timeout(Some(std::time::Duration::from_secs(60)))?;
-        stream.set_write_timeout(Some(std::time::Duration::from_secs(10)))?;
+        let mut stream = transport::connect(path)?;
         stream.write_all(&line)?;
         stream.write_all(b"\n")?;
         let mut response = io::BufReader::new(stream);

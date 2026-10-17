@@ -4,7 +4,7 @@ use gpui::Point;
 
 /// Image magnification relative to its fit, with offsets in frame dimensions.
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-#[cfg_attr(unix, derive(schemars::JsonSchema))]
+#[cfg_attr(any(unix, windows), derive(schemars::JsonSchema))]
 pub struct Placement {
     pub zoom: f32,
     pub offset: [f32; 2],

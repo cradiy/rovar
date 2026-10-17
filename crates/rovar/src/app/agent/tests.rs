@@ -1,9 +1,8 @@
 use super::*;
 use gpui::TestAppContext;
-use std::{
-    io::{BufRead, Write},
-    os::unix::{fs::PermissionsExt, net::UnixStream},
-};
+use std::io::{BufRead, Write};
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 
 fn call(
     path: &std::path::Path,
@@ -13,10 +12,7 @@ fn call(
     let path = path.to_owned();
     let (send, receive) = std::sync::mpsc::channel();
     let worker = std::thread::spawn(move || {
-        let mut stream = UnixStream::connect(path).unwrap();
-        stream
-            .set_read_timeout(Some(std::time::Duration::from_secs(5)))
-            .unwrap();
+        let mut stream = transport::connect(&path).unwrap();
         serde_json::to_writer(&mut stream, &request).unwrap();
         stream.write_all(b"\n").unwrap();
         let mut line = String::new();
@@ -32,7 +28,7 @@ fn call(
         if let Ok(value) = receive.try_recv() {
             break value;
         }
-        assert!(start.elapsed().as_secs() < 8, "Socket response timed out");
+        assert!(start.elapsed().as_secs() < 8, "Endpoint response timed out");
         std::thread::sleep(std::time::Duration::from_millis(5));
     };
     worker.join().unwrap();
@@ -40,18 +36,20 @@ fn call(
 }
 
 #[gpui::test]
-fn socket_routes_only_to_the_named_active_editor(cx: &mut TestAppContext) {
+fn endpoint_routes_only_to_the_named_active_editor(cx: &mut TestAppContext) {
     cx.update(uic::init);
     cx.executor().allow_parking();
     let root = tempfile::tempdir().unwrap();
     cx.update(|cx| start(root.path(), cx).unwrap());
     let endpoints = transport::discover(root.path()).unwrap();
     assert_eq!(endpoints.as_array().unwrap().len(), 1);
-    let path = PathBuf::from(endpoints[0]["socket"].as_str().unwrap());
+    let path = PathBuf::from(endpoints[0]["endpoint"].as_str().unwrap());
+    #[cfg(unix)]
     assert_eq!(
         std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
         0o600
     );
+    #[cfg(unix)]
     assert_eq!(
         std::fs::metadata(path.parent().unwrap())
             .unwrap()
@@ -75,9 +73,16 @@ fn socket_routes_only_to_the_named_active_editor(cx: &mut TestAppContext) {
         .prefix("rovar-live-")
         .tempdir_in(root.path())
         .unwrap();
-    std::fs::set_permissions(stale.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
-    drop(std::os::unix::net::UnixListener::bind(stale.path().join("editor.sock")).unwrap());
-    std::fs::write(stale.path().join("session.json"), b"{\"pid\":1}").unwrap();
+    #[cfg(unix)]
+    {
+        std::fs::set_permissions(stale.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+        drop(std::os::unix::net::UnixListener::bind(stale.path().join("editor.sock")).unwrap());
+    }
+    std::fs::write(
+        stale.path().join("session.json"),
+        serde_json::to_vec(&json!({"pid":1,"endpoint":r"\\.\pipe\rovar-missing"})).unwrap(),
+    )
+    .unwrap();
     assert_eq!(transport::discover(root.path()).unwrap(), endpoints);
     let handle = cx.open_window(gpui::size(px(1000.), px(800.)), |window, cx| {
         Studio::new(root.path().into(), window, cx)
@@ -135,7 +140,11 @@ fn socket_routes_only_to_the_named_active_editor(cx: &mut TestAppContext) {
     cx.update(|cx| {
         cx.remove_global::<transport::Server>();
     });
-    assert!(!path.exists());
-    assert!(!path.parent().unwrap().exists());
+    #[cfg(unix)]
+    {
+        assert!(!path.exists());
+        assert!(!path.parent().unwrap().exists());
+    }
+    assert!(transport::connect(&path).is_err());
     assert_eq!(transport::discover(root.path()).unwrap(), json!([]));
 }

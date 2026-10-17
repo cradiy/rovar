@@ -5,7 +5,7 @@ use crate::scene::{
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(unix, derive(schemars::JsonSchema))]
+#[cfg_attr(any(unix, windows), derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Paint {
     /// Color in #RRGGBB or #RRGGBBAA format.

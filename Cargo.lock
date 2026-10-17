@@ -6485,6 +6485,7 @@ dependencies = [
  "web-sys",
  "web-time",
  "whoami",
+ "windows-sys 0.61.2",
  "zed-font-kit 0.14.1-zed (git+https://github.com/cradiy/font-kit?rev=94b0f28166665e8fd2f53ff6d268a14955c82269)",
 ]
 

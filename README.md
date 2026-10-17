@@ -65,7 +65,7 @@ just install-skill
 This installs or updates `rovar-design` in `~/.agents/skills`. To use a different
 skills directory, run `just install-skill-to /path/to/skills`. Start a new agent session to load the skill,
 open Rovar normally, and ask the agent to create or refine a design with `rovar-design`.
-The skill discovers the running Unix desktop editor's current protocol and guides
+The skill discovers the running Windows, macOS or Linux desktop editor's current protocol and guides
 incremental edits with visual checks. See the [local protocol](docs/agent-protocol.md).
 
 ## Build

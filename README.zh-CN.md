@@ -81,7 +81,7 @@ just install-skill
 `just install-skill-to /path/to/skills`。
 
 新建一个 agent 会话以加载 skill，正常打开 Rovar，然后让 agent 使用
-`rovar-design` 创建或调整设计。skill 会查询运行中 Unix 桌面编辑器的最新协议，
+`rovar-design` 创建或调整设计。skill 会查询运行中 Windows、macOS 或 Linux 桌面编辑器的最新协议，
 优先增量修改现有元素，逐步检查和完善。详见[本地协议](docs/agent-protocol.md)。
 
 ## Web 与服务器

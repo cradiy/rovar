@@ -6,7 +6,7 @@ use crate::{
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(unix, derive(schemars::JsonSchema))]
+#[cfg_attr(any(unix, windows), derive(schemars::JsonSchema))]
 #[serde(
     tag = "property",
     content = "value",
@@ -46,7 +46,7 @@ pub(crate) enum Property {
 
 /// An explicit boolean value or a toggle of the current playback value.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(unix, derive(schemars::JsonSchema))]
+#[cfg_attr(any(unix, windows), derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum Boolean {
     Toggle,
@@ -64,7 +64,7 @@ impl Boolean {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(unix, derive(schemars::JsonSchema))]
+#[cfg_attr(any(unix, windows), derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum Align {
     Left,
@@ -73,7 +73,7 @@ pub(crate) enum Align {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(unix, derive(schemars::JsonSchema))]
+#[cfg_attr(any(unix, windows), derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum Direction {
     Horizontal,

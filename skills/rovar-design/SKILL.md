@@ -11,16 +11,25 @@ there is no pinned protocol version or legacy compatibility mode.
 
 ## Connect and discover
 
-Use the installed `rovar` binary, or an existing build in the user's checkout
-(`target/debug/rovar` or `target/release/rovar`). Run `--help` if the CLI differs.
-Normal application startup automatically exposes a local interface on Unix desktop
-builds; no agent startup flag is needed. Windows and Web do not expose this transport.
+On Windows, use the same `rovar.exe` for GUI startup and CLI commands. Honor an
+executable path explicitly supplied by the user; otherwise first check
+`%LOCALAPPDATA%\Programs\Rovar\rovar.exe`, the default installation path. If it is
+missing, resolve `rovar.exe` from PATH. If neither is available, ask the user to
+add the directory containing `rovar.exe` to PATH or provide its full path, then
+pause connection attempts. Do not search the disk, build the application, or
+fall back to checkout artifacts unless the user explicitly requests that.
+
+On macOS/Linux, use the installed `rovar` binary, or an existing build in the
+user's checkout (`target/debug/rovar` or `target/release/rovar`).
+Run `--help` if the CLI differs.
+Normal application startup automatically exposes a local interface on Windows,
+macOS and Linux; no agent startup flag is needed. Web does not expose this transport.
 
 ```sh
 rovar --list-sessions
 ```
 
-The result lists process IDs and socket paths. Use an actual discovered path:
+The result lists `pid` and `endpoint`. Use an actual discovered endpoint:
 
 ```sh
 printf '%s\n' '{"request_id":"inspect-session","method":"session.describe"}' |
@@ -28,6 +37,33 @@ printf '%s\n' '{"request_id":"inspect-session","method":"session.describe"}' |
 printf '%s\n' '{"request_id":"inspect-apply-schema","method":"schema.get","params":{"method":"document.apply"}}' |
   rovar --connect /DISCOVERED/PATH/editor.sock
 ```
+
+Windows PowerShell example (use a user-supplied executable path instead when
+provided, and replace the endpoint with the discovered value):
+
+```powershell
+$rovar = Join-Path $env:LOCALAPPDATA 'Programs\Rovar\rovar.exe'
+if (-not (Test-Path -LiteralPath $rovar -PathType Leaf)) {
+    $rovar = (Get-Command rovar.exe -CommandType Application -ErrorAction SilentlyContinue |
+        Select-Object -First 1).Source
+}
+if (-not $rovar) {
+    throw 'Rovar was not found. Ask the user to add its directory to PATH or provide the full path to rovar.exe.'
+}
+& $rovar --list-sessions | Out-String
+$endpoint = '\\.\pipe\rovar-PID-UUID'
+'{"request_id":"inspect-session","method":"session.describe"}' |
+  & $rovar --connect $endpoint | Out-String
+```
+
+Windows shells may not wait for GUI executables when invoked directly. Keep
+PowerShell commands in a pipeline, or use `Start-Process -Wait -PassThru` for
+explicit exit status. Agent process APIs should redirect stdin/stdout/stderr and
+wait for exit. No separate CLI executable is needed.
+
+Use UTF-8 for JSON input and output. In Windows PowerShell 5.1, set
+`$OutputEncoding = [System.Text.UTF8Encoding]::new($false)` before piping non-ASCII
+requests. PowerShell 7 uses UTF-8 by default.
 
 `--connect` reads JSON Lines from stdin and returns JSON Lines on stdout; diagnostics
 go to stderr. Inspect the JSON error even when the process exits unsuccessfully.
@@ -38,7 +74,8 @@ Inspect each candidate's `session.describe` to identify the intended document. D
 choose the first process or document arbitrarily. If no document is open, have the
 user open or create one, or use an available authorized UI tool. Do not edit persisted
 `.rovar` files as a substitute for the live protocol. If discovery is empty despite
-a running editor, check that the client uses the same user's desktop runtime directory.
+a running editor, check that the client runs as the same user and uses the same
+runtime directory (Unix) or local application data directory (Windows).
 
 Before editing, record the active `session_id`, `document_id`, `page_id`, document
 `revision`, selection, busy state, and capabilities. Query `schema.get` for the methods
@@ -103,9 +140,14 @@ that navigation, variant switching, or media playback actually executed.
 Import assets with `document.apply`'s `import` operation and an explicit destination
 rectangle. Images accept Base64 file bytes or absolute local paths; SVG accepts XML
 text or absolute local paths. Audio/video require paths on the editor's machine.
-Prefer paths for large payloads and inspect the live request/data limits. SVG remains
-a vector asset unless `editable: true` is requested; conversion failure rejects the
-batch. Respect that choice instead of silently changing the requested representation.
+Prefer paths for large payloads and inspect the live request/data limits. For simple
+SVGs such as icons, basic shapes, and small path illustrations, prefer importing
+with `editable: true` so the result is editable paths rather than a single SVG asset.
+Check the live import schema for where to set this field. Preserve a vector asset
+when the user explicitly requests it, or when conversion cannot preserve a complex
+SVG's appearance. Conversion failure rejects the batch; inspect the failure before
+retrying, and explain any fallback to a non-editable SVG asset. Verify the converted
+result with node reads and a capture.
 Use the returned UUID or batch reference to attach interactions, and distinguish
 successful import from verified media playback.
 Move, resize, rename, or restyle imported assets by updating their existing UUIDs.

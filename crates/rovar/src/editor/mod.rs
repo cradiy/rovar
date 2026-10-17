@@ -1,6 +1,6 @@
 //! Editor state and feature composition. Application windows and shared UI live outside this module.
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 mod agent;
 mod assets;
 mod auto_layout;
@@ -66,7 +66,7 @@ use uic::components::{
 };
 
 pub(crate) struct Workspace {
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     agent: agent::State,
     inspector: inspector::State,
     pages: pages::State,

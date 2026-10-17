@@ -59,7 +59,7 @@ impl Workspace {
         let history = SharedHistory::default();
         history.borrow_mut().set_page(pages.active.clone());
         Self {
-            #[cfg(unix)]
+            #[cfg(any(unix, windows))]
             agent: agent::State::default(),
             pages,
             inspector,

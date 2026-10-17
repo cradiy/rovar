@@ -1,6 +1,7 @@
 # Local editor protocol
 
-The Unix desktop build automatically exposes the running editor through a private local socket.
+Desktop builds automatically expose the running editor through a private local endpoint:
+a Unix socket on macOS/Linux or a named pipe on Windows.
 Edits use the open document's history and normal save/sync behavior. An apply response
 acknowledges an in-memory edit, not a completed disk save or remote upload.
 
@@ -13,29 +14,60 @@ In another terminal, discover running editors:
 rovar --list-sessions
 ```
 
-The JSON array contains each running process's `pid` and `socket`. Connect using
-one of those socket paths:
+The JSON array contains each running process's `pid` and `endpoint`. Connect using
+one of those endpoint addresses:
 
 ```sh
 printf '%s\n' '{"request_id":"describe-1","method":"session.describe"}' |
   rovar --connect /PATH/FROM/DISCOVERY/editor.sock
 ```
 
+On Windows, the same `rovar.exe` opens the GUI without arguments and handles CLI
+commands with arguments. The default installation path is
+`%LOCALAPPDATA%\Programs\Rovar\rovar.exe`. If it is not present, use `rovar.exe`
+from PATH or supply the full executable path. To use PATH, add the directory
+containing `rovar.exe` and reopen the terminal. For a default installation:
+
+```powershell
+$rovar = Join-Path $env:LOCALAPPDATA 'Programs\Rovar\rovar.exe'
+& $rovar --list-sessions | Out-String
+# Copy the endpoint of the intended editor from discovery.
+$endpoint = '\\.\pipe\rovar-PID-UUID'
+'{"request_id":"describe-1","method":"session.describe"}' |
+  & $rovar --connect $endpoint | Out-String
+```
+
+Windows shells may launch GUI executables without waiting. In PowerShell, keep
+the command in a pipeline (as above) or use `Start-Process -Wait -PassThru` when
+you need the process exit code. In interactive cmd.exe, use `start /wait`.
+Agent process APIs should redirect standard input/output/error and wait for exit;
+they do not need a wrapper executable. CLI startup attaches to the parent's console
+when available and preserves redirected streams, without allocating a new console.
+
+Requests and responses use UTF-8. In Windows PowerShell 5.1, set
+`$OutputEncoding = [System.Text.UTF8Encoding]::new($false)` before piping non-ASCII
+JSON to the CLI. PowerShell 7 uses UTF-8 by default.
+
 `rovar --connect` reads newline-delimited JSON requests from stdin and writes JSON
 responses to stdout. Diagnostics go to stderr. Exit status is 0 for successful
 requests, 1 for protocol/connection/input failures, and 2 for invalid CLI arguments.
-Each socket connection accepts one request. The CLI can send multiple input lines.
-Each process creates a unique `rovar-live-*` directory in the user runtime directory
+Each connection accepts one request. The CLI can send multiple input lines.
+On Unix, each process creates a unique `rovar-live-*` directory in the user runtime directory
 (or system temporary directory if unavailable), with mode 0700 and a socket with
 mode 0600. Discovery skips unreachable endpoints. Normal exit removes the process's
-directory; a crash may leave an unreachable directory behind. Interface startup
+directory; a crash may leave an unreachable directory behind.
+On Windows, discovery records live under `%LOCALAPPDATA%/Rovar/agent/rovar-live-*`.
+Pipe names contain a process ID and random UUID. Pipes reject remote clients and
+use an explicit protected DACL granting access only to the current user.
+Normal exit removes the discovery record and closes the listener; discovery skips
+unreachable records left by crashes. Interface startup
 failure is reported to stderr and does not prevent the editor from opening.
 The interface is available to local processes running as the same user.
 
 Only active document tabs and their active pages are addressable. A tab/page change
 does not redirect a request to a different document. Reopening, reloading, or moving
-a document to another window can create a new session. Windows and Web builds do
-not expose this transport.
+a document to another window can create a new session. Web builds do not expose
+this transport.
 
 ## Discover before editing
 

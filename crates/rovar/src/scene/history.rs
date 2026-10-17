@@ -148,7 +148,7 @@ impl History {
     pub fn revision(&self) -> u64 {
         self.revision
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     pub fn is_previewing(&self) -> bool {
         self.preview.is_some()
     }

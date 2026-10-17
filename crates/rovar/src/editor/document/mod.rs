@@ -289,7 +289,7 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> String {
-        #[cfg(unix)]
+        #[cfg(any(unix, windows))]
         {
             self.agent = Default::default();
         }

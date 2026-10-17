@@ -40,7 +40,7 @@ pub(crate) fn start() {
             return;
         }
         i18n::init();
-        #[cfg(unix)]
+        #[cfg(any(unix, windows))]
         if let Err(error) = super::agent::start(&crate::agent::transport::directory(), cx) {
             eprintln!("Could not start agent socket: {error:#}");
         }
