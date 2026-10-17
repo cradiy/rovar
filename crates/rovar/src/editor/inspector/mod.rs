@@ -36,6 +36,8 @@ pub(super) const PROPERTY_SURFACES: usize = 4;
 
 fn inspector_input(state: &Entity<TextInput>) -> Input {
     Input::new(state)
+        // Inspector controls transfer focus after committing drafts or handling clicks.
+        .blur_on_click_outside(false)
         .text_size(px(12.))
         .text_color(TEXT.color())
         .appearance(InputAppearance {

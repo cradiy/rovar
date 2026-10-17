@@ -212,6 +212,8 @@ impl FontPicker {
                     .debug_selector(|| "font-search".into())
                     .child(
                         Input::new(&self.search)
+                            // The popover owns dismissal; a font click must reach its handler.
+                            .blur_on_click_outside(false)
                             .h(px(32.))
                             .px(px(9.))
                             .text_size(px(12.))
