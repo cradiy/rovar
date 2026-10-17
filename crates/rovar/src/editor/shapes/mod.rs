@@ -113,9 +113,10 @@ impl Workspace {
         cx: &mut Context<Self>,
         frame: Option<usize>,
     ) -> Vec<AnyElement> {
-        let boards: HashMap<_, _> = self.boards.iter().map(|b| (b.id, b)).collect();
-        let texts: HashMap<_, _> = self.texts.iter().map(|t| (t.id, t)).collect();
-        let shapes: HashMap<_, _> = self.shapes.iter().map(|s| (s.id, s)).collect();
+        let index = self.scene_index();
+        let board_at = |id: &usize| index.boards.get(id).map(|i| &self.boards[*i]);
+        let text_at = |id: &usize| index.texts.get(id).map(|i| &self.texts[*i]);
+        let shape_at = |id: &usize| index.shapes.get(id).map(|i| &self.shapes[*i]);
         // Use this frame's window size: canvas bounds still describe the previous
         // layout when the window is resized. The larger viewport is conservative.
         let viewport_size = window.viewport_size();
@@ -131,7 +132,7 @@ impl Workspace {
             if viewport.width <= 0. || viewport.height <= 0. {
                 return true;
             }
-            if let Some(board) = board.and_then(|id| boards.get(&id)) {
+            if let Some(board) = board.and_then(|id| board_at(&id)) {
                 rect.x += board.rect.x;
                 rect.y += board.rect.y;
             }
@@ -142,11 +143,14 @@ impl Workspace {
             rect.height += margin * 2.;
             crate::scene::rotation::intersects(rect, rotation, viewport)
         };
-        let mut order = self.canvas_layer_order();
+        let mut order = std::borrow::Cow::Borrowed(&index.order);
         if let Some(frame) = frame {
-            order.retain(|id| *id == frame || self.ancestors(*id).contains(&frame));
+            order
+                .to_mut()
+                .retain(|id| *id == frame || self.ancestors(*id).contains(&frame));
         }
-        let included = order.iter().copied().collect();
+        let frame_included = frame.map(|_| order.iter().copied().collect());
+        let included = frame_included.as_ref().unwrap_or(&index.included);
         let masks = crate::scene::mask::outlines(
             &self.hierarchy,
             &self.shapes,
@@ -157,18 +161,18 @@ impl Workspace {
             .iter()
             .copied()
             .filter_map(|id| {
-                let consumed = crate::scene::boolean::consumed(&self.hierarchy, id, &included)
-                    || crate::scene::mask::is_source(&self.hierarchy, id, &included);
+                let consumed = crate::scene::boolean::consumed(&self.hierarchy, id, included)
+                    || crate::scene::mask::is_source(&self.hierarchy, id, included);
                 if consumed && !self.is_selected(id) && self.vector_edit != Some(id) {
                     return None;
                 }
                 let shadow_margin = self.effect_padding(id);
-                if let Some(board) = boards.get(&id) {
+                if let Some(board) = board_at(&id) {
                     let mut rect = board.rect;
                     rect.width = rect.width.max(100. / self.view.zoom);
                     (self.is_selected(id) || visible(rect, None, 0., 32. + shadow_margin))
                         .then(|| (id, self.board_element(board, cx).into_any_element()))
-                } else if let Some(text) = texts.get(&id) {
+                } else if let Some(text) = text_at(&id) {
                     (text.editor.read(cx).editing
                         || self.is_selected(id)
                         || visible(
@@ -179,6 +183,20 @@ impl Workspace {
                         ))
                     .then(|| (id, self.text_element(text, cx).into_any_element()))
                 } else if self.hierarchy.groups.contains_key(&id) {
+                    let special = self.hierarchy.layouts.contains_key(&id)
+                        || crate::scene::boolean::is_boolean(&self.hierarchy, id)
+                        || crate::scene::mask::source(&self.hierarchy, id).is_some();
+                    let bounds = if special {
+                        self.group_bounds(id)
+                    } else {
+                        index.groups.get(&id).copied()
+                    }?;
+                    if !special
+                        && !self.is_selected(id)
+                        && !visible(bounds, None, 0., 32. + shadow_margin)
+                    {
+                        return None;
+                    }
                     if crate::scene::boolean::is_boolean(&self.hierarchy, id) && !consumed {
                         self.boolean_geometry(id)
                             .map(|g| {
@@ -194,13 +212,12 @@ impl Workspace {
                                     .into_any_element(),
                                 )
                             })
-                            .or_else(|| self.group_element(id, cx).map(|el| (id, el)))
+                            .or_else(|| self.group_element(id, bounds, cx).map(|el| (id, el)))
                     } else {
-                        self.group_element(id, cx).map(|el| (id, el))
+                        self.group_element(id, bounds, cx).map(|el| (id, el))
                     }
                 } else {
-                    shapes
-                        .get(&id)
+                    shape_at(&id)
                         .filter(|s| frame.is_none() || s.kind != ShapeKind::Audio)
                         .filter(|s| {
                             self.is_selected(id)
@@ -239,9 +256,9 @@ impl Workspace {
                 .groups
                 .get(&id)
                 .map(|g| g.layer)
-                .or_else(|| boards.get(&id).map(|b| b.layer))
-                .or_else(|| shapes.get(&id).map(|s| s.layer))
-                .or_else(|| texts.get(&id).map(|t| t.layer))
+                .or_else(|| board_at(&id).map(|b| b.layer))
+                .or_else(|| shape_at(&id).map(|s| s.layer))
+                .or_else(|| text_at(&id).map(|t| t.layer))
                 .unwrap_or_default()
         };
         let scopes: std::collections::BTreeSet<_> = order
@@ -263,15 +280,15 @@ impl Workspace {
         // The order visits parents before children. Resolve each object's
         // nearest compositing scope once instead of rescanning scene objects.
         let mut scope_parents = HashMap::new();
-        for id in &order {
+        for id in order.iter() {
             let parent = self
                 .hierarchy
                 .parents
                 .get(id)
                 .copied()
                 .or_else(|| self.hierarchy.groups.get(id).and_then(|g| g.board))
-                .or_else(|| shapes.get(id).and_then(|s| s.board))
-                .or_else(|| texts.get(id).and_then(|t| t.board));
+                .or_else(|| shape_at(id).and_then(|s| s.board))
+                .or_else(|| text_at(id).and_then(|t| t.board));
             let scope = parent.and_then(|parent| {
                 if scopes.contains(&parent) {
                     Some(parent)
@@ -287,7 +304,7 @@ impl Workspace {
         let mut overlays = Vec::new();
         for id in order.iter().rev().copied() {
             let mut content = rendered.remove(&id).unwrap_or_default();
-            if crate::scene::mask::is_source(&self.hierarchy, id, &included) {
+            if crate::scene::mask::is_source(&self.hierarchy, id, included) {
                 overlays.extend(content);
                 continue;
             }
@@ -316,7 +333,7 @@ impl Workspace {
             } else {
                 &mut roots
             };
-            let backdrop = (!crate::scene::boolean::consumed(&self.hierarchy, id, &included))
+            let backdrop = (!crate::scene::boolean::consumed(&self.hierarchy, id, included))
                 .then(|| self.background_blur_filter(id))
                 .flatten();
             siblings.push((state, content, backdrop));

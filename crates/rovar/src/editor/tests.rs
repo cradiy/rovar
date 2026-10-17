@@ -2,6 +2,118 @@ use super::*;
 use gpui::{TestAppContext, VisualTestContext, WindowHandle};
 
 #[gpui::test]
+#[ignore = "manual canvas profiling; set ROVAR_PROFILE_DOCUMENT"]
+fn profile_canvas_document(cx: &mut TestAppContext) {
+    let path = std::env::var_os("ROVAR_PROFILE_DOCUMENT").expect("ROVAR_PROFILE_DOCUMENT");
+    let started = std::time::Instant::now();
+    let mut document = crate::document::load(std::path::Path::new(&path))
+        .unwrap()
+        .into_document()
+        .unwrap();
+    let copies: usize = std::env::var("ROVAR_PROFILE_COPIES")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(1);
+    let template = document.pages[0].clone();
+    for copy in 1..copies {
+        let page = &mut document.pages[0];
+        let ids = crate::scene::components::ids(&template)
+            .into_iter()
+            .enumerate()
+            .map(|(i, id)| (id, page.next_id + i))
+            .collect();
+        let extra =
+            crate::scene::components::place(&template, &ids, [copy as f32 * 50000., 0.], None);
+        page.next_id = extra.next_id;
+        page.boards.extend(extra.boards);
+        page.shapes.extend(extra.shapes);
+        page.texts.extend(extra.texts);
+        page.assets.extend(extra.assets);
+        page.hierarchy.groups.extend(extra.hierarchy.groups);
+        page.hierarchy.parents.extend(extra.hierarchy.parents);
+        page.hierarchy.names.extend(extra.hierarchy.names);
+        page.hierarchy.order.extend(extra.hierarchy.order);
+        page.hierarchy.layouts.extend(extra.hierarchy.layouts);
+        page.hierarchy.sizing.extend(extra.hierarchy.sizing);
+        page.hierarchy.effects.extend(extra.hierarchy.effects);
+        page.hierarchy.exports.extend(extra.hierarchy.exports);
+        page.hierarchy
+            .interactions
+            .extend(extra.hierarchy.interactions);
+    }
+    eprintln!(
+        "read={:?} pages={} boards={} shapes={} texts={}",
+        started.elapsed(),
+        document.pages.len(),
+        document.pages[0].boards.len(),
+        document.pages[0].shapes.len(),
+        document.pages[0].texts.len()
+    );
+    let handle = open(cx);
+    handle
+        .update(cx, |w, window, cx| {
+            let started = std::time::Instant::now();
+            w.load_prepared_document(document, window, cx);
+            eprintln!("load={:?}", started.elapsed());
+            w.panels.right_collapsed = true;
+        })
+        .unwrap();
+    let mut visual = VisualTestContext::from_window(handle.into(), cx);
+    for zoom in [0.25, 0.5, 1.] {
+        handle
+            .update(&mut visual.cx, |w, _, cx| {
+                w.view.zoom = zoom;
+                w.view.pan = point(0., 0.);
+                let started = std::time::Instant::now();
+                let order = w.canvas_layer_order();
+                eprintln!("zoom={zoom} order={} {:?}", order.len(), started.elapsed());
+                cx.notify();
+            })
+            .unwrap();
+        let started = std::time::Instant::now();
+        draw(&mut visual);
+        eprintln!("first draw={:?}", started.elapsed());
+        let mut elapsed = std::time::Duration::ZERO;
+        for _ in 0..5 {
+            handle
+                .update(&mut visual.cx, |w, _, cx| {
+                    w.view.pan.x += 1.;
+                    cx.notify();
+                })
+                .unwrap();
+            elapsed += visual.update(|window, cx| {
+                let started = std::time::Instant::now();
+                window.draw(cx).clear();
+                started.elapsed()
+            });
+        }
+        eprintln!("pan frame average={:?}", elapsed / 5);
+        let mut elapsed = std::time::Duration::ZERO;
+        for _ in 0..5 {
+            handle
+                .update(&mut visual.cx, |w, _, cx| {
+                    w.view.zoom *= 1.01;
+                    cx.notify();
+                })
+                .unwrap();
+            elapsed += visual.update(|window, cx| {
+                let started = std::time::Instant::now();
+                window.draw(cx).clear();
+                started.elapsed()
+            });
+        }
+        eprintln!("zoom frame average={:?}", elapsed / 5);
+    }
+    handle
+        .update(&mut visual.cx, |w, window, cx| {
+            w.suspend(window, cx);
+            window.remove_window();
+        })
+        .unwrap();
+    visual.cx.run_until_parked();
+}
+
+#[gpui::test]
 fn canvas_culls_offscreen_artwork_but_preserves_edges_and_editing(cx: &mut TestAppContext) {
     let handle = open(cx);
     handle

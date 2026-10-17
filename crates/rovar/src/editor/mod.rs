@@ -31,6 +31,7 @@ mod panels;
 mod presentation;
 mod preview;
 mod rotation;
+mod scene_index;
 mod selection;
 mod shapes;
 mod svg;
@@ -104,6 +105,7 @@ pub(crate) struct Workspace {
     vector_bend: bool,
     vector_segment_t: f32,
     shape_paths: shapes::ShapePaths,
+    scene_index: std::cell::RefCell<scene_index::Cache>,
     boolean_cache: std::cell::RefCell<crate::scene::boolean::Cache>,
     media: media::State,
     svg: svg::State,

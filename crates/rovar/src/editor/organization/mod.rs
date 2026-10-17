@@ -123,12 +123,12 @@ impl Workspace {
     pub(super) fn group_element(
         &self,
         id: usize,
+        rect: Rect,
         cx: &mut Context<Self>,
     ) -> Option<gpui::AnyElement> {
         if !self.layer_editable(id) {
             return None;
         }
-        let rect = self.group_bounds(id)?;
         let position = self.view.screen(point(rect.x, rect.y));
         Some(
             div()
@@ -181,12 +181,79 @@ impl Workspace {
     }
 
     pub(super) fn descendants(&self, roots: &BTreeSet<usize>) -> BTreeSet<usize> {
-        self.layer_ids()
-            .into_iter()
-            .filter(|id| {
-                roots.contains(id) || self.ancestors(*id).iter().any(|p| roots.contains(p))
-            })
-            .collect()
+        let children = self.hierarchy_children();
+        let ids: BTreeSet<_> = self.layer_ids().into_iter().collect();
+        let mut pending: Vec<_> = roots.iter().copied().collect();
+        let mut visited = BTreeSet::new();
+        while let Some(id) = pending.pop() {
+            if visited.insert(id) {
+                pending.extend(children.get(&Some(id)).into_iter().flatten().copied());
+            }
+        }
+        visited.retain(|id| ids.contains(id));
+        visited
+    }
+
+    /// Accumulate primitive bounds once for all ordinary groups, including hidden
+    /// descendants. Special mask, boolean and layout bounds are resolved separately.
+    pub(super) fn group_content_bounds(&self) -> HashMap<usize, Rect> {
+        let boards: HashMap<_, _> = self.boards.iter().map(|b| (b.id, b.rect)).collect();
+        let objects: Vec<_> = self
+            .boards
+            .iter()
+            .map(|b| (b.id, None, b.rect, b.layer.rotation))
+            .chain(
+                self.shapes
+                    .iter()
+                    .map(|s| (s.id, s.board, s.rect, s.layer.rotation)),
+            )
+            .chain(
+                self.texts
+                    .iter()
+                    .map(|t| (t.id, t.board, t.rect, t.layer.rotation)),
+            )
+            .collect();
+        let parents: HashMap<_, _> = objects
+            .iter()
+            .map(|(id, board, _, _)| (*id, self.hierarchy.parents.get(id).copied().or(*board)))
+            .chain(
+                self.hierarchy
+                    .groups
+                    .iter()
+                    .map(|(id, g)| (*id, self.hierarchy.parents.get(id).copied().or(g.board))),
+            )
+            .collect();
+        let mut bounds: HashMap<usize, Rect> = HashMap::new();
+        for (id, board, mut rect, rotation) in objects {
+            if let Some(origin) = board.and_then(|id| boards.get(&id)) {
+                rect.x += origin.x;
+                rect.y += origin.y;
+            }
+            let rect = crate::scene::rotation::bounds(rect, rotation);
+            let mut parent = parents.get(&id).copied().flatten();
+            let mut depth = 0;
+            while let Some(id) = parent {
+                if depth >= parents.len() {
+                    break;
+                }
+                depth += 1;
+                if self.hierarchy.groups.contains_key(&id) {
+                    bounds
+                        .entry(id)
+                        .and_modify(|current| {
+                            let right = (current.x + current.width).max(rect.x + rect.width);
+                            let bottom = (current.y + current.height).max(rect.y + rect.height);
+                            current.x = current.x.min(rect.x);
+                            current.y = current.y.min(rect.y);
+                            current.width = right - current.x;
+                            current.height = bottom - current.y;
+                        })
+                        .or_insert(rect);
+                }
+                parent = parents.get(&id).copied().flatten();
+            }
+        }
+        bounds
     }
 
     /// Expand groups, but not boards: moving a board already moves its contents.
