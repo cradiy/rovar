@@ -4,7 +4,7 @@
 def main [directory: string = ""] {
     let source = ($env.FILE_PWD | path dirname | path join skills rovar-design SKILL.md)
     let root = if ($directory | is-empty) {
-        $nu.home-path | path join .agents skills
+        $nu.home-dir | path join .agents skills
     } else {
         $directory
     }
