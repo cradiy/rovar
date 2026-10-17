@@ -58,9 +58,8 @@ impl Workspace {
     }
 
     pub(super) fn parent_origin(&self, board: Option<usize>) -> Point<f32> {
-        self.boards
-            .iter()
-            .find(|b| Some(b.id) == board)
+        board
+            .and_then(|id| self.board_by_id(id))
             .map_or(point(0., 0.), |b| point(b.rect.x, b.rect.y))
     }
 

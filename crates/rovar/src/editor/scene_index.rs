@@ -45,6 +45,18 @@ mod tests {
                 w.hierarchy.parents.extend([(1, 10), (10, 20)]);
                 let original = w.scene_index();
                 assert_eq!(original.groups[&20], rect);
+                // Insertion and removal can shift cached positions between renders.
+                w.shapes
+                    .insert(0, Shape::new(2, None, ShapeKind::Rectangle, rect));
+                w.shapes[1].layer.locked = true;
+                assert!(!w.layer_editable(1));
+                assert!(w.layer_editable(2));
+                let shape = w.shapes.remove(1);
+                assert!(w.object_info(1).is_none());
+                assert_eq!(w.object_rect(2), Some((None, rect)));
+                w.shapes.clear();
+                w.shapes.push(shape);
+                w.shapes[0].layer.locked = false;
                 w.view.pan.x = 100.;
                 w.view.zoom = 0.25;
                 w.shapes[0].color = rgb(0xff0000);
@@ -79,6 +91,8 @@ mod tests {
                     fill_mode: FillMode::Solid,
                     gradient: Default::default(),
                 });
+                assert_eq!(w.object_rect(1), Some((None, rect)));
+                assert_eq!(w.board_by_id(1).map(|b| b.rect), Some(rect));
                 assert_eq!(w.scene_index().boards.get(&1), Some(&0));
                 assert!(!w.scene_index().shapes.contains_key(&1));
                 w.boards.clear();
@@ -105,6 +119,68 @@ pub(super) struct Cache {
 }
 
 impl Workspace {
+    // Edits may move vector entries before the next render refreshes the index.
+    // Validate cached positions against the live ID and search on a cache miss.
+    pub(super) fn board_by_id(&self, id: usize) -> Option<&Artboard> {
+        self.scene_index
+            .borrow()
+            .index
+            .as_ref()
+            .and_then(|index| index.boards.get(&id))
+            .and_then(|i| self.boards.get(*i))
+            .filter(|b| b.id == id)
+            .or_else(|| self.boards.iter().find(|b| b.id == id))
+    }
+
+    pub(super) fn object_info(
+        &self,
+        id: usize,
+    ) -> Option<(Option<usize>, Rect, crate::scene::layer::LayerState)> {
+        let cache = self.scene_index.borrow();
+        let cached = cache.index.as_ref().and_then(|index| {
+            index
+                .boards
+                .get(&id)
+                .and_then(|i| self.boards.get(*i))
+                .filter(|b| b.id == id)
+                .map(|b| (None, b.rect, b.layer))
+                .or_else(|| {
+                    index
+                        .shapes
+                        .get(&id)
+                        .and_then(|i| self.shapes.get(*i))
+                        .filter(|s| s.id == id)
+                        .map(|s| (s.board, s.rect, s.layer))
+                })
+                .or_else(|| {
+                    index
+                        .texts
+                        .get(&id)
+                        .and_then(|i| self.texts.get(*i))
+                        .filter(|t| t.id == id)
+                        .map(|t| (t.board, t.rect, t.layer))
+                })
+        });
+        cached.or_else(|| {
+            self.boards
+                .iter()
+                .find(|b| b.id == id)
+                .map(|b| (None, b.rect, b.layer))
+                .or_else(|| {
+                    self.shapes
+                        .iter()
+                        .find(|s| s.id == id)
+                        .map(|s| (s.board, s.rect, s.layer))
+                })
+                .or_else(|| {
+                    self.texts
+                        .iter()
+                        .find(|t| t.id == id)
+                        .map(|t| (t.board, t.rect, t.layer))
+                })
+        })
+    }
+
     // Compare geometry directly: previews can change it before history is committed.
     // Pan, zoom, selection and paint changes reuse the index without rebuilding maps.
     pub(super) fn scene_index(&self) -> Rc<Index> {

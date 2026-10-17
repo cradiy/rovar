@@ -79,22 +79,7 @@ impl Workspace {
         {
             return Some((group.board, layout.frame));
         }
-        self.boards
-            .iter()
-            .find(|b| b.id == id)
-            .map(|b| (None, b.rect))
-            .or_else(|| {
-                self.shapes
-                    .iter()
-                    .find(|s| s.id == id)
-                    .map(|s| (s.board, s.rect))
-            })
-            .or_else(|| {
-                self.texts
-                    .iter()
-                    .find(|t| t.id == id)
-                    .map(|t| (t.board, t.rect))
-            })
+        self.object_info(id).map(|(board, rect, _)| (board, rect))
     }
 
     pub(super) fn world_rect(&self, id: usize) -> Option<Rect> {

@@ -151,6 +151,12 @@ impl Workspace {
         }
         let frame_included = frame.map(|_| order.iter().copied().collect());
         let included = frame_included.as_ref().unwrap_or(&index.included);
+        let has_booleans = self.hierarchy.groups.values().any(|g| g.boolean.is_some());
+        let has_masks = self.hierarchy.groups.values().any(|g| g.mask.is_some());
+        let consumed =
+            |id| has_booleans && crate::scene::boolean::consumed(&self.hierarchy, id, included);
+        let mask_source =
+            |id| has_masks && crate::scene::mask::is_source(&self.hierarchy, id, included);
         let masks = crate::scene::mask::outlines(
             &self.hierarchy,
             &self.shapes,
@@ -161,8 +167,7 @@ impl Workspace {
             .iter()
             .copied()
             .filter_map(|id| {
-                let consumed = crate::scene::boolean::consumed(&self.hierarchy, id, included)
-                    || crate::scene::mask::is_source(&self.hierarchy, id, included);
+                let consumed = consumed(id) || mask_source(id);
                 if consumed && !self.is_selected(id) && self.vector_edit != Some(id) {
                     return None;
                 }
@@ -304,7 +309,7 @@ impl Workspace {
         let mut overlays = Vec::new();
         for id in order.iter().rev().copied() {
             let mut content = rendered.remove(&id).unwrap_or_default();
-            if crate::scene::mask::is_source(&self.hierarchy, id, included) {
+            if mask_source(id) {
                 overlays.extend(content);
                 continue;
             }
@@ -333,7 +338,7 @@ impl Workspace {
             } else {
                 &mut roots
             };
-            let backdrop = (!crate::scene::boolean::consumed(&self.hierarchy, id, included))
+            let backdrop = (!consumed(id))
                 .then(|| self.background_blur_filter(id))
                 .flatten();
             siblings.push((state, content, backdrop));
