@@ -14,6 +14,7 @@ pub(crate) fn sources(page: &Page) -> Vec<crate::document::AssetSource> {
                 .into_iter()
                 .flatten()
         }))
+        .chain(page.action_images())
         .map(|a| {
             (
                 a.hash.clone(),

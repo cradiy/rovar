@@ -339,6 +339,29 @@ fn batches_rollback_retry_and_share_the_editors_undo_history(cx: &mut TestAppCon
 }
 
 #[gpui::test]
+fn removing_group_layout_and_setting_rect_transforms_children(cx: &mut TestAppContext) {
+    let handle = crate::editor::tests::open(cx);
+    handle.update(cx, |this, window, cx| {
+        let create = apply(this, json!([
+            {"op":"create","ref":"$group","type":"group","properties":{
+                "rect":{"x":100,"y":200,"width":200,"height":150},
+                "layout":{"direction":"vertical","gap":10,"padding":[10,10,10,10],"main_align":"start","cross_align":"start"}}},
+            {"op":"create","ref":"$child","type":"rectangle","parent":"$group","properties":{
+                "rect":{"x":0,"y":0,"width":100,"height":40}}}
+        ]));
+        let created = execute(this, &create, window, cx).unwrap();
+        let before = this.snapshot_page(cx).0;
+        let update = apply(this, json!([{"op":"update","id":created["created"]["$group"],
+            "properties":{"remove_layout":true,"rect":{"x":300,"y":400,"width":250,"height":80}}}]));
+        execute(this, &update, window, cx).unwrap();
+        assert!(this.hierarchy.layouts.is_empty());
+        assert_eq!(this.shapes[0].rect, Rect { x: 300., y: 400., width: 250., height: 80. });
+        this.undo_redo(false, window, cx);
+        assert!(this.snapshot_page(cx).0 == before);
+    }).unwrap();
+}
+
+#[gpui::test]
 fn layout_edits_protect_locked_descendants_and_preserve_text(cx: &mut TestAppContext) {
     let handle = crate::editor::tests::open(cx);
     handle.update(cx,|this,window,cx| {

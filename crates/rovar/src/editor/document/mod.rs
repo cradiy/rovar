@@ -246,25 +246,8 @@ impl Workspace {
             .iter()
             .chain(document.components.values().map(|c| &c.page))
         {
-            for asset in page
-                .boards
-                .iter()
-                .filter_map(|b| b.image_fill.asset.as_ref())
-                .chain(page.shapes.iter().flat_map(|s| {
-                    [s.asset.as_ref(), s.image_fill.asset.as_ref()]
-                        .into_iter()
-                        .flatten()
-                }))
-                .chain(page.action_images())
-            {
-                sources
-                    .entry(asset.hash.clone())
-                    .or_insert_with(|| AssetSource {
-                        hash: asset.hash.clone(),
-                        name: asset.name(),
-                        path: asset.source.clone(),
-                        size: [asset.width, asset.height],
-                    });
+            for source in crate::scene::components::sources(page) {
+                sources.entry(source.hash.clone()).or_insert(source);
             }
         }
         Ok((
@@ -315,7 +298,6 @@ impl Workspace {
     }
 
     pub(super) fn snapshot_page(&self, cx: &gpui::App) -> (Page, Vec<AssetSource>) {
-        let mut sources = Vec::new();
         let mut assets = Vec::new();
         let mut add = |object, fill, asset: &Option<std::sync::Arc<crate::asset::FileAsset>>| {
             if let Some(asset) = asset {
@@ -323,12 +305,6 @@ impl Workspace {
                     object,
                     fill,
                     hash: asset.hash.clone(),
-                });
-                sources.push(AssetSource {
-                    hash: asset.hash.clone(),
-                    name: asset.name(),
-                    path: asset.source.clone(),
-                    size: [asset.width, asset.height],
                 });
             }
         };
@@ -358,14 +334,6 @@ impl Workspace {
             assets,
         };
         let text_system = gpui::WindowTextSystem::new(cx.text_system().clone());
-        for asset in page.action_images() {
-            sources.push(AssetSource {
-                hash: asset.hash.clone(),
-                name: asset.name(),
-                path: asset.source.clone(),
-                size: [asset.width, asset.height],
-            });
-        }
         match crate::scene::auto_layout::resolve(&mut page, &text_system) {
             Ok(tracks) => *self.auto_layout.grid.tracks.borrow_mut() = tracks,
             Err(error) => {
@@ -373,6 +341,7 @@ impl Workspace {
                 eprintln!("Could not resolve automatic layout: {error:#}");
             }
         }
+        let sources = crate::scene::components::sources(&page);
         (page, sources)
     }
 

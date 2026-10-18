@@ -165,6 +165,101 @@ fn divergent_property_edits_preserve_the_cache_and_rejected_request(cx: &mut Tes
 }
 
 #[gpui::test]
+fn merged_documents_keep_action_only_images_from_both_sides(cx: &mut TestAppContext) {
+    use crate::scene::{
+        artboard::FillMode,
+        image_fill::ImageFill,
+        presentation::{Action, Interaction, paint::Paint, property::Property},
+    };
+    let root = tempfile::tempdir().unwrap();
+    let mut base = document();
+    base.pages[0].hierarchy.interactions.insert(
+        1,
+        Interaction {
+            click: Some(Action::Back),
+            hover: Some(Action::Back),
+            ..Default::default()
+        },
+    );
+    let text_system = cx.update(|cx| cx.text_system().clone());
+    let mut snapshots = Vec::new();
+    let mut hashes = BTreeSet::new();
+    for (index, color) in [[255, 0, 0, 255], [0, 0, 255, 255]].into_iter().enumerate() {
+        let image_path = root.path().join(format!("action-{index}.png"));
+        image::RgbaImage::from_pixel(3, 2, image::Rgba(color))
+            .save(&image_path)
+            .unwrap();
+        let asset = crate::asset::FileAsset::load(image_path.clone()).unwrap();
+        let mut edited = base.clone();
+        let paint = Paint::new(
+            gpui::white().into(),
+            FillMode::Image,
+            Default::default(),
+            ImageFill {
+                asset: Some(asset.clone()),
+                ..Default::default()
+            },
+        );
+        let mut interaction = base.pages[0].hierarchy.interactions[&1].clone();
+        if index == 0 {
+            interaction.click = Some(Action::SetProperty {
+                target: 1,
+                property: Property::Fill(paint),
+            });
+        } else {
+            interaction.hover = Some(Action::SetProperty {
+                target: 1,
+                property: Property::Fill(paint),
+            });
+        }
+        edited.pages[0]
+            .hierarchy
+            .interactions
+            .insert(1, interaction);
+        let source = crate::document::AssetSource {
+            hash: asset.hash.clone(),
+            name: asset.name(),
+            path: asset.source.clone(),
+            size: [asset.width, asset.height],
+        };
+        hashes.insert(asset.hash.clone());
+        let snapshot = root.path().join(format!("snapshot-{index}.rovar"));
+        crate::document::save_as(
+            &snapshot,
+            &serde_json::to_vec(&edited).unwrap(),
+            &[source],
+            &text_system,
+        )
+        .unwrap();
+        snapshots.push(std::fs::read(snapshot).unwrap());
+        std::fs::remove_file(image_path).unwrap();
+    }
+    let merged = super::super::merge::assemble(
+        &serde_json::to_vec(&base).unwrap(),
+        &snapshots[0],
+        &snapshots[1],
+        &text_system,
+    )
+    .unwrap();
+    let path = root.path().join("merged.rovar");
+    std::fs::write(&path, merged).unwrap();
+    let document = crate::document::load(&path)
+        .unwrap()
+        .into_document()
+        .unwrap();
+    assert_eq!(
+        document.pages[0]
+            .action_images()
+            .map(|a| a.hash.clone())
+            .collect::<BTreeSet<_>>(),
+        hashes
+    );
+    for image in document.pages[0].action_images() {
+        image::load_from_memory(&image.source.bytes()).unwrap();
+    }
+}
+
+#[gpui::test]
 fn concurrent_image_insertions_keep_both_embedded_assets_after_handle_remapping(
     cx: &mut TestAppContext,
 ) {

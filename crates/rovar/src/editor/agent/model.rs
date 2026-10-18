@@ -405,6 +405,9 @@ fn update(page: &mut Page, id: usize, props: p::Properties, creating: bool) -> R
                 .map_err(|_| Error::invalid("Invalid fill color"))
         })
         .transpose()?;
+    if props.remove_layout {
+        page.hierarchy.layouts.remove(&id);
+    }
     if let Some(rect) = props.rect {
         let rect: Rect = rect.into();
         validate_rect(rect)?;
@@ -460,9 +463,6 @@ fn update(page: &mut Page, id: usize, props: p::Properties, creating: bool) -> R
         container.main = align(layout.main_align);
         container.cross = align(layout.cross_align);
         page.hierarchy.layouts.insert(id, container);
-    }
-    if props.remove_layout {
-        page.hierarchy.layouts.remove(&id);
     }
     if let Some(name) = &props.name {
         page.hierarchy.names.insert(id, name.clone());

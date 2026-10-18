@@ -29,7 +29,7 @@ impl Workspace {
                 }
             })
             .ok_or_else(|| anyhow::anyhow!("Select a component first"))?;
-        let (mut document, mut sources) = self.snapshot_page(cx);
+        let (mut document, _) = self.snapshot_page(cx);
         document.hierarchy.components.clear();
         document.id = uuid::Uuid::new_v4().to_string();
         document.boards.retain(|item| included.contains(&item.id));
@@ -95,6 +95,7 @@ impl Workspace {
             .hierarchy
             .names
             .retain(|id, _| included.contains(id));
+        document.hierarchy.retain_interactions(&included);
         document.hierarchy.order.retain(|id| included.contains(id));
         if roots.len() > 1 {
             let id = document.next_id;
@@ -118,8 +119,7 @@ impl Workspace {
         document
             .assets
             .retain(|asset| included.contains(&asset.object));
-        let hashes: BTreeSet<_> = document.assets.iter().map(|a| &a.hash).collect();
-        sources.retain(|a| hashes.contains(&a.hash));
+        let sources = crate::scene::components::sources(&document);
         document.validate()?;
         crate::scene::color_styles::visit(&mut document, |reference, _, _, _| *reference = None);
         Ok(SavedComponent {

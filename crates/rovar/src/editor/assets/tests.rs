@@ -4,6 +4,108 @@ use gpui::{EntityInputHandler, TestAppContext, VisualTestContext};
 use std::collections::BTreeSet;
 
 #[gpui::test]
+fn library_saves_preserve_action_only_images(cx: &mut TestAppContext) {
+    use crate::scene::{
+        artboard::FillMode,
+        image_fill::ImageFill,
+        presentation::{Action, Interaction, paint::Paint, property::Property},
+    };
+    let root = tempfile::tempdir().unwrap();
+    let original = root.path().join("action.png");
+    image::RgbaImage::from_pixel(2, 2, image::Rgba([90, 45, 190, 255]))
+        .save(&original)
+        .unwrap();
+    let asset = crate::asset::FileAsset::load(original.clone()).unwrap();
+    let window = crate::editor::tests::open(cx);
+    let library = cx.update(|cx| Library::open(root.path(), cx));
+    cx.run_until_parked();
+    window
+        .update(cx, |editor, window, cx| {
+            editor.attach_library(library.clone(), cx);
+            editor.add_artboard(
+                Rect {
+                    x: 0.,
+                    y: 0.,
+                    width: 200.,
+                    height: 150.,
+                },
+                cx,
+            );
+            editor.shapes.push(Shape::new(
+                2,
+                Some(1),
+                ShapeKind::Rectangle,
+                Rect {
+                    x: 10.,
+                    y: 10.,
+                    width: 50.,
+                    height: 30.,
+                },
+            ));
+            editor.next_id = 3;
+            editor.set_selection(BTreeSet::from([1]), cx);
+            editor.create_component(window, cx);
+            let component = editor.components.definitions.keys().next().unwrap().clone();
+            let paint = Paint::new(
+                gpui::white().into(),
+                FillMode::Image,
+                Default::default(),
+                ImageFill {
+                    asset: Some(asset.clone()),
+                    ..Default::default()
+                },
+            );
+            editor.hierarchy.interactions.insert(
+                2,
+                Interaction {
+                    click: Some(Action::SetProperty {
+                        target: 2,
+                        property: Property::Fill(paint.clone()),
+                    }),
+                    hover: Some(Action::SetProperty {
+                        target: 2,
+                        property: Property::Fill(paint),
+                    }),
+                    ..Default::default()
+                },
+            );
+            editor.history.borrow_mut().mark_changed();
+            editor.save_document_component_local(&component, window, cx);
+            assert!(matches!(editor.assets.dialog, Some(Dialog::Save(_))));
+            editor.confirm_asset_dialog(window, cx);
+        })
+        .unwrap();
+    cx.run_until_parked();
+    library.read_with(cx, |library, _| {
+        assert!(library.error.is_none(), "{:?}", library.error)
+    });
+    window
+        .update(cx, |editor, window, cx| {
+            editor.begin_save_asset(window, cx);
+            assert!(matches!(editor.assets.dialog, Some(Dialog::Save(_))));
+            editor.confirm_asset_dialog(window, cx);
+        })
+        .unwrap();
+    cx.run_until_parked();
+    std::fs::remove_file(original).unwrap();
+    library.read_with(cx, |library, _| {
+        assert!(library.error.is_none(), "{:?}", library.error);
+        assert_eq!(library.entries.len(), 2);
+        for entry in &library.entries {
+            let loaded = crate::document::load(&entry.path).unwrap();
+            assert_eq!(loaded.assets.len(), 1);
+            let document = loaded.into_document().unwrap();
+            let images: Vec<_> = document.pages[0].action_images().collect();
+            assert_eq!(images.len(), 2);
+            for image in images {
+                assert_eq!(image.hash, asset.hash);
+                image::load_from_memory(&image.source.bytes()).unwrap();
+            }
+        }
+    });
+}
+
+#[gpui::test]
 fn saved_group_embeds_media_and_inserts_independent_objects_with_one_undo(cx: &mut TestAppContext) {
     cx.update(uic::init);
     let root = tempfile::tempdir().unwrap();
