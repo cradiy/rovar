@@ -11,7 +11,7 @@ pub(super) struct Controls {
     selection: (String, BTreeSet<usize>),
     rows: Vec<Row>,
     preview_open: bool,
-    preview: Option<Arc<gpui::RenderImage>>,
+    preview: Option<Arc<crate::asset::ManagedImage>>,
     preview_error: bool,
     preview_revision: Option<u64>,
     preview_task: Option<gpui::Task<()>>,
@@ -502,7 +502,8 @@ impl Workspace {
                         .justify_center()
                         .when_some(self.export.controls.preview.clone(), |el, image| {
                             el.child(
-                                gpui::img(image)
+                                image
+                                    .element()
                                     .size_full()
                                     .object_fit(gpui::ObjectFit::Contain),
                             )
@@ -566,9 +567,9 @@ impl Workspace {
                     for pixel in pixels.pixels_mut() {
                         pixel.0.swap(0, 2);
                     }
-                    anyhow::Ok(Arc::new(gpui::RenderImage::new(vec![image::Frame::new(
-                        pixels,
-                    )])))
+                    anyhow::Ok(crate::asset::ManagedImage::new(Arc::new(
+                        gpui::RenderImage::new(vec![image::Frame::new(pixels)]),
+                    )))
                 })
                 .await;
             let _ = this.update(cx, |this, cx| {

@@ -9,7 +9,7 @@ const MAX_EDGE: u32 = 2048;
 
 #[derive(Default)]
 pub(super) struct State {
-    image: Option<Arc<RenderImage>>,
+    image: Option<Arc<crate::asset::ManagedImage>>,
     edge: u32,
     pending: bool,
     failed: Option<Instant>,
@@ -29,7 +29,7 @@ impl SvgAsset {
             .clamp(64., MAX_EDGE as f32) as u32;
         let edge = edge.next_power_of_two().min(MAX_EDGE);
         let mut state = self.raster.lock().ok()?;
-        let image = state.image.clone();
+        let image = state.image.as_ref().map(|image| image.render(cx));
         if state.edge >= edge
             || state.pending
             || state
@@ -60,7 +60,7 @@ impl SvgAsset {
             .spawn(cx, async move |cx| {
                 let result = render.await;
                 // Publish even if the requesting window closed; shared assets must not remain pending.
-                let old = {
+                {
                     let Ok(mut state) = state.lock() else {
                         return;
                     };
@@ -69,19 +69,15 @@ impl SvgAsset {
                         Ok(image) => {
                             state.edge = edge;
                             state.failed = None;
-                            state.image.replace(image)
+                            state.image = Some(crate::asset::ManagedImage::new(image));
                         }
                         Err(error) => {
                             state.failed = Some(Instant::now());
                             eprintln!("Could not rasterize SVG: {error}");
-                            None
                         }
                     }
                 };
                 let _ = cx.update(|window, cx| {
-                    if let Some(old) = old {
-                        let _ = window.drop_image(old);
-                    }
                     window.refresh();
                     cx.refresh_windows();
                 });

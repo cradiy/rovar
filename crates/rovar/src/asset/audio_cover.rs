@@ -44,7 +44,7 @@ impl MediaSource for Reader {
     }
 }
 
-pub(super) fn load(source: &Source) -> Result<Option<Arc<RenderImage>>> {
+pub(super) fn load(source: &Source) -> Result<Option<Arc<super::ManagedImage>>> {
     let mut inner = source.open()?;
     let len = inner.seek(SeekFrom::End(0))?;
     inner.rewind()?;
@@ -87,7 +87,7 @@ pub(super) fn load(source: &Source) -> Result<Option<Arc<RenderImage>>> {
     Ok(fallback)
 }
 
-fn decode(bytes: &[u8]) -> Result<Arc<RenderImage>> {
+fn decode(bytes: &[u8]) -> Result<Arc<super::ManagedImage>> {
     use image::ImageDecoder;
     let mut reader = image::ImageReader::new(std::io::Cursor::new(bytes)).with_guessed_format()?;
     let mut limits = image::Limits::default();
@@ -103,5 +103,7 @@ fn decode(bytes: &[u8]) -> Result<Arc<RenderImage>> {
     for pixel in pixels.pixels_mut() {
         pixel.0.swap(0, 2);
     }
-    Ok(Arc::new(RenderImage::new(vec![image::Frame::new(pixels)])))
+    Ok(super::ManagedImage::new(Arc::new(RenderImage::new(vec![
+        image::Frame::new(pixels),
+    ]))))
 }

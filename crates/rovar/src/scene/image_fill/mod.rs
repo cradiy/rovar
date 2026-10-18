@@ -83,7 +83,7 @@ impl ImageFill {
                 };
                 image
             }
-            AssetContent::Image(image) => image.clone(),
+            AssetContent::Image(image) => image.render(cx),
             _ => return,
         };
         let _ = window.paint_image_with_clip(

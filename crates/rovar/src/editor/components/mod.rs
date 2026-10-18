@@ -13,7 +13,7 @@ pub(super) struct ComponentDrag {
     pub owner: gpui::EntityId,
     pub id: String,
     pub name: String,
-    pub preview: Option<std::sync::Arc<gpui::RenderImage>>,
+    pub preview: Option<std::sync::Arc<crate::asset::ManagedImage>>,
 }
 impl Render for ComponentDrag {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
@@ -27,7 +27,8 @@ impl Render for ComponentDrag {
             .shadow_lg()
             .when_some(self.preview.clone(), |el, preview| {
                 el.child(
-                    gpui::img(preview)
+                    preview
+                        .element()
                         .w_full()
                         .h(px(76.))
                         .object_fit(gpui::ObjectFit::Contain),
@@ -49,8 +50,10 @@ pub(super) struct State {
     pub sets: model::variants::Sets,
     pub rename: Option<variants::Rename>,
     pub revision: Option<u64>,
-    pub previews:
-        std::collections::BTreeMap<String, (Vec<u8>, Option<std::sync::Arc<gpui::RenderImage>>)>,
+    pub previews: std::collections::BTreeMap<
+        String,
+        (Vec<u8>, Option<std::sync::Arc<crate::asset::ManagedImage>>),
+    >,
 }
 
 impl Workspace {
@@ -166,9 +169,9 @@ impl Workspace {
                         for pixel in pixels.pixels_mut() {
                             pixel.0.swap(0, 2);
                         }
-                        anyhow::Ok(std::sync::Arc::new(gpui::RenderImage::new(vec![
-                            image::Frame::new(pixels),
-                        ])))
+                        anyhow::Ok(crate::asset::ManagedImage::new(std::sync::Arc::new(
+                            gpui::RenderImage::new(vec![image::Frame::new(pixels)]),
+                        )))
                     })
                     .await;
                 let _ = this.update(cx, |this, cx| {

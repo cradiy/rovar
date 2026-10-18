@@ -391,7 +391,8 @@ impl Workspace {
                 shape.asset.as_ref().and_then(|asset| asset.content())
             {
                 return content.rounded(px(8.)).child(
-                    gpui::img(cover.clone())
+                    cover
+                        .element()
                         .size_full()
                         .object_fit(gpui::ObjectFit::Cover),
                 );
@@ -479,7 +480,8 @@ impl Workspace {
                         .justify_center()
                         .child(match asset.content() {
                             Some(AssetContent::Image(image) | AssetContent::Audio(Some(image))) => {
-                                gpui::img(image.clone())
+                                image
+                                    .element()
                                     .size_full()
                                     .object_fit(gpui::ObjectFit::Contain)
                                     .into_any_element()

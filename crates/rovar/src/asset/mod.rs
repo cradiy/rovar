@@ -9,14 +9,16 @@ use std::{
 };
 
 mod audio_cover;
+mod managed_image;
 mod source;
+pub(crate) use managed_image::ManagedImage;
 pub(crate) use source::Source;
 
 pub(crate) enum AssetContent {
-    Image(Arc<RenderImage>),
+    Image(Arc<ManagedImage>),
     Svg(svg::SvgAsset),
     Video(Arc<SurfaceFrame>),
-    Audio(Option<Arc<RenderImage>>),
+    Audio(Option<Arc<ManagedImage>>),
 }
 
 pub(crate) struct FileAsset {
@@ -284,7 +286,9 @@ impl FileAsset {
         Ok((
             width,
             height,
-            AssetContent::Image(Arc::new(RenderImage::new(vec![image::Frame::new(pixels)]))),
+            AssetContent::Image(ManagedImage::new(Arc::new(RenderImage::new(vec![
+                image::Frame::new(pixels),
+            ])))),
         ))
     }
 }

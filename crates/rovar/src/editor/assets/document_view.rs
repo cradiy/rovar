@@ -193,7 +193,8 @@ impl Workspace {
                                             .and_then(|(_, p)| p.clone())
                                         {
                                             el.child(
-                                                gpui::img(preview)
+                                                preview
+                                                    .element()
                                                     .size_full()
                                                     .object_fit(gpui::ObjectFit::Contain),
                                             )
