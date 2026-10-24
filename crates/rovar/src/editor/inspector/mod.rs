@@ -13,6 +13,8 @@ mod frame_presets;
 mod image_fill;
 mod name_input;
 mod paint;
+mod paint_layers;
+mod paint_rows;
 mod points;
 mod properties;
 mod scrub;
@@ -36,8 +38,6 @@ pub(super) const PROPERTY_SURFACES: usize = 4;
 
 fn inspector_input(state: &Entity<TextInput>) -> Input {
     Input::new(state)
-        // Inspector controls transfer focus after committing drafts or handling clicks.
-        .blur_on_click_outside(false)
         .text_size(px(12.))
         .text_color(TEXT.color())
         .appearance(InputAppearance {

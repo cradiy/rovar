@@ -67,6 +67,10 @@ pub(crate) enum StrokeAlign {
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub(crate) struct Stroke {
+    #[serde(default)]
+    pub hidden: bool,
+    #[serde(default = "super::paint_layers::opacity")]
+    pub opacity: f32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color_style: Option<String>,
     pub enabled: bool,
@@ -81,6 +85,8 @@ pub(crate) struct Stroke {
 impl Default for Stroke {
     fn default() -> Self {
         Self {
+            opacity: 1.,
+            hidden: false,
             color_style: None,
             enabled: false,
             width: 1.,
@@ -94,11 +100,15 @@ impl Default for Stroke {
 
 impl Stroke {
     pub fn background(&self) -> Background {
-        match self.fill_mode {
+        if self.hidden {
+            return gpui::rgba(0).into();
+        }
+        let background: Background = match self.fill_mode {
             FillMode::Solid => self.color.into(),
             FillMode::Linear => self.gradient.background(),
             FillMode::Image | FillMode::Points(_) => gpui::rgba(0).into(),
-        }
+        };
+        background.opacity(self.opacity)
     }
     pub fn outset(&self) -> f32 {
         if !self.enabled {
@@ -149,6 +159,14 @@ pub(crate) struct Shape {
     // Clockwise from top left. Initialized on first switch, retained thereafter.
     pub corners: Option<[f32; 4]>,
     pub fill_enabled: bool,
+    #[serde(default = "super::paint_layers::opacity")]
+    pub fill_opacity: f32,
+    #[serde(default)]
+    pub fill_hidden: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fill_layers: Vec<super::paint_layers::Fill>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stroke_layers: Vec<Stroke>,
     pub stroke: Stroke,
     #[serde(with = "crate::document::rgba")]
     pub color: Rgba,
@@ -157,6 +175,19 @@ pub(crate) struct Shape {
 }
 
 impl Shape {
+    pub fn stroke_outset(&self) -> f32 {
+        std::iter::once(&self.stroke)
+            .chain(&self.stroke_layers)
+            .filter(|s| s.enabled)
+            .map(|s| {
+                if self.kind.is_path() || self.kind.is_polygon() {
+                    s.width / 2.
+                } else {
+                    s.outset()
+                }
+            })
+            .fold(0., f32::max)
+    }
     pub fn new(id: usize, board: Option<usize>, kind: ShapeKind, rect: Rect) -> Self {
         Self {
             uid: uuid::Uuid::new_v4(),
@@ -183,6 +214,10 @@ impl Shape {
             independent_corners: false,
             corners: None,
             fill_enabled: true,
+            fill_opacity: 1.,
+            fill_hidden: false,
+            fill_layers: Vec::new(),
+            stroke_layers: Vec::new(),
             stroke: Stroke::default(),
             color: rgb(0xd9d9d9),
             fill_mode: FillMode::Solid,
@@ -190,11 +225,16 @@ impl Shape {
         }
     }
     pub fn background(&self) -> Background {
-        match self.fill_mode {
+        let background: Background = match self.fill_mode {
             FillMode::Solid => self.color.into(),
             FillMode::Linear => self.gradient.background(),
             FillMode::Image | FillMode::Points(_) => gpui::rgba(0).into(),
-        }
+        };
+        background.opacity(if self.fill_hidden {
+            0.
+        } else {
+            self.fill_opacity
+        })
     }
     pub fn set_path(&mut self, points: &[Point<f32>]) {
         if points.is_empty() {

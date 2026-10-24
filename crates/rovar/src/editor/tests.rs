@@ -904,7 +904,8 @@ fn creation_and_property_editing_keep_boards_independent(cx: &mut TestAppContext
     window
         .update(&mut visual.cx, |this, _, cx| {
             assert_eq!(this.boards.len(), 2);
-            assert_eq!(this.boards[0].color.a, 0.);
+            assert_eq!(this.boards[0].color.a, 1.);
+            assert_eq!(this.boards[0].fill_opacity, 0.);
             assert_eq!(this.boards[0].rect.width, 320.);
             assert_eq!(this.boards[1].color.a, 1.);
             assert_eq!(this.boards[1].rect.width, 640.);
@@ -1149,7 +1150,8 @@ fn gradient_editor_targets_selected_stop_and_preserves_each_fill_mode(cx: &mut T
         .update(&mut visual.cx, |this, _, _| {
             let board = &this.boards[0];
             assert_eq!(board.fill_mode, FillMode::Linear);
-            assert_eq!(board.color.a, 0.5);
+            assert_eq!(board.color.a, 1.);
+            assert_eq!(board.fill_opacity, 0.5);
             let end = board.gradient.stop(1).unwrap();
             assert_eq!(end.color.r, 1.);
             assert_eq!(end.color.g, 0.);
@@ -1173,7 +1175,7 @@ fn gradient_editor_targets_selected_stop_and_preserves_each_fill_mode(cx: &mut T
     click(&mut visual, "fill-solid");
     window
         .update(&mut visual.cx, |this, _, cx| {
-            assert_eq!(this.inspector.fields[6].read(cx).value().as_ref(), "50");
+            assert_eq!(this.boards[0].fill_opacity, 0.5);
             assert_eq!(this.inspector.fields[5].read(cx).value().as_ref(), "FFFFFF");
         })
         .unwrap();

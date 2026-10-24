@@ -156,8 +156,11 @@ impl Document {
             .iter()
             .chain(self.components.values().map(|c| &c.page))
             .flat_map(|page| {
-                page.assets.iter().map(|asset| asset.hash.as_str()).chain(
-                    page.hierarchy.interactions.values().flat_map(|i| {
+                page.assets
+                    .iter()
+                    .map(|asset| asset.hash.as_str())
+                    .chain(page.extra_fills().filter_map(|f| f.image_hash.as_deref()))
+                    .chain(page.hierarchy.interactions.values().flat_map(|i| {
                         [i.click.as_ref(), i.hover.as_ref()]
                             .into_iter()
                             .flatten()
@@ -172,8 +175,7 @@ impl Document {
                                     None
                                 }
                             })
-                    }),
-                )
+                    }))
             })
     }
 }
@@ -200,6 +202,21 @@ impl Loaded {
             .iter_mut()
             .chain(document.components.values_mut().map(|c| &mut c.page))
         {
+            for fill in page
+                .boards
+                .iter_mut()
+                .flat_map(|b| &mut b.fill_layers)
+                .chain(page.shapes.iter_mut().flat_map(|s| &mut s.fill_layers))
+            {
+                if let Some(hash) = &fill.image_hash {
+                    fill.image_fill.asset = Some(
+                        self.assets
+                            .get(hash)
+                            .context("Missing paint image")?
+                            .clone(),
+                    );
+                }
+            }
             for use_ in &page.assets {
                 let asset = self
                     .assets
@@ -266,6 +283,12 @@ pub(crate) fn import(
 }
 
 impl Page {
+    pub(crate) fn extra_fills(&self) -> impl Iterator<Item = &crate::scene::paint_layers::Fill> {
+        self.boards
+            .iter()
+            .flat_map(|b| &b.fill_layers)
+            .chain(self.shapes.iter().flat_map(|s| &s.fill_layers))
+    }
     pub fn action_images(&self) -> impl Iterator<Item = &Arc<crate::asset::FileAsset>> {
         self.hierarchy
             .interactions
@@ -528,6 +551,52 @@ impl Page {
             }))
         {
             gradient.validate()?;
+        }
+        for fill in self.extra_fills() {
+            fill.validate()?;
+        }
+        for opacity in self
+            .boards
+            .iter()
+            .map(|b| b.fill_opacity)
+            .chain(
+                self.shapes
+                    .iter()
+                    .flat_map(|s| [s.fill_opacity, s.stroke.opacity]),
+            )
+            .chain(
+                self.shapes
+                    .iter()
+                    .flat_map(|s| s.stroke_layers.iter().map(|s| s.opacity)),
+            )
+        {
+            ensure!((0. ..=1.).contains(&opacity), "Invalid paint opacity");
+        }
+        for stroke in self.shapes.iter().flat_map(|s| &s.stroke_layers) {
+            stroke.gradient.validate()?;
+            ensure!(
+                stroke.width.is_finite() && (0. ..=100_000.).contains(&stroke.width),
+                "Invalid stroke layer width"
+            );
+            ensure!(
+                matches!(
+                    stroke.fill_mode,
+                    crate::scene::artboard::FillMode::Solid
+                        | crate::scene::artboard::FillMode::Linear
+                ),
+                "Unsupported stroke paint"
+            );
+            ensure!(
+                [
+                    stroke.color.r,
+                    stroke.color.g,
+                    stroke.color.b,
+                    stroke.color.a
+                ]
+                .into_iter()
+                .all(|v| v.is_finite() && (0. ..=1.).contains(&v)),
+                "Invalid stroke color"
+            );
         }
         for mode in self
             .boards

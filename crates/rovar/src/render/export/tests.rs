@@ -53,6 +53,79 @@ fn png(job: &Job, scale: u32) -> image::RgbaImage {
         .into_rgba8()
 }
 
+#[test]
+fn paint_layers_preserve_old_files_and_composite_fills_and_stroke_rings_in_order() {
+    use crate::scene::{paint_layers::Fill, shape::Stroke};
+    let mut s = Shape::new(1, None, ShapeKind::Rectangle, rect(10., 10., 80., 80.));
+    s.color = rgb(0xff0000);
+    let mut old = serde_json::to_value(&s).unwrap();
+    old.as_object_mut().unwrap().remove("fill_opacity");
+    old.as_object_mut().unwrap().remove("fill_hidden");
+    old["stroke"].as_object_mut().unwrap().remove("opacity");
+    old["stroke"].as_object_mut().unwrap().remove("hidden");
+    assert!(old.get("fill_layers").is_none());
+    assert!(old.get("stroke_layers").is_none());
+    let restored: Shape = serde_json::from_value(old).unwrap();
+    assert_eq!(
+        png(&job_for_shape(restored), 1).get_pixel(40, 40).0,
+        [255, 0, 0, 255]
+    );
+    let mut fill = Fill::from_shape(&s);
+    fill.fill_mode = FillMode::Linear;
+    for id in [0, 1] {
+        fill.gradient.stop_mut(id).unwrap().color = rgb(0x0000ff);
+    }
+    fill.opacity = 0.5;
+    s.fill_layers.push(fill);
+    s.stroke = Stroke {
+        enabled: true,
+        width: 8.,
+        align: StrokeAlign::Outside,
+        color: rgb(0x00ff00),
+        ..Default::default()
+    };
+    s.stroke_layers.push(Stroke {
+        enabled: true,
+        width: 3.,
+        align: StrokeAlign::Outside,
+        color: rgb(0xffff00),
+        ..Default::default()
+    });
+    let serialized = serde_json::to_vec(&s).unwrap();
+    let restored: Shape = serde_json::from_slice(&serialized).unwrap();
+    assert_eq!(restored, s);
+    for scale in [1, 2] {
+        let image = png(
+            &job(&document(vec![restored.clone()]), rect(0., 0., 100., 100.)),
+            scale,
+        );
+        assert_eq!(image.get_pixel(4 * scale, 50 * scale).0, [0, 255, 0, 255]);
+        assert_eq!(image.get_pixel(8 * scale, 50 * scale).0, [255, 255, 0, 255]);
+        let center = image.get_pixel(50 * scale, 50 * scale).0;
+        assert!(
+            center[0].abs_diff(127) <= 1 && center[2].abs_diff(128) <= 1 && center[3] == 255,
+            "{center:?}"
+        );
+        let mut hidden = restored.clone();
+        hidden.fill_layers[0].hidden = true;
+        hidden.stroke_layers[0].hidden = true;
+        let image = png(
+            &job(&document(vec![hidden.clone()]), rect(0., 0., 100., 100.)),
+            scale,
+        );
+        assert_eq!(image.get_pixel(50 * scale, 50 * scale).0, [255, 0, 0, 255]);
+        assert_eq!(image.get_pixel(8 * scale, 50 * scale).0, [0, 255, 0, 255]);
+        hidden.fill_hidden = true;
+        hidden.stroke.hidden = true;
+        let image = png(
+            &job(&document(vec![hidden]), rect(0., 0., 100., 100.)),
+            scale,
+        );
+        assert_eq!(image.get_pixel(50 * scale, 50 * scale).0[3], 0);
+        assert_eq!(image.get_pixel(8 * scale, 50 * scale).0[3], 0);
+    }
+}
+
 fn background_blur_scene() -> Page {
     let mut left = Shape::new(1, None, ShapeKind::Rectangle, rect(0., 0., 50., 100.));
     left.color = rgb(0xff0000);
@@ -270,6 +343,10 @@ fn artboard_bounds_clip_children_without_editor_checkerboard() {
     doc.shapes[0].color = rgb(0xff0000);
     let bounds = rect(100., 200., 100., 80.);
     doc.boards.push(Artboard {
+        fill_enabled: true,
+        fill_opacity: 1.,
+        fill_hidden: false,
+        fill_layers: Vec::new(),
         uid: uuid::Uuid::new_v4(),
         color_style: None,
         id: 1,

@@ -133,6 +133,10 @@ pub(super) fn apply(
                             .flatten()
                     }))
                     .chain(page.action_images())
+                    .chain(
+                        page.extra_fills()
+                            .filter_map(|f| f.image_fill.asset.as_ref()),
+                    )
                     .find(|a| &a.hash == hash && !a.kind().is_playable())
                     .cloned()
                     .ok_or_else(|| {

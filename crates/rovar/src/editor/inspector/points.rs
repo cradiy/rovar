@@ -74,13 +74,13 @@ impl Workspace {
         if !self.layer_editable(id) {
             return None;
         }
-        let mode = if let Some(s) = self.selected_shape() {
+        let mode = if let Some(s) = self.paint_shape() {
             if !s.fill_enabled || !s.can_fill() || s.kind.is_asset() {
                 return None;
             }
             s.fill_mode
         } else {
-            self.selected_board()?.fill_mode
+            self.paint_board()?.fill_mode
         };
         let FillMode::Points(g) = mode else {
             return None;
@@ -189,9 +189,9 @@ impl Workspace {
             }
         };
         if self.selected_shape.is_some() {
-            self.edit_shape(|s| change(&mut s.fill_mode));
+            self.edit_shape_paint(|s| change(&mut s.fill_mode));
         } else {
-            self.edit_board(None, |b| change(&mut b.fill_mode));
+            self.edit_board_paint(None, |b| change(&mut b.fill_mode));
         }
         self.sync_fields(cx);
         cx.notify();

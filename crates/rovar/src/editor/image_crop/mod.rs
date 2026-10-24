@@ -13,6 +13,7 @@ pub(super) struct State {
     )>,
     id: usize,
     media: bool,
+    layer: usize,
     frame: Rect,
     rotation: f32,
     pub(super) image: ImageFill,
@@ -32,6 +33,9 @@ impl Workspace {
                 .action_paint()
                 .filter(|p| p.mode == FillMode::Image)
                 .map(|p| (p.image.clone(), false));
+        }
+        if self.selected_shape.or(self.selected) == Some(id) && self.paint_layer_index(false) > 0 {
+            return self.current_image_fill().map(|f| (f.clone(), false));
         }
         if let Some(shape) = self.shapes.iter().find(|s| s.id == id) {
             if shape.kind == ShapeKind::Image {
@@ -102,6 +106,7 @@ impl Workspace {
             popover.update(cx, |p, cx| p.close(window, cx));
         }
         self.image_crop = Some(State {
+            layer: self.paint_layer_index(false),
             action,
             id,
             media,
@@ -115,9 +120,17 @@ impl Workspace {
     }
 
     pub(super) fn cropped_fill(&self, id: usize, fill: &ImageFill) -> ImageFill {
+        self.cropped_fill_layer(id, 0, fill)
+    }
+    pub(super) fn cropped_fill_layer(
+        &self,
+        id: usize,
+        layer: usize,
+        fill: &ImageFill,
+    ) -> ImageFill {
         self.image_crop
             .as_ref()
-            .filter(|c| c.action.is_none() && c.id == id && !c.media)
+            .filter(|c| c.action.is_none() && c.id == id && !c.media && c.layer == layer)
             .map_or_else(|| fill.clone(), |c| c.image.clone())
     }
 
@@ -243,6 +256,26 @@ impl Workspace {
                 self.history.borrow_mut().break_group();
                 self.edit_action_paint(|b| b.image_fill.placement = crop.image.placement, cx);
                 self.sync_fields(cx);
+            }
+            self.focus.focus(window, cx);
+            cx.notify();
+            return;
+        }
+        if !crop.media && crop.layer > 0 {
+            if commit
+                && self.selected_shape.or(self.selected) == Some(crop.id)
+                && self.paint_layer_index(false) == crop.layer
+                && self.layer_editable(crop.id)
+                && self
+                    .current_image_fill()
+                    .is_some_and(|f| f.asset == crop.image.asset)
+            {
+                self.history.borrow_mut().break_group();
+                if self.selected_shape.is_some() {
+                    self.edit_shape_paint(|s| s.image_fill.placement = crop.image.placement);
+                } else {
+                    self.edit_board_paint(None, |b| b.image_fill.placement = crop.image.placement);
+                }
             }
             self.focus.focus(window, cx);
             cx.notify();

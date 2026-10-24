@@ -17,6 +17,10 @@ fn rect(x: f32, y: f32, width: f32, height: f32) -> Rect {
 fn fixture() -> Page {
     let mut page = Page::empty("Page 1".into());
     page.boards.push(Artboard {
+        fill_enabled: true,
+        fill_opacity: 1.,
+        fill_hidden: false,
+        fill_layers: Vec::new(),
         uid: uuid::Uuid::new_v4(),
         color_style: None,
         id: 1,

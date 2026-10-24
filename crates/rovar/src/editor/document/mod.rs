@@ -93,6 +93,10 @@ impl Workspace {
                         .flatten()
                 }))
                 .chain(page.action_images())
+                .chain(
+                    page.extra_fills()
+                        .filter_map(|f| f.image_fill.asset.as_ref()),
+                )
             {
                 assets.insert(asset.hash.clone(), asset.clone());
             }

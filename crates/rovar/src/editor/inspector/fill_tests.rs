@@ -104,7 +104,7 @@ fn gradient_track_inserts_drags_and_cancels_as_one_edit(cx: &mut TestAppContext)
             visual.simulate_input("Gradient");
         }
         if stroke {
-            click(&mut visual, "stroke-visibility");
+            click(&mut visual, "add-stroke-layer");
         }
         click(
             &mut visual,
@@ -183,21 +183,34 @@ fn gradient_track_inserts_drags_and_cancels_as_one_edit(cx: &mut TestAppContext)
 }
 
 #[gpui::test]
-fn gradient_list_grows_until_viewport_limit_without_displacing_picker(cx: &mut TestAppContext) {
+fn gradient_stops_grow_downward_then_scroll_without_moving_the_add_button(cx: &mut TestAppContext) {
     let window = open(cx);
     let mut visual = VisualTestContext::from_window(window.into(), cx);
+    visual.simulate_resize(size(px(1280.), px(1600.)));
     create(&mut visual, "add-artboard");
     click(&mut visual, "property-drag-5");
     click(&mut visual, "fill-linear");
-    for _ in 2..5 {
-        click(&mut visual, "gradient-add");
-    }
-    let initial = visual.debug_bounds("color-panel").unwrap().size.height;
+    let initial = visual.debug_bounds("color-panel").unwrap();
+    let add = visual.debug_bounds("gradient-add").unwrap();
+    let picker = visual.debug_bounds("color-picker-sv").unwrap();
     click(&mut visual, "gradient-add");
-    assert!(visual.debug_bounds("color-panel").unwrap().size.height > initial + px(30.));
-    for _ in 6..20 {
+    let grown = visual.debug_bounds("color-panel").unwrap();
+    assert_eq!(grown.origin, initial.origin);
+    assert_eq!(grown.size.height, initial.size.height + px(42.));
+    assert_eq!(visual.debug_bounds("gradient-add").unwrap(), add);
+    assert_eq!(
+        visual.debug_bounds("color-picker-sv").unwrap().top(),
+        picker.top() + px(42.)
+    );
+    for _ in 3..20 {
         click(&mut visual, "gradient-add");
+        assert_eq!(visual.debug_bounds("gradient-add").unwrap(), add);
     }
+    let full = visual.debug_bounds("color-panel").unwrap();
+    let picker = visual.debug_bounds("color-picker-sv").unwrap();
+    click(&mut visual, "gradient-add");
+    assert_eq!(visual.debug_bounds("color-panel").unwrap(), full);
+    assert_eq!(visual.debug_bounds("color-picker-sv").unwrap(), picker);
     for height in [800., 640., 1100.] {
         visual.simulate_resize(size(px(1280.), px(height)));
         draw(&mut visual);
@@ -205,11 +218,52 @@ fn gradient_list_grows_until_viewport_limit_without_displacing_picker(cx: &mut T
         let list = visual.debug_bounds("gradient-stop-list").unwrap();
         let picker = visual.debug_bounds("color-picker-sv").unwrap();
         assert!(panel.top() >= px(0.) && panel.bottom() <= px(height));
-        assert!(list.size.height <= px(374.));
+        assert!(list.size.height < px(21. * 42. - 4.));
         assert!(picker.top() >= list.bottom());
         assert!(picker.bottom() <= panel.bottom());
         assert_eq!(picker.size.height, px(152.));
+        let add = visual.debug_bounds("gradient-add").unwrap();
+        click(&mut visual, "gradient-add");
+        assert_eq!(visual.debug_bounds("gradient-add").unwrap(), add);
     }
+    window
+        .update(&mut visual.cx, |w, _, cx| {
+            w.mutate_gradient(
+                |g| {
+                    let removed: Vec<_> = g.stops().iter().skip(5).map(|s| s.id).collect();
+                    for id in removed {
+                        g.remove_stop(id);
+                    }
+                },
+                cx,
+            );
+            w.inspector.active_stop = 0;
+            w.sync_fields(cx);
+            cx.notify();
+        })
+        .unwrap();
+    visual.simulate_keystrokes("escape");
+    visual.simulate_resize(size(px(1280.), px(1000.)));
+    click(&mut visual, "property-drag-5");
+    let initial = visual.debug_bounds("color-panel").unwrap();
+    let add = visual.debug_bounds("gradient-add").unwrap();
+    for removed in 1..=3 {
+        click(&mut visual, "gradient-remove");
+        let panel = visual.debug_bounds("color-panel").unwrap();
+        assert_eq!(panel.origin, initial.origin);
+        assert_eq!(
+            panel.size.height,
+            initial.size.height - px(removed as f32 * 42.)
+        );
+        assert_eq!(visual.debug_bounds("gradient-add").unwrap(), add);
+    }
+    let panel = visual.debug_bounds("color-panel").unwrap();
+    visual.simulate_click(
+        point(panel.center().x, panel.bottom() + px(5.)),
+        Default::default(),
+    );
+    draw(&mut visual);
+    assert!(visual.debug_bounds("color-panel").is_none());
 }
 
 #[gpui::test]
@@ -264,7 +318,7 @@ fn gradient_midpoint_drag_is_one_edit_and_escape_restores_the_preview(cx: &mut T
             visual.simulate_input("Gradient");
         }
         if stroke {
-            click(&mut visual, "stroke-visibility");
+            click(&mut visual, "add-stroke-layer");
         }
         click(
             &mut visual,
@@ -361,7 +415,7 @@ fn alpha_slider_updates_values_and_paint_live_without_changing_rgb_and_undoes_on
             visual.simulate_input("Alpha");
         }
         if stroke {
-            click(&mut visual, "stroke-visibility");
+            click(&mut visual, "add-stroke-layer");
         }
         click(
             &mut visual,
@@ -479,7 +533,8 @@ fn paint_inputs_keep_focus_and_selection_separate_between_surfaces(cx: &mut Test
         visual.simulate_keystrokes("secondary-a left");
         window
             .update(&mut visual.cx, |this, window, cx| {
-                let sidebar = this.inspector.fields[index].update(cx, |input, cx| {
+                let sidebar_input = this.row_field(false, 0, index).unwrap().input;
+                let sidebar = sidebar_input.update(cx, |input, cx| {
                     input.selected_text_range(false, window, cx).unwrap().range
                 });
                 let solid = this.inspector.fields[index + PROPERTY_COUNT]
@@ -488,11 +543,7 @@ fn paint_inputs_keep_focus_and_selection_separate_between_surfaces(cx: &mut Test
                     });
                 assert!(!sidebar.is_empty());
                 assert_eq!(solid, 0..0);
-                assert!(
-                    !this.inspector.fields[index]
-                        .focus_handle(cx)
-                        .is_focused(window)
-                );
+                assert!(!sidebar_input.focus_handle(cx).is_focused(window));
                 assert!(
                     this.inspector.fields[index + PROPERTY_COUNT]
                         .focus_handle(cx)
@@ -669,7 +720,13 @@ fn image_fill_import_fit_opacity_and_history_keep_source_dimensions_and_reject_i
             .update(&mut visual.cx, |this, _, _| {
                 let fill = this.current_image_fill().unwrap();
                 assert_eq!(fill.fit, crate::scene::image_fill::ImageFit::Contain);
-                assert_eq!(fill.opacity, 0.4);
+                assert_eq!(fill.opacity, 1.);
+                assert_eq!(
+                    this.selected_shape()
+                        .map(|s| s.fill_opacity)
+                        .unwrap_or_else(|| this.selected_board().unwrap().fill_opacity),
+                    0.4
+                );
                 let asset = fill.asset.as_ref().unwrap();
                 assert_eq!((asset.width, asset.height), (40, 20));
                 assert_eq!(

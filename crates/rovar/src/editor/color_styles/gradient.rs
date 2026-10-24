@@ -177,7 +177,9 @@ impl Workspace {
     }
 
     pub(super) fn selected_gradient(&self, stroke: bool, cx: &gpui::App) -> Option<LinearGradient> {
-        let (mode, gradient) = if let Some(shape) = self.selected_shape() {
+        let shape = self.paint_shape();
+        let board = self.paint_board();
+        let (mode, gradient) = if let Some(shape) = shape.as_ref() {
             if stroke {
                 (shape.stroke.fill_mode, &shape.stroke.gradient)
             } else {
@@ -187,7 +189,7 @@ impl Workspace {
             let style = text.editor.read(cx).effective_style();
             (style.fill_mode, &style.gradient)
         } else {
-            let board = self.selected_board()?;
+            let board = board.as_ref()?;
             (board.fill_mode, &board.gradient)
         };
         (mode == FillMode::Linear).then(|| gradient.clone())

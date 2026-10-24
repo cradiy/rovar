@@ -80,6 +80,14 @@ pub(crate) fn visit(
     mut f: impl FnMut(&mut Option<String>, &mut Rgba, &mut FillMode, &mut LinearGradient),
 ) {
     for board in &mut page.boards {
+        for fill in &mut board.fill_layers {
+            f(
+                &mut fill.color_style,
+                &mut fill.color,
+                &mut fill.fill_mode,
+                &mut fill.gradient,
+            );
+        }
         f(
             &mut board.color_style,
             &mut board.color,
@@ -88,6 +96,22 @@ pub(crate) fn visit(
         );
     }
     for shape in &mut page.shapes {
+        for fill in &mut shape.fill_layers {
+            f(
+                &mut fill.color_style,
+                &mut fill.color,
+                &mut fill.fill_mode,
+                &mut fill.gradient,
+            );
+        }
+        for stroke in &mut shape.stroke_layers {
+            f(
+                &mut stroke.color_style,
+                &mut stroke.color,
+                &mut stroke.fill_mode,
+                &mut stroke.gradient,
+            );
+        }
         f(
             &mut shape.color_style,
             &mut shape.color,

@@ -58,17 +58,18 @@ impl Workspace {
             .find(|s| s.id == id)
             .or_else(|| boolean.as_ref().map(|g| &g.shape))
         {
-            let width = if shape.stroke.enabled {
-                if shape.kind.is_path() || shape.kind.is_polygon() {
-                    shape.stroke.width / 2.
-                } else {
-                    shape.stroke.outset()
-                }
-            } else {
-                0.
-            };
+            let width = shape.stroke_outset();
             if shape.kind == ShapeKind::Arrow {
                 let mut shape = shape.clone();
+                if let Some(stroke) = shape
+                    .stroke_layers
+                    .iter()
+                    .filter(|s| s.enabled)
+                    .max_by(|a, b| a.width.total_cmp(&b.width))
+                    && stroke.width > shape.stroke.width
+                {
+                    shape.stroke = stroke.clone();
+                }
                 shape.rect = r;
                 for node in shape.editable_nodes() {
                     let right = (r.x + r.width).max(node.anchor.x);

@@ -113,13 +113,8 @@ pub(crate) fn render(
             .iter()
             .find(|s| s.id == *id)
             .or_else(|| compositions.get(id).map(|g| &g.shape))
-            .filter(|s| s.stroke.enabled)
         {
-            let outset = if shape.kind.is_path() || shape.kind.is_polygon() {
-                shape.stroke.width / 2.
-            } else {
-                shape.stroke.outset()
-            };
+            let outset = shape.stroke_outset();
             rect.x -= outset;
             rect.y -= outset;
             rect.width += outset * 2.;

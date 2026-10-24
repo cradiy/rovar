@@ -101,7 +101,7 @@ pub(super) fn node(page: &Page, id: usize, identities: &BTreeMap<usize, uuid::Uu
         (
             "frame".to_string(),
             n.name.clone(),
-            Some((n.color, n.fill_mode)),
+            n.fill_enabled.then_some((n.color, n.fill_mode)),
         )
     } else if let Some(n) = page.shapes.iter().find(|n| n.id == id) {
         (
@@ -230,6 +230,10 @@ pub(super) fn apply(
             let uid = uuid::Uuid::new_v4();
             match kind {
                 p::NodeType::Frame => page.boards.push(Artboard {
+                    fill_enabled: true,
+                    fill_opacity: 1.,
+                    fill_hidden: false,
+                    fill_layers: Vec::new(),
                     uid,
                     id,
                     rect,
@@ -484,6 +488,7 @@ fn update(page: &mut Page, id: usize, props: p::Properties, creating: bool) -> R
     }
     if let Some(n) = page.boards.iter_mut().find(|n| n.id == id) {
         if let Some(color) = color {
+            n.fill_enabled = true;
             n.color = color;
             n.color_style = None;
             n.fill_mode = FillMode::Solid;

@@ -537,32 +537,23 @@ impl Workspace {
             .child({
                 let mut board = board.clone();
                 board.image_fill = self.cropped_fill(id, &board.image_fill);
+                for (index, fill) in board.fill_layers.iter_mut().enumerate() {
+                    fill.image_fill = self.cropped_fill_layer(id, index + 1, &fill.image_fill);
+                }
                 let shadows = self.hierarchy.effects.get(&id).cloned().unwrap_or_default();
                 let zoom = self.view.zoom;
-                let background = board.background();
-                let points = match board.fill_mode {
-                    FillMode::Points(g) => Some(g),
-                    _ => None,
-                };
-                let image = (board.fill_mode == FillMode::Image).then(|| board.image_fill.clone());
+                let fills: Vec<_> =
+                    std::iter::once(crate::scene::paint_layers::Fill::from_board(&board))
+                        .chain(board.fill_layers.iter().cloned())
+                        .collect();
                 let inner_shadows = shadows.clone();
-                let inner_background = background.clone();
-                let inner_image = image.clone();
+                let inner_fills = fills.clone();
                 board
                     .surface(zoom)
                     .on_paint_before_children(move |bounds, _, window, cx| {
                         let mut source = |window: &mut Window| {
-                            if let Some(image) = &image {
-                                window.with_subtree_effect_chain(
-                                    bounds,
-                                    &[],
-                                    image.opacity,
-                                    |window| image.paint(bounds, window, cx),
-                                );
-                            } else if let Some(gradient) = points {
-                                gradient.paint(bounds, window);
-                            } else {
-                                window.paint_quad(gpui::fill(bounds, background.clone()));
+                            for fill in &fills {
+                                fill.paint(bounds, window, cx);
                             }
                         };
                         crate::scene::effects::paint_shadows(
@@ -586,20 +577,8 @@ impl Workspace {
                                     zoom,
                                     window,
                                     |window| {
-                                        if let Some(image) = &inner_image {
-                                            window.with_subtree_effect_chain(
-                                                bounds,
-                                                &[],
-                                                image.opacity,
-                                                |window| image.paint(bounds, window, cx),
-                                            );
-                                        } else if let Some(gradient) = points {
-                                            gradient.paint(bounds, window);
-                                        } else {
-                                            window.paint_quad(gpui::fill(
-                                                bounds,
-                                                inner_background.clone(),
-                                            ));
+                                        for fill in &inner_fills {
+                                            fill.paint(bounds, window, cx);
                                         }
                                     },
                                 );

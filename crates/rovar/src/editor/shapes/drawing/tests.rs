@@ -102,6 +102,8 @@ fn line_draw_endpoint_crossing_and_properties_use_board_coordinates_and_one_step
         })
         .unwrap();
     // Direction constraints work in world coordinates after zoom.
+    visual.simulate_keystrokes("escape");
+    draw(&mut visual);
     click(&mut visual, "draw-line");
     let target = screen(window, &mut visual, point(20., 200.));
     drag(&mut visual, a, target, true);

@@ -247,13 +247,20 @@ impl Workspace {
                             self.selected_shape().is_some_and(|s| !s.kind.is_asset()),
                             |el| el.child(self.shape_paint_controls(cx)),
                         )
-                        .when(self.selected_shape.is_none(), |el| {
-                            el.child(
-                                inspector_section(t("fill"))
-                                    .child(self.color_style_control(false, cx))
-                                    .child(self.paint_value_row(cx)),
-                            )
-                        })
+                        .when(
+                            self.selected_shape.is_none() && self.selected_text.is_some(),
+                            |el| {
+                                el.child(
+                                    inspector_section(t("fill"))
+                                        .child(self.color_style_control(false, cx))
+                                        .child(self.paint_value_row(cx)),
+                                )
+                            },
+                        )
+                        .when(
+                            self.selected_shape.is_none() && self.selected_text.is_none(),
+                            |el| el.child(self.paint_layer_section(false, cx)),
+                        )
                         .child(self.auto_layout_controls(cx))
                         .child(self.constraint_controls(cx))
                         .child(self.size_limit_controls(cx))

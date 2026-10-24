@@ -55,6 +55,10 @@ impl Paint {
     // The inspector's existing paint field conversions operate on this detached value.
     pub fn board(&self) -> Artboard {
         Artboard {
+            fill_enabled: true,
+            fill_opacity: 1.,
+            fill_hidden: false,
+            fill_layers: Vec::new(),
             uid: uuid::Uuid::nil(),
             id: 0,
             name: String::new(),

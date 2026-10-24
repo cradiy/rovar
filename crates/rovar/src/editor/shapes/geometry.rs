@@ -12,6 +12,7 @@ pub(in crate::editor) struct GeometryKey {
     pub height: f32,
     pub radii: [f32; 4],
     pub stroke_width: f32,
+    pub stroke_layers: Vec<(f32, f32)>,
     pub outset: f32,
     pub points: PathPoints,
     pub nodes: crate::scene::bezier::Nodes,
@@ -22,12 +23,19 @@ pub(in crate::editor) struct GeometryKey {
 
 impl GeometryKey {
     pub fn outset(shape: &Shape, zoom: f32) -> f32 {
-        if shape.kind == ShapeKind::Arrow {
-            (shape.stroke.width * 4.).max(12.) * zoom + 6.
-        } else if shape.kind.is_path() || shape.kind.is_polygon() {
-            (shape.stroke.width * zoom / 2.).max(6.)
+        std::iter::once(&shape.stroke)
+            .chain(&shape.stroke_layers)
+            .map(|stroke| Self::stroke_outset(shape.kind, stroke, zoom))
+            .fold(0., f32::max)
+    }
+
+    fn stroke_outset(kind: ShapeKind, stroke: &crate::scene::shape::Stroke, zoom: f32) -> f32 {
+        if kind == ShapeKind::Arrow {
+            (stroke.width * 4.).max(12.) * zoom + 6.
+        } else if kind.is_path() || kind.is_polygon() {
+            (stroke.width * zoom / 2.).max(6.)
         } else {
-            shape.stroke.outset() * zoom
+            stroke.outset() * zoom
         }
     }
 
@@ -46,7 +54,17 @@ impl GeometryKey {
             } else {
                 0.
             },
-            outset: Self::outset(shape, zoom),
+            outset: Self::stroke_outset(shape.kind, &shape.stroke, zoom),
+            stroke_layers: shape
+                .stroke_layers
+                .iter()
+                .map(|s| {
+                    (
+                        if s.enabled { s.width * zoom } else { 0. },
+                        Self::stroke_outset(shape.kind, s, zoom),
+                    )
+                })
+                .collect(),
             points: shape.points.clone(),
             nodes: if shape.kind.is_polygon() {
                 crate::scene::bezier::Nodes(std::sync::Arc::new(
@@ -187,9 +205,28 @@ impl GeometryKey {
             key: self,
             fill,
             stroke,
+            layers: Vec::new(),
         }
     }
     pub fn build(self) -> Geometry {
+        let layers = self
+            .stroke_layers
+            .iter()
+            .map(|&(stroke_width, outset)| {
+                Self {
+                    stroke_width,
+                    outset,
+                    stroke_layers: Vec::new(),
+                    ..self.clone()
+                }
+                .build_single()
+            })
+            .collect();
+        let mut geometry = self.build_single();
+        geometry.layers = layers;
+        geometry
+    }
+    fn build_single(self) -> Geometry {
         if self.kind == ShapeKind::Bezier {
             return self.bezier_geometry();
         }
@@ -248,6 +285,7 @@ impl GeometryKey {
                 key: self,
                 fill: Path::new(point(px(0.), px(0.))),
                 stroke,
+                layers: Vec::new(),
             };
         }
         let mut fill = PathBuilder::fill();
@@ -267,6 +305,7 @@ impl GeometryKey {
             key: self,
             fill,
             stroke,
+            layers: Vec::new(),
         }
     }
 }
@@ -275,6 +314,7 @@ pub(in crate::editor) struct Geometry {
     pub key: GeometryKey,
     pub fill: Path<Pixels>,
     pub stroke: Option<Path<Pixels>>,
+    pub layers: Vec<Geometry>,
 }
 
 fn arc(builder: &mut PathBuilder, radius: f32, x: f32, y: f32) {

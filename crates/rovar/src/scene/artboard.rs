@@ -29,6 +29,14 @@ pub struct Artboard {
     pub fill_mode: FillMode,
     pub gradient: LinearGradient,
     pub image_fill: crate::scene::image_fill::ImageFill,
+    #[serde(default = "super::paint_layers::enabled")]
+    pub fill_enabled: bool,
+    #[serde(default = "super::paint_layers::opacity")]
+    pub fill_opacity: f32,
+    #[serde(default)]
+    pub fill_hidden: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fill_layers: Vec<super::paint_layers::Fill>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -285,11 +293,15 @@ impl LinearGradient {
 
 impl Artboard {
     pub fn background(&self) -> Background {
-        match self.fill_mode {
+        if !self.fill_enabled || self.fill_hidden {
+            return gpui::rgba(0).into();
+        }
+        let background: Background = match self.fill_mode {
             FillMode::Solid => self.color.into(),
             FillMode::Linear => self.gradient.background(),
             FillMode::Image | FillMode::Points(_) => gpui::rgba(0).into(),
-        }
+        };
+        background.opacity(self.fill_opacity)
     }
 
     pub fn editable_color(&self, stop: usize) -> Rgba {
@@ -330,7 +342,9 @@ impl Artboard {
             .child(div().absolute().inset_0().bg(self.background()))
             .when_some(
                 match self.fill_mode {
-                    FillMode::Points(g) => Some(g),
+                    FillMode::Points(g) if self.fill_enabled && !self.fill_hidden => {
+                        Some(super::paint_layers::point_opacity(g, self.fill_opacity))
+                    }
                     _ => None,
                 },
                 |el, g| {
@@ -341,9 +355,53 @@ impl Artboard {
                     )
                 },
             )
-            .when(self.fill_mode == FillMode::Image, |el| {
-                el.child(self.image_fill.element().absolute().inset_0())
-            })
+            .when(
+                self.fill_enabled && !self.fill_hidden && self.fill_mode == FillMode::Image,
+                |el| {
+                    el.child(
+                        self.image_fill
+                            .element()
+                            .opacity(self.image_fill.opacity * self.fill_opacity)
+                            .absolute()
+                            .inset_0(),
+                    )
+                },
+            )
+            .children(
+                self.fill_layers
+                    .iter()
+                    .filter(|f| f.enabled && !f.hidden)
+                    .map(|fill| {
+                        div()
+                            .absolute()
+                            .inset_0()
+                            .bg(fill.background())
+                            .when_some(
+                                match fill.fill_mode {
+                                    FillMode::Points(g) => {
+                                        Some(super::paint_layers::point_opacity(g, fill.opacity))
+                                    }
+                                    _ => None,
+                                },
+                                |el, g| {
+                                    el.child(
+                                        gpui_effects::point_gradient(g.gpu_points())
+                                            .absolute()
+                                            .inset_0(),
+                                    )
+                                },
+                            )
+                            .when(fill.fill_mode == FillMode::Image, |el| {
+                                el.child(
+                                    fill.image_fill
+                                        .element()
+                                        .opacity(fill.image_fill.opacity * fill.opacity)
+                                        .absolute()
+                                        .inset_0(),
+                                )
+                            })
+                    }),
+            )
     }
 }
 

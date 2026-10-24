@@ -14,8 +14,18 @@ impl Workspace {
             return None;
         }
         self.selected_shape()
-            .map(|s| &s.image_fill)
-            .or_else(|| self.selected_board().map(|b| &b.image_fill))
+            .map(|s| {
+                self.paint_layer_index(false)
+                    .checked_sub(1)
+                    .map_or(&s.image_fill, |i| &s.fill_layers[i].image_fill)
+            })
+            .or_else(|| {
+                self.selected_board().map(|b| {
+                    self.paint_layer_index(false)
+                        .checked_sub(1)
+                        .map_or(&b.image_fill, |i| &b.fill_layers[i].image_fill)
+                })
+            })
     }
 
     fn import_image_fill(&mut self, cx: &mut Context<Self>) {
@@ -26,6 +36,8 @@ impl Workspace {
         let Some(id) = self.selected_shape.or(self.selected) else {
             return;
         };
+        let layer_index = self.paint_layer_index(false);
+        let original = self.current_image_fill().cloned();
         self.media.image_request += 1;
         self.media.image_loading = None;
         cx.notify();
@@ -74,6 +86,36 @@ impl Workspace {
                     return;
                 }
                 this.media.image_loading = None;
+                if layer_index > 0 {
+                    if this.pages.active == page
+                        && this.selected_shape.or(this.selected) == Some(id)
+                        && this.paint_layer_index(false) == layer_index
+                        && this.current_image_fill() == original.as_ref()
+                        && this.layer_editable(id)
+                    {
+                        match asset {
+                            Ok(asset) => {
+                                this.history.borrow_mut().break_group();
+                                if this.selected_shape.is_some() {
+                                    this.edit_shape_paint(|s| s.image_fill.asset = Some(asset));
+                                } else {
+                                    this.edit_board_paint(None, |b| {
+                                        b.image_fill.asset = Some(asset)
+                                    });
+                                }
+                                this.sync_fields(cx);
+                            }
+                            Err(error) => {
+                                this.media.error = Some(crate::i18n::message(
+                                    "image-background-error",
+                                    &[("error", format!("{error:#}"))],
+                                ))
+                            }
+                        }
+                    }
+                    cx.notify();
+                    return;
+                }
                 if this.pages.active != page {
                     if let Ok(asset) = asset
                         && let Some(state) =
@@ -214,9 +256,9 @@ impl Workspace {
                                 if this.action_paint().is_some() {
                                     this.edit_action_paint(|b| b.image_fill.fit = fit, cx);
                                 } else if this.selected_shape.is_some() {
-                                    this.edit_shape(|s| s.image_fill.fit = fit);
+                                    this.edit_shape_paint(|s| s.image_fill.fit = fit);
                                 } else {
-                                    this.edit_board(None, |b| b.image_fill.fit = fit);
+                                    this.edit_board_paint(None, |b| b.image_fill.fit = fit);
                                 }
                                 cx.notify();
                             }))

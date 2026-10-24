@@ -15,6 +15,12 @@ pub(in crate::editor) struct State {
     pub blend_menu: Entity<uic::components::dropdown::DropdownState>,
     pub stroke_editing: bool,
     pub paint_stops: [usize; 2],
+    pub paint_object: Option<usize>,
+    pub paint_page: String,
+    pub paint_layers: [usize; 2],
+    pub paint_row_owner: Option<(String, usize)>,
+    pub(super) paint_rows: Vec<super::paint_rows::RowInput>,
+    pub(super) row_scrub: Option<super::paint_rows::Key>,
     pub paint_popovers: [Entity<uic::components::popover::PopoverState>; 2],
     pub inspector_scroll: gpui::ScrollHandle,
     pub fields: Vec<Entity<TextInput>>,
@@ -23,6 +29,7 @@ pub(in crate::editor) struct State {
     pub invalid: [bool; PROPERTY_COUNT * PROPERTY_SURFACES],
     pub active_stop: usize,
     pub gradient_stop_scroll: gpui::ScrollHandle,
+    pub(super) gradient_popup_layout: Rc<Cell<Option<super::paint::GradientPopupLayout>>>,
     pub picker: Entity<ColorPickerState>,
     pub alpha_picker: Entity<ColorPickerState>,
     pub font_picker: Entity<font_picker::FontPicker>,
@@ -56,6 +63,7 @@ impl State {
                 window,
                 move |this, _, event: &uic::components::popover::PopoverEvent, window, cx| {
                     if *event == uic::components::popover::PopoverEvent::Opened {
+                        this.inspector.gradient_popup_layout.set(None);
                         this.inspector.paint_popovers[1 - index].update(cx, |state, cx| {
                             state.dismiss(
                                 uic::components::popover::PopoverDismissReason::Programmatic,
@@ -172,11 +180,24 @@ impl State {
                             .borrow_mut()
                             .set_scope(Group::Color(id, stop), true);
                     }
-                    if this.selected_text.is_some() {
+                    let alpha_key = alpha_only
+                        .then(|| {
+                            this.simple_paint_opacity_key(
+                                if this.selected_shape.is_some() && this.inspector.stroke_editing {
+                                    17
+                                } else {
+                                    6
+                                },
+                            )
+                        })
+                        .flatten();
+                    if let Some(key) = alpha_key {
+                        this.edit_paint_layer_opacity(key, &number(color.a * 100.));
+                    } else if this.selected_text.is_some() {
                         this.change_text_color(color, alpha_only, cx);
                     } else if this.selected_shape.is_some() {
                         let stroke = this.inspector.stroke_editing;
-                        this.edit_shape(|shape| {
+                        this.edit_shape_paint(|shape| {
                             if let Some(target) = shape.paint_color_mut(stop, stroke) {
                                 if alpha_only {
                                     target.a = color.a;
@@ -188,7 +209,7 @@ impl State {
                             }
                         });
                     } else {
-                        this.edit_board(None, |board| {
+                        this.edit_board_paint(None, |board| {
                             if let Some(target) = board.editable_color_mut(stop) {
                                 if alpha_only {
                                     target.a = color.a;
@@ -227,6 +248,12 @@ impl State {
             name_scroll: Rc::new(Cell::new(px(0.))),
             stroke_editing: false,
             paint_stops: [0; 2],
+            paint_object: None,
+            paint_page: String::new(),
+            paint_layers: [0; 2],
+            paint_row_owner: None,
+            paint_rows: Vec::new(),
+            row_scrub: None,
             paint_popovers,
             inspector_scroll: Default::default(),
             fields,
@@ -234,6 +261,7 @@ impl State {
             invalid: [false; PROPERTY_COUNT * PROPERTY_SURFACES],
             active_stop: 0,
             gradient_stop_scroll: gpui::ScrollHandle::default(),
+            gradient_popup_layout: Rc::new(Cell::new(None)),
             picker,
             alpha_picker,
             font_picker,

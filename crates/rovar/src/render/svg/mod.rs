@@ -135,14 +135,20 @@ impl Scene<'_> {
                 rect.y + rect.height / 2.
             )?;
             let mut effect_rect = rect;
-            if let Some(shape) = shape.filter(|s| s.stroke.enabled) {
-                let pad = if shape.kind == ShapeKind::Arrow {
-                    (shape.stroke.width * 4.).max(12.)
-                } else if shape.kind.is_path() || shape.kind.is_polygon() {
-                    shape.stroke.width / 2.
-                } else {
-                    shape.stroke.outset()
-                };
+            if let Some(shape) = shape {
+                let pad = std::iter::once(&shape.stroke)
+                    .chain(&shape.stroke_layers)
+                    .filter(|s| s.enabled)
+                    .map(|stroke| {
+                        if shape.kind == ShapeKind::Arrow {
+                            (stroke.width * 4.).max(12.)
+                        } else if shape.kind.is_path() || shape.kind.is_polygon() {
+                            stroke.width / 2.
+                        } else {
+                            stroke.outset()
+                        }
+                    })
+                    .fold(0., f32::max);
                 effect_rect.x -= pad;
                 effect_rect.y -= pad;
                 effect_rect.width += 2. * pad;
@@ -234,103 +240,155 @@ impl Scene<'_> {
                     path::contour(&local, 0.)
                 };
                 let (mode, color, gradient, enabled, image_fill) = if let Some(b) = board {
-                    (b.fill_mode, b.color, &b.gradient, true, &b.image_fill)
+                    (
+                        b.fill_mode,
+                        b.color,
+                        &b.gradient,
+                        b.fill_enabled && !b.fill_hidden,
+                        &b.image_fill,
+                    )
                 } else {
                     let s = shape.unwrap();
                     (
                         s.fill_mode,
                         s.color,
                         &s.gradient,
-                        s.fill_enabled && s.can_fill(),
+                        s.fill_enabled && !s.fill_hidden && s.can_fill(),
                         &s.image_fill,
                     )
                 };
                 let media =
                     shape.is_some_and(|s| matches!(s.kind, ShapeKind::Image | ShapeKind::Svg));
-                if enabled && mode != FillMode::Image && !media {
-                    let fill = paint::paint(
-                        mode,
-                        color,
-                        gradient,
-                        rect,
-                        &mut defs,
-                        &format!("fill-{id}"),
-                    )?;
-                    write!(body, "<path d=\"{contour}\" fill-rule=\"evenodd\" {fill}/>")?;
-                }
-                if (media || (enabled && mode == FillMode::Image))
-                    && let Some(asset) = doc.assets.iter().find(|a| {
-                        a.object == composition.as_ref().map_or(*id, |g| g.source)
-                            && a.fill != media
-                    })
+                let extra = board
+                    .map(|b| b.fill_layers.as_slice())
+                    .unwrap_or_else(|| &shape.unwrap().fill_layers);
+                for (layer_index, (mode, color, gradient, enabled, image_fill, image_hash)) in
+                    std::iter::once((mode, color, gradient, enabled, image_fill, None))
+                        .chain(extra.iter().map(|f| {
+                            (
+                                f.fill_mode,
+                                f.color,
+                                &f.gradient,
+                                f.enabled && !f.hidden,
+                                &f.image_fill,
+                                f.image_hash.as_deref(),
+                            )
+                        }))
+                        .enumerate()
                 {
-                    if !images.contains_key(&asset.hash) {
+                    let media = media && layer_index == 0;
+                    let opacity = if layer_index > 0 {
+                        extra[layer_index - 1].opacity
+                    } else if media {
+                        1.
+                    } else {
+                        board.map_or_else(|| shape.unwrap().fill_opacity, |b| b.fill_opacity)
+                    };
+                    write!(body, "<g opacity=\"{opacity}\">")?;
+                    if enabled && mode != FillMode::Image && !media {
+                        let fill = paint::paint(
+                            mode,
+                            color,
+                            gradient,
+                            rect,
+                            &mut defs,
+                            &format!("fill-{id}-{layer_index}"),
+                        )?;
+                        write!(body, "<path d=\"{contour}\" fill-rule=\"evenodd\" {fill}/>")?;
+                    }
+                    if (media || (enabled && mode == FillMode::Image))
+                        && let Some(hash) = image_hash.or_else(|| {
+                            (layer_index == 0)
+                                .then(|| {
+                                    doc.assets
+                                        .iter()
+                                        .find(|a| {
+                                            a.object
+                                                == composition.as_ref().map_or(*id, |g| g.source)
+                                                && a.fill != media
+                                        })
+                                        .map(|a| a.hash.as_str())
+                                })
+                                .flatten()
+                        })
+                    {
+                        if !images.contains_key(hash) {
+                            let source = self
+                                .assets
+                                .iter()
+                                .find(|s| s.hash == hash)
+                                .context("Missing image source")?;
+                            images.insert(hash.to_owned(), paint::image_uri(source, output)?);
+                        }
+                        let key = format!("image-clip-{id}-{layer_index}");
+                        clip(&mut defs, &key, &contour);
                         let source = self
                             .assets
                             .iter()
-                            .find(|s| s.hash == asset.hash)
+                            .find(|s| s.hash == hash)
                             .context("Missing image source")?;
-                        images.insert(asset.hash.clone(), paint::image_uri(source, output)?);
+                        let (placement, fit) = if media {
+                            (
+                                shape.unwrap().media_placement,
+                                crate::scene::image_fill::ImageFit::Contain,
+                            )
+                        } else {
+                            (image_fill.placement, image_fill.fit)
+                        };
+                        let image_rect = placement.rect(rect, source.size, fit);
+                        let opacity = if media { 1. } else { image_fill.opacity };
+                        write!(
+                            body,
+                            "<image x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" preserveAspectRatio=\"none\" opacity=\"{opacity}\" clip-path=\"url(#{key})\" href=\"{}\"/>",
+                            image_rect.x,
+                            image_rect.y,
+                            image_rect.width,
+                            image_rect.height,
+                            images[hash]
+                        )?;
                     }
-                    let key = format!("image-clip-{id}");
-                    clip(&mut defs, &key, &contour);
-                    let source = self
-                        .assets
-                        .iter()
-                        .find(|s| s.hash == asset.hash)
-                        .context("Missing image source")?;
-                    let (placement, fit) = if media {
-                        (
-                            shape.unwrap().media_placement,
-                            crate::scene::image_fill::ImageFit::Contain,
-                        )
-                    } else {
-                        (image_fill.placement, image_fill.fit)
-                    };
-                    let image_rect = placement.rect(rect, source.size, fit);
-                    let opacity = if media { 1. } else { image_fill.opacity };
-                    write!(
-                        body,
-                        "<image x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" preserveAspectRatio=\"none\" opacity=\"{opacity}\" clip-path=\"url(#{key})\" href=\"{}\"/>",
-                        image_rect.x,
-                        image_rect.y,
-                        image_rect.width,
-                        image_rect.height,
-                        images[&asset.hash]
-                    )?;
+                    body.push_str("</g>");
                 }
-                if let Some(s) = shape.filter(|s| s.stroke.enabled && s.stroke.width > 0.) {
-                    let vector = s.kind.is_path() || s.kind.is_polygon();
-                    let outset = if vector {
-                        s.stroke.width / 2.
-                    } else {
-                        s.stroke.outset()
-                    };
-                    let paint_bounds = path::expand(rect, outset);
-                    let fill = paint::paint(
-                        s.stroke.fill_mode,
-                        s.stroke.color,
-                        &s.stroke.gradient,
-                        paint_bounds,
-                        &mut defs,
-                        &format!("stroke-{id}"),
-                    )?;
-                    if vector {
-                        let stroke = fill
-                            .replace("fill=", "stroke=")
-                            .replace("fill-opacity=", "stroke-opacity=");
-                        write!(
-                            body,
-                            "<path d=\"{contour}\" fill=\"none\" {stroke} stroke-width=\"{}\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>",
-                            s.stroke.width
+                if let Some(s) = shape {
+                    for (stroke_index, stroke) in std::iter::once(&s.stroke)
+                        .chain(&s.stroke_layers)
+                        .enumerate()
+                        .filter(|(_, s)| s.enabled && !s.hidden && s.width > 0.)
+                    {
+                        write!(body, "<g opacity=\"{}\">", stroke.opacity)?;
+                        let vector = s.kind.is_path() || s.kind.is_polygon();
+                        let outset = if vector {
+                            stroke.width / 2.
+                        } else {
+                            stroke.outset()
+                        };
+                        let paint_bounds = path::expand(rect, outset);
+                        let fill = paint::paint(
+                            stroke.fill_mode,
+                            stroke.color,
+                            &stroke.gradient,
+                            paint_bounds,
+                            &mut defs,
+                            &format!("stroke-{id}-{stroke_index}"),
                         )?;
-                    } else {
-                        let outer = path::contour(&local, outset);
-                        let inner = path::contour(&local, outset - s.stroke.width);
-                        write!(
-                            body,
-                            "<path d=\"{outer} {inner}\" fill-rule=\"evenodd\" {fill}/>"
-                        )?;
+                        if vector {
+                            let stroke_paint = fill
+                                .replace("fill=", "stroke=")
+                                .replace("fill-opacity=", "stroke-opacity=");
+                            write!(
+                                body,
+                                "<path d=\"{contour}\" fill=\"none\" {stroke_paint} stroke-width=\"{}\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>",
+                                stroke.width
+                            )?;
+                        } else {
+                            let outer = path::contour(&local, outset);
+                            let inner = path::contour(&local, outset - stroke.width);
+                            write!(
+                                body,
+                                "<path d=\"{outer} {inner}\" fill-rule=\"evenodd\" {fill}/>"
+                            )?;
+                        }
+                        body.push_str("</g>");
                     }
                 }
             }

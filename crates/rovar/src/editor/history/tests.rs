@@ -74,6 +74,8 @@ fn deleting_a_board_restores_its_children_styles_and_order_as_one_step(cx: &mut 
     visual.simulate_input("A中😀B");
     visual.simulate_keystrokes("secondary-home shift-right");
     click(&mut visual, "fill-linear");
+    visual.simulate_keystrokes("escape");
+    draw(&mut visual);
     create(&mut visual, "add-text");
     visual.simulate_input("second");
     create(&mut visual, "add-artboard");

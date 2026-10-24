@@ -896,6 +896,7 @@ impl Workspace {
         label: &'static str,
         cx: &mut Context<Self>,
     ) -> Div {
+        let focus = self.inspector.effects.rows[index].inputs[field].focus_handle(cx);
         div()
             .debug_selector(move || format!("shadow-input-{index}-{field}"))
             .flex_1()
@@ -907,6 +908,14 @@ impl Workspace {
             .flex()
             .items_center()
             .gap(px(6.))
+            .on_mouse_down_out(cx.listener(
+                move |this, event: &gpui::MouseDownEvent, window, cx| {
+                    if event.button == MouseButton::Left && focus.is_focused(window) {
+                        this.apply_effect_field(index, field, cx);
+                        window.blur();
+                    }
+                },
+            ))
             .child(
                 div()
                     .id(format!("shadow-drag-{index}-{field}"))
@@ -928,6 +937,7 @@ impl Workspace {
             )
             .child(
                 inspector_input(&self.inspector.effects.rows[index].inputs[field])
+                    .blur_on_click_outside(false)
                     .flex_1()
                     .min_w_0()
                     .h(px(28.))

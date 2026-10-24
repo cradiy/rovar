@@ -6,7 +6,7 @@ use crate::ui::theme::Color;
 
 impl Workspace {
     pub(in crate::editor) fn shape_field_visible(&self, index: usize) -> bool {
-        let Some(shape) = self.selected_shape() else {
+        let Some(shape) = self.paint_shape() else {
             return false;
         };
         match index {
@@ -182,46 +182,6 @@ impl Workspace {
             })
     }
 
-    fn paint_toggle(
-        &self,
-        enabled: bool,
-        stroke: bool,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement + use<> {
-        icon_button(
-            if stroke == self.inspector.stroke_editing {
-                "shape-paint-enabled"
-            } else if stroke {
-                "stroke-visibility"
-            } else {
-                "fill-visibility"
-            },
-            if enabled {
-                t("paint-hide")
-            } else {
-                t("paint-enable")
-            },
-            if enabled {
-                GpuiIcons::LucideEye
-            } else {
-                GpuiIcons::LucidePlus
-            },
-            false,
-        )
-        .on_click(cx.listener(move |this, _, window, cx| {
-            this.history.borrow_mut().break_group();
-            this.edit_shape(|shape| {
-                if stroke {
-                    shape.stroke.enabled = !shape.stroke.enabled;
-                } else {
-                    shape.fill_enabled = !shape.fill_enabled;
-                }
-            });
-            this.activate_paint(stroke, cx);
-            this.focus.focus(window, cx);
-        }))
-    }
-
     pub(in crate::editor) fn activate_paint(&mut self, stroke: bool, cx: &mut Context<Self>) {
         self.history.borrow_mut().break_group();
         self.set_paint_target(stroke);
@@ -242,50 +202,29 @@ impl Workspace {
         &self,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let shape = self.selected_shape().unwrap();
-        div().flex().flex_col().flex_shrink_0().children(
-            [false, true]
-                .into_iter()
-                .filter(|stroke| *stroke || shape.can_fill())
-                .map(|stroke| {
-                    let enabled = if stroke {
-                        shape.stroke.enabled
-                    } else {
-                        shape.fill_enabled
-                    };
-                    let label = if stroke { t("stroke") } else { t("fill") };
-                    let id = if stroke { "shape-stroke" } else { "shape-fill" };
-                    crate::editor::inspector::section_body()
-                        .gap(px(8.))
-                        .child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap(px(6.))
-                                .child(
-                                    div()
-                                        .id(id)
-                                        .debug_selector(move || id.into())
-                                        .flex_1()
-                                        .h(px(28.))
-                                        .flex()
-                                        .items_center()
-                                        .text_size(px(12.))
-                                        .font_weight(FontWeight::SEMIBOLD)
-                                        .child(label),
-                                )
-                                .child(self.paint_toggle(enabled, stroke, cx)),
-                        )
-                        .when(enabled, |el| {
-                            el.child(self.color_style_control(stroke, cx))
-                                .child(self.active_paint_controls(stroke, cx))
-                        })
-                }),
-        )
+        div()
+            .flex()
+            .flex_col()
+            .flex_shrink_0()
+            .when(self.selected_shape().unwrap().can_fill(), |el| {
+                el.child(self.paint_layer_section(false, cx))
+            })
+            .child(self.paint_layer_section(true, cx))
     }
 
-    fn active_paint_controls(&self, stroke: bool, cx: &mut Context<Self>) -> impl IntoElement {
-        let shape = self.selected_shape().unwrap();
+    pub(in crate::editor) fn active_paint_controls(
+        &self,
+        stroke: bool,
+        layer: usize,
+        remove: gpui::AnyElement,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let shape = self
+            .paint_shape_at(
+                if stroke { 0 } else { layer },
+                if stroke { layer } else { 0 },
+            )
+            .unwrap();
         let open_path = shape.kind.is_path() || shape.kind.is_polygon();
         let enabled = if stroke {
             shape.stroke.enabled
@@ -298,14 +237,28 @@ impl Workspace {
             .flex()
             .flex_col()
             .gap(px(10.))
-            .when(enabled, |el| el.child(self.paint_value_row_for(stroke, cx)))
+            .when(enabled, |el| {
+                el.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(4.))
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .child(self.paint_layer_value_row(stroke, layer, cx)),
+                        )
+                        .child(remove),
+                )
+            })
             .when(stroke && enabled, |el| {
                 el.child(
                     div()
                         .flex()
                         .items_center()
                         .gap(px(6.))
-                        .child(self.property_field(14, t("stroke-width"), cx))
+                        .child(self.paint_layer_field(stroke, layer, 14, t("stroke-width"), cx))
                         .when(!open_path, |el| {
                             el.children(
                                 [
@@ -333,8 +286,11 @@ impl Workspace {
                                     |(value, id, label, glyph)| {
                                         icon_button(id, label, glyph, align == value).on_click(
                                             cx.listener(move |this, _, window, cx| {
+                                                this.select_paint_layer(stroke, layer, window, cx);
                                                 this.history.borrow_mut().break_group();
-                                                this.edit_shape(|shape| shape.stroke.align = value);
+                                                this.edit_shape_paint(|shape| {
+                                                    shape.stroke.align = value
+                                                });
                                                 this.focus.focus(window, cx);
                                                 this.sync_fields(cx);
                                                 cx.notify();

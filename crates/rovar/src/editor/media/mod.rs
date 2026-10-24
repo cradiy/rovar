@@ -144,6 +144,18 @@ impl Workspace {
                     .flatten()
                     .map(move |asset| (s.id, asset))
             }))
+            .chain(self.boards.iter().flat_map(|b| {
+                b.fill_layers
+                    .iter()
+                    .filter(|f| f.enabled && f.fill_mode == FillMode::Image)
+                    .filter_map(move |f| f.image_fill.asset.as_ref().map(|a| (b.id, a)))
+            }))
+            .chain(self.shapes.iter().flat_map(|s| {
+                s.fill_layers
+                    .iter()
+                    .filter(|f| f.enabled && f.fill_mode == FillMode::Image)
+                    .filter_map(move |f| f.image_fill.asset.as_ref().map(|a| (s.id, a)))
+            }))
             .chain(
                 self.action_paint()
                     .and_then(|p| p.image.asset.as_ref())

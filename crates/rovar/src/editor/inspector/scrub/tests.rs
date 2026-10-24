@@ -16,11 +16,87 @@ fn finish(visual: &mut VisualTestContext, p: Point<Pixels>, delta: f32) {
 }
 
 #[gpui::test]
+fn solid_paint_opacity_stays_in_sync_before_and_after_opening_the_picker(cx: &mut TestAppContext) {
+    let window = open(cx);
+    let mut visual = VisualTestContext::from_window(window.into(), cx);
+    visual.simulate_resize(size(px(1280.), px(1400.)));
+    create(&mut visual, "add-rectangle");
+    window
+        .update(&mut visual.cx, |w, _, cx| {
+            w.edit_shape(|s| {
+                s.stroke.enabled = true;
+                s.stroke.color = rgb(0x1fa786).opacity(0.62);
+                s.stroke_layers.push(crate::scene::shape::Stroke {
+                    enabled: true,
+                    opacity: 0.17,
+                    ..Default::default()
+                });
+            });
+            w.sync_fields(cx);
+            cx.notify();
+        })
+        .unwrap();
+    draw(&mut visual);
+    let p = start(&mut visual, "property-drag-17");
+    finish(&mut visual, p, -10.);
+    window
+        .update(&mut visual.cx, |w, _, cx| {
+            assert_eq!(w.shapes[0].stroke.opacity, 0.52);
+            assert_eq!(w.shapes[0].stroke.color.a, 1.);
+            assert_eq!(w.shapes[0].stroke_layers[0].opacity, 0.17);
+            assert_eq!(
+                w.row_field(true, 0, 17)
+                    .unwrap()
+                    .input
+                    .read(cx)
+                    .value()
+                    .as_ref(),
+                "52"
+            );
+        })
+        .unwrap();
+    click(&mut visual, "property-drag-16");
+    window
+        .update(&mut visual.cx, |w, _, cx| {
+            assert!((w.inspector.alpha_picker.read(cx).value().a - 0.52).abs() < 0.001);
+            w.inspector.alpha_picker.update(cx, |_, cx| {
+                cx.emit(ColorPickerEvent::Commit(rgb(0x1fa786).opacity(0.35)));
+            });
+        })
+        .unwrap();
+    draw(&mut visual);
+    window
+        .update(&mut visual.cx, |w, _, cx| {
+            assert_eq!(
+                w.row_field(true, 0, 17)
+                    .unwrap()
+                    .input
+                    .read(cx)
+                    .value()
+                    .as_ref(),
+                "35"
+            );
+            assert_eq!(w.field_value(17, cx).as_deref(), Some("35"));
+        })
+        .unwrap();
+    visual.simulate_keystrokes("escape");
+    draw(&mut visual);
+    let p = start(&mut visual, "property-drag-17");
+    finish(&mut visual, p, 10.);
+    window
+        .update(&mut visual.cx, |w, _, _| {
+            assert_eq!(w.shapes[0].stroke.opacity, 0.45);
+            assert_eq!(w.shapes[0].stroke_layers[0].opacity, 0.17);
+        })
+        .unwrap();
+}
+
+#[gpui::test]
 fn gradient_popup_stays_open_during_scrub_release_and_cancel(cx: &mut TestAppContext) {
     let window = open(cx);
     let mut visual = VisualTestContext::from_window(window.into(), cx);
     create(&mut visual, "add-rectangle");
-    click(&mut visual, "stroke-visibility");
+    click(&mut visual, "add-stroke-layer");
     for (slot, swatch) in [(0, "property-drag-5"), (1, "property-drag-16")] {
         click(&mut visual, swatch);
         click(&mut visual, "fill-linear");

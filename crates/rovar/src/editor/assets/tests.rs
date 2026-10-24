@@ -4,7 +4,7 @@ use gpui::{EntityInputHandler, TestAppContext, VisualTestContext};
 use std::collections::BTreeSet;
 
 #[gpui::test]
-fn library_saves_preserve_action_only_images(cx: &mut TestAppContext) {
+fn library_saves_preserve_action_and_paint_layer_only_images(cx: &mut TestAppContext) {
     use crate::scene::{
         artboard::FillMode,
         image_fill::ImageFill,
@@ -16,6 +16,11 @@ fn library_saves_preserve_action_only_images(cx: &mut TestAppContext) {
         .save(&original)
         .unwrap();
     let asset = crate::asset::FileAsset::load(original.clone()).unwrap();
+    let layer_path = root.path().join("layer.png");
+    image::RgbaImage::from_pixel(2, 2, image::Rgba([20, 130, 190, 255]))
+        .save(&layer_path)
+        .unwrap();
+    let layer_asset = crate::asset::FileAsset::load(layer_path.clone()).unwrap();
     let window = crate::editor::tests::open(cx);
     let library = cx.update(|cx| Library::open(root.path(), cx));
     cx.run_until_parked();
@@ -43,6 +48,11 @@ fn library_saves_preserve_action_only_images(cx: &mut TestAppContext) {
                 },
             ));
             editor.next_id = 3;
+            let mut fill = crate::scene::paint_layers::Fill::from_shape(&editor.shapes[0]);
+            fill.fill_mode = FillMode::Image;
+            fill.image_hash = Some(layer_asset.hash.clone());
+            fill.image_fill.asset = Some(layer_asset.clone());
+            editor.shapes[0].fill_layers.push(fill);
             editor.set_selection(BTreeSet::from([1]), cx);
             editor.create_component(window, cx);
             let component = editor.components.definitions.keys().next().unwrap().clone();
@@ -88,13 +98,24 @@ fn library_saves_preserve_action_only_images(cx: &mut TestAppContext) {
         .unwrap();
     cx.run_until_parked();
     std::fs::remove_file(original).unwrap();
+    std::fs::remove_file(layer_path).unwrap();
     library.read_with(cx, |library, _| {
         assert!(library.error.is_none(), "{:?}", library.error);
         assert_eq!(library.entries.len(), 2);
         for entry in &library.entries {
             let loaded = crate::document::load(&entry.path).unwrap();
-            assert_eq!(loaded.assets.len(), 1);
+            assert_eq!(loaded.assets.len(), 2);
             let document = loaded.into_document().unwrap();
+            let layer = document.pages[0]
+                .extra_fills()
+                .next()
+                .unwrap()
+                .image_fill
+                .asset
+                .as_ref()
+                .unwrap();
+            assert_eq!(layer.hash, layer_asset.hash);
+            image::load_from_memory(&layer.source.bytes()).unwrap();
             let images: Vec<_> = document.pages[0].action_images().collect();
             assert_eq!(images.len(), 2);
             for image in images {
@@ -455,6 +476,10 @@ fn assets_panel_search_save_cancel_and_drop_respect_the_canvas(cx: &mut TestAppC
 
 fn board(id: usize, rect: Rect) -> Artboard {
     Artboard {
+        fill_enabled: true,
+        fill_opacity: 1.,
+        fill_hidden: false,
+        fill_layers: Vec::new(),
         uid: uuid::Uuid::new_v4(),
         color_style: None,
         id,

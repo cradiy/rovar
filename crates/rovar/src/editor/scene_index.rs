@@ -161,6 +161,10 @@ mod tests {
                 w.shapes.clear();
                 // A conversion may reuse the same ID and geometry in another collection.
                 w.boards.push(Artboard {
+                    fill_enabled: true,
+                    fill_opacity: 1.,
+                    fill_hidden: false,
+                    fill_layers: Vec::new(),
                     id: 1,
                     uid: uuid::Uuid::new_v4(),
                     name: "Frame".into(),

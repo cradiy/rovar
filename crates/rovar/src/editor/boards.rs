@@ -44,6 +44,10 @@ impl Workspace {
         let id = self.next_id;
         self.next_id += 1;
         self.boards.push(Artboard {
+            fill_enabled: true,
+            fill_opacity: 1.,
+            fill_hidden: false,
+            fill_layers: Vec::new(),
             uid: uuid::Uuid::new_v4(),
             color_style: None,
             id,

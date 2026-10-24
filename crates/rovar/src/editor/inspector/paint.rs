@@ -3,6 +3,15 @@
 use super::*;
 use crate::ui::theme::Color;
 
+#[derive(Clone, Copy)]
+pub(super) struct GradientPopupLayout {
+    bounds: Bounds<Pixels>,
+    list_height: Pixels,
+    anchor_height: Pixels,
+    viewport: gpui::Size<Pixels>,
+    kind: gpui::GradientKind,
+}
+
 impl Workspace {
     pub(in crate::editor) fn field_edits_stroke(&self, index: usize) -> bool {
         match index {
@@ -18,12 +27,13 @@ impl Workspace {
             self.inspector.paint_stops[stroke as usize]
         };
         if matches!(
-            self.selected_shape().unwrap().paint_mode(stroke),
+            self.paint_shape().unwrap().paint_mode(stroke),
             FillMode::Points(_)
         ) {
             return id.min(3);
         }
-        let gradient = self.selected_shape().unwrap().paint_gradient(stroke);
+        let shape = self.paint_shape().unwrap();
+        let gradient = shape.paint_gradient(stroke);
         if gradient.stop(id).is_some() {
             id
         } else {
@@ -41,13 +51,13 @@ impl Workspace {
             let editor = text.editor.read(cx);
             let style = editor.effective_style();
             Some((style.fill_mode, style.gradient.clone()))
-        } else if let Some(shape) = self.selected_shape() {
+        } else if let Some(shape) = self.paint_shape() {
             Some((
                 shape.paint_mode(self.inspector.stroke_editing),
                 shape.paint_gradient(self.inspector.stroke_editing).clone(),
             ))
         } else {
-            self.selected_board()
+            self.paint_board()
                 .map(|board| (board.fill_mode, board.gradient.clone()))
         }
     }
@@ -65,9 +75,9 @@ impl Workspace {
             self.change_text_style(StyleChange::Gradient(gradient), cx);
         } else if self.selected_shape.is_some() {
             let stroke = self.inspector.stroke_editing;
-            self.edit_shape(|shape| *shape.paint_gradient_mut(stroke) = gradient);
+            self.edit_shape_paint(|shape| *shape.paint_gradient_mut(stroke) = gradient);
         } else {
-            self.edit_board(None, |board| board.gradient = gradient);
+            self.edit_board_paint(None, |board| board.gradient = gradient);
         }
         Some(result)
     }
@@ -194,21 +204,14 @@ impl Workspace {
                 6
             };
         let stop_count = gradient.stops().len();
-        // Reserve room for the picker, controls, and the panel's viewport margin.
-        let reserved_height = if gradient.kind == gpui::GradientKind::Angular {
-            520.
-        } else {
-            482.
-        };
-        let stop_list_height =
-            (window.viewport_size().height - px(reserved_height)).clamp(px(38.), px(374.));
+        let stop_list_height = self.gradient_stop_list_height(&gradient, window);
         let image_allowed = if action {
             self.action_paint_image_allowed()
         } else {
             !text_selected
                 && (self.selected_shape.is_none() || !self.inspector.stroke_editing)
                 && self.current_image_fill().is_some()
-                && self.selected_shape().is_none_or(|s| s.can_fill())
+                && self.paint_shape().is_none_or(|s| s.can_fill())
         };
         let mixed_mode = !action
             && self
@@ -267,7 +270,7 @@ impl Workspace {
                                             && (self.selected_shape.is_none()
                                                 || !self.inspector.stroke_editing)
                                             && self
-                                                .selected_shape()
+                                                .paint_shape()
                                                 .is_none_or(|s| s.can_fill() && !s.kind.is_asset())
                                     })
                             })
@@ -304,7 +307,7 @@ impl Workspace {
                                             this.change_text_style(StyleChange::FillMode(kind), cx);
                                         } else if this.selected_shape.is_some() {
                                             let stroke = this.inspector.stroke_editing;
-                                            this.edit_shape(|s| {
+                                            this.edit_shape_paint(|s| {
                                                 if stroke {
                                                     s.stroke.fill_mode = kind
                                                 } else {
@@ -312,7 +315,7 @@ impl Workspace {
                                                 }
                                             });
                                         } else {
-                                            this.edit_board(None, |b| b.fill_mode = kind);
+                                            this.edit_board_paint(None, |b| b.fill_mode = kind);
                                         }
                                         this.sync_fields(cx);
                                         cx.notify();
@@ -430,7 +433,8 @@ impl Workspace {
                         .id("gradient-stop-list")
                         .debug_selector(|| "gradient-stop-list".into())
                         .track_scroll(&self.inspector.gradient_stop_scroll)
-                        .max_h(stop_list_height)
+                        .h(stop_list_height)
+                        .flex_shrink_0()
                         .overflow_y_scroll()
                         .flex()
                         .flex_col()
@@ -613,12 +617,55 @@ impl Workspace {
     pub(in crate::editor) fn color_picker(&self) -> impl IntoElement {
         inspector_color_picker(&self.inspector.picker)
     }
+
+    fn gradient_stop_list_height(&self, gradient: &LinearGradient, window: &Window) -> Pixels {
+        let viewport = window.viewport_size();
+        let capacity = self
+            .inspector
+            .gradient_popup_layout
+            .get()
+            .filter(|layout| layout.viewport == viewport && layout.kind == gradient.kind)
+            .map(|layout| {
+                // Grow below the current top edge so the add button stays under the pointer.
+                layout.list_height
+                    + (viewport.height - layout.bounds.bottom() - px(16.)).max(px(0.))
+            })
+            .unwrap_or_else(|| {
+                viewport.height
+                    - px(if gradient.kind == gpui::GradientKind::Angular {
+                        520.
+                    } else {
+                        482.
+                    })
+            });
+        px(gradient.stops().len() as f32 * 42. - 4.).min(capacity.max(px(38.)))
+    }
+
     pub(in crate::editor) fn color_panel(
         &self,
         window: &Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement + use<> {
-        layers::glass_surface()
+        let gradient = self.fill_state(cx).and_then(|(mode, gradient)| {
+            (mode == FillMode::Linear).then(|| {
+                (
+                    gradient.kind,
+                    self.gradient_stop_list_height(&gradient, window),
+                )
+            })
+        });
+        let layout = self.inspector.gradient_popup_layout.clone();
+        let viewport = window.viewport_size();
+        let anchor_height = gradient.and_then(|(kind, list_height)| {
+            layout
+                .get()
+                .filter(|old| old.viewport == viewport && old.kind == kind)
+                .map(|old| {
+                    old.anchor_height
+                        .max(old.bounds.size.height - old.list_height + list_height)
+                })
+        });
+        let panel = layers::glass_surface()
             .id("color-panel")
             .debug_selector(|| "color-panel".into())
             .w(px(336.))
@@ -669,6 +716,42 @@ impl Workspace {
             .when(
                 self.action_paint().is_some() || self.multi_selection.is_empty(),
                 |el| el.child(self.fill_controls(window, cx)),
+            );
+        let surface =
+            div()
+                .flex_shrink_0()
+                .child(panel)
+                .on_paint_before_children(move |bounds, _, _, _| {
+                    layout.set(gradient.map(|(kind, list_height)| GradientPopupLayout {
+                        bounds,
+                        list_height,
+                        anchor_height: anchor_height.unwrap_or(bounds.size.height),
+                        viewport,
+                        kind,
+                    }));
+                });
+        // Keep the collision anchor stable while only the visible surface shrinks.
+        div()
+            .w(px(336.))
+            .flex()
+            .flex_col()
+            .when_some(anchor_height, |el, height| el.h(height))
+            .child(surface)
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|this, event: &gpui::MouseDownEvent, window, cx| {
+                    if this
+                        .inspector
+                        .gradient_popup_layout
+                        .get()
+                        .is_some_and(|layout| !layout.bounds.contains(&event.position))
+                    {
+                        for popover in &this.inspector.paint_popovers {
+                            popover.update(cx, |p, cx| p.close(window, cx));
+                        }
+                        cx.stop_propagation();
+                    }
+                }),
             )
     }
 }

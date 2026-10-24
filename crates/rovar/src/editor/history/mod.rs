@@ -23,9 +23,10 @@ impl Workspace {
         let before = self.boards[index].clone();
         let result = edit(&mut self.boards[index]);
         let board = &mut self.boards[index];
-        if board.color != before.color
+        if (board.color != before.color
             || board.fill_mode != before.fill_mode
-            || board.gradient != before.gradient
+            || board.gradient != before.gradient)
+            && board.color_style == before.color_style
         {
             board.color_style = None;
         }
@@ -396,7 +397,7 @@ impl Workspace {
         }) {
             return;
         }
-        for field in &self.inspector.fields {
+        for field in self.inspector.fields.iter().chain(self.paint_row_inputs()) {
             if field.focus_handle(cx).is_focused(window)
                 && field.update(cx, |input, cx| {
                     input.marked_text_range(window, cx).is_some()
@@ -630,6 +631,7 @@ impl Workspace {
                 self.focus.focus(window, cx);
             }
         } else if removed
+            || self.paint_row_focus_removed(window, cx)
             || (self.selected.is_none() && text_id.is_none() && shape_id.is_none())
             || old_component != (text_id.is_some(), shape_id.is_some())
             || (shape_id.is_some()

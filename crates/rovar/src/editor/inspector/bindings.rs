@@ -10,6 +10,9 @@ impl Workspace {
         }
         use Property::*;
         let property = self.field_property(index)?;
+        if let Some(key) = self.simple_paint_opacity_key(index) {
+            return self.row_value(key).map(|row| row.0);
+        }
         if matches!(property, PointX | PointY | PointRadius) {
             let (FillMode::Points(g), _) = self.fill_state(cx)? else {
                 return None;
@@ -82,7 +85,7 @@ impl Workspace {
                 _ => return None,
             });
         }
-        if let Some(shape) = self.selected_shape() {
+        if let Some(shape) = self.paint_shape() {
             let stroke = self.field_edits_stroke(index);
             let stop = self.shape_paint_stop(stroke);
             let color = shape.paint_color(stop, stroke);
@@ -116,7 +119,7 @@ impl Workspace {
                 _ => return None,
             });
         }
-        let board = self.selected_board()?;
+        let board = self.paint_board()?;
         let color = board.editable_color(self.inspector.active_stop);
         Some(match property {
             Name => board.name.clone(),
@@ -143,7 +146,18 @@ impl Workspace {
         })
     }
 
-    pub(in crate::editor) fn sync_picker(&mut self, color: gpui::Rgba, cx: &mut Context<Self>) {
+    pub(in crate::editor) fn sync_picker(&mut self, mut color: gpui::Rgba, cx: &mut Context<Self>) {
+        let index = if self.selected_shape.is_some() && self.inspector.stroke_editing {
+            17
+        } else {
+            6
+        };
+        if let Some(key) = self.simple_paint_opacity_key(index)
+            && let Some((value, FillMode::Solid, ..)) = self.row_value(key)
+            && let Ok(opacity) = value.parse::<f32>()
+        {
+            color.a = opacity / 100.;
+        }
         for picker in [&self.inspector.picker, &self.inspector.alpha_picker] {
             let old = picker.read(cx).value();
             if [
@@ -226,11 +240,11 @@ impl Workspace {
                 .font_picker
                 .update(cx, |picker, cx| picker.set_selected(family, cx));
             self.sync_picker(color, cx);
-        } else if let Some(shape) = self.selected_shape() {
+        } else if let Some(shape) = self.paint_shape() {
             let color =
                 shape.paint_color(self.inspector.active_stop, self.inspector.stroke_editing);
             self.sync_picker(color, cx);
-        } else if let Some(board) = self.selected_board() {
+        } else if let Some(board) = self.paint_board() {
             let color = board.editable_color(self.inspector.active_stop);
             self.sync_picker(color, cx);
         }
@@ -387,18 +401,23 @@ impl Workspace {
             (valid, color)
         } else if self.selected_shape.is_some() {
             let stroke = self.field_edits_stroke(index);
-            let valid = self
-                .edit_shape(|shape| apply_shape_field(shape, stroke, stop, property, value))
-                .unwrap_or(false);
-            (
-                valid,
-                self.selected_shape().unwrap().paint_color(stop, stroke),
-            )
+            let valid = if let Some(key) = self.simple_paint_opacity_key(index) {
+                self.edit_paint_layer_opacity(key, value).unwrap_or(false)
+            } else {
+                self.edit_shape_paint(|shape| {
+                    apply_shape_field(shape, stroke, stop, property, value)
+                })
+                .unwrap_or(false)
+            };
+            (valid, self.paint_shape().unwrap().paint_color(stop, stroke))
         } else {
-            let valid = self
-                .edit_board(None, |board| apply_field(board, stop, property, value))
-                .unwrap_or(false);
-            (valid, self.selected_board().unwrap().editable_color(stop))
+            let valid = if let Some(key) = self.simple_paint_opacity_key(index) {
+                self.edit_paint_layer_opacity(key, value).unwrap_or(false)
+            } else {
+                self.edit_board_paint(None, |board| apply_field(board, stop, property, value))
+                    .unwrap_or(false)
+            };
+            (valid, self.paint_board().unwrap().editable_color(stop))
         };
         self.history.borrow_mut().clear_scope();
         self.inspector.invalid[slot] = !valid;
@@ -444,6 +463,10 @@ mod tests {
     #[test]
     fn invalid_properties_preserve_geometry_and_hex_preserves_alpha() {
         let mut board = Artboard {
+            fill_enabled: true,
+            fill_opacity: 1.,
+            fill_hidden: false,
+            fill_layers: Vec::new(),
             uid: uuid::Uuid::new_v4(),
             color_style: None,
             id: 1,

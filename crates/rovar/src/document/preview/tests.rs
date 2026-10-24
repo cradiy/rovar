@@ -58,6 +58,10 @@ fn thumbnail_preserves_rich_text_alignment_wrapping_and_clipped_overflow(
         id: uuid::Uuid::new_v4().to_string(),
         next_id: 3,
         boards: vec![Artboard {
+            fill_enabled: true,
+            fill_opacity: 1.,
+            fill_hidden: false,
+            fill_layers: Vec::new(),
             uid: uuid::Uuid::new_v4(),
             color_style: None,
             id: 1,

@@ -38,15 +38,17 @@ impl Workspace {
         let before = self.shapes[index].clone();
         let result = change(&mut self.shapes[index]);
         let shape = &mut self.shapes[index];
-        if shape.color != before.color
+        if (shape.color != before.color
             || shape.fill_mode != before.fill_mode
-            || shape.gradient != before.gradient
+            || shape.gradient != before.gradient)
+            && shape.color_style == before.color_style
         {
             shape.color_style = None;
         }
-        if shape.stroke.color != before.stroke.color
+        if (shape.stroke.color != before.stroke.color
             || shape.stroke.fill_mode != before.stroke.fill_mode
-            || shape.stroke.gradient != before.stroke.gradient
+            || shape.stroke.gradient != before.stroke.gradient)
+            && shape.stroke.color_style == before.stroke.color_style
         {
             shape.stroke.color_style = None;
         }
@@ -457,6 +459,7 @@ impl Workspace {
         key.contours = contours;
         if !paint {
             key.stroke_width = 0.;
+            key.stroke_layers.clear();
         }
         let rounded_rect = (key.contours.is_none()
             && matches!(
@@ -472,16 +475,24 @@ impl Workspace {
                 bottom_left,
             }
         });
-        let outset = key.outset;
-        let fill = (paint && shape.fill_enabled && shape.can_fill() && !shape.kind.is_asset())
-            .then(|| shape.background());
+        let outset = GeometryKey::outset(shape, self.view.zoom);
+        let path_offset = outset - key.outset;
+        let fill = (paint
+            && shape.fill_enabled
+            && !shape.fill_hidden
+            && shape.can_fill()
+            && !shape.kind.is_asset())
+        .then(|| shape.background());
         let edit_hatch = self.vector_edit == Some(id) && shape.editable_closed();
         let stroke = shape.stroke.background();
+        let stroke_layers: Vec<_> = shape.stroke_layers.iter().map(|s| s.background()).collect();
         let point_fill = match shape.fill_mode {
-            FillMode::Points(g) if fill.is_some() => Some(g),
+            FillMode::Points(g) if fill.is_some() => Some(
+                crate::scene::paint_layers::point_opacity(g, shape.fill_opacity),
+            ),
             _ => None,
         };
-        let image_fill = if shape.kind == ShapeKind::Svg {
+        let mut image_fill = if shape.kind == ShapeKind::Svg {
             Some(crate::scene::image_fill::ImageFill {
                 asset: shape.asset.clone(),
                 fit: crate::scene::image_fill::ImageFit::Contain,
@@ -490,17 +501,59 @@ impl Workspace {
         } else if shape.kind == ShapeKind::Image {
             Some(self.cropped_media(shape))
         } else {
-            (paint && shape.fill_enabled && shape.can_fill() && shape.fill_mode == FillMode::Image)
+            (paint
+                && shape.fill_enabled
+                && !shape.fill_hidden
+                && shape.can_fill()
+                && shape.fill_mode == FillMode::Image)
                 .then(|| self.cropped_fill(source.unwrap_or(id), &shape.image_fill))
         };
+        if !shape.kind.is_asset()
+            && let Some(image) = &mut image_fill
+        {
+            image.opacity *= shape.fill_opacity;
+        }
+        let mut fills = vec![(fill, point_fill, image_fill)];
+        if paint && shape.can_fill() {
+            fills.extend(
+                shape
+                    .fill_layers
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, f)| f.enabled && !f.hidden)
+                    .map(|(index, f)| {
+                        (
+                            Some(f.background()),
+                            match f.fill_mode {
+                                FillMode::Points(g) => {
+                                    Some(crate::scene::paint_layers::point_opacity(g, f.opacity))
+                                }
+                                _ => None,
+                            },
+                            (f.fill_mode == FillMode::Image).then(|| {
+                                let mut image = self.cropped_fill_layer(
+                                    source.unwrap_or(id),
+                                    index + 1,
+                                    &f.image_fill,
+                                );
+                                image.opacity *= f.opacity;
+                                image
+                            }),
+                        )
+                    }),
+            );
+        }
         let effects = if paint {
             self.hierarchy.effects.get(&id).cloned().unwrap_or_default()
         } else {
             Vec::new()
         };
         let zoom = self.view.zoom;
-        let needs_paths =
-            rounded_rect.is_none() || key.stroke_width > 0. || point_fill.is_some() || edit_hatch;
+        let needs_paths = rounded_rect.is_none()
+            || key.stroke_width > 0.
+            || !key.stroke_layers.is_empty()
+            || fills.iter().any(|(_, p, _)| p.is_some())
+            || edit_hatch;
         let paths = self.shape_paths.clone();
         let surface = move |bounds: Bounds<Pixels>,
                             _: &gpui::Style,
@@ -519,62 +572,28 @@ impl Workspace {
                 }
             };
             let mut paint = |window: &mut Window| {
-                if let Some(fill) = &fill {
-                    if let Some(radii) = rounded_rect {
-                        let rect = Bounds::new(
+                let path_origin = bounds.origin + point(px(path_offset), px(path_offset));
+                for (fill, point_fill, image_fill) in &fills {
+                    if let Some(fill) = &fill {
+                        if let Some(radii) = rounded_rect {
+                            let rect = Bounds::new(
+                                bounds.origin + point(px(outset), px(outset)),
+                                gpui::size(px(width), px(height)),
+                            );
+                            window.paint_quad(gpui::fill(rect, fill.clone()).corner_radii(radii));
+                        } else if let Some(geometry) = &geometry {
+                            paint_path(&geometry.fill, path_origin, fill.clone(), window);
+                        }
+                    }
+                    if let Some(gradient) = point_fill
+                        && let Some(geometry) = &geometry
+                    {
+                        let surface = Bounds::new(
                             bounds.origin + point(px(outset), px(outset)),
                             gpui::size(px(width), px(height)),
                         );
-                        window.paint_quad(gpui::fill(rect, fill.clone()).corner_radii(radii));
-                    } else if let Some(geometry) = &geometry {
-                        paint_path(&geometry.fill, bounds.origin, fill.clone(), window);
-                    }
-                }
-                if let Some(gradient) = point_fill
-                    && let Some(geometry) = &geometry
-                {
-                    let surface = Bounds::new(
-                        bounds.origin + point(px(outset), px(outset)),
-                        gpui::size(px(width), px(height)),
-                    );
-                    let capture = surface.intersect(&window.content_mask().bounds);
-                    if !capture.is_empty() {
-                        window.with_subtree_pair(
-                            capture,
-                            gpui::EffectShader::wgsl_two_images(include_str!("image_mask.wgsl")),
-                            Default::default(),
-                            0.,
-                            1.,
-                            |input, window| match input {
-                                gpui::SubtreeInput::First => paint_path(
-                                    &geometry.fill,
-                                    bounds.origin,
-                                    gpui::rgb(0xffffff).into(),
-                                    window,
-                                ),
-                                gpui::SubtreeInput::Second => gradient.paint(surface, window),
-                            },
-                        );
-                    }
-                }
-                if let Some(image_fill) = &image_fill {
-                    let image_bounds = Bounds::new(
-                        bounds.origin + point(px(outset), px(outset)),
-                        gpui::size(px(width), px(height)),
-                    );
-                    let capture = image_bounds.intersect(&window.content_mask().bounds);
-                    if !capture.is_empty() && image_fill.asset.is_some() {
-                        if let Some(radii) = rounded_rect {
-                            // Native sprite clipping avoids two offscreen captures per image.
-                            window.with_subtree_effect_chain(
-                                capture,
-                                &[],
-                                image_fill.opacity,
-                                |window| {
-                                    image_fill.paint_with_radii(image_bounds, radii, window, cx);
-                                },
-                            );
-                        } else if let Some(geometry) = &geometry {
+                        let capture = surface.intersect(&window.content_mask().bounds);
+                        if !capture.is_empty() {
                             window.with_subtree_pair(
                                 capture,
                                 gpui::EffectShader::wgsl_two_images(include_str!(
@@ -582,24 +601,81 @@ impl Workspace {
                                 )),
                                 Default::default(),
                                 0.,
-                                image_fill.opacity,
+                                1.,
                                 |input, window| match input {
                                     gpui::SubtreeInput::First => paint_path(
                                         &geometry.fill,
-                                        bounds.origin,
-                                        Color::Handle.color().into(),
+                                        path_origin,
+                                        gpui::rgb(0xffffff).into(),
                                         window,
                                     ),
-                                    gpui::SubtreeInput::Second => {
-                                        image_fill.paint(image_bounds, window, cx)
-                                    }
+                                    gpui::SubtreeInput::Second => gradient.paint(surface, window),
                                 },
                             );
                         }
                     }
+                    if let Some(image_fill) = &image_fill {
+                        let image_bounds = Bounds::new(
+                            bounds.origin + point(px(outset), px(outset)),
+                            gpui::size(px(width), px(height)),
+                        );
+                        let capture = image_bounds.intersect(&window.content_mask().bounds);
+                        if !capture.is_empty() && image_fill.asset.is_some() {
+                            if let Some(radii) = rounded_rect {
+                                // Native sprite clipping avoids two offscreen captures per image.
+                                window.with_subtree_effect_chain(
+                                    capture,
+                                    &[],
+                                    image_fill.opacity,
+                                    |window| {
+                                        image_fill.paint_with_radii(
+                                            image_bounds,
+                                            radii,
+                                            window,
+                                            cx,
+                                        );
+                                    },
+                                );
+                            } else if let Some(geometry) = &geometry {
+                                window.with_subtree_pair(
+                                    capture,
+                                    gpui::EffectShader::wgsl_two_images(include_str!(
+                                        "image_mask.wgsl"
+                                    )),
+                                    Default::default(),
+                                    0.,
+                                    image_fill.opacity,
+                                    |input, window| match input {
+                                        gpui::SubtreeInput::First => paint_path(
+                                            &geometry.fill,
+                                            path_origin,
+                                            Color::Handle.color().into(),
+                                            window,
+                                        ),
+                                        gpui::SubtreeInput::Second => {
+                                            image_fill.paint(image_bounds, window, cx)
+                                        }
+                                    },
+                                );
+                            }
+                        }
+                    }
                 }
-                if let Some(path) = geometry.as_ref().and_then(|g| g.stroke.as_ref()) {
-                    paint_path(path, bounds.origin, stroke.clone(), window);
+                if let Some(g) = &geometry {
+                    if let Some(path) = &g.stroke {
+                        paint_path(path, path_origin, stroke.clone(), window);
+                    }
+                    for (layer, background) in g.layers.iter().zip(&stroke_layers) {
+                        if let Some(path) = &layer.stroke {
+                            let offset = outset - layer.key.outset;
+                            paint_path(
+                                path,
+                                bounds.origin + point(px(offset), px(offset)),
+                                background.clone(),
+                                window,
+                            );
+                        }
+                    }
                 }
             };
             crate::scene::effects::paint_effects(bounds, &effects, zoom, window, &mut paint);
@@ -609,7 +685,7 @@ impl Workspace {
                 let scale = window.raster_scale_factor();
                 paint_path(
                     &geometry.fill,
-                    bounds.origin,
+                    bounds.origin + point(px(path_offset), px(path_offset)),
                     gpui::pattern_slash(ACCENT.color().opacity(0.65), 1.5 * scale, 14. * scale),
                     window,
                 );

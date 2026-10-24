@@ -15,6 +15,10 @@ pub(crate) fn sources(page: &Page) -> Vec<crate::document::AssetSource> {
                 .flatten()
         }))
         .chain(page.action_images())
+        .chain(
+            page.extra_fills()
+                .filter_map(|f| f.image_fill.asset.as_ref()),
+        )
         .map(|a| {
             (
                 a.hash.clone(),
@@ -478,6 +482,11 @@ pub(crate) fn synchronize(pages: &mut [Page], definitions: &mut Definitions) -> 
                         .into_iter()
                         .flatten()
                 }))
+                .chain(
+                    page.extra_fills()
+                        .chain(definition.page.extra_fills())
+                        .filter_map(|f| f.image_fill.asset.clone()),
+                )
                 .map(|a| (a.hash.clone(), a))
                 .collect();
             merge_objects(&mut page.boards, &previous.boards, &next.boards, |x| x.id)?;
@@ -567,6 +576,15 @@ pub(crate) fn synchronize(pages: &mut [Page], definitions: &mut Definitions) -> 
                 } else if let Some(s) = page.shapes.iter_mut().find(|s| s.id == a.object) {
                     s.asset = asset;
                 }
+            }
+            for fill in page
+                .boards
+                .iter_mut()
+                .flat_map(|b| &mut b.fill_layers)
+                .chain(page.shapes.iter_mut().flat_map(|s| &mut s.fill_layers))
+            {
+                fill.image_fill.asset =
+                    fill.image_hash.as_ref().and_then(|h| media.get(h).cloned());
             }
             let old_ids = ids(&previous);
             let ordered = |p: &Page| {

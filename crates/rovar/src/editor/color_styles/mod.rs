@@ -151,7 +151,7 @@ impl Workspace {
     }
 
     fn color_source(&self, stroke: bool, cx: &gpui::App) -> Option<(gpui::Rgba, Option<String>)> {
-        if let Some(shape) = self.selected_shape() {
+        if let Some(shape) = self.paint_shape() {
             if !self.layer_editable(shape.id) {
                 return None;
             }
@@ -169,7 +169,7 @@ impl Workspace {
                 let style = text.editor.read(cx).effective_style();
                 return Some((style.color, style.color_style.clone()));
             }
-            if let Some(board) = self.selected_board().filter(|b| self.layer_editable(b.id)) {
+            if let Some(board) = self.paint_board().filter(|b| self.layer_editable(b.id)) {
                 return Some((board.color, board.color_style.clone()));
             }
         }
@@ -203,6 +203,16 @@ impl Workspace {
                 .iter_mut()
                 .find(|s| Some(s.id) == self.selected_shape)
             {
+                let base_fill = crate::scene::paint_layers::Fill::from_shape(shape);
+                let base_stroke = shape.stroke.clone();
+                let layer = self.paint_layer_index(stroke);
+                if layer > 0 {
+                    if stroke {
+                        shape.stroke = shape.stroke_layers[layer - 1].clone();
+                    } else {
+                        shape.fill_layers[layer - 1].clone().apply_shape(shape);
+                    }
+                }
                 if stroke {
                     style.apply(
                         &mut shape.stroke.color,
@@ -216,10 +226,30 @@ impl Workspace {
                     shape.fill_enabled = true;
                     shape.color_style = reference;
                 }
+                if layer > 0 {
+                    if stroke {
+                        shape.stroke_layers[layer - 1] = shape.stroke.clone();
+                        shape.stroke = base_stroke;
+                    } else {
+                        shape.fill_layers[layer - 1] =
+                            crate::scene::paint_layers::Fill::from_shape(shape);
+                        base_fill.apply_shape(shape);
+                    }
+                }
             } else if let Some(board) = page.boards.iter_mut().find(|b| Some(b.id) == self.selected)
             {
+                let base = crate::scene::paint_layers::Fill::from_board(board);
+                let layer = self.paint_layer_index(false);
+                if layer > 0 {
+                    board.fill_layers[layer - 1].clone().apply_board(board);
+                }
                 style.apply(&mut board.color, &mut board.fill_mode, &mut board.gradient);
                 board.color_style = reference;
+                if layer > 0 {
+                    board.fill_layers[layer - 1] =
+                        crate::scene::paint_layers::Fill::from_board(board);
+                    base.apply_board(board);
+                }
             }
             self.apply_component_page(page, window, cx);
             self.record_page_edit(before);
@@ -237,7 +267,7 @@ impl Workspace {
             self.history.borrow_mut().break_group();
             self.change_text_style(StyleChange::DetachColorStyle, cx);
         } else if self.selected_shape.is_some() {
-            self.edit_shape(|s| {
+            self.edit_shape_paint(|s| {
                 if stroke {
                     s.stroke.color_style = None
                 } else {
@@ -245,7 +275,7 @@ impl Workspace {
                 }
             });
         } else {
-            self.edit_board(None, |b| b.color_style = None);
+            self.edit_board_paint(None, |b| b.color_style = None);
         }
         cx.notify();
     }

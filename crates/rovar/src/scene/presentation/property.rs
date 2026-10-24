@@ -285,6 +285,7 @@ impl Property {
         if let Some(n) = page.boards.iter_mut().find(|n| n.id == id) {
             rects.push(&mut n.rect);
             if let Self::Fill(v) = self {
+                n.fill_enabled = true;
                 n.color = color(&v.color).unwrap();
                 n.color_style = None;
                 n.fill_mode = v.mode;

@@ -62,7 +62,7 @@ impl Workspace {
                 _ => None,
             };
         }
-        if let Some(shape) = self.selected_shape() {
+        if let Some(shape) = self.paint_shape() {
             if shape.kind.is_line() {
                 match slot {
                     1 => return Some(StartX),

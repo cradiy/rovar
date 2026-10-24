@@ -3,12 +3,114 @@ use super::{ShapeKind, *};
 use gpui::{TestAppContext, VisualTestContext};
 
 #[gpui::test]
+fn paint_layers_edit_reorder_remove_and_undo_without_changing_other_layers(
+    cx: &mut TestAppContext,
+) {
+    let window = open(cx);
+    let mut visual = VisualTestContext::from_window(window.into(), cx);
+    visual.simulate_resize(size(px(1280.), px(1400.)));
+    create(&mut visual, "add-rectangle");
+    click(&mut visual, "property-drag-5");
+    click(&mut visual, "fill-linear");
+    visual.simulate_keystrokes("escape");
+    draw(&mut visual);
+    click(&mut visual, "add-fill-layer");
+    click(&mut visual, "property-5");
+    visual.simulate_keystrokes("secondary-a");
+    visual.simulate_input("FF0000");
+    click(&mut visual, "property-drag-5");
+    click(&mut visual, "layer-0-property-6");
+    visual.simulate_keystrokes("secondary-a 3 5 enter");
+    click(&mut visual, "shape-fill");
+    window
+        .update(&mut visual.cx, |w, window, cx| {
+            assert!(
+                !w.paint_row_inputs()
+                    .any(|input| input.focus_handle(cx).is_focused(window))
+            );
+            assert_eq!(w.shapes[0].fill_opacity, 0.35);
+            assert_eq!(w.shapes[0].fill_layers[0].opacity, 0.5);
+        })
+        .unwrap();
+    click(&mut visual, "fill-layer-1");
+    let start = visual
+        .debug_bounds("layer-0-property-drag-6")
+        .unwrap()
+        .center();
+    visual.simulate_mouse_down(start, MouseButton::Left, Default::default());
+    let end = start + point(px(20.), px(0.));
+    visual.simulate_mouse_move(end, MouseButton::Left, Default::default());
+    visual.simulate_mouse_up(end, MouseButton::Left, Default::default());
+    draw(&mut visual);
+    window
+        .update(&mut visual.cx, |w, _, _| {
+            assert_eq!(w.shapes[0].fill_opacity, 0.55);
+            assert_eq!(w.shapes[0].fill_layers[0].opacity, 0.5);
+        })
+        .unwrap();
+    click(&mut visual, "fill-layer-0");
+    click(&mut visual, "toggle-fill-layer-0");
+    window
+        .update(&mut visual.cx, |w, _, _| {
+            assert!(w.shapes[0].fill_hidden);
+            assert_eq!(w.shapes[0].fill_opacity, 0.55);
+            assert!(!w.shapes[0].fill_layers[0].hidden);
+        })
+        .unwrap();
+    click(&mut visual, "toggle-fill-layer-0");
+    window
+        .update(&mut visual.cx, |w, _, _| {
+            assert_eq!(w.shapes[0].color, rgb(0xd9d9d9));
+            assert_eq!(w.shapes[0].fill_layers[0].color, rgb(0xff0000));
+            assert_eq!(w.shapes[0].fill_layers[0].opacity, 0.5);
+        })
+        .unwrap();
+    click(&mut visual, "move-fill-up");
+    window
+        .update(&mut visual.cx, |w, _, _| {
+            assert_eq!(w.shapes[0].color, rgb(0xff0000));
+            assert_eq!(w.shapes[0].fill_opacity, 0.5);
+            assert_eq!(w.paint_layer_index(false), 1);
+        })
+        .unwrap();
+    click(&mut visual, "remove-fill-layer-0");
+    window
+        .update(&mut visual.cx, |w, _, _| {
+            assert_eq!(w.shapes[0].color, rgb(0xd9d9d9));
+            assert!(w.shapes[0].fill_layers.is_empty());
+        })
+        .unwrap();
+    visual.simulate_keystrokes("secondary-z");
+    draw(&mut visual);
+    click(&mut visual, "add-stroke-layer");
+    click(&mut visual, "add-stroke-layer");
+    click(&mut visual, "property-14");
+    visual.simulate_keystrokes("secondary-a 2 4 enter");
+    window
+        .update(&mut visual.cx, |w, _, _| {
+            assert_eq!(w.shapes[0].fill_layers.len(), 1);
+            assert_eq!(w.shapes[0].stroke.width, 1.);
+            assert_eq!(w.shapes[0].stroke_layers[0].width, 24.);
+        })
+        .unwrap();
+    click(&mut visual, "remove-stroke-layer-0");
+    click(&mut visual, "toggle-stroke-layer-0");
+    window
+        .update(&mut visual.cx, |w, _, _| {
+            assert_eq!(w.shapes[0].stroke.width, 24.);
+            assert!(w.shapes[0].stroke.hidden);
+            assert!(w.shapes[0].stroke_layers.is_empty());
+        })
+        .unwrap();
+}
+
+#[gpui::test]
 fn paint_sections_stay_visible_and_popovers_keep_target_and_stops(cx: &mut TestAppContext) {
     let window = open(cx);
     let mut visual = VisualTestContext::from_window(window.into(), cx);
     visual.simulate_resize(size(px(1280.), px(1000.)));
     create(&mut visual, "add-rectangle");
-    click(&mut visual, "stroke-visibility");
+    click(&mut visual, "add-stroke-layer");
     assert!(visual.debug_bounds("property-5").is_some());
     assert!(visual.debug_bounds("property-16").is_some());
     click(&mut visual, "shape-fill");
@@ -30,7 +132,8 @@ fn paint_sections_stay_visible_and_popovers_keep_target_and_stops(cx: &mut TestA
     window
         .update(&mut visual.cx, |this, _, cx| {
             assert_eq!(this.shapes[0].color, rgb(0xff0000));
-            assert_eq!(this.shapes[0].stroke.color, rgb(0x0000ff).opacity(0.4));
+            assert_eq!(this.shapes[0].stroke.color, rgb(0x0000ff));
+            assert_eq!(this.shapes[0].stroke.opacity, 0.4);
             assert_eq!(this.inspector.fields[5].read(cx).value().as_ref(), "FF0000");
             assert_eq!(
                 this.inspector.fields[16].read(cx).value().as_ref(),
@@ -113,7 +216,8 @@ fn shape_properties_and_gradient_are_independent_of_the_board_and_other_shapes(
             assert_eq!(shape.kind, ShapeKind::Rectangle);
             assert_eq!(shape.rect.width, 320.);
             assert_eq!(shape.radius, 40.);
-            assert_eq!(shape.color.a, 0.5);
+            assert_eq!(shape.color.a, 1.);
+            assert_eq!(shape.fill_opacity, 0.5);
             assert_eq!(shape.gradient.stops().len(), 4);
             assert_eq!(shape.gradient.angle, 45.);
             assert_eq!(
@@ -378,7 +482,7 @@ fn fill_stroke_and_corner_modes_preserve_independent_values_and_undo(cx: &mut Te
         .unwrap();
     click(&mut visual, "property-5");
     visual.simulate_keystrokes("secondary-a f f 0 0 0 0");
-    click(&mut visual, "stroke-visibility");
+    click(&mut visual, "add-stroke-layer");
     click(&mut visual, "property-14");
     visual.simulate_keystrokes("secondary-a 2 0");
     click(&mut visual, "stroke-outside");
@@ -484,8 +588,8 @@ fn fill_stroke_and_corner_modes_preserve_independent_values_and_undo(cx: &mut Te
             assert_eq!(this.shapes[0].stroke.gradient, before_picker)
         })
         .unwrap();
-    // The inactive fill section has its own visibility control while editing the stroke.
-    click(&mut visual, "fill-visibility");
+    // Removing the fill leaves the independently edited stroke intact.
+    click(&mut visual, "remove-fill-layer-0");
     window
         .update(&mut visual.cx, |this, _, _| {
             assert!(!this.shapes[0].fill_enabled);
@@ -503,8 +607,7 @@ fn fill_stroke_and_corner_modes_preserve_independent_values_and_undo(cx: &mut Te
         .unwrap();
     visual.simulate_keystrokes("secondary-shift-z");
     draw(&mut visual);
-    click(&mut visual, "stroke-visibility");
-    click(&mut visual, "shape-paint-enabled");
+    click(&mut visual, "stroke-layer-0");
     click(&mut visual, "property-14");
     visual.simulate_keystrokes("secondary-a - 1");
     click(&mut visual, "stroke-center");
@@ -550,7 +653,7 @@ fn undo_hiding_corner_or_stroke_inputs_keeps_keyboard_history_working(cx: &mut T
     visual.simulate_keystrokes("secondary-shift-z");
     draw(&mut visual);
     assert!(visual.debug_bounds("property-10").is_some());
-    click(&mut visual, "stroke-visibility");
+    click(&mut visual, "add-stroke-layer");
     click(&mut visual, "property-14");
     visual.simulate_keystrokes("secondary-z");
     draw(&mut visual);

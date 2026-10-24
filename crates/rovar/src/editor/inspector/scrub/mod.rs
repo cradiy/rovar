@@ -26,7 +26,10 @@ impl Workspace {
             self.activate_paint(stroke, cx);
         }
         let Some(original) = self
-            .field_value(index, cx)
+            .inspector
+            .row_scrub
+            .and_then(|key| self.row_value(key).map(|v| v.0))
+            .or_else(|| self.field_value(index, cx))
             .and_then(|s| s.parse::<f32>().ok())
         else {
             return;
@@ -60,10 +63,27 @@ impl Workspace {
         let (min, max, step, quantum) = property.numeric_limits();
         let delta = (delta * step * if shift { 10. } else { 1. } / quantum).round() * quantum;
         let value = number((original + delta).clamp(min, max));
-        if self.field_value(index, cx).as_deref() == Some(value.as_str()) {
+        if self
+            .inspector
+            .row_scrub
+            .and_then(|key| self.row_value(key).map(|v| v.0))
+            .or_else(|| self.field_value(index, cx))
+            .as_deref()
+            == Some(value.as_str())
+        {
             return;
         }
         let stop = self.inspector.active_stop;
+        if self
+            .inspector
+            .row_scrub
+            .or_else(|| self.simple_paint_opacity_key(index))
+            .is_some_and(|key| self.edit_paint_layer_opacity(key, &value).is_some())
+        {
+            self.sync_fields(cx);
+            cx.notify();
+            return;
+        }
         if self.inspector_action().is_some() {
             self.edit_action_field(index, &value, cx);
         } else if property == Property::LayerOpacity {
@@ -90,9 +110,9 @@ impl Workspace {
             }
         } else if self.selected_shape.is_some() {
             let stroke = self.field_edits_stroke(index);
-            self.edit_shape(|shape| apply_shape_field(shape, stroke, stop, property, &value));
+            self.edit_shape_paint(|shape| apply_shape_field(shape, stroke, stop, property, &value));
         } else {
-            self.edit_board(None, |board| apply_field(board, stop, property, &value));
+            self.edit_board_paint(None, |board| apply_field(board, stop, property, &value));
         }
         self.sync_fields(cx);
         cx.notify();
@@ -103,6 +123,7 @@ impl Workspace {
         commit: bool,
         cx: &mut Context<Self>,
     ) {
+        self.inspector.row_scrub = None;
         let changes = self.history.borrow_mut().end_preview(commit);
         for change in changes {
             match change {

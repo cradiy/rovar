@@ -157,7 +157,7 @@ fn closing_bezier_preserves_nodes_and_fill_with_bounding_box_selection(cx: &mut 
             assert_eq!(this.history.borrow().undo_len(), 2);
         })
         .unwrap();
-    click(&mut visual, "fill-visibility");
+    click(&mut visual, "add-fill-layer");
     click(&mut visual, "fill-linear");
     click(&mut visual, "gradient-add");
     visual.simulate_keystrokes("secondary-z");
