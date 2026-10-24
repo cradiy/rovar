@@ -24,7 +24,38 @@ use std::{
     },
 };
 #[cfg(windows)]
-pub(crate) use windows::{Server, connect, directory, discover, listen};
+pub(crate) use windows::{Server, connect, discover, listen};
+
+pub(crate) fn directory() -> std::path::PathBuf {
+    dirs::home_dir()
+        .unwrap_or_else(std::env::temp_dir)
+        .join(".rovar/instances")
+}
+
+fn register(
+    base: &std::path::Path,
+    endpoint: &std::path::Path,
+) -> anyhow::Result<tempfile::TempDir> {
+    std::fs::create_dir_all(base)?;
+    let directory = tempfile::Builder::new()
+        .prefix("rovar-live-")
+        .tempdir_in(base)?;
+    #[cfg(unix)]
+    std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;
+    let record = serde_json::json!({
+        "pid": std::process::id(),
+        "executable": std::env::current_exe()?,
+        "endpoint": endpoint,
+        "application_version": env!("CARGO_PKG_VERSION"),
+        "started_at_unix_ms": std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?.as_millis() as u64,
+        "transport": if cfg!(windows) { "named_pipe" } else { "unix_socket" },
+    });
+    let mut file = tempfile::NamedTempFile::new_in(directory.path())?;
+    serde_json::to_writer(&mut file, &record)?;
+    file.persist(directory.path().join("session.json"))?;
+    Ok(directory)
+}
 
 pub(crate) const MAX_REQUEST_BYTES: usize = 24 * 1024 * 1024;
 pub(crate) struct Pending {
@@ -39,6 +70,7 @@ pub(crate) struct Server {
     path: PathBuf,
     inode: u64,
     _directory: tempfile::TempDir,
+    _registration: tempfile::TempDir,
 }
 impl gpui::Global for Server {}
 #[cfg(unix)]
@@ -52,15 +84,10 @@ impl Drop for Server {
 }
 
 #[cfg(unix)]
-pub(crate) fn directory() -> PathBuf {
-    dirs::runtime_dir().unwrap_or_else(std::env::temp_dir)
-}
-
-#[cfg(unix)]
 pub(crate) fn listen(base: &Path) -> anyhow::Result<(Server, mpsc::Receiver<Pending>)> {
     let directory = tempfile::Builder::new()
         .prefix("rovar-live-")
-        .tempdir_in(base)?;
+        .tempdir_in(dirs::runtime_dir().unwrap_or_else(std::env::temp_dir))?;
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;
     let path = directory.path().join("editor.sock");
     // Never unlink an existing path: it may belong to another running editor.
@@ -68,14 +95,11 @@ pub(crate) fn listen(base: &Path) -> anyhow::Result<(Server, mpsc::Receiver<Pend
     let guard = Server {
         stop: Arc::new(AtomicBool::new(false)),
         inode: std::fs::symlink_metadata(&path)?.ino(),
+        _registration: register(base, &path)?,
         path,
         _directory: directory,
     };
     std::fs::set_permissions(&guard.path, std::fs::Permissions::from_mode(0o600))?;
-    std::fs::write(
-        guard._directory.path().join("session.json"),
-        serde_json::to_vec(&serde_json::json!({"pid":std::process::id(),"endpoint":guard.path}))?,
-    )?;
     listener.set_nonblocking(true)?;
     let stop = guard.stop.clone();
     let (sender, receiver) = mpsc::channel(8);
@@ -145,14 +169,17 @@ pub(crate) fn discover(base: &Path) -> anyhow::Result<serde_json::Value> {
         if !std::fs::symlink_metadata(&path).is_ok_and(|m| m.is_dir() && m.mode() & 0o077 == 0) {
             continue;
         }
-        let socket = path.join("editor.sock");
         let record = std::fs::File::open(path.join("session.json"))
             .ok()
-            .and_then(|file| serde_json::from_reader::<_, serde_json::Value>(file.take(4096)).ok());
-        if let Some(pid) = record.and_then(|value| value["pid"].as_u64())
-            && UnixStream::connect(&socket).is_ok()
+            .and_then(|file| {
+                serde_json::from_reader::<_, serde_json::Value>(file.take(16 * 1024)).ok()
+            });
+        if let Some(record) = record
+            && record["pid"].as_u64().is_some()
+            && let Some(endpoint) = record["endpoint"].as_str()
+            && UnixStream::connect(endpoint).is_ok()
         {
-            sessions.push(serde_json::json!({"pid":pid,"endpoint":socket}));
+            sessions.push(record);
         }
     }
     sessions.sort_by(|a, b| a["endpoint"].as_str().cmp(&b["endpoint"].as_str()));

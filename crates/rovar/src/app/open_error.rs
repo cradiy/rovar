@@ -2,13 +2,15 @@ use super::*;
 use crate::ui::theme::Color;
 
 pub(super) struct OpenError {
-    title: String,
-    detail: String,
+    pub(super) token: usize,
+    pub(super) title: String,
+    pub(super) detail: String,
 }
 
 impl Studio {
     pub(super) fn show_open_error(
         &mut self,
+        token: usize,
         title: String,
         detail: String,
         window: &mut Window,
@@ -17,7 +19,11 @@ impl Studio {
         if let Some(editor) = self.active_editor() {
             editor.update(cx, |editor, cx| editor.suspend(window, cx));
         }
-        self.open_errors.push_back(OpenError { title, detail });
+        self.open_errors.push_back(OpenError {
+            token,
+            title,
+            detail,
+        });
         self.focus.focus(window, cx);
         cx.notify();
     }
@@ -40,7 +46,7 @@ impl Studio {
     pub(super) fn open_error_dialog(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let error = self.open_errors.front().unwrap();
         let body = div()
-            .id("open-error-dialog")
+            .id(("open-error-dialog", error.token))
             .debug_selector(|| "open-error-dialog".into())
             .w(px(440.))
             .max_w_full()

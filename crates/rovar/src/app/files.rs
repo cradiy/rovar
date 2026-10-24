@@ -458,7 +458,7 @@ impl Studio {
                     Err(error) => {
                         let title = tab.file.title.clone();
                         this.remove_tab(token, window, cx);
-                        this.show_open_error(title, error.to_string(), window, cx);
+                        this.show_open_error(token, title, error.to_string(), window, cx);
                     }
                 }
                 cx.notify();

@@ -7,15 +7,29 @@ acknowledges an in-memory edit, not a completed disk save or remote upload.
 
 ## Connect
 
-Start Rovar normally and open a document. No special startup arguments are needed.
-In another terminal, discover running editors:
+Start Rovar normally. No special startup arguments are needed, and no document needs
+to be open. Every desktop process atomically publishes a discovery record at:
+
+- Linux/macOS: `~/.rovar/instances/rovar-live-*/session.json`
+- Windows: `%USERPROFILE%\.rovar\instances\rovar-live-*\session.json`
+
+Read these files first; finding Rovar does not require PATH or guessing an installation
+directory. Each record contains `executable` (the absolute running executable path),
+`endpoint`, `pid`, `application_version`, `started_at_unix_ms`, and `transport`
+(`unix_socket` or `named_pipe`). Use the recorded executable for CLI commands and
+the matching endpoint for that process. Multiple instances have separate records.
+If there are multiple candidates, inspect their sessions/tabs to choose the intended editor.
+Records are removed on normal exit. A crash may leave a stale record, so connection
+success, not file existence or PID alone, determines whether an instance is live.
+
+Using the recorded executable, discover reachable running editors:
 
 ```sh
 rovar --list-sessions
 ```
 
-The JSON array contains each running process's `pid` and `endpoint`. Connect using
-one of those endpoint addresses:
+The JSON array contains the same metadata for reachable instances. Connect using
+one of those endpoint addresses (replace `rovar` with the recorded executable):
 
 ```sh
 printf '%s\n' '{"request_id":"describe-1","method":"session.describe"}' |
@@ -23,13 +37,13 @@ printf '%s\n' '{"request_id":"describe-1","method":"session.describe"}' |
 ```
 
 On Windows, the same `rovar.exe` opens the GUI without arguments and handles CLI
-commands with arguments. The default installation path is
-`%LOCALAPPDATA%\Programs\Rovar\rovar.exe`. If it is not present, use `rovar.exe`
-from PATH or supply the full executable path. To use PATH, add the directory
-containing `rovar.exe` and reopen the terminal. For a default installation:
+commands with arguments. To inspect the records in PowerShell:
 
 ```powershell
-$rovar = Join-Path $env:LOCALAPPDATA 'Programs\Rovar\rovar.exe'
+Get-ChildItem "$env:USERPROFILE\.rovar\instances\rovar-live-*\session.json" |
+  ForEach-Object { Get-Content -Raw -LiteralPath $_.FullName | ConvertFrom-Json }
+# Choose the intended record and use its executable and endpoint.
+$rovar = '/EXECUTABLE/FROM/RECORD'
 & $rovar --list-sessions | Out-String
 # Copy the endpoint of the intended editor from discovery.
 $endpoint = '\\.\pipe\rovar-PID-UUID'
@@ -52,11 +66,13 @@ JSON to the CLI. PowerShell 7 uses UTF-8 by default.
 responses to stdout. Diagnostics go to stderr. Exit status is 0 for successful
 requests, 1 for protocol/connection/input failures, and 2 for invalid CLI arguments.
 Each connection accepts one request. The CLI can send multiple input lines.
-On Unix, each process creates a unique `rovar-live-*` directory in the user runtime directory
+On Unix, each process also creates a unique `rovar-live-*` socket directory in the user runtime directory
 (or system temporary directory if unavailable), with mode 0700 and a socket with
 mode 0600. Discovery skips unreachable endpoints. Normal exit removes the process's
-directory; a crash may leave an unreachable directory behind.
-On Windows, discovery records live under `%LOCALAPPDATA%/Rovar/agent/rovar-live-*`.
+directory and its discovery record; a crash may leave unreachable records behind.
+Unix discovery record directories have mode 0700 and records have mode 0600.
+Socket locations are separate from discovery records to avoid Unix socket path length limits.
+On Windows, discovery records use the user profile directory described above.
 Pipe names contain a process ID and random UUID. Pipes reject remote clients and
 use an explicit protected DACL granting access only to the current user.
 Normal exit removes the discovery record and closes the listener; discovery skips
@@ -64,14 +80,16 @@ unreachable records left by crashes. Interface startup
 failure is reported to stderr and does not prevent the editor from opening.
 The interface is available to local processes running as the same user.
 
-Only active document tabs and their active pages are addressable. A tab/page change
+Document editing addresses active document tabs and their active pages. `tabs.list`
+also exposes inactive, unloaded, saving, and loading tabs, plus windows with no documents.
+A tab/page change
 does not redirect a request to a different document. Reopening, reloading, or moving
 a document to another window can create a new session. Web builds do not expose
 this transport.
 
 ## Discover before editing
 
-`session.describe` returns active sessions, their document/page IDs, revision,
+`session.describe` returns active sessions, their window/tab/document/page IDs, revision,
 selection UUIDs, `start_frame_id`, busy state, remaining receipt slots, and supported capabilities.
 Selection is observable and can be set explicitly; document mutations always name
 their targets and never implicitly operate on the current selection.
@@ -103,12 +121,19 @@ All document methods require the `session_id` and `document_id` returned by disc
 }
 ```
 
-IDs are opaque UUIDs, not names or numeric indices. Revisions are opaque strings.
+Document/session/page/node IDs are opaque UUIDs, not names or numeric indices.
+Window/tab IDs are opaque strings as described below. Revisions are opaque strings.
 
 | Method | Behavior |
 | --- | --- |
 | `session.describe` | List active editor sessions and capabilities; empty parameters. |
 | `schema.get` | Get the envelope or a method's input schema. |
+| `tabs.list` | List all windows, tabs, load/save states, and opening errors; empty parameters. |
+| `tabs.create` | Create and activate a document in a window, with an optional title. |
+| `tabs.open` | Open an absolute `.rovar` file path, activating an existing tab if already open. |
+| `tabs.activate` | Activate a specific tab and its window, loading the document if needed. |
+| `tabs.close` | Close a specific tab through the normal save-before-close flow. |
+| `tabs.save` | Request a save of a loaded tab without switching tabs. |
 | `nodes.get` | Read specified UUIDs, or a page's nodes; returns parent UUIDs, properties, total, and next offset. |
 | `nodes.find` | Same read contract, with an optional case-insensitive name substring and exact node type filter. |
 | `document.apply` | Apply ordered node edits and prototype interaction settings atomically. |
@@ -120,6 +145,44 @@ IDs are opaque UUIDs, not names or numeric indices. Revisions are opaque strings
 Reads and captures require a matching document revision. For pagination, keep the
 same revision and use `next_offset`; a conflict requires restarting the read.
 Read limits are 1–200 nodes. Returned order is bottom-to-top layer order.
+
+## Document tabs
+
+Tab methods are process-scoped: omit envelope `session_id` and `document_id`.
+Use opaque string `window_id` and `tab_id` values from `tabs.list`; tab IDs are scoped
+to their window. Do not derive them from titles or array indices. Reopening a document
+or moving a tab to another window can change its tab ID. After activation, use
+`session.describe` to obtain the current editing session and revision.
+
+```json
+{"request_id":"new-design","method":"tabs.create","params":{"window_id":"WINDOW_ID","title":"Music player"}}
+{"request_id":"open-design","method":"tabs.open","params":{"window_id":"WINDOW_ID","path":"/absolute/design.rovar"}}
+{"request_id":"activate-design","method":"tabs.activate","params":{"window_id":"WINDOW_ID","tab_id":"TAB_ID"}}
+{"request_id":"close-design","method":"tabs.close","params":{"window_id":"WINDOW_ID","tab_id":"TAB_ID"}}
+```
+
+Create uses the window's current local/remote source and normal autosave behavior.
+External files are imported into the workspace, as with the UI; their source files
+are not overwritten. If a path is already open in another window, `tabs.open`
+activates that window and returns its IDs. Remote documents already in the workspace
+can be opened using the path returned by `tabs.list`.
+
+Mutations return `status: "accepted"`, `window_id`, `tab_id`, and a `tab` snapshot
+(null if already removed). Acceptance is not proof of completed loading, saving,
+remote upload, or closing. Poll `tabs.list`: inspect `loaded`, `loading`,
+`checking_remote`, `saving`, `closing`, `dirty`, and `error`. A successful close
+removes the tab; a failed save retains it with an error. A failed open removes the
+loading tab and reports `{tab_id, title, message}` in the window's `open_errors`
+while the corresponding error dialog remains open. Pending dialogs, comparisons,
+and tab drags return `BUSY`. Closing never discards unsaved changes.
+
+Keep the same request ID and exact body when retrying a mutation after a timeout.
+Each process retains up to 256 successful tab-operation receipts; a repeated request
+returns its original acceptance response without executing again. Changed bodies
+with a used ID return `REQUEST_ID_REUSED`; exhausted capacity returns `RECEIPT_LIMIT`
+before any change. `tabs.list` reports `remaining_tab_receipts`. Requests are limited
+to 16 KiB. Read requests do not consume receipt slots. Poll for current state rather
+than treating a replayed snapshot as live state.
 
 ## Selection and view
 

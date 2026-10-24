@@ -44,12 +44,6 @@ impl Drop for Server {
     }
 }
 
-pub(crate) fn directory() -> PathBuf {
-    dirs::data_local_dir()
-        .unwrap_or_else(std::env::temp_dir)
-        .join("Rovar/agent")
-}
-
 fn runtime() -> io::Result<Arc<Runtime>> {
     Builder::new_multi_thread()
         .worker_threads(1)
@@ -212,10 +206,6 @@ fn create_pipe(path: &Path, first: bool) -> anyhow::Result<NamedPipeServer> {
 }
 
 pub(crate) fn listen(base: &Path) -> anyhow::Result<(Server, mpsc::Receiver<Pending>)> {
-    std::fs::create_dir_all(base)?;
-    let directory = tempfile::Builder::new()
-        .prefix("rovar-live-")
-        .tempdir_in(base)?;
     let endpoint = PathBuf::from(format!(
         "{PREFIX}{}-{}",
         std::process::id(),
@@ -226,10 +216,7 @@ pub(crate) fn listen(base: &Path) -> anyhow::Result<(Server, mpsc::Receiver<Pend
         let _entered = runtime.enter();
         create_pipe(&endpoint, true)?
     };
-    std::fs::write(
-        directory.path().join("session.json"),
-        serde_json::to_vec(&serde_json::json!({"pid":std::process::id(),"endpoint":endpoint}))?,
-    )?;
+    let directory = super::register(base, &endpoint)?;
     let stop = Arc::new(AtomicBool::new(false));
     let stopping = stop.clone();
     let (sender, receiver) = mpsc::channel(8);
@@ -314,13 +301,15 @@ pub(crate) fn discover(base: &Path) -> anyhow::Result<serde_json::Value> {
         }
         let record = std::fs::File::open(entry.path().join("session.json"))
             .ok()
-            .and_then(|file| serde_json::from_reader::<_, serde_json::Value>(file.take(4096)).ok());
+            .and_then(|file| {
+                serde_json::from_reader::<_, serde_json::Value>(file.take(16 * 1024)).ok()
+            });
         if let Some(record) = record
-            && let (Some(pid), Some(endpoint)) =
-                (record["pid"].as_u64(), record["endpoint"].as_str())
+            && record["pid"].as_u64().is_some()
+            && let Some(endpoint) = record["endpoint"].as_str()
             && connect(Path::new(endpoint)).is_ok()
         {
-            sessions.push(serde_json::json!({"pid":pid,"endpoint":endpoint}));
+            sessions.push(record);
         }
     }
     sessions.sort_by(|a, b| a["endpoint"].as_str().cmp(&b["endpoint"].as_str()));

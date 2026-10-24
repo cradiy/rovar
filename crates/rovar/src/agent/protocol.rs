@@ -98,6 +98,28 @@ pub(crate) struct Empty {}
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+pub(crate) struct CreateTab {
+    pub window_id: String,
+    pub title: Option<String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct OpenTab {
+    pub window_id: String,
+    /// Absolute path to a .rovar document. External files are imported into the workspace.
+    pub path: std::path::PathBuf,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct TabTarget {
+    pub window_id: String,
+    pub tab_id: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct Schema {
     /// Method whose input schema is needed; omit for the request envelope.
     pub method: Option<String>,
@@ -310,7 +332,12 @@ fn one() -> u32 {
 pub(crate) fn schema(method: Option<&str>) -> Result<Value> {
     Ok(match method {
         None => json!(schemars::schema_for!(Request)),
-        Some("session.describe") => json!(schemars::schema_for!(Empty)),
+        Some("session.describe" | "tabs.list") => json!(schemars::schema_for!(Empty)),
+        Some("tabs.create") => json!(schemars::schema_for!(CreateTab)),
+        Some("tabs.open") => json!(schemars::schema_for!(OpenTab)),
+        Some("tabs.activate" | "tabs.close" | "tabs.save") => {
+            json!(schemars::schema_for!(TabTarget))
+        }
         Some("schema.get") => json!(schemars::schema_for!(Schema)),
         Some("nodes.get" | "nodes.find") => json!(schemars::schema_for!(Read)),
         Some("document.apply") => json!(schemars::schema_for!(Apply)),

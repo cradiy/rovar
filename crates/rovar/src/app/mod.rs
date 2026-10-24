@@ -390,6 +390,15 @@ impl Studio {
     }
 
     fn new_document(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.new_named_document(None, window, cx);
+    }
+
+    fn new_named_document(
+        &mut self,
+        title: Option<String>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if !self.can_create_document(window, cx) {
             return;
         }
@@ -409,7 +418,9 @@ impl Studio {
                 .directory
                 .join("documents")
                 .join(format!("{document_id}.rovar")),
-            title: crate::i18n::message("untitled-name", &[("id", token.to_string())]),
+            title: title.unwrap_or_else(|| {
+                crate::i18n::message("untitled-name", &[("id", token.to_string())])
+            }),
             created: sorting::creation_time(),
             modified: now(),
             views: Default::default(),

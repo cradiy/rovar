@@ -5,6 +5,7 @@ use crate::agent::{
 };
 use futures_util::StreamExt;
 use serde_json::json;
+mod tabs;
 #[cfg(test)]
 mod tests;
 
@@ -12,6 +13,7 @@ pub(super) fn start(base: &std::path::Path, cx: &mut gpui::App) -> anyhow::Resul
     let (server, mut requests) = transport::listen(base)?;
     let stop = server.stop.clone();
     cx.set_global(server);
+    cx.set_global(tabs::Receipts::default());
     cx.on_app_quit(|cx| {
         cx.remove_global::<transport::Server>();
         async {}
@@ -75,6 +77,9 @@ fn dispatch(
         let params: protocol::Schema = protocol::parse(request.params.clone())?;
         return protocol::schema(params.method.as_deref()).map(protocol::Reply::Ready);
     }
+    if request.method.starts_with("tabs.") {
+        return tabs::dispatch(request, cx).map(protocol::Reply::Ready);
+    }
     let mut sessions = Vec::new();
     let mut target = None;
     for handle in cx
@@ -97,13 +102,15 @@ fn dispatch(
             let Some(editor) = &tab.editor else {
                 return;
             };
-            if tab.loading || tab.checking_remote {
+            if tab.loading || tab.checking_remote || tab.close_after_save {
                 return;
             }
-            let session =
+            let mut session =
                 editor
                     .read(cx)
                     .agent_session(&tab.document_id, &tab.file.title, window, cx);
+            session["window_id"] = json!(studio.window_id.to_string());
+            session["tab_id"] = json!(tab.token.to_string());
             if request.session_id.as_deref() == session["session_id"].as_str()
                 && request.document_id.as_deref() == Some(tab.document_id.as_str())
             {
@@ -116,7 +123,7 @@ fn dispatch(
         let _: protocol::Empty = protocol::parse(request.params.clone())?;
         return Ok(protocol::Reply::Ready(
             json!({"sessions":sessions,"capabilities":{
-                "methods":["session.describe","schema.get","nodes.get","nodes.find","document.apply","canvas.capture","selection.set","canvas.focus","canvas.fit"],
+                "methods":["session.describe","schema.get","tabs.list","tabs.create","tabs.open","tabs.activate","tabs.close","tabs.save","nodes.get","nodes.find","document.apply","canvas.capture","selection.set","canvas.focus","canvas.fit"],
                 "create_types":["frame","rectangle","ellipse","text","group"],
                 "operations":["create","update","delete","set_interaction","set_start_frame","import","replace_source"],
                 "import_types":["image","svg","video","audio"],

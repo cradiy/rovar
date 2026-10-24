@@ -11,26 +11,20 @@ there is no pinned protocol version or legacy compatibility mode.
 
 ## Connect and discover
 
-On Windows, use the same `rovar.exe` for GUI startup and CLI commands. Honor an
-executable path explicitly supplied by the user; otherwise first check
-`%LOCALAPPDATA%\Programs\Rovar\rovar.exe`, the default installation path. If it is
-missing, resolve `rovar.exe` from PATH. If neither is available, ask the user to
-add the directory containing `rovar.exe` to PATH or provide its full path, then
-pause connection attempts.
+Read the running editor's discovery records before searching for an executable:
 
-On macOS, honor an executable path explicitly supplied by the user; otherwise
-first check `/Applications/Rovar.app/Contents/MacOS/rovar`. If it is missing or
-not executable, resolve `rovar` from PATH. If neither is available, ask the user
-for the location of `Rovar.app` or the full path to the `rovar` executable, then
-pause connection attempts. For an application bundle, use its
-`Contents/MacOS/rovar` executable for CLI commands.
+- Linux/macOS: `~/.rovar/instances/rovar-live-*/session.json`
+- Windows: `%USERPROFILE%\.rovar\instances\rovar-live-*\session.json`
 
-On Linux, honor an executable path explicitly supplied by the user; otherwise
-resolve `rovar` from PATH. If it is unavailable, ask the user to add its directory
-to PATH or provide the full executable path, then pause connection attempts.
+Each JSON record contains the absolute `executable`, `endpoint`, `pid`,
+`application_version`, `started_at_unix_ms`, and `transport`. Use the executable and
+endpoint from the same record. Do not guess build directories, installation paths,
+or socket names. Honor a path explicitly supplied by the user. If no live record
+exists, ask the user to start Rovar normally; stale records left by crashes are not
+proof of a running editor. Do not launch duplicate editors merely to find a session.
 
-In the commands below, replace `rovar` with the resolved executable path, quoted
-when needed. Run `--help` if the CLI differs.
+In the commands below, replace `rovar` with the recorded executable path, quoted
+when needed. `--list-sessions` checks reachability and returns the same metadata.
 Normal application startup automatically exposes a local interface on Windows,
 macOS and Linux; no agent startup flag is needed. Web does not expose this transport.
 
@@ -38,27 +32,23 @@ macOS and Linux; no agent startup flag is needed. Web does not expose this trans
 rovar --list-sessions
 ```
 
-The result lists `pid` and `endpoint`. Use an actual discovered endpoint:
+Use an actual discovered endpoint:
 
 ```sh
 printf '%s\n' '{"request_id":"inspect-session","method":"session.describe"}' |
+  rovar --connect /DISCOVERED/PATH/editor.sock
+printf '%s\n' '{"request_id":"inspect-tabs","method":"tabs.list"}' |
   rovar --connect /DISCOVERED/PATH/editor.sock
 printf '%s\n' '{"request_id":"inspect-apply-schema","method":"schema.get","params":{"method":"document.apply"}}' |
   rovar --connect /DISCOVERED/PATH/editor.sock
 ```
 
-Windows PowerShell example (use a user-supplied executable path instead when
-provided, and replace the endpoint with the discovered value):
+Windows PowerShell discovery (choose the intended record before connecting):
 
 ```powershell
-$rovar = Join-Path $env:LOCALAPPDATA 'Programs\Rovar\rovar.exe'
-if (-not (Test-Path -LiteralPath $rovar -PathType Leaf)) {
-    $rovar = (Get-Command rovar.exe -CommandType Application -ErrorAction SilentlyContinue |
-        Select-Object -First 1).Source
-}
-if (-not $rovar) {
-    throw 'Rovar was not found. Ask the user to add its directory to PATH or provide the full path to rovar.exe.'
-}
+Get-ChildItem "$env:USERPROFILE\.rovar\instances\rovar-live-*\session.json" |
+    ForEach-Object { Get-Content -Raw -LiteralPath $_.FullName | ConvertFrom-Json }
+$rovar = '/EXECUTABLE/FROM/RECORD'
 & $rovar --list-sessions | Out-String
 $endpoint = '\\.\pipe\rovar-PID-UUID'
 '{"request_id":"inspect-session","method":"session.describe"}' |
@@ -79,16 +69,40 @@ go to stderr. Inspect the JSON error even when the process exits unsuccessfully.
 Use structured JSON serialization or a request file rather than interpolating design
 text into shell commands. The CLI accepts multiple request lines.
 
-Inspect each candidate's `session.describe` to identify the intended document. Do not
-choose the first process or document arbitrarily. If no document is open, have the
-user open or create one, or use an available authorized UI tool. Do not edit persisted
-`.rovar` files as a substitute for the live protocol. If discovery is empty despite
-a running editor, check that the client runs as the same user and uses the same
-runtime directory (Unix) or local application data directory (Windows).
+Inspect each candidate's `tabs.list` and `session.describe` to identify the intended
+window/document; do not choose the first process or tab arbitrarily. If discovery is
+empty despite a running editor, check that both processes use the same user/home
+directory. Do not edit persisted `.rovar` files as a substitute for the live protocol.
 
 Before editing, record the active `session_id`, `document_id`, `page_id`, document
 `revision`, selection, busy state, and capabilities. Query `schema.get` for the methods
 you will use. Never infer supported properties from what the editor UI can do.
+
+## Manage documents
+
+Use `tabs.list` to inspect all windows and tabs, including empty windows and inactive
+documents. Tab methods omit envelope `session_id` and `document_id`; their parameters
+use the returned opaque `window_id` and, where required, `tab_id`.
+
+- `tabs.create`: `window_id`, optional `title`. Create a document when the design task
+  calls for one; it uses the window's current local/remote source.
+- `tabs.open`: `window_id`, absolute `.rovar` `path`. External files are imported into
+  the workspace. An already-open path activates its existing window/tab.
+- `tabs.activate`: `window_id`, `tab_id`. Select the intended document, then call
+  `session.describe` again for its current editing scope and revision.
+- `tabs.save`: `window_id`, `tab_id`. Save a loaded document without switching tabs.
+- `tabs.close`: `window_id`, `tab_id`. Use when the task calls for closing that document;
+  unrelated user tabs should remain open. Closing saves changes first.
+
+Query the method schema before use. Mutations return an acceptance response, not a
+completed disk operation. Poll `tabs.list` for loading/saving/closing state and errors.
+A failed save keeps the tab; a failed open appears in the window's `open_errors`,
+identified by `tab_id`. Do not proceed with editing until `session.describe` exposes
+the intended session. On `BUSY`, inspect pending state rather than flooding retries.
+After a timeout, retry the exact request ID/body to avoid creating duplicate tabs.
+There are 256 successful tab-operation receipt slots per process, reported by
+`remaining_tab_receipts`; reads consume none. Replayed responses are historical
+acceptance snapshots, so use `tabs.list` for current state.
 
 ## Inspect the design
 
