@@ -1,11 +1,49 @@
 use super::inspector::{icon_button, inspector_section};
 use super::*;
 use crate::i18n::t;
-use crate::scene::text::VerticalAlign;
+use crate::scene::text::{TextFormat, VerticalAlign};
 use crate::ui::theme::Color;
 use gpui::{CursorStyle, TextAlign};
 
 impl Workspace {
+    fn text_format_controls(&self, cx: &mut Context<Self>) -> Div {
+        div().flex_shrink_0().flex().gap(px(4.)).children(
+            [
+                (TextFormat::Bold, "text-bold", GpuiIcons::LucideBold),
+                (TextFormat::Italic, "text-italic", GpuiIcons::LucideItalic),
+                (
+                    TextFormat::Underline,
+                    "text-underline",
+                    GpuiIcons::LucideUnderline,
+                ),
+                (
+                    TextFormat::Strikethrough,
+                    "text-strikethrough",
+                    GpuiIcons::LucideStrikethrough,
+                ),
+            ]
+            .into_iter()
+            .map(|(format, id, glyph)| {
+                let active = self
+                    .selected_text()
+                    .is_some_and(|text| text.editor.read(cx).format_active(format));
+                icon_button(id, t(id), glyph, active)
+                    .flex_1()
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.toggle_text_format(format, cx);
+                    }))
+            }),
+        )
+    }
+
+    pub(super) fn toggle_text_format(&mut self, format: TextFormat, cx: &mut Context<Self>) {
+        if let Some(text) = self.selected_text() {
+            text.editor
+                .update(cx, |editor, cx| editor.toggle_format(format, cx));
+        }
+        cx.notify();
+    }
+
     pub(super) fn text_alignment_control(
         &self,
         align: Option<TextAlign>,
@@ -391,6 +429,7 @@ impl Workspace {
                             }),
                     )
                     .child(self.inspector.font_picker.clone())
+                    .child(self.text_format_controls(cx))
                     .child(
                         div()
                             .flex_shrink_0()

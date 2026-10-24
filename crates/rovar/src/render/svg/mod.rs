@@ -189,12 +189,19 @@ impl Scene<'_> {
                     )?;
                     write!(
                         body,
-                        "<text x=\"{}\" y=\"{}\" font-family=\"{}\" font-size=\"{}\" font-weight=\"{}\" letter-spacing=\"{}\" {fill}>{}</text>",
+                        "<text x=\"{}\" y=\"{}\" font-family=\"{}\" font-size=\"{}\" font-weight=\"{}\" font-style=\"{}\" text-decoration=\"{}\" letter-spacing=\"{}\" {fill}>{}</text>",
                         rect.x + fragment.x,
                         rect.y + fragment.baseline,
                         escape(&crate::platform::render_font_family(&style.family)),
                         style.size,
                         style.weight,
+                        if style.italic { "italic" } else { "normal" },
+                        match (style.underline, style.strikethrough) {
+                            (true, true) => "underline line-through",
+                            (true, false) => "underline",
+                            (false, true) => "line-through",
+                            (false, false) => "none",
+                        },
                         style.spacing,
                         escape(&fragment.text)
                     )?;

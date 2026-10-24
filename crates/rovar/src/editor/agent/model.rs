@@ -133,6 +133,9 @@ pub(super) fn node(page: &Page, id: usize, identities: &BTreeMap<usize, uuid::Uu
         properties["font_family"] = json!(n.styles.default.family);
         properties["font_size"] = json!(n.styles.default.size);
         properties["font_weight"] = json!(n.styles.default.weight);
+        properties["italic"] = json!(n.styles.default.italic);
+        properties["underline"] = json!(n.styles.default.underline);
+        properties["strikethrough"] = json!(n.styles.default.strikethrough);
     }
     if let Some(n) = page
         .shapes
@@ -348,7 +351,10 @@ fn update(page: &mut Page, id: usize, props: p::Properties, creating: bool) -> R
         && (props.content.is_some()
             || props.font_size.is_some()
             || props.font_family.is_some()
-            || props.font_weight.is_some())
+            || props.font_weight.is_some()
+            || props.italic.is_some()
+            || props.underline.is_some()
+            || props.strikethrough.is_some())
     {
         return Err(Error::invalid("Text properties require a text node"));
     }
@@ -519,6 +525,15 @@ fn update(page: &mut Page, id: usize, props: p::Properties, creating: bool) -> R
         }
         if let Some(value) = props.font_weight {
             changes.push(StyleChange::Weight(value));
+        }
+        if let Some(value) = props.italic {
+            changes.push(StyleChange::Italic(value));
+        }
+        if let Some(value) = props.underline {
+            changes.push(StyleChange::Underline(value));
+        }
+        if let Some(value) = props.strikethrough {
+            changes.push(StyleChange::Strikethrough(value));
         }
         if let Some(value) = color {
             changes.extend([

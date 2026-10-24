@@ -370,12 +370,21 @@ fn layout_edits_protect_locked_descendants_and_preserve_text(cx: &mut TestAppCon
             {"op":"create","ref":"$group","type":"group","properties":{
                 "rect":{"x":100,"y":200,"width":200,"height":150},"layout":layout}},
             {"op":"create","ref":"$text","type":"text","parent":"$group","properties":{
-                "rect":{"x":0,"y":0,"width":100,"height":40},"content":"登录","font_size":16}}
+                "rect":{"x":0,"y":0,"width":100,"height":40},"content":"登录","font_size":16,
+                "font_weight":700,"italic":true,"underline":true,"strikethrough":true}}
         ]));
         let result=execute(this,&create,window,cx).unwrap();
         assert_eq!(this.texts[0].rect.x,110.);
         assert_eq!(this.texts[0].rect.y,210.);
         assert_eq!(this.snapshot_page(cx).0.texts[0].content,"登录");
+        let read=request(this,"nodes.get",json!({"page_id":this.pages.active,
+            "revision":result["revision"]}));
+        let nodes=execute(this,&read,window,cx).unwrap();
+        let text=nodes["nodes"].as_array().unwrap().iter()
+            .find(|node| node["properties"]["content"]=="登录").unwrap();
+        for key in ["italic","underline","strikethrough"] {
+            assert_eq!(text["properties"][key],true);
+        }
         let capture=request(this,"canvas.capture",json!({"page_id":this.pages.active,
             "revision":result["revision"],"node_id":result["created"]["$text"]}));
         let image=execute(this,&capture,window,cx).unwrap();

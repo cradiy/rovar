@@ -94,7 +94,7 @@ fn text_clipboard_shortcuts_only_accept_the_host_primary_modifier(cx: &mut TestA
                 text.key_down(&event(primary, "a"), window, cx);
                 assert_eq!(text.selection(), 0..text.content.len());
                 cx.write_to_clipboard(ClipboardItem::new_string("untouched".into()));
-                for key in ["c", "x", "v", "backspace", "left"] {
+                for key in ["c", "x", "v", "b", "i", "u", "backspace", "left"] {
                     text.key_down(&event(other, key), window, cx);
                 }
                 assert_eq!(text.content, "A中😀B");
@@ -109,6 +109,12 @@ fn text_clipboard_shortcuts_only_accept_the_host_primary_modifier(cx: &mut TestA
                 assert!(text.content.is_empty());
                 text.key_down(&event(primary, "v"), window, cx);
                 assert_eq!(text.content, "A中😀B");
+                for key in ["b", "i", "u"] {
+                    text.key_down(&event(primary, key), window, cx);
+                }
+                let style = text.effective_style();
+                assert_eq!(style.weight, 700.);
+                assert!(style.italic && style.underline);
             });
         })
         .unwrap();

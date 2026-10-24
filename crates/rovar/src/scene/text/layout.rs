@@ -35,6 +35,9 @@ fn shape(
 ) -> ShapedLine {
     let mut font = gpui::font(crate::platform::font_family(&style.family));
     font.weight = FontWeight(style.weight);
+    if style.italic {
+        font.style = FontStyle::Italic;
+    }
     if style.spacing != 0. {
         font.features = FontFeatures(Arc::new(vec![("liga".into(), 0), ("clig".into(), 0)]));
     }
@@ -47,8 +50,14 @@ fn shape(
             style.color.into()
         },
         background_color: None,
-        underline: None,
-        strikethrough: None,
+        underline: style.underline.then_some(UnderlineStyle {
+            thickness: px(style.size / 16. * zoom),
+            ..Default::default()
+        }),
+        strikethrough: style.strikethrough.then_some(StrikethroughStyle {
+            thickness: px(style.size / 16. * zoom),
+            ..Default::default()
+        }),
     };
     let mut line =
         text_system.shape_line(text.to_owned().into(), px(style.size * zoom), &[run], None);

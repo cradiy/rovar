@@ -105,6 +105,15 @@ impl Workspace {
                 if !modifiers.secondary() && (modifiers.control || modifiers.platform) {
                     return;
                 }
+                if this.gesture.is_none()
+                    && this.selected_text().is_some()
+                    && let Some(format) =
+                        crate::scene::text::TextFormat::for_keystroke(&event.keystroke)
+                {
+                    this.toggle_text_format(format, cx);
+                    cx.stop_propagation();
+                    return;
+                }
                 if this.selection_key(event, window, cx) {
                     return;
                 }

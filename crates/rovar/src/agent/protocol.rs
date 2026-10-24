@@ -212,6 +212,9 @@ pub(crate) struct Properties {
     pub font_family: Option<String>,
     pub font_size: Option<f32>,
     pub font_weight: Option<f32>,
+    pub italic: Option<bool>,
+    pub underline: Option<bool>,
+    pub strikethrough: Option<bool>,
     /// Replaces the layout configuration. Only frames and groups support layout.
     pub layout: Option<Layout>,
     /// Explicitly remove auto layout; cannot be combined with layout.

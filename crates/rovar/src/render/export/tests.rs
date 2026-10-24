@@ -596,6 +596,31 @@ fn svg_text_is_outlined_and_png_contains_the_glyphs() {
         .unwrap()
         .into_rgba8();
     assert!(pixels.pixels().filter(|p| p.0[3] > 100).count() > 150);
+    let baseline = pixels;
+    for change in [
+        crate::scene::text::StyleChange::Italic(true),
+        crate::scene::text::StyleChange::Weight(700.),
+        crate::scene::text::StyleChange::Underline(true),
+        crate::scene::text::StyleChange::Strikethrough(true),
+    ] {
+        let mut styles = doc.texts[0].styles.clone();
+        styles.apply(0..5, &change, true);
+        job.text.get_mut(&1).unwrap()[0].style = styles.default;
+        let styled = image::load_from_memory(&job.render(Format::Png, 1, &options).unwrap())
+            .unwrap()
+            .into_rgba8();
+        assert_ne!(styled, baseline, "{change:?} must affect exported pixels");
+        if matches!(
+            change,
+            crate::scene::text::StyleChange::Underline(_)
+                | crate::scene::text::StyleChange::Strikethrough(_)
+        ) {
+            assert!(
+                styled.pixels().filter(|p| p.0[3] > 100).count()
+                    > baseline.pixels().filter(|p| p.0[3] > 100).count()
+            );
+        }
+    }
 }
 
 #[test]

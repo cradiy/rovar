@@ -304,6 +304,8 @@ separately describes whether a node's interaction settings can be changed.
   entire text box. Replacing text follows the editor's style inheritance rules.
 - Font size is 1–1000 and weight 100–900. An explicit family must exist; otherwise
   `FONT_NOT_FOUND` is returned. Omit it to use the editor default.
+- Text nodes also accept boolean `italic`, `underline`, and `strikethrough`
+  properties. These apply to the entire text box and can be combined with font weight.
 - Locked nodes and descendants of locked nodes cannot be edited or deleted. Layout
   edits that move protected descendants also fail. Active editing/dragging/previews
   return `BUSY` rather than finishing or interrupting the user's gesture.

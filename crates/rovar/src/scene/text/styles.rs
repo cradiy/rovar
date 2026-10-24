@@ -10,6 +10,9 @@ pub(crate) enum StyleChange {
     DetachColorStyle,
     Family(SharedString),
     Weight(f32),
+    Italic(bool),
+    Underline(bool),
+    Strikethrough(bool),
     Size(f32),
     Color(Rgba),
     Opacity(f32),
@@ -35,6 +38,9 @@ impl StyleChange {
             Self::LineHeight(_) => TextProperty::LineHeight,
             Self::Spacing(_) => TextProperty::Spacing,
             Self::Weight(_) => TextProperty::Weight,
+            Self::Italic(_) => TextProperty::Italic,
+            Self::Underline(_) => TextProperty::Underline,
+            Self::Strikethrough(_) => TextProperty::Strikethrough,
             Self::Align(_) => TextProperty::Align,
             Self::FillMode(_) => TextProperty::FillMode,
             Self::Gradient(_) => TextProperty::Gradient,
@@ -56,6 +62,9 @@ impl StyleChange {
             Self::DetachColorStyle => style.color_style = None,
             Self::Family(value) => style.family = value.clone(),
             Self::Weight(value) => style.weight = *value,
+            Self::Italic(value) => style.italic = *value,
+            Self::Underline(value) => style.underline = *value,
+            Self::Strikethrough(value) => style.strikethrough = *value,
             Self::Size(value) => style.size = *value,
             Self::Opacity(value) => style.color.a = *value,
             Self::Color(value) => {
@@ -87,10 +96,53 @@ impl TextStyle {
             TextProperty::LineHeight => self.line_height == other.line_height,
             TextProperty::Spacing => self.spacing == other.spacing,
             TextProperty::Weight => self.weight == other.weight,
+            TextProperty::Italic => self.italic == other.italic,
+            TextProperty::Underline => self.underline == other.underline,
+            TextProperty::Strikethrough => self.strikethrough == other.strikethrough,
             TextProperty::Align => self.align == other.align,
             TextProperty::FillMode => self.fill_mode == other.fill_mode,
             TextProperty::Gradient => self.gradient == other.gradient,
             TextProperty::VerticalAlign => self.vertical_align == other.vertical_align,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum TextFormat {
+    Bold,
+    Italic,
+    Underline,
+    Strikethrough,
+}
+
+impl TextFormat {
+    pub fn for_keystroke(key: &gpui::Keystroke) -> Option<Self> {
+        if !key.modifiers.secondary() || key.modifiers.shift || key.modifiers.alt {
+            return None;
+        }
+        match key.key.as_str() {
+            "b" => Some(Self::Bold),
+            "i" => Some(Self::Italic),
+            "u" => Some(Self::Underline),
+            _ => None,
+        }
+    }
+
+    pub fn enabled(self, style: &TextStyle) -> bool {
+        match self {
+            Self::Bold => style.weight >= 700.,
+            Self::Italic => style.italic,
+            Self::Underline => style.underline,
+            Self::Strikethrough => style.strikethrough,
+        }
+    }
+
+    pub fn change(self, enabled: bool) -> StyleChange {
+        match self {
+            Self::Bold => StyleChange::Weight(if enabled { 700. } else { 400. }),
+            Self::Italic => StyleChange::Italic(enabled),
+            Self::Underline => StyleChange::Underline(enabled),
+            Self::Strikethrough => StyleChange::Strikethrough(enabled),
         }
     }
 }

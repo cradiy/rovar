@@ -5,6 +5,7 @@ pub(crate) use layout::measure_content;
 pub(crate) mod styles;
 pub(crate) use styles::StyleChange;
 use styles::StyledText;
+pub(crate) use styles::TextFormat;
 #[cfg(test)]
 mod tests;
 
@@ -40,6 +41,12 @@ pub struct TextStyle {
     pub color_style: Option<String>,
     pub family: SharedString,
     pub weight: f32,
+    #[serde(default)]
+    pub italic: bool,
+    #[serde(default)]
+    pub underline: bool,
+    #[serde(default)]
+    pub strikethrough: bool,
     pub size: f32,
     pub line_height: f32,
     pub spacing: f32,
@@ -59,6 +66,9 @@ impl Default for TextStyle {
             family: crate::ui::font::SYSTEM.into(),
             color_style: None,
             weight: 400.,
+            italic: false,
+            underline: false,
+            strikethrough: false,
             size: 24.,
             line_height: 1.5,
             spacing: 0.,
@@ -258,6 +268,15 @@ impl TextEditor {
             .in_range(self.style_range())
             .any(|style| !style.same_property(effective, property))
     }
+    pub fn format_active(&self, format: TextFormat) -> bool {
+        self.styles
+            .in_range(self.style_range())
+            .all(|style| format.enabled(style))
+    }
+    pub fn toggle_format(&mut self, format: TextFormat, cx: &mut Context<Self>) {
+        self.history.borrow_mut().break_group();
+        self.apply_style(format.change(!self.format_active(format)), cx);
+    }
     pub fn apply_color(
         &mut self,
         color: Rgba,
@@ -436,6 +455,11 @@ impl TextEditor {
         }
         // Let the platform input method consume composition keys first.
         if self.marked.is_some() {
+            return;
+        }
+        if let Some(format) = TextFormat::for_keystroke(&event.keystroke) {
+            self.toggle_format(format, cx);
+            cx.stop_propagation();
             return;
         }
         if command {
