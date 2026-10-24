@@ -156,7 +156,7 @@ impl Workspace {
                             .bg(Color::Input.color())
                     })
                     .hover(|s| s.bg(BORDER.color()))
-                    .child(icon(LucideIcons::Combine, 16.).flex_shrink_0())
+                    .child(icon(GpuiIcons::LucideCombine, 16.).flex_shrink_0())
                     .child(
                         div()
                             .min_w_0()
@@ -164,7 +164,7 @@ impl Workspace {
                             .truncate()
                             .child(selected.map_or(t("boolean-operations"), Operation::label)),
                     )
-                    .child(icon(LucideIcons::ChevronDown, 12.).flex_shrink_0()),
+                    .child(icon(GpuiIcons::LucideChevronDown, 12.).flex_shrink_0()),
             )
             .menu(
                 div()
@@ -191,7 +191,7 @@ impl Workspace {
                             .hover(|s| s.bg(Color::Hover.color()))
                             .child(div().w(px(14.)).when(current, |el| {
                                 el.child(
-                                    icon(LucideIcons::Check, 13.)
+                                    icon(GpuiIcons::LucideCheck, 13.)
                                         .debug_selector(|| "boolean-current-option".into()),
                                 )
                             }))

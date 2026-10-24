@@ -30,40 +30,40 @@ impl LayoutAction {
         Self::DistributeX,
         Self::DistributeY,
     ];
-    pub(super) fn details(self) -> (&'static str, &'static str, LucideIcons) {
+    pub(super) fn details(self) -> (&'static str, &'static str, GpuiIcons) {
         match self {
             Self::Left => (
                 "align-left",
                 t("align-left"),
-                LucideIcons::AlignStartVertical,
+                GpuiIcons::LucideAlignStartVertical,
             ),
             Self::CenterX => (
                 "align-center-x",
                 t("align-center-x"),
-                LucideIcons::AlignCenterVertical,
+                GpuiIcons::LucideAlignCenterVertical,
             ),
             Self::Right => (
                 "align-right",
                 t("align-right"),
-                LucideIcons::AlignEndVertical,
+                GpuiIcons::LucideAlignEndVertical,
             ),
             Self::Top => (
                 "align-top",
                 t("align-top"),
-                LucideIcons::AlignStartHorizontal,
+                GpuiIcons::LucideAlignStartHorizontal,
             ),
             Self::CenterY => (
                 "align-center-y",
                 t("align-center-y"),
-                LucideIcons::AlignCenterHorizontal,
+                GpuiIcons::LucideAlignCenterHorizontal,
             ),
             Self::Bottom => (
                 "align-bottom",
                 t("align-bottom"),
-                LucideIcons::AlignEndHorizontal,
+                GpuiIcons::LucideAlignEndHorizontal,
             ),
-            Self::DistributeX => ("distribute-x", t("distribute-x"), LucideIcons::Columns3),
-            Self::DistributeY => ("distribute-y", t("distribute-y"), LucideIcons::Rows3),
+            Self::DistributeX => ("distribute-x", t("distribute-x"), GpuiIcons::LucideColumns3),
+            Self::DistributeY => ("distribute-y", t("distribute-y"), GpuiIcons::LucideRows3),
         }
     }
     fn horizontal(self) -> bool {

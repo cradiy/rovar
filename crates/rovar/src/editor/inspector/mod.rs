@@ -47,19 +47,23 @@ fn inspector_input(state: &Entity<TextInput>) -> Input {
 }
 
 pub(super) fn inspector_color_picker(state: &Entity<ColorPickerState>) -> ColorPicker {
+    let gap = px(10.);
+    let appearance = ColorPickerAppearance {
+        area_height: px(152.),
+        hue_width: px(14.),
+        marker_size: px(12.),
+        accent: ACCENT.color().into(),
+        ..Default::default()
+    };
     ColorPicker::new(state)
         .horizontal_hue(true)
-        .gap(px(10.))
+        .h(appearance.area_height + gap + appearance.hue_width)
+        .flex_shrink_0()
+        .gap(gap)
         .p_0()
         .border_0()
         .bg(Color::Transparent.color())
-        .appearance(ColorPickerAppearance {
-            area_height: px(152.),
-            hue_width: px(14.),
-            marker_size: px(12.),
-            accent: ACCENT.color().into(),
-            ..Default::default()
-        })
+        .appearance(appearance)
 }
 
 pub(super) fn inspector_section(title: &'static str) -> Div {
@@ -101,7 +105,7 @@ pub(super) fn hex(color: gpui::Rgba) -> String {
 pub(super) fn icon_button(
     id: impl Into<gpui::SharedString>,
     label: &'static str,
-    glyph: LucideIcons,
+    glyph: GpuiIcons,
     active: bool,
 ) -> gpui::Stateful<Div> {
     let id = id.into();

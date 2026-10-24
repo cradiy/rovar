@@ -119,7 +119,7 @@ impl Workspace {
                             .child(style.name),
                     )
                     .when(selected, |el| {
-                        el.child(icon(LucideIcons::Check, 12.).text_color(ACCENT.color()))
+                        el.child(icon(GpuiIcons::LucideCheck, 12.).text_color(ACCENT.color()))
                     })
                     .when(can_apply, |el| {
                         el.cursor_pointer()
@@ -154,7 +154,7 @@ impl Workspace {
                     .cursor_pointer()
                     .text_color(MUTED.color())
                     .hover(|s| s.text_color(TEXT.color()))
-                    .child(icon(LucideIcons::Pencil, 13.))
+                    .child(icon(GpuiIcons::LucidePencil, 13.))
                     .on_click(cx.listener(move |this, _, window, cx| {
                         this.open_color_dialog(scope, Some(edit_id.clone()), false, window, cx);
                     })),
@@ -214,7 +214,7 @@ impl Workspace {
                                 MUTED.color()
                             })
                             .hover(|s| s.bg(Color::Hover.color()))
-                            .child(icon(LucideIcons::Palette, 13.))
+                            .child(icon(GpuiIcons::LucidePalette, 13.))
                             .child(div().max_w(px(150.)).truncate().child(
                                 linked.map_or_else(
                                     || t("color-styles").to_owned(),
@@ -326,7 +326,7 @@ impl Workspace {
                         .cursor_pointer()
                         .text_color(MUTED.color())
                         .hover(|s| s.text_color(TEXT.color()))
-                        .child(icon(LucideIcons::Unlink, 13.))
+                        .child(icon(GpuiIcons::LucideUnlink, 13.))
                         .on_click(
                             cx.listener(move |this, _, _, cx| this.detach_color_style(stroke, cx)),
                         ),
@@ -570,6 +570,8 @@ impl Workspace {
                     })
                     .child(
                         ColorPicker::new(&self.colors.picker)
+                            .h(px(152.))
+                            .flex_shrink_0()
                             .rounded(px(6.))
                             .overflow_hidden()
                             .horizontal_hue(true)

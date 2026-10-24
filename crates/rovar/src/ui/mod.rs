@@ -8,7 +8,7 @@ pub(crate) mod theme;
 pub(crate) mod titlebar;
 
 use gpui::{Styled, px, svg};
-use uic::assets::LucideIcons;
+use gpui_icons::GpuiIcons;
 
 pub(crate) const PANEL: theme::Color = theme::Color::Panel;
 pub(crate) const WORKSPACE: theme::Color = theme::Color::Workspace;
@@ -25,7 +25,7 @@ pub(crate) fn disclosure_icon(
     color: gpui::Rgba,
 ) -> gpui_effects::AnimatedNumber {
     gpui_effects::animated_number(id, if expanded { 1. } else { 0. }, move |progress| {
-        icon(LucideIcons::ChevronRight, size)
+        icon(GpuiIcons::LucideChevronRight, size)
             .text_color(color)
             .with_transformation(gpui::Transformation::rotate(gpui::radians(
                 progress as f32 * std::f32::consts::FRAC_PI_2,
@@ -34,6 +34,6 @@ pub(crate) fn disclosure_icon(
     .duration(DISCLOSURE_DURATION)
 }
 
-pub(crate) fn icon(glyph: LucideIcons, size: f32) -> gpui::Svg {
+pub(crate) fn icon(glyph: GpuiIcons, size: f32) -> gpui::Svg {
     svg().path(glyph).size(px(size)).text_color(TEXT.color())
 }

@@ -42,14 +42,12 @@ use gpui::{
     AppContext, Context, Entity, FocusHandle, IntoElement, Render, Subscription, Task, Window, div,
     prelude::*, px,
 };
+use gpui_icons::GpuiIcons;
 use serde::{Deserialize, Serialize};
 use std::{cell::RefCell, path::PathBuf, rc::Rc};
-use uic::{
-    assets::LucideIcons,
-    components::{
-        dropdown::DropdownState,
-        input::{InputEvent, TextInput},
-    },
+use uic::components::{
+    dropdown::DropdownState,
+    input::{InputEvent, TextInput},
 };
 use web_time::Duration;
 
@@ -664,7 +662,7 @@ impl Render for Studio {
                                 .size(px(22.))
                                 .flex_shrink_0()
                                 .cursor_pointer()
-                                .child(icon(LucideIcons::X, 14.))
+                                .child(icon(GpuiIcons::LucideX, 14.))
                                 .on_click(cx.listener(|this, _, _, cx| {
                                     this.error = None;
                                     cx.notify();

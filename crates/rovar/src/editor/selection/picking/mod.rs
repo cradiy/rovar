@@ -32,35 +32,35 @@ impl Workspace {
             .collect()
     }
 
-    fn pick_glyph(&self, id: usize) -> LucideIcons {
+    fn pick_glyph(&self, id: usize) -> GpuiIcons {
         if let Some(link) = self.hierarchy.components.get(&id) {
             return if link.master {
-                LucideIcons::Component
+                GpuiIcons::LucideComponent
             } else {
-                LucideIcons::Diamond
+                GpuiIcons::LucideDiamond
             };
         }
         if self.hierarchy.groups.contains_key(&id) {
-            LucideIcons::Group
+            GpuiIcons::LucideGroup
         } else if self.boards.iter().any(|b| b.id == id) {
-            LucideIcons::Frame
+            GpuiIcons::LucideFrame
         } else if let Some(shape) = self.shapes.iter().find(|s| s.id == id) {
             match shape.kind {
-                ShapeKind::Rectangle => LucideIcons::Square,
-                ShapeKind::Ellipse => LucideIcons::Circle,
-                ShapeKind::Arrow => LucideIcons::ArrowUpRight,
-                ShapeKind::Polygon => LucideIcons::Triangle,
-                ShapeKind::Star => LucideIcons::Star,
-                ShapeKind::Image => LucideIcons::Image,
-                ShapeKind::Svg => LucideIcons::FileCode,
-                ShapeKind::Video => LucideIcons::Film,
-                ShapeKind::Audio => LucideIcons::Music,
-                ShapeKind::Line => LucideIcons::Minus,
-                ShapeKind::Pen => LucideIcons::Pencil,
-                ShapeKind::Bezier => LucideIcons::PenTool,
+                ShapeKind::Rectangle => GpuiIcons::LucideSquare,
+                ShapeKind::Ellipse => GpuiIcons::LucideCircle,
+                ShapeKind::Arrow => GpuiIcons::LucideArrowUpRight,
+                ShapeKind::Polygon => GpuiIcons::LucideTriangle,
+                ShapeKind::Star => GpuiIcons::LucideStar,
+                ShapeKind::Image => GpuiIcons::LucideImage,
+                ShapeKind::Svg => GpuiIcons::LucideFileCode,
+                ShapeKind::Video => GpuiIcons::LucideFilm,
+                ShapeKind::Audio => GpuiIcons::LucideMusic,
+                ShapeKind::Line => GpuiIcons::LucideMinus,
+                ShapeKind::Pen => GpuiIcons::LucidePencil,
+                ShapeKind::Bezier => GpuiIcons::LucidePenTool,
             }
         } else {
-            LucideIcons::Type
+            GpuiIcons::LucideType
         }
     }
 
@@ -131,9 +131,9 @@ impl Workspace {
                             .when(locked || selected, |el| {
                                 el.child(icon(
                                     if locked {
-                                        LucideIcons::Lock
+                                        GpuiIcons::LucideLock
                                     } else {
-                                        LucideIcons::Check
+                                        GpuiIcons::LucideCheck
                                     },
                                     13.,
                                 ))
@@ -178,7 +178,7 @@ impl Workspace {
                     .flex()
                     .items_center()
                     .gap(px(10.))
-                    .child(icon(LucideIcons::Layers, 15.))
+                    .child(icon(GpuiIcons::LucideLayers, 15.))
                     .child(t("select-layer"))
             },
             submenu,

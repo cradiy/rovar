@@ -215,7 +215,7 @@ impl Workspace {
                             .child(t("export-action")),
                     )
                     .child(
-                        export_icon("export-add", t("export-add"), LucideIcons::Plus).on_click(
+                        export_icon("export-add", t("export-add"), GpuiIcons::LucidePlus).on_click(
                             cx.listener(|this, _, _, cx| {
                                 this.edit_export_presets(
                                     None,
@@ -385,7 +385,7 @@ impl Workspace {
                     .trigger(export_icon(
                         gpui::SharedString::from(row_id("export-options", index)),
                         t("export-options"),
-                        LucideIcons::Ellipsis,
+                        GpuiIcons::LucideEllipsis,
                     ))
                     .content(move |_, _| {
                         div()
@@ -439,7 +439,7 @@ impl Workspace {
                 export_icon(
                     gpui::SharedString::from(row_id("export-remove", index)),
                     t("export-remove"),
-                    LucideIcons::Minus,
+                    GpuiIcons::LucideMinus,
                 )
                 .on_click(cx.listener(move |this, _, _, cx| {
                     this.edit_export_presets(
@@ -471,9 +471,9 @@ impl Workspace {
                     .child(
                         icon(
                             if open {
-                                LucideIcons::ChevronDown
+                                GpuiIcons::LucideChevronDown
                             } else {
-                                LucideIcons::ChevronRight
+                                GpuiIcons::LucideChevronRight
                             },
                             12.,
                         )
@@ -588,7 +588,7 @@ impl Workspace {
 fn export_icon(
     id: impl Into<gpui::SharedString>,
     label: &'static str,
-    glyph: LucideIcons,
+    glyph: GpuiIcons,
 ) -> gpui::Stateful<Div> {
     let id = id.into();
     div()

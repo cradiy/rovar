@@ -203,7 +203,7 @@ impl Workspace {
                                         inspector::icon_button(
                                             "prototype-disconnect",
                                             t("prototype-disconnect"),
-                                            LucideIcons::Unlink,
+                                            GpuiIcons::LucideUnlink,
                                             false,
                                         )
                                         .on_click(
@@ -556,7 +556,7 @@ impl Workspace {
                     .text_color(TEXT.color())
                     .hover(|s| s.bg(Color::Hover.color()))
                     .child(div().flex_1().min_w_0().truncate().child(label))
-                    .child(icon(LucideIcons::ChevronDown, 12.)),
+                    .child(icon(GpuiIcons::LucideChevronDown, 12.)),
             )
             .menu(
                 div()
@@ -594,7 +594,7 @@ impl Workspace {
                             .child(
                                 div()
                                     .w(px(14.))
-                                    .children(current.then(|| icon(LucideIcons::Check, 14.))),
+                                    .children(current.then(|| icon(GpuiIcons::LucideCheck, 14.))),
                             )
                             .child(div().flex_1().min_w_0().truncate().child(label))
                             .on_click(cx.listener(move |this, _, window, cx| {

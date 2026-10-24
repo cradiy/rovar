@@ -19,10 +19,10 @@ impl Workspace {
                 } else {
                     t("multi-selection")
                 },
-                LucideIcons::Layers,
+                GpuiIcons::LucideLayers,
             )
         } else if self.selected_text.is_some() {
-            (t("text"), LucideIcons::Type)
+            (t("text"), GpuiIcons::LucideType)
         } else if let Some(shape) = self.selected_shape() {
             (
                 if shape.kind == ShapeKind::Bezier {
@@ -31,24 +31,24 @@ impl Workspace {
                     shape.kind.label()
                 },
                 match shape.kind {
-                    ShapeKind::Rectangle => LucideIcons::Square,
-                    ShapeKind::Ellipse => LucideIcons::Circle,
-                    ShapeKind::Arrow => LucideIcons::ArrowUpRight,
-                    ShapeKind::Polygon => LucideIcons::Triangle,
-                    ShapeKind::Star => LucideIcons::Star,
-                    ShapeKind::Image => LucideIcons::Image,
-                    ShapeKind::Svg => LucideIcons::FileCode,
-                    ShapeKind::Video => LucideIcons::Film,
-                    ShapeKind::Audio => LucideIcons::Music,
-                    ShapeKind::Line => LucideIcons::Minus,
-                    ShapeKind::Pen => LucideIcons::Pencil,
-                    ShapeKind::Bezier => LucideIcons::PenTool,
+                    ShapeKind::Rectangle => GpuiIcons::LucideSquare,
+                    ShapeKind::Ellipse => GpuiIcons::LucideCircle,
+                    ShapeKind::Arrow => GpuiIcons::LucideArrowUpRight,
+                    ShapeKind::Polygon => GpuiIcons::LucideTriangle,
+                    ShapeKind::Star => GpuiIcons::LucideStar,
+                    ShapeKind::Image => GpuiIcons::LucideImage,
+                    ShapeKind::Svg => GpuiIcons::LucideFileCode,
+                    ShapeKind::Video => GpuiIcons::LucideFilm,
+                    ShapeKind::Audio => GpuiIcons::LucideMusic,
+                    ShapeKind::Line => GpuiIcons::LucideMinus,
+                    ShapeKind::Pen => GpuiIcons::LucidePencil,
+                    ShapeKind::Bezier => GpuiIcons::LucidePenTool,
                 },
             )
         } else if selected {
-            (t("artboard"), LucideIcons::Frame)
+            (t("artboard"), GpuiIcons::LucideFrame)
         } else {
-            (t("design"), LucideIcons::SlidersHorizontal)
+            (t("design"), GpuiIcons::LucideSlidersHorizontal)
         };
         let collapsed = self.panels.right_collapsed;
         let toggle = icon_button(
@@ -59,9 +59,9 @@ impl Workspace {
                 "collapse-properties"
             }),
             if collapsed {
-                LucideIcons::ChevronsLeft
+                GpuiIcons::LucideChevronsLeft
             } else {
-                LucideIcons::ChevronsRight
+                GpuiIcons::LucideChevronsRight
             },
             false,
         )
@@ -153,7 +153,7 @@ impl Workspace {
                                     icon_button(
                                         "inspector-create-component",
                                         t("component-create"),
-                                        LucideIcons::Component,
+                                        GpuiIcons::LucideComponent,
                                         false,
                                     )
                                     .size(px(28.))
@@ -276,7 +276,9 @@ impl Workspace {
                         .justify_center()
                         .text_center()
                         .gap(px(12.))
-                        .child(icon(LucideIcons::SlidersHorizontal, 24.).text_color(MUTED.color()))
+                        .child(
+                            icon(GpuiIcons::LucideSlidersHorizontal, 24.).text_color(MUTED.color()),
+                        )
                         .child(
                             div()
                                 .text_size(px(12.))

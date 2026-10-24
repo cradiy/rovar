@@ -5,7 +5,7 @@ use uic::components::{
     input::{Input, InputAppearance},
 };
 
-fn icon_action(id: &'static str, glyph: LucideIcons) -> gpui::Stateful<Div> {
+fn icon_action(id: &'static str, glyph: GpuiIcons) -> gpui::Stateful<Div> {
     div()
         .id(id)
         .debug_selector(move || id.into())
@@ -35,7 +35,7 @@ fn text_action(id: &'static str, label: &'static str) -> gpui::Stateful<Div> {
         .text_size(px(12.))
         .text_color(ACCENT.color())
         .hover(|s| s.bg(Color::Selected.color()))
-        .child(icon(LucideIcons::Plus, 14.))
+        .child(icon(GpuiIcons::LucidePlus, 14.))
         .child(label)
 }
 
@@ -111,7 +111,7 @@ impl Workspace {
                             .child(t("component-variants")),
                     )
                     .when(set.is_some() && editable, |el| {
-                        el.child(icon_action("add-variant", LucideIcons::Plus).on_click(
+                        el.child(icon_action("add-variant", GpuiIcons::LucidePlus).on_click(
                             cx.listener(|this, _, window, cx| this.add_variant(window, cx)),
                         ))
                     }),
@@ -124,7 +124,7 @@ impl Workspace {
                     .flex()
                     .items_center()
                     .gap(px(7.))
-                    .child(icon(LucideIcons::Component, 14.).text_color(ACCENT.color()))
+                    .child(icon(GpuiIcons::LucideComponent, 14.).text_color(ACCENT.color()))
                     .child(
                         div()
                             .id("variant-set-name")
@@ -181,7 +181,9 @@ impl Workspace {
                         value
                             .cursor_pointer()
                             .hover(|s| s.bg(BORDER.color()))
-                            .child(icon(LucideIcons::ChevronDown, 12.).text_color(MUTED.color())),
+                            .child(
+                                icon(GpuiIcons::LucideChevronDown, 12.).text_color(MUTED.color()),
+                            ),
                         move |_, cx| {
                             weak.update(cx, |this, cx| this.variant_menu(root, &page, cx))
                                 .unwrap_or_default()
@@ -195,11 +197,13 @@ impl Workspace {
                 row = row
                     .child(div().flex_1().min_w_0().child(value))
                     .when(editable, |el| {
-                        el.child(icon_action("rename-variant", LucideIcons::Pencil).on_click(
-                            cx.listener(|this, _, window, cx| {
-                                this.begin_variant_rename(false, window, cx)
-                            }),
-                        ))
+                        el.child(
+                            icon_action("rename-variant", GpuiIcons::LucidePencil).on_click(
+                                cx.listener(|this, _, window, cx| {
+                                    this.begin_variant_rename(false, window, cx)
+                                }),
+                            ),
+                        )
                     });
             }
             section = section.child(row);
@@ -247,7 +251,7 @@ impl Workspace {
                         .child(
                             div()
                                 .w(px(14.))
-                                .when(checked, |el| el.child(icon(LucideIcons::Check, 13.))),
+                                .when(checked, |el| el.child(icon(GpuiIcons::LucideCheck, 13.))),
                         )
                         .child(name.clone())
                 },

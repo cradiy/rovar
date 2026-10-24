@@ -5,12 +5,10 @@ use gpui::{
     Context, Entity, EventEmitter, Focusable, IntoElement, Render, ScrollStrategy, SharedString,
     Subscription, Task, UniformListScrollHandle, Window, div, prelude::*, px, uniform_list,
 };
-use uic::{
-    assets::LucideIcons,
-    components::{
-        input::{Input, InputEvent, TextInput},
-        popover::{Popover, PopoverEvent, PopoverPlacement, PopoverState},
-    },
+use gpui_icons::GpuiIcons;
+use uic::components::{
+    input::{Input, InputEvent, TextInput},
+    popover::{Popover, PopoverEvent, PopoverPlacement, PopoverState},
 };
 
 pub(crate) struct FontChosen(pub SharedString);
@@ -261,11 +259,13 @@ impl FontPicker {
                                                     .min_w_0()
                                                     .overflow_hidden()
                                                     .text_ellipsis()
-                                                    .font_family(family.clone())
+                                                    .font_family(crate::platform::font_family(
+                                                        &family,
+                                                    ))
                                                     .child(family),
                                             )
                                             .when(selected, |el| {
-                                                el.child(icon(LucideIcons::Check, 14.))
+                                                el.child(icon(GpuiIcons::LucideCheck, 14.))
                                             })
                                             .on_click(cx.listener(move |this, _, window, cx| {
                                                 this.choose(index, window, cx)
@@ -362,7 +362,7 @@ impl Render for FontPicker {
                                     .min_w_0()
                                     .text_ellipsis()
                                     .when(self.selected.as_ref() != t("font-mixed"), |el| {
-                                        el.font_family(self.selected.clone())
+                                        el.font_family(crate::platform::font_family(&self.selected))
                                     })
                                     .child(if self.selected.as_ref() == crate::ui::font::SYSTEM {
                                         t("settings-system-font").into()
@@ -370,7 +370,9 @@ impl Render for FontPicker {
                                         self.selected.clone()
                                     }),
                             )
-                            .child(icon(LucideIcons::ChevronDown, 14.).text_color(MUTED.color())),
+                            .child(
+                                icon(GpuiIcons::LucideChevronDown, 14.).text_color(MUTED.color()),
+                            ),
                     )
                     .content(move |_, cx| {
                         div().children(weak.update(cx, |this, cx| this.menu(cx)).ok())

@@ -194,15 +194,15 @@ impl Render for Playback {
                     (
                         "audio-toggle",
                         if self.playing {
-                            LucideIcons::Pause
+                            GpuiIcons::LucidePause
                         } else {
-                            LucideIcons::Play
+                            GpuiIcons::LucidePlay
                         },
                         MediaCommand::Toggle,
                     ),
                     (
                         "audio-restart",
-                        LucideIcons::RotateCcw,
+                        GpuiIcons::LucideRotateCcw,
                         MediaCommand::Restart,
                     ),
                 ]
@@ -235,9 +235,9 @@ impl Render for Playback {
                     .cursor_pointer()
                     .child(icon(
                         if muted {
-                            LucideIcons::VolumeX
+                            GpuiIcons::LucideVolumeX
                         } else {
-                            LucideIcons::Volume2
+                            GpuiIcons::LucideVolume2
                         },
                         16.,
                     ))

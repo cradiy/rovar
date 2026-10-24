@@ -101,9 +101,9 @@ impl Workspace {
         self.focus_canvas(window, cx);
         let mut menu = crate::editor::context_menu::menu(210., "page-context-glass");
         for (key, label, glyph) in [
-            ("page-rename", "rename", LucideIcons::Pencil),
-            ("page-duplicate", "page-duplicate", LucideIcons::Copy),
-            ("page-delete", "page-delete", LucideIcons::Trash2),
+            ("page-rename", "rename", GpuiIcons::LucidePencil),
+            ("page-duplicate", "page-duplicate", GpuiIcons::LucideCopy),
+            ("page-delete", "page-delete", GpuiIcons::LucideTrash2),
         ] {
             let id = id.clone();
             let weak = cx.entity().downgrade();
@@ -170,9 +170,9 @@ impl Workspace {
                             .text_color(MUTED.color())
                             .child(icon(
                                 if self.pages.expanded {
-                                    LucideIcons::ChevronDown
+                                    GpuiIcons::LucideChevronDown
                                 } else {
-                                    LucideIcons::ChevronRight
+                                    GpuiIcons::LucideChevronRight
                                 },
                                 14.,
                             ))
@@ -205,7 +205,7 @@ impl Workspace {
                             .tooltip(|_, cx| {
                                 cx.new(|_| toolbar::ToolTip(t("page-new").into())).into()
                             })
-                            .child(icon(LucideIcons::Plus, 16.))
+                            .child(icon(GpuiIcons::LucidePlus, 16.))
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.add_page(None, window, cx);
                                 cx.stop_propagation();

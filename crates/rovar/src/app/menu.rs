@@ -44,18 +44,18 @@ impl Studio {
             .menu(
                 div().flex().flex_col().children(
                     [
-                        ("new-document", LucideIcons::FilePlus, "Mod+N"),
-                        ("open-document", LucideIcons::FolderOpen, "Mod+O"),
-                        ("save-document", LucideIcons::Save, "Mod+S"),
-                        ("export-document", LucideIcons::Download, "Mod+Shift+E"),
-                        ("settings", LucideIcons::Settings, "Mod+,"),
+                        ("new-document", GpuiIcons::LucideFilePlus, "Mod+N"),
+                        ("open-document", GpuiIcons::LucideFolderOpen, "Mod+O"),
+                        ("save-document", GpuiIcons::LucideSave, "Mod+S"),
+                        ("export-document", GpuiIcons::LucideDownload, "Mod+Shift+E"),
+                        ("settings", GpuiIcons::LucideSettings, "Mod+,"),
                         (
                             if cfg!(target_family = "wasm") {
                                 "server-sign-out"
                             } else {
                                 "server-manage"
                             },
-                            LucideIcons::Server,
+                            GpuiIcons::LucideServer,
                             "",
                         ),
                     ]

@@ -113,7 +113,7 @@ impl Studio {
                             .gap(px(7.))
                             .text_size(px(11.))
                             .text_color(MUTED.color())
-                            .child(icon(LucideIcons::User, 12.).flex_shrink_0())
+                            .child(icon(GpuiIcons::LucideUser, 12.).flex_shrink_0())
                             .child(div().max_w(px(90.)).min_w_0().truncate().child(username))
                             .child(
                                 div()
@@ -124,9 +124,9 @@ impl Studio {
                             .child(
                                 icon(
                                     if team {
-                                        LucideIcons::Users
+                                        GpuiIcons::LucideUsers
                                     } else {
-                                        LucideIcons::House
+                                        GpuiIcons::LucideHouse
                                     },
                                     12.,
                                 )
@@ -146,7 +146,9 @@ impl Studio {
                         .items_center()
                         .justify_center()
                         .when(preview.is_none(), |el| {
-                            el.child(icon(LucideIcons::Frame, 30.).text_color(Color::Muted.color()))
+                            el.child(
+                                icon(GpuiIcons::LucideFrame, 30.).text_color(Color::Muted.color()),
+                            )
                         })
                         .when_some(preview, |el, path| {
                             el.child(

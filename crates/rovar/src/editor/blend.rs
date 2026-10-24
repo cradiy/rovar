@@ -117,7 +117,9 @@ impl Workspace {
                                                 .truncate()
                                                 .child(selected.map_or(t("mixed"), Mode::label)),
                                         )
-                                        .child(icon(LucideIcons::ChevronDown, 12.).flex_shrink_0()),
+                                        .child(
+                                            icon(GpuiIcons::LucideChevronDown, 12.).flex_shrink_0(),
+                                        ),
                                 )
                                 .menu(
                                     div()
@@ -142,7 +144,7 @@ impl Workspace {
                                                 })
                                                 .hover(|s| s.bg(Color::Hover.color()))
                                                 .child(div().w(px(14.)).when(current, |el| {
-                                                    el.child(icon(LucideIcons::Check, 13.))
+                                                    el.child(icon(GpuiIcons::LucideCheck, 13.))
                                                 }))
                                                 .child(mode.label())
                                                 .on_click(cx.listener(

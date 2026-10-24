@@ -88,14 +88,14 @@ impl Workspace {
             _ => label,
         };
         let label_icon = match label {
-            value if value == t("rotation") => Some(LucideIcons::RotateCw),
-            value if value == t("corner-radius") => Some(LucideIcons::Radius),
-            value if value == t("top-left") => Some(LucideIcons::CornerUpLeft),
-            value if value == t("top-right") => Some(LucideIcons::CornerUpRight),
-            value if value == t("bottom-left") => Some(LucideIcons::CornerDownLeft),
-            value if value == t("bottom-right") => Some(LucideIcons::CornerDownRight),
-            value if value == t("stroke-width") => Some(LucideIcons::Minus),
-            value if value == t("name") => Some(LucideIcons::Pencil),
+            value if value == t("rotation") => Some(GpuiIcons::LucideRotateCw),
+            value if value == t("corner-radius") => Some(GpuiIcons::LucideRadius),
+            value if value == t("top-left") => Some(GpuiIcons::LucideCornerUpLeft),
+            value if value == t("top-right") => Some(GpuiIcons::LucideCornerUpRight),
+            value if value == t("bottom-left") => Some(GpuiIcons::LucideCornerDownLeft),
+            value if value == t("bottom-right") => Some(GpuiIcons::LucideCornerDownRight),
+            value if value == t("stroke-width") => Some(GpuiIcons::LucideMinus),
+            value if value == t("name") => Some(GpuiIcons::LucidePencil),
             _ => None,
         };
         let swatch = if is_color && action {

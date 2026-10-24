@@ -262,9 +262,9 @@ impl Studio {
                                         device.system.as_str(),
                                         "Android" | "iOS" | "iPadOS"
                                     ) {
-                                        LucideIcons::Smartphone
+                                        GpuiIcons::LucideSmartphone
                                     } else {
-                                        LucideIcons::Monitor
+                                        GpuiIcons::LucideMonitor
                                     },
                                     18.,
                                 )
@@ -339,7 +339,7 @@ impl Studio {
                     .flex()
                     .items_center()
                     .gap(px(10.))
-                    .child(icon(LucideIcons::User, 18.).text_color(ACCENT.color()))
+                    .child(icon(GpuiIcons::LucideUser, 18.).text_color(ACCENT.color()))
                     .child(div().flex_1().min_w_0().truncate().child(username)),
             )
             .child(

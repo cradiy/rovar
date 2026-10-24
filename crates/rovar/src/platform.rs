@@ -12,6 +12,15 @@ pub(crate) fn now() -> u64 {
 
 type Dialog<T> = Task<anyhow::Result<anyhow::Result<Option<T>>>>;
 
+pub fn font_family(family: &gpui::SharedString) -> gpui::FontFamily {
+    let family = render_font_family(family);
+    if family.as_ref() == crate::ui::font::SYSTEM {
+        gpui::GenericFontFamily::SystemUi.into()
+    } else {
+        family.into()
+    }
+}
+
 pub fn render_font_family(family: &gpui::SharedString) -> gpui::SharedString {
     #[cfg(target_family = "wasm")]
     if !matches!(

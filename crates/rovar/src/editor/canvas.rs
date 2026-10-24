@@ -439,7 +439,9 @@ impl Workspace {
                             .items_center()
                             .justify_center()
                             .gap(px(14.))
-                            .child(icon(LucideIcons::Frame, 32.).text_color(Color::Muted.color()))
+                            .child(
+                                icon(GpuiIcons::LucideFrame, 32.).text_color(Color::Muted.color()),
+                            )
                             .child(
                                 div()
                                     .text_size(px(13.))

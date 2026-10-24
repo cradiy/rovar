@@ -92,13 +92,13 @@ impl Workspace {
                                         false,
                                         "corners-unified",
                                         t("corners-unified"),
-                                        LucideIcons::Link,
+                                        GpuiIcons::LucideLink,
                                     ),
                                     (
                                         true,
                                         "corners-independent",
                                         t("corners-independent"),
-                                        LucideIcons::Scan,
+                                        GpuiIcons::LucideScan,
                                     ),
                                 ]
                                 .into_iter()
@@ -202,9 +202,9 @@ impl Workspace {
                 t("paint-enable")
             },
             if enabled {
-                LucideIcons::Eye
+                GpuiIcons::LucideEye
             } else {
-                LucideIcons::Plus
+                GpuiIcons::LucidePlus
             },
             false,
         )
@@ -320,19 +320,19 @@ impl Workspace {
                                         StrokeAlign::Inside,
                                         "stroke-inside",
                                         t("stroke-inside"),
-                                        LucideIcons::ArrowDownToLine,
+                                        GpuiIcons::LucideArrowDownToLine,
                                     ),
                                     (
                                         StrokeAlign::Center,
                                         "stroke-center",
                                         t("stroke-center"),
-                                        LucideIcons::Minus,
+                                        GpuiIcons::LucideMinus,
                                     ),
                                     (
                                         StrokeAlign::Outside,
                                         "stroke-outside",
                                         t("stroke-outside"),
-                                        LucideIcons::ArrowUpFromLine,
+                                        GpuiIcons::LucideArrowUpFromLine,
                                     ),
                                 ]
                                 .into_iter()

@@ -387,7 +387,7 @@ impl Workspace {
                     .text_color(TEXT.color())
                     .hover(|s| s.bg(Color::Hover.color()))
                     .child(div().flex_1().truncate().child(title))
-                    .child(icon(LucideIcons::ChevronDown, 12.)),
+                    .child(icon(GpuiIcons::LucideChevronDown, 12.)),
             )
             .menu(
                 div()
@@ -420,11 +420,9 @@ impl Workspace {
                                         el.bg(Color::Selected.color()).text_color(ACCENT.color())
                                     })
                                     .hover(|s| s.bg(Color::Hover.color()))
-                                    .child(
-                                        div().w(px(14.)).children(
-                                            selected.then(|| icon(LucideIcons::Check, 14.)),
-                                        ),
-                                    )
+                                    .child(div().w(px(14.)).children(
+                                        selected.then(|| icon(GpuiIcons::LucideCheck, 14.)),
+                                    ))
                                     .child(label)
                                     .on_click(cx.listener(move |this, _, window, cx| {
                                         this.presentation.properties.menus[index]

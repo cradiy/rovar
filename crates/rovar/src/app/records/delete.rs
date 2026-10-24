@@ -79,7 +79,7 @@ impl Studio {
                     .flex()
                     .items_center()
                     .gap(px(10.))
-                    .child(icon(LucideIcons::Trash2, 18.).text_color(Color::Danger.color()))
+                    .child(icon(GpuiIcons::LucideTrash2, 18.).text_color(Color::Danger.color()))
                     .child(div().text_size(px(15.)).child(t("delete-document-title"))),
             )
             .child(div().text_size(px(13.)).truncate().child(title))

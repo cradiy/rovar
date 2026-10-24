@@ -351,9 +351,9 @@ impl Workspace {
                     })
                     .child(icon(
                         if self.auto_layout.grid.show_guides {
-                            LucideIcons::Eye
+                            GpuiIcons::LucideEye
                         } else {
-                            LucideIcons::EyeOff
+                            GpuiIcons::LucideEyeOff
                         },
                         14.,
                     ))

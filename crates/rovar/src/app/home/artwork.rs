@@ -129,7 +129,7 @@ pub(super) fn blank_canvas() -> impl IntoElement {
         .items_center()
         .justify_center()
         .text_color(Color::Accent.color().opacity(0.5020))
-        .child(icon(LucideIcons::Frame, 22.))
+        .child(icon(GpuiIcons::LucideFrame, 22.))
         .children(
             [(false, false), (true, false), (false, true), (true, true)].map(|(right, bottom)| {
                 div()

@@ -250,7 +250,7 @@ impl Workspace {
                     .justify_center()
                     .gap(px(6.))
                     .cursor_pointer()
-                    .child(icon(LucideIcons::Image, 16.))
+                    .child(icon(GpuiIcons::LucideImage, 16.))
                     .child(if loading {
                         t("loading")
                     } else if fill.asset.is_some() {

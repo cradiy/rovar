@@ -26,18 +26,18 @@ impl Studio {
                     (
                         "window-minimize",
                         WindowControlArea::Min,
-                        LucideIcons::Minus,
+                        GpuiIcons::LucideMinus,
                     ),
                     (
                         "window-maximize",
                         WindowControlArea::Max,
                         if maximized {
-                            LucideIcons::Copy
+                            GpuiIcons::LucideCopy
                         } else {
-                            LucideIcons::Square
+                            GpuiIcons::LucideSquare
                         },
                     ),
-                    ("window-close", WindowControlArea::Close, LucideIcons::X),
+                    ("window-close", WindowControlArea::Close, GpuiIcons::LucideX),
                 ]
                 .map(|(id, area, glyph)| {
                     let button = div()

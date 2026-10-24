@@ -373,13 +373,13 @@ impl Workspace {
         for (id, glyph, label, delete) in [
             (
                 "duplicate-selection",
-                LucideIcons::Copy,
+                GpuiIcons::LucideCopy,
                 t("duplicate-hint"),
                 false,
             ),
             (
                 "delete-selection",
-                LucideIcons::Trash2,
+                GpuiIcons::LucideTrash2,
                 t("delete-selection"),
                 true,
             ),

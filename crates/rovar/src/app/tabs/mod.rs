@@ -109,7 +109,7 @@ impl Studio {
                             .when(self.active.is_some(), |el| {
                                 el.hover(|s| s.bg(Color::Text.color().opacity(0.0314)))
                             })
-                            .child(icon(LucideIcons::House, 17.).text_color(
+                            .child(icon(GpuiIcons::LucideHouse, 17.).text_color(
                                 if self.active.is_none() {
                                     Color::Accent.color()
                                 } else {
@@ -158,7 +158,7 @@ impl Studio {
                                     .justify_center()
                                     .cursor_pointer()
                                     .hover(|s| s.bg(Color::Selected.color()))
-                                    .child(icon(LucideIcons::Plus, 17.))
+                                    .child(icon(GpuiIcons::LucidePlus, 17.))
                                     .on_click(cx.listener(|this, _, window, cx| {
                                         this.new_document(window, cx)
                                     })),
@@ -205,9 +205,9 @@ impl Studio {
                                         .child(
                                             icon(
                                                 if redo {
-                                                    LucideIcons::Redo2
+                                                    GpuiIcons::LucideRedo2
                                                 } else {
-                                                    LucideIcons::Undo2
+                                                    GpuiIcons::LucideUndo2
                                                 },
                                                 16.,
                                             )
@@ -311,7 +311,7 @@ impl Studio {
             .on_hover(cx.listener(move |this, hovered, _, cx| {
                 this.hover_tab(token, *hovered, cx);
             }))
-            .child(icon(LucideIcons::PenTool, 13.))
+            .child(icon(GpuiIcons::LucidePenTool, 13.))
             .child(
                 div()
                     .flex_1()
@@ -343,7 +343,7 @@ impl Studio {
                     .items_center()
                     .justify_center()
                     .hover(|s| s.bg(Color::Hover.color()))
-                    .child(icon(LucideIcons::X, 12.))
+                    .child(icon(GpuiIcons::LucideX, 12.))
                     .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
                     .on_click(cx.listener(move |this, _, window, cx| {
                         this.close_tab(token, window, cx);

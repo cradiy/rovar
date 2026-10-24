@@ -209,7 +209,7 @@ impl Render for DragPreview {
                     .items_center()
                     .gap(px(8.))
                     .text_size(px(12.))
-                    .child(icon(LucideIcons::PenTool, 14.))
+                    .child(icon(GpuiIcons::LucidePenTool, 14.))
                     .child(
                         div()
                             .flex_1()
@@ -237,7 +237,7 @@ impl Render for DragPreview {
                         el.child(
                             div()
                                 .text_color(ACCENT.color())
-                                .child(icon(LucideIcons::Frame, 36.)),
+                                .child(icon(GpuiIcons::LucideFrame, 36.)),
                         )
                     }),
             )
@@ -255,7 +255,7 @@ pub(in crate::app) fn tab_face(title: &str, cx: &gpui::App) -> gpui::Div {
         .text_color(TEXT.color())
         .text_size(px(12.))
         .font_family(crate::ui::font::family(cx))
-        .child(icon(LucideIcons::PenTool, 13.))
+        .child(icon(GpuiIcons::LucidePenTool, 13.))
         .child(div().flex_1().min_w_0().truncate().child(title.to_owned()))
-        .child(icon(LucideIcons::X, 12.))
+        .child(icon(GpuiIcons::LucideX, 12.))
 }

@@ -206,28 +206,28 @@ impl Workspace {
                         NodeAction::Insert,
                         "node-insert",
                         t("insert-node"),
-                        LucideIcons::Plus,
+                        GpuiIcons::LucidePlus,
                         false,
                     ),
                     (
                         NodeAction::Delete,
                         "node-delete",
                         t("delete-node-hint"),
-                        LucideIcons::Trash2,
+                        GpuiIcons::LucideTrash2,
                         false,
                     ),
                     (
                         NodeAction::Corner,
                         "node-corner",
                         t("corner-node-hint"),
-                        LucideIcons::Diamond,
+                        GpuiIcons::LucideDiamond,
                         self.active_node().is_some() && !smooth,
                     ),
                     (
                         NodeAction::Smooth,
                         "node-smooth",
                         t("smooth-node"),
-                        LucideIcons::Circle,
+                        GpuiIcons::LucideCircle,
                         smooth,
                     ),
                     (
@@ -239,9 +239,9 @@ impl Workspace {
                             t("close-path")
                         },
                         if closed {
-                            LucideIcons::Link
+                            GpuiIcons::LucideLink
                         } else {
-                            LucideIcons::Unlink
+                            GpuiIcons::LucideUnlink
                         },
                         closed,
                     ),

@@ -152,9 +152,9 @@ impl Workspace {
                 })
                 .child(icon(
                     if locked {
-                        LucideIcons::Link
+                        GpuiIcons::LucideLink
                     } else {
-                        LucideIcons::Unlink
+                        GpuiIcons::LucideUnlink
                     },
                     15.,
                 ))

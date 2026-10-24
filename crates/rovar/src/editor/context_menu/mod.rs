@@ -149,7 +149,7 @@ impl Workspace {
                             .flex()
                             .items_center()
                             .gap(px(10.))
-                            .child(icon(LucideIcons::Plus, 15.))
+                            .child(icon(GpuiIcons::LucidePlus, 15.))
                             .child(t("context-create"))
                     },
                     |mut menu| {
@@ -157,49 +157,49 @@ impl Workspace {
                             (
                                 "context-create-frame",
                                 "artboard",
-                                LucideIcons::Frame,
+                                GpuiIcons::LucideFrame,
                                 DrawTool::Board,
                             ),
                             (
                                 "context-create-text",
                                 "text-box",
-                                LucideIcons::Type,
+                                GpuiIcons::LucideType,
                                 DrawTool::Text,
                             ),
                             (
                                 "context-create-rectangle",
                                 "shape-rectangle",
-                                LucideIcons::Square,
+                                GpuiIcons::LucideSquare,
                                 DrawTool::Shape(ShapeKind::Rectangle),
                             ),
                             (
                                 "context-create-ellipse",
                                 "shape-ellipse",
-                                LucideIcons::Circle,
+                                GpuiIcons::LucideCircle,
                                 DrawTool::Shape(ShapeKind::Ellipse),
                             ),
                             (
                                 "context-create-line",
                                 "shape-line",
-                                LucideIcons::Minus,
+                                GpuiIcons::LucideMinus,
                                 DrawTool::Shape(ShapeKind::Line),
                             ),
                             (
                                 "context-create-arrow",
                                 "shape-arrow",
-                                LucideIcons::ArrowUpRight,
+                                GpuiIcons::LucideArrowUpRight,
                                 DrawTool::Shape(ShapeKind::Arrow),
                             ),
                             (
                                 "context-create-polygon",
                                 "shape-polygon",
-                                LucideIcons::Triangle,
+                                GpuiIcons::LucideTriangle,
                                 DrawTool::Shape(ShapeKind::Polygon),
                             ),
                             (
                                 "context-create-star",
                                 "shape-star",
-                                LucideIcons::Star,
+                                GpuiIcons::LucideStar,
                                 DrawTool::Shape(ShapeKind::Star),
                             ),
                         ] {
@@ -216,7 +216,7 @@ impl Workspace {
                             .item(item(
                                 "context-create-image",
                                 t("shape-image"),
-                                LucideIcons::Image,
+                                GpuiIcons::LucideImage,
                                 "",
                                 Command::ImportMedia(media::ImportKind::Image, origin),
                                 true,
@@ -224,7 +224,7 @@ impl Workspace {
                             .item(item(
                                 "context-create-svg",
                                 "SVG",
-                                LucideIcons::FileCode,
+                                GpuiIcons::LucideFileCode,
                                 "",
                                 Command::ImportSvg(origin),
                                 true,
@@ -232,7 +232,7 @@ impl Workspace {
                             .item(item(
                                 "context-create-video",
                                 t("shape-video"),
-                                LucideIcons::Film,
+                                GpuiIcons::LucideFilm,
                                 "",
                                 Command::ImportMedia(media::ImportKind::Video, origin),
                                 true,
@@ -240,7 +240,7 @@ impl Workspace {
                             .item(item(
                                 "context-create-audio",
                                 t("shape-audio"),
-                                LucideIcons::Music,
+                                GpuiIcons::LucideMusic,
                                 "",
                                 Command::ImportMedia(media::ImportKind::Audio, origin),
                                 true,
@@ -257,7 +257,7 @@ impl Workspace {
                         menu = menu.item(item(
                             operation.key(),
                             operation.label(),
-                            LucideIcons::Layers,
+                            GpuiIcons::LucideLayers,
                             "",
                             Command::Boolean(operation),
                             true,
@@ -276,7 +276,7 @@ impl Workspace {
                 } else {
                     "mask-create"
                 }),
-                LucideIcons::Scan,
+                GpuiIcons::LucideScan,
                 "",
                 if release {
                     Command::ReleaseMask
@@ -290,7 +290,7 @@ impl Workspace {
             .item(item(
                 "context-undo",
                 t("undo"),
-                LucideIcons::Undo2,
+                GpuiIcons::LucideUndo2,
                 "Mod+Z",
                 Command::Undo,
                 self.history.borrow().can_undo(),
@@ -298,7 +298,7 @@ impl Workspace {
             .item(item(
                 "context-redo",
                 t("redo"),
-                LucideIcons::Redo2,
+                GpuiIcons::LucideRedo2,
                 "Mod+Shift+Z",
                 Command::Redo,
                 self.history.borrow().can_redo(),
@@ -307,7 +307,7 @@ impl Workspace {
             .item(item(
                 "context-cut",
                 t("cut"),
-                LucideIcons::Scissors,
+                GpuiIcons::LucideScissors,
                 "Mod+X",
                 Command::Cut,
                 editable,
@@ -315,7 +315,7 @@ impl Workspace {
             .item(item(
                 "context-copy",
                 t("copy"),
-                LucideIcons::Copy,
+                GpuiIcons::LucideCopy,
                 "Mod+C",
                 Command::Copy,
                 editable,
@@ -323,7 +323,7 @@ impl Workspace {
             .item(item(
                 "context-paste",
                 t("paste"),
-                LucideIcons::Clipboard,
+                GpuiIcons::LucideClipboard,
                 "Mod+V",
                 Command::Paste,
                 paste_enabled,
@@ -331,7 +331,7 @@ impl Workspace {
             .item(item(
                 "context-paste-in-place",
                 t("paste-in-place"),
-                LucideIcons::ClipboardPaste,
+                GpuiIcons::LucideClipboardPaste,
                 "Mod+Shift+V",
                 Command::PasteInPlace,
                 paste_enabled,
@@ -339,7 +339,7 @@ impl Workspace {
             .item(item(
                 "context-duplicate",
                 t("duplicate"),
-                LucideIcons::CopyPlus,
+                GpuiIcons::LucideCopyPlus,
                 "Mod+D",
                 Command::Duplicate,
                 editable,
@@ -347,7 +347,7 @@ impl Workspace {
             .item(item(
                 "context-rename",
                 t("rename"),
-                LucideIcons::Pencil,
+                GpuiIcons::LucidePencil,
                 "F2",
                 Command::Rename,
                 editable && ids.len() == 1,
@@ -355,7 +355,7 @@ impl Workspace {
             .item(item(
                 "context-save-asset",
                 t("component-save-local"),
-                LucideIcons::Component,
+                GpuiIcons::LucideComponent,
                 "",
                 Command::SaveAsset,
                 self.can_save_asset(cx),
@@ -365,7 +365,7 @@ impl Workspace {
             menu = menu.item(item(
                 "context-create-component",
                 t("component-create"),
-                LucideIcons::Component,
+                GpuiIcons::LucideComponent,
                 "",
                 Command::CreateComponent,
                 true,
@@ -381,7 +381,7 @@ impl Workspace {
                     .item(item(
                         "context-edit-component",
                         t("component-edit-main"),
-                        LucideIcons::Pencil,
+                        GpuiIcons::LucidePencil,
                         "",
                         Command::EditComponent,
                         true,
@@ -389,7 +389,7 @@ impl Workspace {
                     .item(item(
                         "context-reset-component",
                         t("component-reset"),
-                        LucideIcons::RotateCcw,
+                        GpuiIcons::LucideRotateCcw,
                         "",
                         Command::ResetComponent,
                         editable,
@@ -398,7 +398,7 @@ impl Workspace {
             menu = menu.item(item(
                 "context-detach-component",
                 t("component-detach"),
-                LucideIcons::Unlink,
+                GpuiIcons::LucideUnlink,
                 "",
                 Command::DetachComponent,
                 editable,
@@ -412,7 +412,7 @@ impl Workspace {
                 } else {
                     "layout-enable"
                 }),
-                LucideIcons::PanelsTopLeft,
+                GpuiIcons::LucidePanelsTopLeft,
                 "Shift+A",
                 Command::AutoLayout,
                 editable && self.can_auto_layout(),
@@ -422,7 +422,7 @@ impl Workspace {
             .item(item(
                 "context-group",
                 t("group"),
-                LucideIcons::Group,
+                GpuiIcons::LucideGroup,
                 "Mod+G",
                 Command::Group,
                 self.can_group(),
@@ -430,7 +430,7 @@ impl Workspace {
             .item(item(
                 "context-ungroup",
                 t("ungroup"),
-                LucideIcons::Ungroup,
+                GpuiIcons::LucideUngroup,
                 "Mod+Shift+G",
                 Command::Ungroup,
                 editable && ids.iter().any(|id| self.hierarchy.groups.contains_key(id)),
@@ -445,7 +445,7 @@ impl Workspace {
                     menu.item(item(
                         "context-front",
                         t("bring-front"),
-                        LucideIcons::ChevronsUp,
+                        GpuiIcons::LucideChevronsUp,
                         "Mod+Shift+]",
                         Command::Front,
                         order_enabled,
@@ -453,7 +453,7 @@ impl Workspace {
                     .item(item(
                         "context-raise",
                         t("bring-forward"),
-                        LucideIcons::ArrowUp,
+                        GpuiIcons::LucideArrowUp,
                         "Mod+]",
                         Command::Raise,
                         order_enabled,
@@ -461,7 +461,7 @@ impl Workspace {
                     .item(item(
                         "context-lower",
                         t("send-backward"),
-                        LucideIcons::ArrowDown,
+                        GpuiIcons::LucideArrowDown,
                         "Mod+[",
                         Command::Lower,
                         order_enabled,
@@ -469,7 +469,7 @@ impl Workspace {
                     .item(item(
                         "context-back",
                         t("send-back"),
-                        LucideIcons::ChevronsDown,
+                        GpuiIcons::LucideChevronsDown,
                         "Mod+Shift+[",
                         Command::Back,
                         order_enabled,
@@ -501,7 +501,7 @@ impl Workspace {
             menu.item(item(
                 "context-flip-x",
                 t("flip-horizontal"),
-                LucideIcons::FlipHorizontal2,
+                GpuiIcons::LucideFlipHorizontal2,
                 "Shift+H",
                 Command::Flip(true),
                 self.can_flip(),
@@ -509,7 +509,7 @@ impl Workspace {
             .item(item(
                 "context-flip-y",
                 t("flip-vertical"),
-                LucideIcons::FlipVertical2,
+                GpuiIcons::LucideFlipVertical2,
                 "Shift+V",
                 Command::Flip(false),
                 self.can_flip(),
@@ -519,7 +519,7 @@ impl Workspace {
             menu = menu.item(item(
                 "context-export-video",
                 t("export-video"),
-                LucideIcons::Download,
+                GpuiIcons::LucideDownload,
                 "",
                 Command::Export(crate::document::export::Format::Png),
                 !self.export.busy,
@@ -530,7 +530,7 @@ impl Workspace {
                 menu.item(item(
                     "context-export-png",
                     "PNG",
-                    LucideIcons::Download,
+                    GpuiIcons::LucideDownload,
                     "",
                     Command::Export(Format::Png),
                     !ids.is_empty() && !self.export.busy,
@@ -538,7 +538,7 @@ impl Workspace {
                 .item(item(
                     "context-export-svg",
                     "SVG",
-                    LucideIcons::Download,
+                    GpuiIcons::LucideDownload,
                     "",
                     Command::Export(Format::Svg),
                     !ids.is_empty() && !self.export.busy,
@@ -558,25 +558,25 @@ impl Workspace {
                             NodeAction::Insert,
                             "context-node-insert",
                             t("insert-node"),
-                            LucideIcons::Plus,
+                            GpuiIcons::LucidePlus,
                         ),
                         (
                             NodeAction::Delete,
                             "context-node-delete",
                             t("delete-node"),
-                            LucideIcons::Trash2,
+                            GpuiIcons::LucideTrash2,
                         ),
                         (
                             NodeAction::Corner,
                             "context-node-corner",
                             t("corner-node"),
-                            LucideIcons::Diamond,
+                            GpuiIcons::LucideDiamond,
                         ),
                         (
                             NodeAction::Smooth,
                             "context-node-smooth",
                             t("smooth-node"),
-                            LucideIcons::Circle,
+                            GpuiIcons::LucideCircle,
                         ),
                         (
                             NodeAction::ToggleClosed,
@@ -586,7 +586,7 @@ impl Workspace {
                             } else {
                                 t("close-path")
                             },
-                            LucideIcons::Link,
+                            GpuiIcons::LucideLink,
                         ),
                     ] {
                         menu = menu.item(item(
@@ -627,9 +627,9 @@ impl Workspace {
                     "context-lock",
                     if locked { t("unlock") } else { t("lock") },
                     if locked {
-                        LucideIcons::LockOpen
+                        GpuiIcons::LucideLockOpen
                     } else {
-                        LucideIcons::Lock
+                        GpuiIcons::LucideLock
                     },
                     "",
                     Command::Lock(!locked),
@@ -639,9 +639,9 @@ impl Workspace {
                     "context-hide",
                     if hidden { t("show") } else { t("hide") },
                     if hidden {
-                        LucideIcons::Eye
+                        GpuiIcons::LucideEye
                     } else {
-                        LucideIcons::EyeOff
+                        GpuiIcons::LucideEyeOff
                     },
                     "",
                     Command::Hide(!hidden),
@@ -651,7 +651,7 @@ impl Workspace {
                     item(
                         "context-delete",
                         t("delete"),
-                        LucideIcons::Trash2,
+                        GpuiIcons::LucideTrash2,
                         "Delete",
                         Command::Delete,
                         editable,

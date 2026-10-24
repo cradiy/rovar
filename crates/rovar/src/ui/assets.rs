@@ -27,11 +27,11 @@ impl AssetSource for Assets {
         if let Some((_, bytes)) = EMBEDDED.iter().find(|(name, _)| *name == path) {
             return Ok(Some(Cow::Borrowed(bytes)));
         }
-        uic::assets::LucideAssets::new().load(path)
+        gpui_icons::IconAssets::new().load(path)
     }
 
     fn list(&self, path: &str) -> Result<Vec<SharedString>> {
-        let mut paths = uic::assets::LucideAssets::new().list(path)?;
+        let mut paths = gpui_icons::IconAssets::new().list(path)?;
         paths.extend(
             EMBEDDED
                 .iter()

@@ -17,19 +17,19 @@ impl Workspace {
                     TextAlign::Left,
                     t("text-align-left"),
                     "align-left",
-                    LucideIcons::TextAlignStart,
+                    GpuiIcons::LucideTextAlignStart,
                 ),
                 (
                     TextAlign::Center,
                     t("text-align-center"),
                     "align-center",
-                    LucideIcons::TextAlignCenter,
+                    GpuiIcons::LucideTextAlignCenter,
                 ),
                 (
                     TextAlign::Right,
                     t("text-align-right"),
                     "align-right",
-                    LucideIcons::TextAlignEnd,
+                    GpuiIcons::LucideTextAlignEnd,
                 ),
             ]
             .into_iter()
@@ -428,25 +428,25 @@ impl Workspace {
                                             VerticalAlign::Baseline,
                                             t("align-baseline"),
                                             "vertical-baseline",
-                                            LucideIcons::Baseline,
+                                            GpuiIcons::LucideBaseline,
                                         ),
                                         (
                                             VerticalAlign::Top,
                                             t("inline-top"),
                                             "vertical-top",
-                                            LucideIcons::AlignStartHorizontal,
+                                            GpuiIcons::LucideAlignStartHorizontal,
                                         ),
                                         (
                                             VerticalAlign::Center,
                                             t("inline-center"),
                                             "vertical-center",
-                                            LucideIcons::AlignCenterHorizontal,
+                                            GpuiIcons::LucideAlignCenterHorizontal,
                                         ),
                                         (
                                             VerticalAlign::Bottom,
                                             t("inline-bottom"),
                                             "vertical-bottom",
-                                            LucideIcons::AlignEndHorizontal,
+                                            GpuiIcons::LucideAlignEndHorizontal,
                                         ),
                                     ]
                                     .into_iter()

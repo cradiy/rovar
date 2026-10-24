@@ -81,7 +81,7 @@ impl Studio {
                             .text_color(TEXT.color())
                     })
                     .child(t(self.file_sort.label()))
-                    .child(icon(LucideIcons::ChevronDown, 12.)),
+                    .child(icon(GpuiIcons::LucideChevronDown, 12.)),
             )
             .menu(
                 div().flex().flex_col().children(
@@ -104,7 +104,9 @@ impl Studio {
                             .cursor_pointer()
                             .hover(|style| style.bg(Color::Accent.color().opacity(0.1569)))
                             .child(div().w(px(16.)).when(self.file_sort == sort, |el| {
-                                el.child(icon(LucideIcons::Check, 14.).text_color(ACCENT.color()))
+                                el.child(
+                                    icon(GpuiIcons::LucideCheck, 14.).text_color(ACCENT.color()),
+                                )
                             }))
                             .child(t(sort.label()))
                             .on_click(cx.listener(move |this, _, window, cx| {

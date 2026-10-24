@@ -168,7 +168,7 @@ impl Workspace {
                     ),
             )
             .child(
-                inspector::icon_button("present", t("present"), LucideIcons::Play, false)
+                inspector::icon_button("present", t("present"), GpuiIcons::LucidePlay, false)
                     .size(px(24.))
                     .opacity(if self.presentation_start().is_some() {
                         1.
@@ -228,7 +228,7 @@ impl Workspace {
                         el.bg(BORDER.color())
                     })
                     .child(format!("{:.0}%", self.view.zoom * 100.))
-                    .child(icon(LucideIcons::ChevronDown, 12.).text_color(MUTED.color())),
+                    .child(icon(GpuiIcons::LucideChevronDown, 12.).text_color(MUTED.color())),
             )
             .content(move |_, cx| {
                 div().children(weak.update(cx, |this, cx| this.zoom_options(cx)).ok())

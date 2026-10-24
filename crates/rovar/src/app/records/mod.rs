@@ -202,7 +202,7 @@ impl Studio {
                     .flex()
                     .items_center()
                     .gap(px(10.))
-                    .child(icon(LucideIcons::Pencil, 15.))
+                    .child(icon(GpuiIcons::LucidePencil, 15.))
                     .child(t("rename"))
             },
             move |window, cx| {
@@ -244,9 +244,9 @@ impl Studio {
                             })
                             .child(icon(
                                 if delete {
-                                    LucideIcons::Trash2
+                                    GpuiIcons::LucideTrash2
                                 } else {
-                                    LucideIcons::X
+                                    GpuiIcons::LucideX
                                 },
                                 15.,
                             ))

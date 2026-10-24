@@ -23,39 +23,59 @@ pub(super) enum Tool {
     Text,
 }
 impl Tool {
-    fn details(self) -> (&'static str, &'static str, &'static str, LucideIcons) {
+    fn details(self) -> (&'static str, &'static str, &'static str, GpuiIcons) {
         match self {
-            Self::Move => ("tool-move", t("tool-move"), "V", LucideIcons::MousePointer2),
-            Self::Hand => ("tool-hand", t("tool-hand"), "H", LucideIcons::Hand),
-            Self::Board => ("add-artboard", t("artboard"), "F", LucideIcons::Frame),
+            Self::Move => (
+                "tool-move",
+                t("tool-move"),
+                "V",
+                GpuiIcons::LucideMousePointer2,
+            ),
+            Self::Hand => ("tool-hand", t("tool-hand"), "H", GpuiIcons::LucideHand),
+            Self::Board => ("add-artboard", t("artboard"), "F", GpuiIcons::LucideFrame),
             Self::Rectangle => (
                 "add-rectangle",
                 t("shape-rectangle"),
                 "R",
-                LucideIcons::Square,
+                GpuiIcons::LucideSquare,
             ),
-            Self::Ellipse => ("add-ellipse", t("shape-ellipse"), "O", LucideIcons::Circle),
+            Self::Ellipse => (
+                "add-ellipse",
+                t("shape-ellipse"),
+                "O",
+                GpuiIcons::LucideCircle,
+            ),
             Self::Arrow => (
                 "draw-arrow",
                 t("shape-arrow"),
                 "Shift+L",
-                LucideIcons::ArrowUpRight,
+                GpuiIcons::LucideArrowUpRight,
             ),
-            Self::Polygon => ("add-polygon", t("shape-polygon"), "", LucideIcons::Triangle),
-            Self::Star => ("add-star", t("shape-star"), "", LucideIcons::Star),
+            Self::Polygon => (
+                "add-polygon",
+                t("shape-polygon"),
+                "",
+                GpuiIcons::LucideTriangle,
+            ),
+            Self::Star => ("add-star", t("shape-star"), "", GpuiIcons::LucideStar),
             Self::Image => (
                 "import-image",
                 t("shape-image"),
                 "Mod+Shift+K",
-                LucideIcons::Image,
+                GpuiIcons::LucideImage,
             ),
-            Self::Video => ("import-video", t("shape-video"), "", LucideIcons::Film),
-            Self::Audio => ("import-audio", t("shape-audio"), "", LucideIcons::Music),
-            Self::Svg => ("import-svg", "SVG", "", LucideIcons::FileCode),
-            Self::Line => ("draw-line", t("shape-line"), "L", LucideIcons::Minus),
-            Self::Bezier => ("draw-bezier", t("tool-pen"), "P", LucideIcons::PenTool),
-            Self::Pencil => ("draw-pen", t("tool-pencil"), "Shift+P", LucideIcons::Pencil),
-            Self::Text => ("add-text", t("text-box"), "T", LucideIcons::Type),
+            Self::Video => ("import-video", t("shape-video"), "", GpuiIcons::LucideFilm),
+            Self::Audio => ("import-audio", t("shape-audio"), "", GpuiIcons::LucideMusic),
+            Self::Svg => ("import-svg", "SVG", "", GpuiIcons::LucideFileCode),
+            Self::Line => ("draw-line", t("shape-line"), "L", GpuiIcons::LucideMinus),
+            Self::Bezier => ("draw-bezier", t("tool-pen"), "P", GpuiIcons::LucidePenTool),
+            Self::Pencil => (
+                "draw-pen",
+                t("tool-pencil"),
+                "Shift+P",
+                GpuiIcons::LucidePencil,
+            ),
+            Self::Text => ("add-text", t("text-box"), "T", GpuiIcons::LucideType),
         }
     }
 }
@@ -293,9 +313,12 @@ impl Workspace {
                     .gap(px(10.))
                     .cursor_pointer()
                     .hover(|s| s.bg(Color::Hover.color()))
-                    .child(div().w(px(16.)).child(
-                        icon(LucideIcons::Check, 15.).when(tool != selected, |el| el.opacity(0.)),
-                    ))
+                    .child(
+                        div().w(px(16.)).child(
+                            icon(GpuiIcons::LucideCheck, 15.)
+                                .when(tool != selected, |el| el.opacity(0.)),
+                        ),
+                    )
                     .child(icon(glyph, 19.))
                     .child(div().flex_1().child(label))
                     .child(div().text_color(MUTED.color()).child(key))
@@ -339,7 +362,9 @@ impl Workspace {
                             .justify_center()
                             .when(open, |el| el.bg(Color::Hover.color()))
                             .hover(|s| s.bg(Color::Hover.color()))
-                            .child(icon(LucideIcons::ChevronDown, 12.).text_color(MUTED.color())),
+                            .child(
+                                icon(GpuiIcons::LucideChevronDown, 12.).text_color(MUTED.color()),
+                            ),
                     )
                     .menu(
                         div()

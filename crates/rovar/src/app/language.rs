@@ -89,8 +89,8 @@ impl Studio {
                     .gap(px(8.))
                     .cursor_pointer()
                     .hover(|style| style.bg(Color::Input.color()))
-                    .child(icon(LucideIcons::Languages, 16.))
-                    .child(icon(LucideIcons::ChevronDown, 12.)),
+                    .child(icon(GpuiIcons::LucideLanguages, 16.))
+                    .child(icon(GpuiIcons::LucideChevronDown, 12.)),
             )
             .menu(
                 div()
@@ -111,7 +111,7 @@ impl Studio {
                             .cursor_pointer()
                             .hover(|style| style.bg(Color::Selected.color()))
                             .child(div().w(px(16.)).when(i18n::preference() == language, |el| {
-                                el.child(icon(LucideIcons::Check, 14.))
+                                el.child(icon(GpuiIcons::LucideCheck, 14.))
                             }))
                             .child(
                                 div()

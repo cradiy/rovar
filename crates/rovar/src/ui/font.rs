@@ -5,7 +5,11 @@ pub(crate) const SYSTEM: &str = ".SystemUIFont";
 struct UiFont(SharedString);
 impl Global for UiFont {}
 
-pub(crate) fn family(cx: &App) -> SharedString {
+pub(crate) fn family(cx: &App) -> gpui::FontFamily {
+    crate::platform::font_family(&selected_family(cx))
+}
+
+pub(crate) fn selected_family(cx: &App) -> SharedString {
     cx.try_global::<UiFont>()
         .map(|font| font.0.clone())
         .unwrap_or_else(|| SYSTEM.into())

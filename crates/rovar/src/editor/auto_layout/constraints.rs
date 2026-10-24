@@ -133,7 +133,9 @@ impl Workspace {
                             .text_color(TEXT.color())
                             .cursor_pointer()
                             .child(t(constraint_label(mode, axis)))
-                            .child(icon(LucideIcons::ChevronDown, 12.).text_color(MUTED.color()))
+                            .child(
+                                icon(GpuiIcons::LucideChevronDown, 12.).text_color(MUTED.color()),
+                            )
                             .on_click(cx.listener(move |this, _, window, cx| {
                                 this.constraint_menu(id, axis, window, cx)
                             })),
@@ -175,7 +177,7 @@ impl Workspace {
                             .gap(px(8.))
                             .child(div().flex_1().child(t(constraint_label(mode, axis))))
                             .when(current == mode, |el| {
-                                el.child(icon(LucideIcons::Check, 13.))
+                                el.child(icon(GpuiIcons::LucideCheck, 13.))
                             })
                     },
                     move |_, cx| {

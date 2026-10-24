@@ -109,9 +109,9 @@ impl Workspace {
                         effective.hidden,
                         inherited.hidden,
                         if effective.hidden {
-                            LucideIcons::EyeOff
+                            GpuiIcons::LucideEyeOff
                         } else {
-                            LucideIcons::Eye
+                            GpuiIcons::LucideEye
                         },
                         if inherited.hidden {
                             t("parent-hidden")
@@ -126,9 +126,9 @@ impl Workspace {
                         effective.locked,
                         inherited.locked,
                         if effective.locked {
-                            LucideIcons::Lock
+                            GpuiIcons::LucideLock
                         } else {
-                            LucideIcons::LockOpen
+                            GpuiIcons::LucideLockOpen
                         },
                         if inherited.locked {
                             t("parent-locked")

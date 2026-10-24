@@ -39,7 +39,7 @@ impl Studio {
         if let Some(font) = &font {
             font.update(cx, |font, cx| {
                 font.hide_label();
-                font.set_selected(crate::ui::font::family(cx), cx);
+                font.set_selected(crate::ui::font::selected_family(cx), cx);
             });
         }
         let subscription = font.as_ref().map(|font| {
@@ -113,7 +113,7 @@ impl Studio {
             panel.error = result.err().map(|error| error.to_string());
             if let Some(font) = &panel.font {
                 font.update(cx, |font, cx| {
-                    font.set_selected(crate::ui::font::family(cx), cx)
+                    font.set_selected(crate::ui::font::selected_family(cx), cx)
                 });
             }
         }
@@ -285,7 +285,7 @@ impl Studio {
                             .items_center()
                             .justify_center()
                             .text_color(ACCENT.color())
-                            .child(icon(LucideIcons::Settings, 19.)),
+                            .child(icon(GpuiIcons::LucideSettings, 19.)),
                     )
                     .child(div().flex_1().text_size(px(18.)).child(t("settings")))
                     .child(
@@ -300,7 +300,7 @@ impl Studio {
                             .text_color(MUTED.color())
                             .cursor_pointer()
                             .hover(|s| s.bg(Color::Text.color().opacity(0.0471)))
-                            .child(icon(LucideIcons::X, 16.))
+                            .child(icon(GpuiIcons::LucideX, 16.))
                             .on_click(
                                 cx.listener(|this, _, window, cx| this.close_settings(window, cx)),
                             ),
@@ -506,7 +506,7 @@ fn choice(id: &'static str, label: &'static str) -> gpui::Stateful<gpui::Div> {
         .cursor_pointer()
         .hover(|s| s.bg(Color::Hover.color()))
         .child(div().flex_1().child(label))
-        .child(icon(LucideIcons::ChevronDown, 12.).text_color(MUTED.color()))
+        .child(icon(GpuiIcons::LucideChevronDown, 12.).text_color(MUTED.color()))
 }
 
 fn choice_item(id: &'static str, label: &'static str, selected: bool) -> gpui::Stateful<gpui::Div> {
@@ -524,7 +524,7 @@ fn choice_item(id: &'static str, label: &'static str, selected: bool) -> gpui::S
         .child(
             div()
                 .w(px(16.))
-                .when(selected, |el| el.child(icon(LucideIcons::Check, 14.))),
+                .when(selected, |el| el.child(icon(GpuiIcons::LucideCheck, 14.))),
         )
         .child(label)
 }

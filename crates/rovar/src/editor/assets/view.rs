@@ -20,7 +20,9 @@ pub(super) fn thumbnail(entry: &Entry, height: f32) -> impl IntoElement {
             if entry.error.is_some() {
                 el.flex_col()
                     .gap(px(8.))
-                    .child(icon(LucideIcons::CircleAlert, 22.).text_color(Color::Danger.color()))
+                    .child(
+                        icon(GpuiIcons::LucideCircleAlert, 22.).text_color(Color::Danger.color()),
+                    )
                     .child(
                         div()
                             .px(px(4.))
@@ -40,7 +42,9 @@ pub(super) fn thumbnail(entry: &Entry, height: f32) -> impl IntoElement {
                             .size_full()
                             .object_fit(ObjectFit::Contain),
                     ),
-                    None => el.child(icon(LucideIcons::Component, 25.).text_color(ACCENT.color())),
+                    None => {
+                        el.child(icon(GpuiIcons::LucideComponent, 25.).text_color(ACCENT.color()))
+                    }
                 }
             }
         })
@@ -112,7 +116,7 @@ impl Workspace {
                             .text_size(px(11.))
                             .text_color(ACCENT.color())
                             .opacity(if enabled { 1. } else { 0.35 })
-                            .child(icon(LucideIcons::Plus, 13.).text_color(ACCENT.color()))
+                            .child(icon(GpuiIcons::LucidePlus, 13.).text_color(ACCENT.color()))
                             .child(t("assets-save-selection"))
                             .when(enabled, |el| {
                                 el.cursor_pointer()
@@ -165,7 +169,7 @@ impl Workspace {
                     .gap(px(10.))
                     .px(px(8.))
                     .pb(px(48.))
-                    .child(icon(LucideIcons::Component, 30.).text_color(Color::Muted.color()))
+                    .child(icon(GpuiIcons::LucideComponent, 30.).text_color(Color::Muted.color()))
                     .child(div().text_size(px(13.)).child(t(if query.is_empty() {
                         "assets-empty"
                     } else {
@@ -332,9 +336,9 @@ impl Workspace {
     ) {
         let mut menu = crate::editor::context_menu::menu(194., "asset-context-glass");
         for (action, label, glyph) in [
-            (0, t("assets-insert"), LucideIcons::Plus),
-            (1, t("rename"), LucideIcons::Pencil),
-            (2, t("delete"), LucideIcons::Trash2),
+            (0, t("assets-insert"), GpuiIcons::LucidePlus),
+            (1, t("rename"), GpuiIcons::LucidePencil),
+            (2, t("delete"), GpuiIcons::LucideTrash2),
         ] {
             let weak = cx.entity().downgrade();
             let entry = entry.clone();

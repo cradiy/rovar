@@ -95,7 +95,7 @@ impl Workspace {
                             .text_color(TEXT.color())
                             .hover(|s| s.bg(Color::Hover.color()))
                             .child(div().flex_1().min_w_0().truncate().child(label))
-                            .child(icon(LucideIcons::ChevronDown, 12.)),
+                            .child(icon(GpuiIcons::LucideChevronDown, 12.)),
                     )
                     .menu(
                         div()
@@ -128,7 +128,7 @@ impl Workspace {
                                         .child(
                                             div().w(px(14.)).children(
                                                 (current == value)
-                                                    .then(|| icon(LucideIcons::Check, 14.)),
+                                                    .then(|| icon(GpuiIcons::LucideCheck, 14.)),
                                             ),
                                         )
                                         .child(div().flex_1().min_w_0().truncate().child(label))

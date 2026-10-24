@@ -5,7 +5,7 @@ use uic::components::dropdown::{DropdownPlacement, dropdown};
 
 fn row(
     id: impl Into<gpui::ElementId>,
-    symbol: LucideIcons,
+    symbol: GpuiIcons,
     label: impl Into<SharedString>,
     selected: bool,
 ) -> gpui::Stateful<gpui::Div> {
@@ -32,7 +32,7 @@ fn row(
         }))
         .child(div().flex_1().min_w_0().truncate().child(label.into()))
         .when(selected, |el| {
-            el.child(icon(LucideIcons::Check, 14.).text_color(ACCENT.color()))
+            el.child(icon(GpuiIcons::LucideCheck, 14.).text_color(ACCENT.color()))
         })
 }
 
@@ -61,9 +61,9 @@ impl Studio {
             .map(|c| c.space_label())
             .unwrap_or_else(|| t("server-local").into());
         let symbol = if active.as_ref().is_some_and(|c| c.space.kind == "team") {
-            LucideIcons::Users
+            GpuiIcons::LucideUsers
         } else {
-            LucideIcons::House
+            GpuiIcons::LucideHouse
         };
         let account = active
             .as_ref()
@@ -127,7 +127,7 @@ impl Studio {
                 el.child(
                     row(
                         "source-local",
-                        LucideIcons::Laptop,
+                        GpuiIcons::LucideLaptop,
                         t("server-local"),
                         self.source.is_none(),
                     )
@@ -140,9 +140,9 @@ impl Studio {
                 let selected = self.source.as_ref() == Some(&connection.id);
                 let id = connection.id;
                 let symbol = if connection.space.kind == "team" {
-                    LucideIcons::Users
+                    GpuiIcons::LucideUsers
                 } else {
-                    LucideIcons::House
+                    GpuiIcons::LucideHouse
                 };
                 let label = if connection.space.kind == "personal" {
                     t("space-personal").into()
@@ -188,7 +188,7 @@ impl Studio {
                 el.child(
                     row(
                         "account-settings",
-                        LucideIcons::User,
+                        GpuiIcons::LucideUser,
                         t("account-settings"),
                         false,
                     )
@@ -203,7 +203,7 @@ impl Studio {
                 .child(
                     row(
                         "space-manage",
-                        LucideIcons::Settings,
+                        GpuiIcons::LucideSettings,
                         t("space-manage"),
                         false,
                     )
@@ -218,7 +218,7 @@ impl Studio {
                 el.child(
                     row(
                         "source-manage",
-                        LucideIcons::Server,
+                        GpuiIcons::LucideServer,
                         t("server-manage"),
                         false,
                     )
@@ -233,7 +233,7 @@ impl Studio {
                 el.child(
                     row(
                         "source-sign-out",
-                        LucideIcons::LogOut,
+                        GpuiIcons::LucideLogOut,
                         t("server-sign-out"),
                         false,
                     )
@@ -263,7 +263,7 @@ impl Studio {
             .hover(|s| s.bg(Color::Hover.color()))
             .child(icon(symbol, 16.).text_color(ACCENT.color()))
             .child(div().min_w_0().truncate().child(label))
-            .child(icon(LucideIcons::ChevronDown, 13.).text_color(MUTED.color()));
+            .child(icon(GpuiIcons::LucideChevronDown, 13.).text_color(MUTED.color()));
         div()
             .flex()
             .items_center()
@@ -306,7 +306,7 @@ impl Studio {
                         .text_color(MUTED.color())
                         .cursor_pointer()
                         .hover(|s| s.bg(Color::Hover.color()).text_color(TEXT.color()))
-                        .child(icon(LucideIcons::RefreshCw, 16.))
+                        .child(icon(GpuiIcons::LucideRefreshCw, 16.))
                         .on_click(cx.listener(|this, _, _, cx| this.refresh_server(cx))),
                 )
             })

@@ -213,7 +213,7 @@ impl Workspace {
                                     .cursor_pointer()
                                     .text_color(MUTED.color())
                                     .hover(|s| s.bg(Color::Input.color()))
-                                    .child(icon(LucideIcons::Minus, 13.))
+                                    .child(icon(GpuiIcons::LucideMinus, 13.))
                                     .on_click(cx.listener(move |this, _, _, cx| {
                                         this.set_size_limits(id, Limits::default(), cx)
                                     })),

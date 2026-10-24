@@ -378,9 +378,9 @@ impl Render for VideoControls {
                             .cursor_pointer()
                             .child(icon(
                                 if playing {
-                                    LucideIcons::Pause
+                                    GpuiIcons::LucidePause
                                 } else {
-                                    LucideIcons::Play
+                                    GpuiIcons::LucidePlay
                                 },
                                 17.,
                             ))
@@ -406,9 +406,9 @@ impl Render for VideoControls {
                             .cursor_pointer()
                             .child(icon(
                                 if muted {
-                                    LucideIcons::VolumeX
+                                    GpuiIcons::LucideVolumeX
                                 } else {
-                                    LucideIcons::Volume2
+                                    GpuiIcons::LucideVolume2
                                 },
                                 17.,
                             ))

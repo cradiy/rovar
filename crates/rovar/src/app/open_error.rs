@@ -59,7 +59,9 @@ impl Studio {
                     .flex()
                     .items_center()
                     .gap(px(10.))
-                    .child(icon(LucideIcons::CircleAlert, 20.).text_color(Color::Danger.color()))
+                    .child(
+                        icon(GpuiIcons::LucideCircleAlert, 20.).text_color(Color::Danger.color()),
+                    )
                     .child(div().text_size(px(16.)).child(t("open-error-title"))),
             )
             .child(

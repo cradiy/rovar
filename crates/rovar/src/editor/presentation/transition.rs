@@ -315,7 +315,7 @@ impl Workspace {
                                             .gap(px(8.))
                                             .cursor_pointer()
                                             .child(format!("{duration} ms"))
-                                            .child(icon(LucideIcons::ChevronDown, 12.)),
+                                            .child(icon(GpuiIcons::LucideChevronDown, 12.)),
                                     )
                                     .menu(div().flex().flex_col().children(
                                         [100u16, 200, 300, 500, 1000].map(|ms| {
@@ -337,7 +337,7 @@ impl Workspace {
                                                         .text_color(ACCENT.color())
                                                 })
                                                 .child(
-                                                    icon(LucideIcons::Check, 12.).opacity(
+                                                    icon(GpuiIcons::LucideCheck, 12.).opacity(
                                                         if ms == duration { 1. } else { 0. },
                                                     ),
                                                 )

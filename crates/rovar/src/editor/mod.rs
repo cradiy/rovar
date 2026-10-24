@@ -59,8 +59,8 @@ use gpui::{
     Bounds, Context, Div, Entity, FocusHandle, Focusable, FontWeight, HitboxId, IntoElement,
     MouseButton, Pixels, Point, Render, Subscription, Window, div, point, prelude::*, px, rgb,
 };
+use gpui_icons::GpuiIcons;
 use std::{cell::Cell, rc::Rc};
-use uic::assets::LucideIcons;
 use uic::components::{
     color_picker::{ColorPickerEvent, ColorPickerState},
     input::{InputEvent, TextInput},

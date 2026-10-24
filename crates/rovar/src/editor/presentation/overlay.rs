@@ -192,7 +192,8 @@ impl Workspace {
                                 .rounded(px(3.))
                                 .when(checked, |el| {
                                     el.bg(Color::Selected.color()).child(
-                                        icon(LucideIcons::Check, 14.).text_color(ACCENT.color()),
+                                        icon(GpuiIcons::LucideCheck, 14.)
+                                            .text_color(ACCENT.color()),
                                     )
                                 }),
                         )

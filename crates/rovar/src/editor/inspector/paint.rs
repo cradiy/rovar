@@ -130,7 +130,7 @@ impl Workspace {
                         .items_center()
                         .justify_between()
                         .child(label)
-                        .child(icon(LucideIcons::ChevronDown, 14.)),
+                        .child(icon(GpuiIcons::LucideChevronDown, 14.)),
                 )
                 .menu(
                     div()
@@ -150,11 +150,10 @@ impl Workspace {
                                 .gap(px(8.))
                                 .cursor_pointer()
                                 .hover(|s| s.bg(Color::Selected.color()))
-                                .child(icon(LucideIcons::Check, 13.).opacity(if selected == kind {
-                                    1.
-                                } else {
-                                    0.
-                                }))
+                                .child(
+                                    icon(GpuiIcons::LucideCheck, 13.)
+                                        .opacity(if selected == kind { 1. } else { 0. }),
+                                )
                                 .child(label)
                                 .on_click(cx.listener(move |this, _, window, cx| {
                                     this.mutate_gradient(|g| g.kind = kind, cx);
@@ -220,25 +219,25 @@ impl Workspace {
                 FillMode::Solid,
                 t("solid"),
                 "fill-solid",
-                LucideIcons::PaintBucket,
+                GpuiIcons::LucidePaintBucket,
             ),
             (
                 FillMode::Linear,
                 t("gradient"),
                 "fill-linear",
-                LucideIcons::Blend,
+                GpuiIcons::LucideBlend,
             ),
             (
                 FillMode::Image,
                 t("shape-image"),
                 "fill-image",
-                LucideIcons::Image,
+                GpuiIcons::LucideImage,
             ),
             (
                 FillMode::Points(Default::default()),
                 t("gradient-points"),
                 "fill-points",
-                LucideIcons::Palette,
+                GpuiIcons::LucidePalette,
             ),
         ];
         div()
@@ -323,7 +322,7 @@ impl Workspace {
                     )
                     .child(div().flex_1())
                     .child(
-                        icon_button("color-close", t("close"), LucideIcons::X, false).on_click(
+                        icon_button("color-close", t("close"), GpuiIcons::LucideX, false).on_click(
                             cx.listener(|this, _, window, cx| {
                                 for popover in &this.inspector.paint_popovers {
                                     popover.update(cx, |state, cx| state.close(window, cx));
@@ -360,7 +359,7 @@ impl Workspace {
                             icon_button(
                                 "gradient-reverse",
                                 t("gradient-reverse"),
-                                LucideIcons::ArrowLeftRight,
+                                GpuiIcons::LucideArrowLeftRight,
                                 false,
                             )
                             .on_click(cx.listener(|this, _, _, cx| {
@@ -374,7 +373,7 @@ impl Workspace {
                                 icon_button(
                                     "gradient-rotate",
                                     t("rotate-quarter"),
-                                    LucideIcons::RotateCw,
+                                    GpuiIcons::LucideRotateCw,
                                     false,
                                 )
                                 .on_click(cx.listener(
@@ -410,17 +409,20 @@ impl Workspace {
                                 .child(t("stops")),
                         )
                         .child(
-                            gradient_button("gradient-add", t("stop-add"), LucideIcons::Plus, true)
-                                .on_click(cx.listener(|this, _, _, cx| {
-                                    if let Some(Some(id)) =
-                                        this.mutate_gradient(|g| g.add_stop(), cx)
-                                    {
-                                        this.inspector.active_stop = id;
-                                        this.sync_fields(cx);
-                                        this.reveal_gradient_stop(cx);
-                                        cx.notify();
-                                    }
-                                })),
+                            gradient_button(
+                                "gradient-add",
+                                t("stop-add"),
+                                GpuiIcons::LucidePlus,
+                                true,
+                            )
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                if let Some(Some(id)) = this.mutate_gradient(|g| g.add_stop(), cx) {
+                                    this.inspector.active_stop = id;
+                                    this.sync_fields(cx);
+                                    this.reveal_gradient_stop(cx);
+                                    cx.notify();
+                                }
+                            })),
                         ),
                 )
                 .child(
@@ -564,7 +566,7 @@ impl Workspace {
                                         .justify_center()
                                         .cursor_pointer()
                                         .opacity(if stop_count > 2 { 1. } else { 0.3 })
-                                        .child(icon(LucideIcons::Minus, 14.))
+                                        .child(icon(GpuiIcons::LucideMinus, 14.))
                                         .on_mouse_down(MouseButton::Left, |_, _, cx| {
                                             cx.stop_propagation()
                                         })
@@ -650,7 +652,7 @@ impl Workspace {
                                 },
                             )
                             .child(
-                                icon_button("color-close", t("close"), LucideIcons::X, false)
+                                icon_button("color-close", t("close"), GpuiIcons::LucideX, false)
                                     .on_click(cx.listener(|this, _, window, cx| {
                                         for popover in &this.inspector.paint_popovers {
                                             popover.update(cx, |state, cx| state.close(window, cx));
@@ -674,7 +676,7 @@ impl Workspace {
 fn gradient_button(
     id: &'static str,
     label: &'static str,
-    glyph: LucideIcons,
+    glyph: GpuiIcons,
     enabled: bool,
 ) -> gpui::Stateful<Div> {
     icon_button(id, label, glyph, false).when(!enabled, |el| el.opacity(0.3))

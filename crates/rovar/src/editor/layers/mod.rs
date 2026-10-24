@@ -71,7 +71,7 @@ impl Workspace {
             .gap(px(6.))
             .text_size(px(11.))
             .text_color(MUTED.color())
-            .child(icon(LucideIcons::Frame, 14.))
+            .child(icon(GpuiIcons::LucideFrame, 14.))
             .child(crate::i18n::message(
                 "frames-count",
                 &[("count", self.boards.len().to_string())],
@@ -81,7 +81,7 @@ impl Workspace {
                 icon_button(
                     "collapse-all-layers",
                     t("collapse-all-layers"),
-                    LucideIcons::ListCollapse,
+                    GpuiIcons::LucideListCollapse,
                     false,
                 )
                 .size(px(26.))
@@ -160,35 +160,35 @@ impl Workspace {
                 crate::scene::mask::source(&self.hierarchy, *parent) == Some(id)
             });
         let glyph = match layer.kind {
-            LayerKind::Board => LucideIcons::Frame,
-            LayerKind::Text => LucideIcons::Type,
+            LayerKind::Board => GpuiIcons::LucideFrame,
+            LayerKind::Text => GpuiIcons::LucideType,
             LayerKind::Group if crate::scene::mask::source(&self.hierarchy, id).is_some() => {
-                LucideIcons::Scan
+                GpuiIcons::LucideScan
             }
             LayerKind::Group if crate::scene::boolean::is_boolean(&self.hierarchy, id) => {
-                LucideIcons::Combine
+                GpuiIcons::LucideCombine
             }
-            LayerKind::Group => LucideIcons::Group,
+            LayerKind::Group => GpuiIcons::LucideGroup,
             LayerKind::Shape => match self.shapes[layer.index].kind {
-                ShapeKind::Rectangle => LucideIcons::Square,
-                ShapeKind::Ellipse => LucideIcons::Circle,
-                ShapeKind::Arrow => LucideIcons::ArrowUpRight,
-                ShapeKind::Polygon => LucideIcons::Triangle,
-                ShapeKind::Star => LucideIcons::Star,
-                ShapeKind::Image => LucideIcons::Image,
-                ShapeKind::Svg => LucideIcons::FileCode,
-                ShapeKind::Video => LucideIcons::Film,
-                ShapeKind::Audio => LucideIcons::Music,
-                ShapeKind::Line => LucideIcons::Minus,
-                ShapeKind::Pen => LucideIcons::Pencil,
-                ShapeKind::Bezier => LucideIcons::PenTool,
+                ShapeKind::Rectangle => GpuiIcons::LucideSquare,
+                ShapeKind::Ellipse => GpuiIcons::LucideCircle,
+                ShapeKind::Arrow => GpuiIcons::LucideArrowUpRight,
+                ShapeKind::Polygon => GpuiIcons::LucideTriangle,
+                ShapeKind::Star => GpuiIcons::LucideStar,
+                ShapeKind::Image => GpuiIcons::LucideImage,
+                ShapeKind::Svg => GpuiIcons::LucideFileCode,
+                ShapeKind::Video => GpuiIcons::LucideFilm,
+                ShapeKind::Audio => GpuiIcons::LucideMusic,
+                ShapeKind::Line => GpuiIcons::LucideMinus,
+                ShapeKind::Pen => GpuiIcons::LucidePencil,
+                ShapeKind::Bezier => GpuiIcons::LucidePenTool,
             },
         };
         let glyph = self.hierarchy.components.get(&id).map_or(glyph, |link| {
             if link.master {
-                LucideIcons::Component
+                GpuiIcons::LucideComponent
             } else {
-                LucideIcons::Diamond
+                GpuiIcons::LucideDiamond
             }
         });
         let active = self.is_selected(id);
@@ -251,9 +251,9 @@ impl Workspace {
                                 .child(
                                     icon(
                                         if folded {
-                                            LucideIcons::ChevronRight
+                                            GpuiIcons::LucideChevronRight
                                         } else {
-                                            LucideIcons::ChevronDown
+                                            GpuiIcons::LucideChevronDown
                                         },
                                         13.,
                                     )
@@ -404,9 +404,9 @@ impl Workspace {
             .child(
                 icon(
                     if self.sidebar.collapsed {
-                        LucideIcons::ChevronsRight
+                        GpuiIcons::LucideChevronsRight
                     } else {
-                        LucideIcons::ChevronsLeft
+                        GpuiIcons::LucideChevronsLeft
                     },
                     17.,
                 )
@@ -428,8 +428,8 @@ impl Workspace {
             .items_center()
             .gap(px(4.));
         for (resources, id, label, glyph) in [
-            (false, "layers-tab", t("layers"), LucideIcons::Layers),
-            (true, "resources-tab", t("assets"), LucideIcons::Box),
+            (false, "layers-tab", t("layers"), GpuiIcons::LucideLayers),
+            (true, "resources-tab", t("assets"), GpuiIcons::LucideBox),
         ] {
             let active = self.sidebar.resources == resources;
             tabs = tabs.child(
@@ -492,7 +492,9 @@ impl Workspace {
                             .flex_col()
                             .items_center()
                             .gap(px(10.))
-                            .child(icon(LucideIcons::Layers, 24.).text_color(Color::Muted.color()))
+                            .child(
+                                icon(GpuiIcons::LucideLayers, 24.).text_color(Color::Muted.color()),
+                            )
                             .child(
                                 div()
                                     .text_size(px(12.))

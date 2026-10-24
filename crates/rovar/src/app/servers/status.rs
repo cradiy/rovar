@@ -38,27 +38,27 @@ impl Studio {
         let (status, mark, color) = if !connection.authenticated {
             (
                 "server-session-expired",
-                LucideIcons::LogOut,
+                GpuiIcons::LucideLogOut,
                 Color::Warning,
             )
         } else if link.conflict {
             (
                 "server-conflict-title",
-                LucideIcons::CircleAlert,
+                GpuiIcons::LucideCircleAlert,
                 Color::Warning,
             )
         } else if failed {
             (
                 "server-sync-paused",
-                LucideIcons::CircleAlert,
+                GpuiIcons::LucideCircleAlert,
                 Color::Warning,
             )
         } else if tab.saving || (pending && remote.connection_busy(&connection.id)) {
-            ("server-syncing", LucideIcons::RefreshCw, ACCENT)
+            ("server-syncing", GpuiIcons::LucideRefreshCw, ACCENT)
         } else if pending || tab.saved_revision != Some(editor.read(cx).document_revision()) {
-            ("server-pending", LucideIcons::Clock, Color::Warning)
+            ("server-pending", GpuiIcons::LucideClock, Color::Warning)
         } else {
-            ("server-synced", LucideIcons::Check, Color::Success)
+            ("server-synced", GpuiIcons::LucideCheck, Color::Success)
         };
         let trigger = div()
             .id("server-badge")
@@ -82,7 +82,7 @@ impl Studio {
                     .bg(Color::Hover.color())
                     .border_color(Color::Accent.color().opacity(0.5333))
             })
-            .child(icon(LucideIcons::Cloud, 19.).text_color(Color::Accent.color()))
+            .child(icon(GpuiIcons::LucideCloud, 19.).text_color(Color::Accent.color()))
             .child(
                 div()
                     .absolute()
@@ -117,7 +117,7 @@ impl Studio {
                             .flex()
                             .items_center()
                             .justify_center()
-                            .child(icon(LucideIcons::Server, 17.).text_color(ACCENT.color())),
+                            .child(icon(GpuiIcons::LucideServer, 17.).text_color(ACCENT.color())),
                     )
                     .child(
                         div()

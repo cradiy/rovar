@@ -86,9 +86,9 @@ impl Workspace {
             .child(t("layout-wrap"))
             .child(icon(
                 if wrap {
-                    LucideIcons::Check
+                    GpuiIcons::LucideCheck
                 } else {
-                    LucideIcons::Plus
+                    GpuiIcons::LucidePlus
                 },
                 14.,
             ))
@@ -101,9 +101,9 @@ impl Workspace {
                 .map(|axis| {
                     let active = axis == current;
                     let (label, glyph) = match axis {
-                        Axis::Horizontal => ("layout-horizontal", LucideIcons::ArrowRight),
-                        Axis::Vertical => ("layout-vertical", LucideIcons::ArrowDown),
-                        Axis::Grid => ("layout-grid", LucideIcons::Grid2x2),
+                        Axis::Horizontal => ("layout-horizontal", GpuiIcons::LucideArrowRight),
+                        Axis::Vertical => ("layout-vertical", GpuiIcons::LucideArrowDown),
+                        Axis::Grid => ("layout-grid", GpuiIcons::LucideGrid2x2),
                     };
                     div()
                         .id(label)
@@ -706,7 +706,7 @@ impl Workspace {
                             .gap(px(8.))
                             .child(div().flex_1().child(t(label)))
                             .when(current == mode, |el| {
-                                el.child(icon(LucideIcons::Check, 13.))
+                                el.child(icon(GpuiIcons::LucideCheck, 13.))
                             })
                     },
                     move |_, cx| {
@@ -761,7 +761,7 @@ impl Workspace {
                         .text_color(TEXT.color())
                 })
                 .tooltip(move |_, cx| cx.new(|_| toolbar::ToolTip(label.into())).into())
-                .child(icon(LucideIcons::ChevronDown, 12.))
+                .child(icon(GpuiIcons::LucideChevronDown, 12.))
                 .on_click(cx.listener(move |this, _, window, cx| {
                     this.sizing_menu(id, axis, window, cx);
                     cx.stop_propagation();
@@ -795,9 +795,9 @@ impl Workspace {
                 .hover(|s| s.text_color(TEXT.color()))
                 .child(icon(
                     if absolute {
-                        LucideIcons::Check
+                        GpuiIcons::LucideCheck
                     } else {
-                        LucideIcons::Move
+                        GpuiIcons::LucideMove
                     },
                     13.,
                 ))
@@ -825,9 +825,9 @@ impl Workspace {
             .hover(|s| s.text_color(ACCENT.color()))
             .child(icon(
                 if layout.is_some() {
-                    LucideIcons::Minus
+                    GpuiIcons::LucideMinus
                 } else {
-                    LucideIcons::Plus
+                    GpuiIcons::LucidePlus
                 },
                 13.,
             ))
@@ -902,15 +902,15 @@ impl Workspace {
                                         .child(icon(
                                             if (layout.axis != Axis::Vertical) != cross {
                                                 [
-                                                    LucideIcons::AlignStartVertical,
-                                                    LucideIcons::AlignCenterVertical,
-                                                    LucideIcons::AlignEndVertical,
+                                                    GpuiIcons::LucideAlignStartVertical,
+                                                    GpuiIcons::LucideAlignCenterVertical,
+                                                    GpuiIcons::LucideAlignEndVertical,
                                                 ][index]
                                             } else {
                                                 [
-                                                    LucideIcons::AlignStartHorizontal,
-                                                    LucideIcons::AlignCenterHorizontal,
-                                                    LucideIcons::AlignEndHorizontal,
+                                                    GpuiIcons::LucideAlignStartHorizontal,
+                                                    GpuiIcons::LucideAlignCenterHorizontal,
+                                                    GpuiIcons::LucideAlignEndHorizontal,
                                                 ][index]
                                             },
                                             14.,

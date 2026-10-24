@@ -3,7 +3,7 @@ use super::*;
 fn button(
     id: &'static str,
     label: &'static str,
-    glyph: LucideIcons,
+    glyph: GpuiIcons,
     enabled: bool,
 ) -> gpui::Stateful<Div> {
     div()
@@ -60,7 +60,7 @@ impl Workspace {
                         button(
                             "playback-back",
                             t("prototype-back"),
-                            LucideIcons::ArrowLeft,
+                            GpuiIcons::LucideArrowLeft,
                             can_back,
                         )
                         .on_click(cx.listener(move |this, _, _, cx| {
@@ -77,7 +77,7 @@ impl Workspace {
                         button(
                             "playback-restart",
                             t("prototype-restart"),
-                            LucideIcons::RotateCcw,
+                            GpuiIcons::LucideRotateCcw,
                             true,
                         )
                         .on_click(cx.listener(|this, _, window, cx| {
@@ -120,7 +120,7 @@ impl Workspace {
                             .flex()
                             .items_center()
                             .justify_center()
-                            .child(icon(LucideIcons::Play, 12.).text_color(ACCENT.color())),
+                            .child(icon(GpuiIcons::LucidePlay, 12.).text_color(ACCENT.color())),
                     )
                     .child(
                         div()
@@ -134,7 +134,7 @@ impl Workspace {
                     ),
             )
             .child(
-                button("presentation-close", t("close"), LucideIcons::X, true).on_click(
+                button("presentation-close", t("close"), GpuiIcons::LucideX, true).on_click(
                     move |_, window, cx| {
                         let _ = owner.update(cx, |this, cx| this.stop_presentation(window, cx));
                     },

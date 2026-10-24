@@ -35,13 +35,13 @@ impl Studio {
             PendingAction::Remove(url) => (
                 "server-remove",
                 "server-remove-confirm",
-                LucideIcons::Trash2,
+                GpuiIcons::LucideTrash2,
                 remote.server_name(url).to_owned(),
             ),
             PendingAction::SignOut(id) => (
                 "server-sign-out",
                 "server-sign-out-confirm",
-                LucideIcons::LogOut,
+                GpuiIcons::LucideLogOut,
                 remote
                     .connection(id)
                     .map(|c| format!("{} · {}", c.identity.username, remote.server_name(&c.url)))

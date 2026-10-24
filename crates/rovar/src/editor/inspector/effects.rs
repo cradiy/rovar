@@ -555,7 +555,7 @@ impl Workspace {
                             .font_weight(FontWeight::SEMIBOLD)
                             .child(t("effects")),
                     )
-                    .child(button("shadow-add", LucideIcons::Plus).when(
+                    .child(button("shadow-add", GpuiIcons::LucidePlus).when(
                         shadows.as_ref().is_some_and(|s| s.len() < MAX_EFFECTS),
                         |el| {
                             el.on_click(cx.listener(|this, _, _, cx| {
@@ -670,9 +670,9 @@ impl Workspace {
                 button(
                     format!("shadow-toggle-{index}"),
                     if effect.enabled() {
-                        LucideIcons::Eye
+                        GpuiIcons::LucideEye
                     } else {
-                        LucideIcons::EyeOff
+                        GpuiIcons::LucideEyeOff
                     },
                 )
                 .on_click(cx.listener(move |this, _, _, cx| {
@@ -688,8 +688,8 @@ impl Workspace {
                 })),
             )
             .child(
-                button(format!("shadow-remove-{index}"), LucideIcons::Minus).on_click(cx.listener(
-                    move |this, _, _, cx| {
+                button(format!("shadow-remove-{index}"), GpuiIcons::LucideMinus).on_click(
+                    cx.listener(move |this, _, _, cx| {
                         this.edit_effects(
                             None,
                             |s| {
@@ -699,8 +699,8 @@ impl Workspace {
                             },
                             cx,
                         )
-                    },
-                )),
+                    }),
+                ),
             )
     }
 
@@ -829,7 +829,7 @@ impl Workspace {
             .hover(|s| s.bg(BORDER.color()))
             .text_size(px(12.))
             .child(t(current.label()))
-            .child(icon(LucideIcons::ChevronDown, 12.).text_color(MUTED.color()));
+            .child(icon(GpuiIcons::LucideChevronDown, 12.).text_color(MUTED.color()));
         div().flex_1().min_w_0().child(
             ContextMenuTrigger::new(trigger, move |_, _| {
                 let mut menu = super::super::context_menu::menu(180., "shadow-kind-menu");
@@ -858,7 +858,7 @@ impl Workspace {
                                     .items_center()
                                     .gap(px(8.))
                                     .child(div().w(px(14.)).when(kind == current, |el| {
-                                        el.child(icon(LucideIcons::Check, 13.))
+                                        el.child(icon(GpuiIcons::LucideCheck, 13.))
                                     }))
                                     .child(t(label))
                             },
@@ -947,7 +947,7 @@ impl Workspace {
     }
 }
 
-fn button(id: impl Into<gpui::SharedString>, glyph: LucideIcons) -> gpui::Stateful<Div> {
+fn button(id: impl Into<gpui::SharedString>, glyph: GpuiIcons) -> gpui::Stateful<Div> {
     let id = id.into();
     div()
         .id(id.clone())

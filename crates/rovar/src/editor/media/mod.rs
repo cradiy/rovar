@@ -405,7 +405,7 @@ impl Workspace {
                 .bg(Color::Selected.color())
                 .child(
                     icon(
-                        LucideIcons::Music,
+                        GpuiIcons::LucideMusic,
                         (24. * self.view.zoom)
                             .min(shape.rect.width.min(shape.rect.height) * self.view.zoom),
                     )
@@ -492,11 +492,11 @@ impl Workspace {
                                 .into_any_element(),
                             _ => icon(
                                 if audio {
-                                    LucideIcons::Music
+                                    GpuiIcons::LucideMusic
                                 } else if video {
-                                    LucideIcons::Film
+                                    GpuiIcons::LucideFilm
                                 } else {
-                                    LucideIcons::Image
+                                    GpuiIcons::LucideImage
                                 },
                                 18.,
                             )
@@ -545,9 +545,9 @@ impl Workspace {
                                 .child(
                                     icon(
                                         if loading {
-                                            LucideIcons::Loader
+                                            GpuiIcons::LucideLoader
                                         } else {
-                                            LucideIcons::Play
+                                            GpuiIcons::LucidePlay
                                         },
                                         16.,
                                     )
@@ -596,11 +596,11 @@ impl Workspace {
     pub(super) fn media_status(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let failed = self.media.error.is_some();
         let indicator = if failed {
-            icon(LucideIcons::CircleAlert, 15.)
+            icon(GpuiIcons::LucideCircleAlert, 15.)
                 .text_color(Color::Danger.color())
                 .into_any_element()
         } else {
-            icon(LucideIcons::Loader, 15.)
+            icon(GpuiIcons::LucideLoader, 15.)
                 .text_color(ACCENT.color())
                 .with_animation(
                     ("media-loading-spinner", self.media.import_request as usize),
@@ -659,7 +659,7 @@ impl Workspace {
                             .rounded(px(5.))
                             .cursor_pointer()
                             .hover(|s| s.bg(Color::Text.color().opacity(0.0471)))
-                            .child(icon(LucideIcons::X, 13.).text_color(MUTED.color()))
+                            .child(icon(GpuiIcons::LucideX, 13.).text_color(MUTED.color()))
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.media.error = None;
                                 if this.media.importing {

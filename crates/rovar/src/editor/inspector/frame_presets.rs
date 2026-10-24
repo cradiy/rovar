@@ -74,7 +74,7 @@ impl Workspace {
                 .text_color(TEXT.color())
                 .hover(|s| s.bg(BORDER.color()))
                 .child(t("artboard"))
-                .child(icon(LucideIcons::ChevronDown, 12.).text_color(MUTED.color())),
+                .child(icon(GpuiIcons::LucideChevronDown, 12.).text_color(MUTED.color())),
             move |window, cx| {
                 weak.update(cx, |this, cx| this.frame_presets(id, &page, window, cx))
                     .unwrap_or_default()
@@ -123,7 +123,7 @@ impl Workspace {
                             div()
                                 .w(px(14.))
                                 .flex_shrink_0()
-                                .when(checked, |el| el.child(icon(LucideIcons::Check, 13.))),
+                                .when(checked, |el| el.child(icon(GpuiIcons::LucideCheck, 13.))),
                         )
                         .child(div().flex_1().min_w_0().truncate().child(label.clone()))
                         .child(

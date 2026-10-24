@@ -441,7 +441,7 @@ impl Workspace {
                                 .rounded(px(5.))
                                 .cursor_pointer()
                                 .hover(|el| el.bg(BORDER.color()))
-                                .child(icon(LucideIcons::X, 13.))
+                                .child(icon(GpuiIcons::LucideX, 13.))
                                 .on_click(cx.listener(|this, _, _, cx| {
                                     this.export.status = None;
                                     this.export.status_dismiss = None;
@@ -482,7 +482,7 @@ fn export_trigger(id: String, label: impl Into<gpui::SharedString>) -> gpui::Sta
         .cursor_pointer()
         .hover(|s| s.bg(Color::Text.color().opacity(0.0314)))
         .child(label.into())
-        .child(icon(LucideIcons::ChevronDown, 11.).text_color(MUTED.color()))
+        .child(icon(GpuiIcons::LucideChevronDown, 11.).text_color(MUTED.color()))
 }
 
 fn export_choice(
@@ -502,7 +502,7 @@ fn export_choice(
         .hover(|s| s.bg(Color::Accent.color().opacity(0.0941)))
         .child(label.into())
         .child(
-            icon(LucideIcons::Check, 12.)
+            icon(GpuiIcons::LucideCheck, 12.)
                 .text_color(ACCENT.color())
                 .opacity(if selected { 1. } else { 0. }),
         )

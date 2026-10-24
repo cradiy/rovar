@@ -3,7 +3,7 @@ use super::*;
 pub(in crate::editor) fn action(
     id: &'static str,
     label: &'static str,
-    glyph: LucideIcons,
+    glyph: GpuiIcons,
 ) -> gpui::Stateful<Div> {
     div()
         .id(id)
@@ -62,7 +62,7 @@ impl Workspace {
                                 action(
                                     "boolean-release",
                                     t("boolean-release"),
-                                    LucideIcons::Ungroup,
+                                    GpuiIcons::LucideUngroup,
                                 )
                                 .flex_shrink_0()
                                 .on_click(cx.listener(

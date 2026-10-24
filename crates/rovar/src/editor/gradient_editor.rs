@@ -285,7 +285,7 @@ impl Workspace {
                     .cursor(gpui::CursorStyle::ResizeLeftRight)
                     .text_color(if active { ACCENT.color() } else { MUTED.color() })
                     .hover(|s| s.text_color(TEXT.color()))
-                    .child(icon(LucideIcons::Diamond, 10.))
+                    .child(icon(GpuiIcons::LucideDiamond, 10.))
                     .tooltip(move |_, cx| cx.new(|_| toolbar::ToolTip(hint.clone())).into())
                     .on_mouse_down(MouseButton::Left, cx.listener(move |this, event: &gpui::MouseDownEvent, window, cx| {
                         cx.stop_propagation();

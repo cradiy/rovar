@@ -141,9 +141,9 @@ impl Studio {
             .cursor(gpui::CursorStyle::Arrow)
             .child(icon(
                 if next {
-                    LucideIcons::ChevronRight
+                    GpuiIcons::LucideChevronRight
                 } else {
-                    LucideIcons::ChevronLeft
+                    GpuiIcons::LucideChevronLeft
                 },
                 15.,
             ))

@@ -239,8 +239,13 @@ impl Workspace {
                     .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
                     .children(
                         [
-                            (false, "vector-move", t("nodes"), LucideIcons::MousePointer2),
-                            (true, "vector-bend", t("bend"), LucideIcons::Spline),
+                            (
+                                false,
+                                "vector-move",
+                                t("nodes"),
+                                GpuiIcons::LucideMousePointer2,
+                            ),
+                            (true, "vector-bend", t("bend"), GpuiIcons::LucideSpline),
                         ]
                         .into_iter()
                         .map(|(bend, id, title, glyph)| {
@@ -294,7 +299,7 @@ impl Workspace {
                             .gap(px(6.))
                             .text_size(px(12.))
                             .cursor_pointer()
-                            .child(icon(LucideIcons::Check, 16.))
+                            .child(icon(GpuiIcons::LucideCheck, 16.))
                             .child(t("done"))
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.exit_vector_edit(cx);

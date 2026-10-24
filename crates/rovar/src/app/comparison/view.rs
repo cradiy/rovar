@@ -103,7 +103,7 @@ impl Studio {
                                     .justify_center()
                                     .cursor_pointer()
                                     .hover(|s| s.bg(Color::Hover.color()))
-                                    .child(icon(LucideIcons::ArrowLeft, 16.))
+                                    .child(icon(GpuiIcons::LucideArrowLeft, 16.))
                                     .on_click(cx.listener(|this, _, window, cx| {
                                         this.close_comparison(window, cx)
                                     })),
@@ -196,9 +196,9 @@ impl Studio {
                             .text_size(px(11.))
                             .child(icon(
                                 if server {
-                                    LucideIcons::Lock
+                                    GpuiIcons::LucideLock
                                 } else {
-                                    LucideIcons::Pencil
+                                    GpuiIcons::LucidePencil
                                 },
                                 12.,
                             ))

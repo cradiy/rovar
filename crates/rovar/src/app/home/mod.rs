@@ -162,7 +162,7 @@ impl Studio {
                                             .border_color(Color::Text.color().opacity(0.0510))
                                             .bg(Color::Text.color().opacity(0.0157))
                                             .text_color(Color::Muted.color())
-                                            .child(icon(LucideIcons::Search, 14.))
+                                            .child(icon(GpuiIcons::LucideSearch, 14.))
                                             .child(
                                                 Input::new(&self.search)
                                                     .w_full()
@@ -201,7 +201,7 @@ impl Studio {
                                                 .flex()
                                                 .items_center()
                                                 .justify_center()
-                                                .child(icon(LucideIcons::Files, 22.)),
+                                                .child(icon(GpuiIcons::LucideFiles, 22.)),
                                         )
                                         .child(div().text_size(px(13.)).child(t(
                                             if search.is_empty() {
@@ -315,9 +315,9 @@ impl Studio {
                             })
                             .child(icon(
                                 if primary {
-                                    LucideIcons::Plus
+                                    GpuiIcons::LucidePlus
                                 } else {
-                                    LucideIcons::FolderOpen
+                                    GpuiIcons::LucideFolderOpen
                                 },
                                 18.,
                             )),
@@ -463,7 +463,7 @@ impl Studio {
                             .flex()
                             .items_center()
                             .justify_center()
-                            .child(icon(LucideIcons::PenTool, 16.)),
+                            .child(icon(GpuiIcons::LucidePenTool, 16.)),
                     )
                     .child(
                         div()

@@ -109,7 +109,7 @@ impl Workspace {
                                 .gap(px(5.))
                                 .text_size(px(11.))
                                 .text_color(ACCENT.color())
-                                .child(icon(LucideIcons::Plus, 13.))
+                                .child(icon(GpuiIcons::LucidePlus, 13.))
                                 .child(t("component-create-selection"))
                                 .cursor_pointer()
                                 .hover(|s| s.bg(Color::Accent.color().opacity(0.0941)))
@@ -200,7 +200,7 @@ impl Workspace {
                                             )
                                         } else {
                                             el.child(
-                                                icon(LucideIcons::Component, 22.)
+                                                icon(GpuiIcons::LucideComponent, 22.)
                                                     .text_color(ACCENT.color()),
                                             )
                                         }
@@ -222,7 +222,7 @@ impl Workspace {
                                     .items_center()
                                     .justify_center()
                                     .text_color(MUTED.color())
-                                    .child(icon(LucideIcons::Pencil, 14.))
+                                    .child(icon(GpuiIcons::LucidePencil, 14.))
                                     .on_click(cx.listener(move |this, _, window, cx| {
                                         this.edit_document_component(&edit, window, cx);
                                         cx.stop_propagation();

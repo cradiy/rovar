@@ -25,9 +25,9 @@ impl Workspace {
             })
             .child(icon(
                 if increase {
-                    LucideIcons::Plus
+                    GpuiIcons::LucidePlus
                 } else {
-                    LucideIcons::Minus
+                    GpuiIcons::LucideMinus
                 },
                 14.,
             ))
@@ -52,7 +52,7 @@ impl Workspace {
             .justify_center()
             .cursor_pointer()
             .hover(|el| el.bg(BORDER.color()))
-            .child(icon(LucideIcons::Crop, 16.).text_color(MUTED.color()))
+            .child(icon(GpuiIcons::LucideCrop, 16.).text_color(MUTED.color()))
             .tooltip(|_, cx| cx.new(|_| toolbar::ToolTip(t("image-crop").into())).into())
             .on_click(cx.listener(move |this, _, window, cx| {
                 this.start_image_crop(id, window, cx);
@@ -150,7 +150,7 @@ impl Workspace {
                                     .flex()
                                     .items_center()
                                     .justify_center()
-                                    .child(icon(LucideIcons::Crop, 16.))
+                                    .child(icon(GpuiIcons::LucideCrop, 16.))
                                     .tooltip(|_, cx| {
                                         cx.new(|_| toolbar::ToolTip(t("image-crop-hint").into()))
                                             .into()
@@ -188,7 +188,7 @@ impl Workspace {
                                         s.bg(Color::Text.color().opacity(0.0471))
                                             .text_color(TEXT.color())
                                     })
-                                    .child(icon(LucideIcons::RotateCcw, 15.))
+                                    .child(icon(GpuiIcons::LucideRotateCcw, 15.))
                                     .tooltip(|_, cx| {
                                         cx.new(|_| toolbar::ToolTip(t("image-crop-reset").into()))
                                             .into()
@@ -220,7 +220,7 @@ impl Workspace {
                                                     .text_color(Color::OnAccent.color())
                                                     .hover(|s| s.bg(Color::Accent.color()))
                                                     .child(
-                                                        icon(LucideIcons::Check, 14.)
+                                                        icon(GpuiIcons::LucideCheck, 14.)
                                                             .text_color(Color::OnAccent.color()),
                                                     )
                                             })

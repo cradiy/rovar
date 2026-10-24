@@ -241,7 +241,9 @@ impl Studio {
                                     .flex()
                                     .items_center()
                                     .gap(px(12.))
-                                    .child(icon(LucideIcons::Link, 20.).text_color(ACCENT.color()))
+                                    .child(
+                                        icon(GpuiIcons::LucideLink, 20.).text_color(ACCENT.color()),
+                                    )
                                     .child(
                                         div()
                                             .flex_1()
@@ -299,7 +301,7 @@ impl Studio {
                                             button("copy-invite", t("space-copy"))
                                                 .bg(Color::Selected.color())
                                                 .text_color(ACCENT.color())
-                                                .child(icon(LucideIcons::Copy, 14.))
+                                                .child(icon(GpuiIcons::LucideCopy, 14.))
                                                 .on_click(move |_, _, cx| {
                                                     cx.write_to_clipboard(
                                                         ClipboardItem::new_string(copy.clone()),
@@ -394,7 +396,7 @@ impl Studio {
                                             .child(connection.space.name),
                                     )
                                     .child(
-                                        icon(LucideIcons::ArrowRight, 16.)
+                                        icon(GpuiIcons::LucideArrowRight, 16.)
                                             .text_color(MUTED.color()),
                                     )
                                     .on_click(cx.listener(move |this, _, window, cx| {
@@ -459,7 +461,7 @@ impl Studio {
                                 }),
                                 panel.busy,
                             )
-                            .child(icon(LucideIcons::ArrowRight, 15.))
+                            .child(icon(GpuiIcons::LucideArrowRight, 15.))
                             .on_click(cx.listener(
                                 move |this, _, window, cx| {
                                     if let Some(panel) = &this.spaces {
@@ -524,7 +526,7 @@ impl Studio {
                             )
                             .child(
                                 button("space-close-icon", "")
-                                    .child(icon(LucideIcons::X, 18.))
+                                    .child(icon(GpuiIcons::LucideX, 18.))
                                     .text_color(MUTED.color())
                                     .on_click(cx.listener(|this, _, window, cx| {
                                         this.spaces = None;

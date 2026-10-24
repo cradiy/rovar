@@ -27,7 +27,7 @@ pub(super) fn primary(
         .opacity(if busy { 0.5 } else { 1. })
 }
 
-fn tile(symbol: LucideIcons) -> gpui::Div {
+fn tile(symbol: GpuiIcons) -> gpui::Div {
     div()
         .size(px(38.))
         .flex_shrink_0()
@@ -113,9 +113,9 @@ impl Studio {
             .child(
                 icon(
                     if visible {
-                        LucideIcons::EyeOff
+                        GpuiIcons::LucideEyeOff
                     } else {
-                        LucideIcons::Eye
+                        GpuiIcons::LucideEye
                     },
                     17.,
                 )
@@ -166,7 +166,7 @@ impl Studio {
                             .size(px(32.))
                             .p_0()
                             .justify_center()
-                            .child(icon(LucideIcons::ArrowLeft, 18.))
+                            .child(icon(GpuiIcons::LucideArrowLeft, 18.))
                             .on_click(cx.listener(|this, _, window, cx| {
                                 let view =
                                     if this.servers.as_ref().is_some_and(|p| {
@@ -218,7 +218,7 @@ impl Studio {
                     .size(px(30.))
                     .p_0()
                     .justify_center()
-                    .child(icon(LucideIcons::X, 17.))
+                    .child(icon(GpuiIcons::LucideX, 17.))
                     .on_click(cx.listener(|this, _, window, cx| {
                         this.servers = None;
                         this.focus.focus(window, cx);
@@ -269,7 +269,7 @@ impl Studio {
                                             .bg(CARD.color())
                                             .cursor_pointer()
                                             .hover(|s| s.bg(Color::Hover.color()))
-                                            .child(tile(LucideIcons::Server))
+                                            .child(tile(GpuiIcons::LucideServer))
                                             .child(
                                                 div()
                                                     .flex_1()
@@ -293,7 +293,7 @@ impl Studio {
                                             )
                                             .when(active, |el| {
                                                 el.child(
-                                                    icon(LucideIcons::Check, 15.)
+                                                    icon(GpuiIcons::LucideCheck, 15.)
                                                         .text_color(ACCENT.color()),
                                                 )
                                             })
@@ -307,7 +307,7 @@ impl Studio {
                                                     .p_0()
                                                     .justify_center()
                                                     .child(
-                                                        icon(LucideIcons::Pencil, 15.)
+                                                        icon(GpuiIcons::LucidePencil, 15.)
                                                             .text_color(MUTED.color()),
                                                     )
                                                     .on_click(cx.listener(
@@ -325,7 +325,7 @@ impl Studio {
                                                 button(("remove-server", index), "")
                                                     .debug_selector(move || format!("remove-server-{index}"))
                                                     .child(
-                                                        icon(LucideIcons::Trash2, 15.)
+                                                        icon(GpuiIcons::LucideTrash2, 15.)
                                                             .text_color(MUTED.color()),
                                                     )
                                                     .on_click(cx.listener(
@@ -339,7 +339,7 @@ impl Studio {
                                                 ),
                                             )
                                             .child(
-                                                icon(LucideIcons::ChevronRight, 16.)
+                                                icon(GpuiIcons::LucideChevronRight, 16.)
                                                     .text_color(MUTED.color()),
                                             )
                                             .on_click(cx.listener(move |this, _, window, cx| {
@@ -353,7 +353,7 @@ impl Studio {
                         el.child(button("server-add", "")
                             .debug_selector(|| "server-add".into())
                             .w_full().h(px(38.)).gap(px(8.)).justify_center().border_1().border_color(BORDER.color())
-                            .child(icon(LucideIcons::Plus, 16.).text_color(ACCENT.color()))
+                            .child(icon(GpuiIcons::LucidePlus, 16.).text_color(ACCENT.color()))
                             .child(t("server-add"))
                             .on_click(cx.listener(|this, _, window, cx| {
                                 if let Some(panel) = &mut this.servers {
@@ -396,7 +396,7 @@ impl Studio {
                             .gap(px(8.))
                             .text_size(px(12.))
                             .text_color(MUTED.color())
-                            .child(icon(LucideIcons::Laptop, 15.))
+                            .child(icon(GpuiIcons::LucideLaptop, 15.))
                             .child(t("server-local-available")),
                     )
             }
@@ -431,7 +431,7 @@ impl Studio {
                                 .items_center()
                                 .gap(px(12.))
                                 .py(px(24.))
-                                .child(tile(LucideIcons::User))
+                                .child(tile(GpuiIcons::LucideUser))
                                 .child(
                                     div()
                                         .font_weight(FontWeight::SEMIBOLD)
@@ -492,7 +492,7 @@ impl Studio {
                                             .rounded(px(8.))
                                             .cursor_pointer()
                                             .hover(|s| s.bg(Color::Hover.color()))
-                                            .child(tile(LucideIcons::User))
+                                            .child(tile(GpuiIcons::LucideUser))
                                             .child(
                                                 div()
                                                     .flex_1()
@@ -522,7 +522,7 @@ impl Studio {
                                                     ),
                                             )
                                             .child(
-                                                icon(if expanded { LucideIcons::ChevronDown } else { LucideIcons::ChevronRight }, 16.)
+                                                icon(if expanded { GpuiIcons::LucideChevronDown } else { GpuiIcons::LucideChevronRight }, 16.)
                                                     .text_color(MUTED.color()),
                                             )
                                             .on_click(cx.listener(move |this, _, window, cx| {
@@ -551,7 +551,7 @@ impl Studio {
                                     .when(authenticated, |el| {
                                         el.child(
                                             button(("account-settings", index), "")
-                                                .child(icon(LucideIcons::Settings, 16.))
+                                                .child(icon(GpuiIcons::LucideSettings, 16.))
                                                 .on_click(cx.listener(
                                                     move |this, _, window, cx| {
                                                         this.open_account(
@@ -606,9 +606,9 @@ impl Studio {
                                                         .gap(px(10.))
                                                         .cursor_pointer()
                                                         .hover(|s| s.bg(Color::Hover.color()))
-                                                        .child(icon(if connection.space.kind == "team" { LucideIcons::Users } else { LucideIcons::House }, 16.).text_color(MUTED.color()))
+                                                        .child(icon(if connection.space.kind == "team" { GpuiIcons::LucideUsers } else { GpuiIcons::LucideHouse }, 16.).text_color(MUTED.color()))
                                                         .child(div().flex_1().min_w_0().truncate().child(connection.space_label()))
-                                                        .when(selected, |el| el.child(icon(LucideIcons::Check, 14.).text_color(ACCENT.color())))
+                                                        .when(selected, |el| el.child(icon(GpuiIcons::LucideCheck, 14.).text_color(ACCENT.color())))
                                                         .on_click(cx.listener(move |this, _, window, cx| {
                                                             if this.signing_out { return; }
                                                             this.servers = None;

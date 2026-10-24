@@ -122,9 +122,9 @@ impl Workspace {
                 "mask-action",
                 t(if release { "mask-release" } else { "mask-use" }),
                 if release {
-                    LucideIcons::Ungroup
+                    GpuiIcons::LucideUngroup
                 } else {
-                    LucideIcons::Scan
+                    GpuiIcons::LucideScan
                 },
             )
             .flex_1()
