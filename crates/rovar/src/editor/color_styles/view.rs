@@ -2,8 +2,8 @@ use super::*;
 use crate::ui::theme::Color;
 use uic::components::{
     color_picker::{AlphaSlider, ColorPicker, ColorPickerAppearance},
-    dropdown::dropdown,
     input::{Input, InputAppearance},
+    popover::{Popover, PopoverCollision, PopoverPlacement},
 };
 
 impl Workspace {
@@ -171,167 +171,51 @@ impl Workspace {
             .as_ref()
             .and_then(|s| s.1.as_ref())
             .and_then(|id| self.colors.palette.get(id));
-        let scope = self.colors.scope;
-        let palette = self.color_palette(scope, cx);
-        let can_save = scope == Scope::Document
-            || self.assets.library.as_ref().is_some_and(|library| {
-                let library = library.read(cx);
-                library.ready && !library.busy
-            });
+        let weak = cx.entity().downgrade();
+        let label = linked.map_or_else(|| t("color-styles").to_owned(), |s| s.name.clone());
         let trigger_id = if stroke {
             "stroke-color-style"
         } else {
             "fill-color-style"
         };
-        div()
-            .flex()
-            .items_center()
-            .gap(px(4.))
-            .child(
-                dropdown(&self.colors.menu[usize::from(stroke)])
-                    .priority(1100)
-                    .w(px(260.))
-                    .p(px(6.))
-                    .rounded(px(10.))
-                    .bg(Color::Surface.color())
-                    .border_color(BORDER.color())
-                    .shadow_lg()
-                    .trigger(
-                        div()
-                            .id(trigger_id)
-                            .debug_selector(move || trigger_id.into())
-                            .h(px(26.))
-                            .px(px(7.))
-                            .rounded(px(5.))
-                            .flex()
-                            .items_center()
-                            .gap(px(6.))
-                            .cursor_pointer()
-                            .text_size(px(11.))
-                            .text_color(if linked.is_some() {
-                                ACCENT.color()
-                            } else {
-                                MUTED.color()
-                            })
-                            .hover(|s| s.bg(Color::Hover.color()))
-                            .child(icon(GpuiIcons::LucidePalette, 13.))
-                            .child(div().max_w(px(150.)).truncate().child(
-                                linked.map_or_else(
-                                    || t("color-styles").to_owned(),
-                                    |s| s.name.clone(),
-                                ),
-                            )),
-                    )
-                    .menu(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .gap(px(6.))
-                            .child(
-                                div().flex().gap(px(3.)).children(
-                                    [
-                                        (Scope::Document, "assets-document"),
-                                        (Scope::Local, "assets-local"),
-                                    ]
-                                    .map(|(choice, key)| {
-                                        button(key, t(key))
-                                            .flex_1()
-                                            .when(choice == scope, |el| {
-                                                el.bg(Color::Selected.color())
-                                                    .text_color(ACCENT.color())
-                                            })
-                                            .on_click(cx.listener(move |this, _, _, cx| {
-                                                this.colors.scope = choice;
-                                                cx.notify();
-                                            }))
-                                    }),
-                                ),
-                            )
-                            .child(
-                                div()
-                                    .id(if stroke {
-                                        "stroke-style-list"
-                                    } else {
-                                        "fill-style-list"
-                                    })
-                                    .max_h(px(230.))
-                                    .overflow_y_scroll()
-                                    .flex()
-                                    .flex_col()
-                                    .gap(px(2.))
-                                    .when(palette.is_empty(), |el| {
-                                        el.child(
-                                            div()
-                                                .p(px(12.))
-                                                .text_size(px(11.))
-                                                .text_color(MUTED.color())
-                                                .child(t("color-styles-empty")),
-                                        )
-                                    })
-                                    .children(palette.into_iter().map(|(id, style)| {
-                                        div()
-                                            .id(gpui::SharedString::from(format!(
-                                                "pick-color-{id}"
-                                            )))
-                                            .h(px(34.))
-                                            .px(px(8.))
-                                            .rounded(px(6.))
-                                            .flex()
-                                            .items_center()
-                                            .gap(px(9.))
-                                            .text_size(px(12.))
-                                            .text_color(TEXT.color())
-                                            .cursor_pointer()
-                                            .hover(|s| s.bg(Color::Hover.color()))
-                                            .child(paint_swatch(style.background(), 20.))
-                                            .child(div().flex_1().truncate().child(style.name))
-                                            .on_click(cx.listener(move |this, _, window, cx| {
-                                                this.apply_color_style(
-                                                    scope, &id, stroke, window, cx,
-                                                );
-                                            }))
-                                    })),
-                            )
-                            .child(
-                                button(
-                                    if stroke {
-                                        "save-stroke-style"
-                                    } else {
-                                        "save-fill-style"
-                                    },
-                                    t("color-style-create"),
-                                )
-                                .text_color(ACCENT.color())
-                                .opacity(if can_save { 1. } else { 0.4 })
-                                .when(can_save, |el| {
-                                    el.on_click(cx.listener(move |this, _, window, cx| {
-                                        this.open_color_dialog(scope, None, stroke, window, cx);
-                                    }))
-                                }),
-                            ),
-                    ),
-            )
-            .when(linked.is_some(), |el| {
-                el.child(
+        div().flex().items_center().gap(px(4.)).child(
+            Popover::new(&self.colors.menu[usize::from(stroke)])
+                .label(t("color-styles"))
+                .placement(PopoverPlacement::LeftStart)
+                .collision(PopoverCollision::Shift)
+                .viewport_margin(px(16.))
+                .gap(px(24.))
+                .priority(1100)
+                .p_0()
+                .border_0()
+                .bg(Color::Transparent.color())
+                .trigger(
                     div()
-                        .id(if stroke {
-                            "detach-stroke-style"
-                        } else {
-                            "detach-fill-style"
-                        })
-                        .size(px(24.))
+                        .id(trigger_id)
+                        .debug_selector(move || trigger_id.into())
+                        .size(px(26.))
+                        .rounded(px(8.))
                         .flex()
                         .items_center()
                         .justify_center()
                         .cursor_pointer()
-                        .text_color(MUTED.color())
-                        .hover(|s| s.text_color(TEXT.color()))
-                        .child(icon(GpuiIcons::LucideUnlink, 13.))
-                        .on_click(
-                            cx.listener(move |this, _, _, cx| this.detach_color_style(stroke, cx)),
-                        ),
+                        .text_size(px(11.))
+                        .text_color(if linked.is_some() {
+                            ACCENT.color()
+                        } else {
+                            MUTED.color()
+                        })
+                        .hover(|s| s.bg(Color::Text.color().opacity(0.07)))
+                        .tooltip(move |_, cx| cx.new(|_| toolbar::ToolTip(label.clone())).into())
+                        .child(icon(GpuiIcons::LucidePalette, 15.)),
                 )
-            })
+                .content(move |window, cx| {
+                    div().children(
+                        weak.update(cx, |this, cx| this.color_style_menu(stroke, window, cx))
+                            .ok(),
+                    )
+                }),
+        )
     }
 
     fn gradient_style_controls(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
@@ -663,7 +547,7 @@ fn label(text: &'static str) -> Div {
         .child(text)
 }
 
-fn paint_swatch(background: gpui::Background, size: f32) -> Div {
+pub(super) fn paint_swatch(background: gpui::Background, size: f32) -> Div {
     div()
         .size(px(size))
         .flex_shrink_0()

@@ -3,10 +3,11 @@ use crate::i18n::t;
 use crate::scene::color_styles::{ColorStyle, DEFAULT_STYLE_COLOR, Palette};
 use assets::Scope;
 use gpui::Focusable;
-use uic::components::dropdown::DropdownState;
+use uic::components::popover::PopoverState;
 
 mod gradient;
 mod input;
+mod menu;
 #[cfg(test)]
 mod tests;
 mod view;
@@ -28,7 +29,8 @@ pub(super) struct State {
     pub dialog: Option<Dialog>,
     pub(super) focus: gpui::FocusHandle,
     scope: Scope,
-    pub(super) menu: [Entity<DropdownState>; 2],
+    pub(super) menu: [Entity<PopoverState>; 2],
+    browser: menu::Browser,
     name: Entity<TextInput>,
     value: Entity<TextInput>,
     angle: Entity<TextInput>,
@@ -116,12 +118,15 @@ impl State {
                 }
             }));
         }
+        let menu = std::array::from_fn(|_| cx.new(|cx| PopoverState::new(window, cx)));
+        let browser = menu::Browser::new(window, cx, &menu, &mut subscriptions);
         Self {
             palette: Palette::new(),
             dialog: None,
             focus: cx.focus_handle(),
             scope: Scope::Document,
-            menu: std::array::from_fn(|_| cx.new(|cx| DropdownState::new(window, cx))),
+            menu,
+            browser,
             name,
             value,
             angle,

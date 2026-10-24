@@ -369,9 +369,13 @@ impl Workspace {
                 div()
                     .flex()
                     .items_center()
-                    .justify_between()
+                    .gap(px(4.))
+                    .when(enabled || count > 0, |el| {
+                        el.child(self.color_style_control(stroke, cx))
+                    })
                     .child(
                         div()
+                            .flex_1()
                             .text_size(px(12.))
                             .font_weight(FontWeight::SEMIBOLD)
                             .debug_selector(move || {
@@ -434,9 +438,6 @@ impl Workspace {
                         )),
                     ),
             )
-            .when(enabled || count > 0, |el| {
-                el.child(self.color_style_control(stroke, cx))
-            })
             .children(
                 (0..=count)
                     .rev()

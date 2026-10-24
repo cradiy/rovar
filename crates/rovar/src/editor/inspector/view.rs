@@ -251,8 +251,20 @@ impl Workspace {
                             self.selected_shape.is_none() && self.selected_text.is_some(),
                             |el| {
                                 el.child(
-                                    inspector_section(t("fill"))
-                                        .child(self.color_style_control(false, cx))
+                                    section_body()
+                                        .child(
+                                            div()
+                                                .flex()
+                                                .items_center()
+                                                .gap(px(4.))
+                                                .child(self.color_style_control(false, cx))
+                                                .child(
+                                                    div()
+                                                        .text_size(px(12.))
+                                                        .font_weight(FontWeight::SEMIBOLD)
+                                                        .child(t("fill")),
+                                                ),
+                                        )
                                         .child(self.paint_value_row(cx)),
                                 )
                             },
