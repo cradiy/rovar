@@ -1961,11 +1961,12 @@ fn prototype_controls_configure_and_remove_clicks(cx: &mut TestAppContext) {
     let play = visual.debug_bounds("present").unwrap();
     let zoom = visual.debug_bounds("inspector-zoom").unwrap();
     assert!(
-        tab.right() <= play.left(),
+        tab.bottom() <= play.top() && tab.bottom() <= zoom.top(),
         "tab={tab:?}, play={play:?}, zoom={zoom:?}, panel={panel:?}"
     );
-    assert!(play.bottom() <= zoom.top());
-    assert!(zoom.right() < panel.right());
+    assert_eq!(play.center().y, zoom.center().y);
+    assert!(zoom.right() < play.left());
+    assert!(zoom.left() > panel.left() && play.right() < panel.right());
     click(&mut visual, "prototype-click-menu");
     click(&mut visual, "prototype-option-1-1");
     assert!(visual.debug_bounds("prototype-target-menu").is_none());

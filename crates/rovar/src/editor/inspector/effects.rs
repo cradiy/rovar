@@ -535,14 +535,7 @@ impl Workspace {
             return div();
         }
         let shadows = self.common_effects();
-        div()
-            .flex_shrink_0()
-            .px(px(14.))
-            .py(px(10.))
-            .border_b_1()
-            .border_color(BORDER.color())
-            .flex()
-            .flex_col()
+        section_body()
             .gap(px(6.))
             .child(
                 div()

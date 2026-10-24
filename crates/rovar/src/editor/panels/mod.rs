@@ -1,10 +1,87 @@
 use super::*;
+use crate::ui::theme::Color;
 
 const CANVAS_SPACE: f32 = 312.;
 const FLOATING_GAPS: f32 = 56.;
 
 pub(super) const PANEL_TOP: f32 = 14.;
 pub(super) const PANEL_BOTTOM: f32 = 18.;
+pub(super) const PANEL_RADIUS: f32 = 20.;
+
+pub(super) fn mode_tabs() -> Div {
+    div()
+        .flex_1()
+        .min_w_0()
+        .p(px(3.))
+        .rounded(px(12.))
+        .bg(Color::Workspace.color().opacity(0.5))
+        .flex()
+        .items_center()
+        .gap(px(2.))
+}
+
+pub(super) fn mode_tab(id: &'static str, active: bool) -> gpui::Stateful<Div> {
+    div()
+        .id(id)
+        .debug_selector(move || id.into())
+        .h(px(32.))
+        .px(px(6.))
+        .flex_1()
+        .min_w_0()
+        .rounded(px(9.))
+        .border_1()
+        .border_color(if active {
+            Color::Accent.color().opacity(0.16)
+        } else {
+            Color::Transparent.color()
+        })
+        .flex()
+        .items_center()
+        .justify_center()
+        .gap(px(6.))
+        .text_size(px(12.))
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(if active {
+            ACCENT.color()
+        } else {
+            MUTED.color()
+        })
+        .cursor_pointer()
+        .hover(|s| s.bg(Color::Text.color().opacity(0.04)))
+        .when(active, |el| el.bg(Color::Selected.color()))
+}
+
+pub(super) fn empty_state(glyph: GpuiIcons, message: &'static str) -> Div {
+    div()
+        .flex_1()
+        .min_h_0()
+        .p(px(24.))
+        .flex()
+        .flex_col()
+        .items_center()
+        .justify_center()
+        .text_center()
+        .gap(px(16.))
+        .child(
+            div()
+                .size(px(52.))
+                .flex_shrink_0()
+                .rounded(px(18.))
+                .bg(Color::Accent.color().opacity(0.075))
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(icon(glyph, 22.).text_color(ACCENT.color())),
+        )
+        .child(
+            div()
+                .max_w(px(190.))
+                .text_size(px(12.))
+                .line_height(px(20.))
+                .text_color(MUTED.color())
+                .child(message),
+        )
+}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum Side {
@@ -137,6 +214,7 @@ impl Workspace {
             .rounded(px(3.))
             .occlude()
             .cursor(gpui::CursorStyle::ResizeLeftRight)
+            .hover(|s| s.bg(Color::Accent.color().opacity(0.18)))
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(move |this, event: &gpui::MouseDownEvent, window, cx| {

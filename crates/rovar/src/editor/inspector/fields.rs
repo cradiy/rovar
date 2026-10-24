@@ -136,13 +136,13 @@ impl Workspace {
             .min_w_0()
             .flex_shrink_0()
             .h(px(32.))
-            .rounded(px(6.))
+            .rounded(px(9.))
             .bg(Color::Input.color())
             .border_1()
             .border_color(if self.inspector.invalid[slot] {
                 Color::Danger.color()
             } else {
-                Color::Hover.color()
+                Color::Text.color().opacity(0.055)
             })
             .when(!popup, |el| {
                 el.bg(Color::Transparent.color())
@@ -224,7 +224,7 @@ impl Workspace {
                     Popover::new(&self.inspector.paint_popovers[usize::from(index == 16)])
                         .label(t("color"))
                         .placement(PopoverPlacement::LeftStart)
-                        .gap(px(20.))
+                        .gap(px(32.))
                         .p_0()
                         .border_0()
                         .bg(Color::Transparent.color())
@@ -303,7 +303,7 @@ impl Workspace {
             .h(px(32.))
             .flex()
             .items_center()
-            .rounded(px(6.))
+            .rounded(px(9.))
             .bg(Color::Input.color())
             .child(self.property_field(if stroke { 16 } else { 5 }, t("color-hex"), cx))
             .child(

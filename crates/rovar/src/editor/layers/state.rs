@@ -145,13 +145,18 @@ impl Workspace {
                     .debug_selector(move || format!("layer-{action}-{id}"))
                     .size(px(22.))
                     .flex_shrink_0()
-                    .rounded(px(4.))
+                    .rounded(px(7.))
+                    .opacity(if active || self.is_selected(id) || disabled {
+                        1.
+                    } else {
+                        0.5
+                    })
                     .flex()
                     .items_center()
                     .justify_center()
                     .when(!disabled, |el| {
                         el.cursor_pointer()
-                            .hover(|s| s.bg(Color::Text.color().opacity(0.0941)))
+                            .hover(|s| s.opacity(1.).bg(Color::Text.color().opacity(0.0941)))
                     })
                     .tooltip(move |_, cx| cx.new(|_| toolbar::ToolTip(label.into())).into())
                     .child(icon(glyph, 14.).text_color(if active && !disabled {

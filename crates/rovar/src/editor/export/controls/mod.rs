@@ -194,14 +194,8 @@ impl Workspace {
         } else {
             t("export-selection").into()
         };
-        div()
+        inspector::section_body()
             .debug_selector(|| "export-properties".into())
-            .flex_shrink_0()
-            .p(px(14.))
-            .border_b_1()
-            .border_color(BORDER.color())
-            .flex()
-            .flex_col()
             .gap(px(8.))
             .text_size(px(12.))
             .child(

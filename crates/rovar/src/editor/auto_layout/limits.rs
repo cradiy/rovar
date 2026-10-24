@@ -149,14 +149,7 @@ impl Workspace {
             .is_some_and(|s| !s.limits.is_empty());
         let expanded = self.auto_layout.limits.expanded;
         let section =
-            div()
-                .flex_shrink_0()
-                .px(px(14.))
-                .py(px(10.))
-                .border_b_1()
-                .border_color(BORDER.color())
-                .flex()
-                .flex_col()
+            inspector::section_body()
                 .text_size(px(12.))
                 .font_weight(FontWeight::NORMAL)
                 .line_height(px(16.))

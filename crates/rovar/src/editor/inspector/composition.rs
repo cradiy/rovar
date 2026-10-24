@@ -38,15 +38,9 @@ impl Workspace {
             return None;
         }
         Some(
-            div()
+            section_body()
                 .debug_selector(|| "composition-controls".into())
-                .px(px(14.))
                 .py(px(10.))
-                .border_b_1()
-                .border_color(BORDER.color())
-                .flex_shrink_0()
-                .flex()
-                .flex_col()
                 .gap(px(6.))
                 .child(
                     div()

@@ -255,15 +255,8 @@ impl Workspace {
                     };
                     let label = if stroke { t("stroke") } else { t("fill") };
                     let id = if stroke { "shape-stroke" } else { "shape-fill" };
-                    div()
-                        .px(px(14.))
-                        .py(px(12.))
-                        .flex()
-                        .flex_col()
+                    crate::editor::inspector::section_body()
                         .gap(px(8.))
-                        .flex_shrink_0()
-                        .border_b_1()
-                        .border_color(BORDER.color())
                         .child(
                             div()
                                 .flex()

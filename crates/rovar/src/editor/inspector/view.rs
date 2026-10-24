@@ -67,16 +67,16 @@ impl Workspace {
         )
         .size(px(28.))
         .on_click(cx.listener(|this, _, window, cx| this.toggle_properties(window, cx)));
-        let surface = layers::glass_surface()
+        let surface = layers::sidebar_surface()
             .id("properties-panel")
             .debug_selector(|| "properties-panel".into())
             .absolute()
             .top(px(panels::PANEL_TOP))
             .right(px(14.))
             .flex_shrink_0()
-            .rounded(px(16.))
+            .rounded(px(panels::PANEL_RADIUS))
             .border_1()
-            .border_color(Color::Accent.color().opacity(0.1882))
+            .border_color(Color::Text.color().opacity(0.12))
             .shadow_lg()
             .occlude()
             .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
@@ -100,24 +100,25 @@ impl Workspace {
             .flex()
             .flex_col()
             .child(self.inspector_modes(toggle, cx))
-            .child(div().h(px(1.)).flex_shrink_0().bg(BORDER.color()))
             .when(selected || !self.multi_selection.is_empty(), |el| {
                 el.child(
                     div()
-                        .h(px(48.))
-                        .px(px(12.))
+                        .h(px(52.))
+                        .px(px(16.))
                         .flex_shrink_0()
                         .flex()
                         .items_center()
                         .gap(px(8.))
                         .child(
                             div()
-                                .size(px(28.))
+                                .size(px(30.))
+                                .rounded(px(10.))
+                                .bg(Color::Accent.color().opacity(0.08))
                                 .flex_shrink_0()
                                 .flex()
                                 .items_center()
                                 .justify_center()
-                                .child(icon(glyph, 16.).text_color(MUTED.color())),
+                                .child(icon(glyph, 15.).text_color(ACCENT.color())),
                         )
                         .child(
                             div()
@@ -164,7 +165,6 @@ impl Workspace {
                             },
                         )),
                 )
-                .child(div().h(px(1.)).flex_shrink_0().bg(BORDER.color()))
             })
             .when(self.selected_text.is_some(), |el| {
                 el.child(self.text_properties(cx))
@@ -181,8 +181,9 @@ impl Workspace {
                         .flex_col()
                         .child(
                             div()
-                                .px(px(14.))
-                                .py(px(10.))
+                                .px(px(20.))
+                                .pt(px(2.))
+                                .pb(px(10.))
                                 .flex()
                                 .flex_shrink_0()
                                 .child(self.property_field(0, t("name"), cx)),
@@ -265,26 +266,8 @@ impl Workspace {
             })
             .when(!selected && self.multi_selection.is_empty(), |el| {
                 el.child(
-                    div()
-                        .debug_selector(|| "inspector-empty".into())
-                        .flex_1()
-                        .min_h_0()
-                        .p(px(24.))
-                        .flex()
-                        .flex_col()
-                        .items_center()
-                        .justify_center()
-                        .text_center()
-                        .gap(px(12.))
-                        .child(
-                            icon(GpuiIcons::LucideSlidersHorizontal, 24.).text_color(MUTED.color()),
-                        )
-                        .child(
-                            div()
-                                .text_size(px(12.))
-                                .text_color(MUTED.color())
-                                .child(t("inspector-empty")),
-                        ),
+                    panels::empty_state(GpuiIcons::LucideSlidersHorizontal, t("inspector-empty"))
+                        .debug_selector(|| "inspector-empty".into()),
                 )
             })
             .when(self.export.busy || self.export.status.is_some(), |el| {

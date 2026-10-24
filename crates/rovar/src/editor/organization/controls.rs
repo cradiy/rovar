@@ -183,14 +183,15 @@ impl Workspace {
     pub(in crate::editor) fn organization_actions(&self, cx: &mut Context<Self>) -> Div {
         let ids = self.selection_ids();
         let mut row = div()
-            .h(px(38.))
-            .px(px(10.))
+            .h(px(36.))
+            .mx(px(12.))
+            .px(px(4.))
+            .rounded(px(10.))
+            .bg(Color::Text.color().opacity(0.025))
             .flex_shrink_0()
             .flex()
             .items_center()
-            .gap(px(3.))
-            .border_b_1()
-            .border_color(BORDER.color());
+            .gap(px(4.));
         for (id, label, glyph, action, enabled) in [
             (
                 "group-selection",
@@ -233,7 +234,7 @@ impl Workspace {
                     .id(id)
                     .debug_selector(move || id.into())
                     .size(px(28.))
-                    .rounded(px(5.))
+                    .rounded(px(8.))
                     .flex()
                     .items_center()
                     .justify_center()

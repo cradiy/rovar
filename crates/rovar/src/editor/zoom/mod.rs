@@ -102,100 +102,69 @@ impl Workspace {
         collapse: impl IntoElement,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let compact = self.panels.width(panels::Side::Right) < 280.;
         let row = div()
-            .h(px(48.))
-            .px(px(8.))
+            .h(px(60.))
+            .px(px(12.))
             .flex_shrink_0()
             .flex()
             .items_center()
-            .gap(px(2.))
+            .gap(px(6.))
             .child(
-                div()
+                panels::mode_tabs()
                     .id("inspector-modes")
-                    .flex_1()
-                    .min_w_0()
-                    .flex()
-                    .items_center()
-                    .gap(px(4.))
                     .child(
-                        div()
-                            .id("inspector-design-tab")
-                            .debug_selector(|| "inspector-design-tab".into())
-                            .h(px(28.))
-                            .px(px(6.))
-                            .flex_shrink_0()
-                            .rounded(px(6.))
-                            .when(!self.presentation.tab, |el| el.bg(Color::Selected.color()))
-                            .text_color(if self.presentation.tab {
-                                MUTED.color()
-                            } else {
-                                ACCENT.color()
-                            })
-                            .cursor_pointer()
+                        panels::mode_tab("inspector-design-tab", !self.presentation.tab)
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.set_presentation_tab(false, window, cx)
                             }))
-                            .text_size(px(12.))
-                            .font_weight(FontWeight::MEDIUM)
-                            .flex()
-                            .items_center()
-                            .child(t("design")),
+                            .child(div().min_w_0().truncate().child(t("design"))),
                     )
                     .child(
-                        div()
-                            .id("inspector-prototype-tab")
-                            .debug_selector(|| "inspector-prototype-tab".into())
-                            .h(px(28.))
-                            .px(px(6.))
-                            .flex_shrink_0()
-                            .rounded(px(6.))
-                            .when(self.presentation.tab, |el| el.bg(Color::Selected.color()))
-                            .text_color(if self.presentation.tab {
-                                ACCENT.color()
-                            } else {
-                                MUTED.color()
-                            })
-                            .text_size(px(12.))
-                            .font_weight(FontWeight::MEDIUM)
-                            .flex()
-                            .items_center()
-                            .cursor_pointer()
-                            .child(t("prototype"))
+                        panels::mode_tab("inspector-prototype-tab", self.presentation.tab)
+                            .child(div().min_w_0().truncate().child(t("prototype")))
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.set_presentation_tab(true, window, cx)
                             })),
                     ),
             )
-            .child(
-                inspector::icon_button("present", t("present"), GpuiIcons::LucidePlay, false)
-                    .size(px(24.))
-                    .opacity(if self.presentation_start().is_some() {
-                        1.
-                    } else {
-                        0.4
-                    })
-                    .on_click(
-                        cx.listener(|this, _, window, cx| this.start_presentation(window, cx)),
-                    ),
-            )
-            .when(!compact, |el| el.child(self.zoom_control(cx)))
             .child(collapse);
-        div()
-            .flex()
-            .flex_col()
-            .flex_shrink_0()
-            .child(row)
-            .when(compact, |el| {
-                el.child(
+        div().flex().flex_col().flex_shrink_0().child(row).child(
+            div()
+                .px(px(16.))
+                .pb(px(6.))
+                .flex()
+                .items_center()
+                .justify_between()
+                .child(self.zoom_control(cx))
+                .child(
                     div()
+                        .id("present")
+                        .debug_selector(|| "present".into())
+                        .h(px(28.))
                         .px(px(8.))
-                        .pb(px(6.))
+                        .rounded(px(8.))
                         .flex()
-                        .justify_end()
-                        .child(self.zoom_control(cx)),
-                )
-            })
+                        .items_center()
+                        .gap(px(6.))
+                        .text_size(px(11.))
+                        .text_color(ACCENT.color())
+                        .bg(Color::Accent.color().opacity(0.08))
+                        .opacity(if self.presentation_start().is_some() {
+                            1.
+                        } else {
+                            0.4
+                        })
+                        .when(self.presentation_start().is_some(), |el| {
+                            el.cursor_pointer()
+                                .hover(|s| s.bg(Color::Accent.color().opacity(0.15)))
+                        })
+                        .child(icon(GpuiIcons::LucidePlay, 13.))
+                        .child(t("present"))
+                        .on_click(
+                            cx.listener(|this, _, window, cx| this.start_presentation(window, cx)),
+                        ),
+                ),
+        )
     }
 
     fn zoom_control(&self, cx: &mut Context<Self>) -> impl IntoElement {

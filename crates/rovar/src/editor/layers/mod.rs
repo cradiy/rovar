@@ -19,10 +19,20 @@ pub(super) struct Sidebar {
 // Only the enclosing surfaces sample the backdrop; their contents stay sharp.
 #[cfg(not(target_family = "wasm"))]
 pub(super) fn glass_surface() -> LiquidGlass {
+    glass_surface_with_tint(Color::Glass.color())
+}
+
+#[cfg(not(target_family = "wasm"))]
+pub(super) fn sidebar_surface() -> LiquidGlass {
+    glass_surface_with_tint(Color::Panel.color().opacity(0.96))
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn glass_surface_with_tint(tint: gpui::Rgba) -> LiquidGlass {
     LiquidGlass::with_appearance(LiquidGlassAppearance {
         blur_radius: px(16.),
         clarity: 0.12,
-        tint: Color::Glass.color().into(),
+        tint: tint.into(),
         refraction: px(3.),
         thickness: px(12.),
         highlight: 0.24,
@@ -42,6 +52,9 @@ pub(super) fn glass_surface() -> LiquidGlass {
 pub(super) fn glass_surface() -> Div {
     div().bg(PANEL.color())
 }
+
+#[cfg(target_family = "wasm")]
+pub(super) use glass_surface as sidebar_surface;
 
 #[derive(Clone, Copy)]
 enum LayerKind {
@@ -63,8 +76,8 @@ struct Layer {
 impl Workspace {
     fn layer_summary(&self, cx: &mut Context<Self>) -> Div {
         div()
-            .h(px(34.))
-            .px(px(14.))
+            .h(px(38.))
+            .px(px(16.))
             .flex_shrink_0()
             .flex()
             .items_center()
@@ -211,10 +224,10 @@ impl Workspace {
             .w_full()
             .h(px(36.))
             .px(px(6.))
-            .rounded(px(7.))
+            .rounded(px(10.))
             .border_1()
             .border_color(if active {
-                Color::Accent.color().opacity(0.2667)
+                Color::Accent.color().opacity(0.18)
             } else {
                 Color::Transparent.color()
             })
@@ -222,13 +235,16 @@ impl Workspace {
             .items_center()
             .gap(px(7.))
             .text_size(px(12.))
+            .when(matches!(layer.kind, LayerKind::Board), |el| {
+                el.font_weight(FontWeight::MEDIUM)
+            })
             .cursor_pointer()
             .when(!effective.editable(), |el| {
                 el.cursor(gpui::CursorStyle::Arrow)
             })
-            .hover(|s| s.bg(Color::Accent.color().opacity(0.0863)))
+            .hover(|s| s.bg(Color::Text.color().opacity(0.045)))
             .when(active, |el| {
-                el.bg(Color::Accent.color().opacity(0.1647))
+                el.bg(Color::Accent.color().opacity(0.12))
                     .text_color(ACCENT.color())
             })
             .pl(px(6. + layer.depth as f32 * 16.))
@@ -363,15 +379,15 @@ impl Workspace {
 
     pub(super) fn sidebar(&self, cx: &mut Context<Self>) -> AnyElement {
         self.layer_row_bounds.borrow_mut().clear();
-        let surface = glass_surface()
+        let surface = sidebar_surface()
             .id("layers-panel")
             .debug_selector(|| "layers-panel".into())
             .absolute()
             .left(px(14.))
             .top(px(panels::PANEL_TOP))
-            .rounded(px(16.))
+            .rounded(px(panels::PANEL_RADIUS))
             .border_1()
-            .border_color(Color::Accent.color().opacity(0.1882))
+            .border_color(Color::Text.color().opacity(0.12))
             .shadow_lg()
             .occlude()
             .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
@@ -382,7 +398,7 @@ impl Workspace {
             .debug_selector(|| "toggle-layers".into())
             .size(px(28.))
             .flex_shrink_0()
-            .rounded(px(6.))
+            .rounded(px(8.))
             .flex()
             .items_center()
             .justify_center()
@@ -420,45 +436,16 @@ impl Workspace {
         if self.sidebar.collapsed {
             return surface.p(px(8.)).child(toggle).into_any_element();
         }
-        let mut tabs = div()
-            .h(px(56.))
-            .px(px(10.))
-            .flex_shrink_0()
-            .flex()
-            .items_center()
-            .gap(px(4.));
+        let mut tabs = panels::mode_tabs();
         for (resources, id, label, glyph) in [
             (false, "layers-tab", t("layers"), GpuiIcons::LucideLayers),
             (true, "resources-tab", t("assets"), GpuiIcons::LucideBox),
         ] {
             let active = self.sidebar.resources == resources;
             tabs = tabs.child(
-                div()
-                    .id(id)
-                    .debug_selector(move || id.into())
-                    .h(px(34.))
-                    .flex_1()
-                    .rounded(px(7.))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .gap(px(7.))
-                    .text_size(px(12.))
-                    .font_weight(FontWeight::MEDIUM)
-                    .text_color(if active {
-                        ACCENT.color()
-                    } else {
-                        MUTED.color()
-                    })
-                    .cursor_pointer()
-                    .hover(|s| s.bg(Color::Accent.color().opacity(0.0863)))
-                    .when(active, |el| el.bg(Color::Accent.color().opacity(0.1333)))
-                    .child(icon(glyph, 17.).text_color(if active {
-                        ACCENT.color()
-                    } else {
-                        MUTED.color()
-                    }))
-                    .child(label)
+                panels::mode_tab(id, active)
+                    .child(icon(glyph, 15.).flex_shrink_0())
+                    .child(div().min_w_0().truncate().child(label))
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.sidebar.resources = resources;
                         cx.stop_propagation();
@@ -471,12 +458,16 @@ impl Workspace {
             .bottom(px(panels::PANEL_BOTTOM))
             .flex()
             .flex_col()
-            .child(tabs.child(toggle))
             .child(
                 div()
-                    .h(px(1.))
+                    .h(px(60.))
+                    .px(px(12.))
                     .flex_shrink_0()
-                    .bg(Color::Accent.color().opacity(0.1255)),
+                    .flex()
+                    .items_center()
+                    .gap(px(6.))
+                    .child(tabs)
+                    .child(toggle),
             )
             .when(!self.sidebar.resources, |el| {
                 let el = el
@@ -485,23 +476,10 @@ impl Workspace {
                     .child(self.layer_summary(cx));
                 let rows = self.layer_rows();
                 if rows.is_empty() {
-                    el.child(
-                        div()
-                            .pt(px(40.))
-                            .flex()
-                            .flex_col()
-                            .items_center()
-                            .gap(px(10.))
-                            .child(
-                                icon(GpuiIcons::LucideLayers, 24.).text_color(Color::Muted.color()),
-                            )
-                            .child(
-                                div()
-                                    .text_size(px(12.))
-                                    .text_color(MUTED.color())
-                                    .child(t("layers-empty")),
-                            ),
-                    )
+                    el.child(panels::empty_state(
+                        GpuiIcons::LucideLayers,
+                        t("layers-empty"),
+                    ))
                 } else {
                     el.child(
                         uniform_list(

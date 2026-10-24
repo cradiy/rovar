@@ -66,24 +66,30 @@ pub(super) fn inspector_color_picker(state: &Entity<ColorPickerState>) -> ColorP
         .appearance(appearance)
 }
 
-pub(super) fn inspector_section(title: &'static str) -> Div {
+pub(super) fn section_body() -> Div {
     div()
         .flex_shrink_0()
-        .px(px(14.))
-        .py(px(14.))
-        .border_b_1()
-        .border_color(BORDER.color())
+        .mx(px(8.))
+        .my(px(4.))
+        .p(px(12.))
+        .rounded(px(13.))
+        .border_1()
+        .border_color(Color::Text.color().opacity(0.045))
+        .bg(Color::Text.color().opacity(0.025))
         .flex()
         .flex_col()
         .gap(px(10.))
-        .child(
-            div()
-                .text_size(px(12.))
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(TEXT.color())
-                .line_height(px(16.))
-                .child(title),
-        )
+}
+
+pub(super) fn inspector_section(title: &'static str) -> Div {
+    section_body().child(
+        div()
+            .text_size(px(12.))
+            .font_weight(FontWeight::SEMIBOLD)
+            .text_color(TEXT.color())
+            .line_height(px(16.))
+            .child(title),
+    )
 }
 
 pub(super) fn property_caption(label: &'static str) -> Div {
@@ -114,13 +120,13 @@ pub(super) fn icon_button(
         .debug_selector(move || id.to_string())
         .size(px(30.))
         .flex_shrink_0()
-        .rounded(px(5.))
+        .rounded(px(8.))
         .flex()
         .items_center()
         .justify_center()
         .cursor_pointer()
         .when(active, |el| el.bg(Color::Selected.color()))
-        .hover(|s| s.bg(BORDER.color()))
+        .hover(|s| s.bg(Color::Text.color().opacity(0.07)))
         .tooltip(move |_, cx| cx.new(|_| toolbar::ToolTip(label.into())).into())
         .child(icon(glyph, 17.).text_color(if active {
             ACCENT.color()
