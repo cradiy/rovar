@@ -3,6 +3,7 @@ use crate::agent::protocol::{self as p, Error, Request, Result};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 mod geometry;
+mod history;
 mod import;
 mod interaction;
 mod model;
@@ -41,6 +42,12 @@ impl Workspace {
         &self.agent.session
     }
 
+    pub(crate) fn agent_scope(&self, document_id: &str) -> Value {
+        json!({"session_id":self.agent.session,"document_id":document_id,
+            "page_id":self.pages.active,"revision":self.document_revision().to_string(),
+            "history":{"can_undo":self.can_undo_redo(false),"can_redo":self.can_undo_redo(true)}})
+    }
+
     pub(crate) fn agent_session(
         &self,
         document_id: &str,
@@ -56,12 +63,13 @@ impl Workspace {
             "components":self.components.definitions.iter().map(|(id,d)|json!({"id":id,"name":d.name})).collect::<Vec<_>>(),
             "selection":self.selection_ids().iter().filter_map(|id| identities.get(id)).collect::<Vec<_>>(),
             "view":self.agent_view(),
+            "history":{"can_undo":self.can_undo_redo(false),"can_redo":self.can_undo_redo(true)},
             "start_frame_id":page.hierarchy.start.and_then(|id| identities.get(&id)),
             "busy":self.agent_busy(window,cx),"remaining_apply_receipts":p::MAX_RECEIPTS-self.agent.receipts.len(),
             "remaining_receipt_bytes":p::MAX_RECEIPT_BYTES-self.agent.receipt_bytes})
     }
 
-    fn agent_busy(&self, window: &Window, cx: &gpui::App) -> bool {
+    pub(crate) fn agent_busy(&self, window: &Window, cx: &gpui::App) -> bool {
         !self.sync_ready(cx)
             || self.history.borrow().is_previewing()
             || self.preview_read_only()
@@ -121,7 +129,12 @@ impl Workspace {
         if !active_tab
             && matches!(
                 request.method.as_str(),
-                "pages.activate" | "selection.set" | "canvas.focus" | "canvas.fit"
+                "pages.activate"
+                    | "selection.set"
+                    | "canvas.focus"
+                    | "canvas.fit"
+                    | "document.undo"
+                    | "document.redo"
             )
         {
             return Err(Error::new(
@@ -211,6 +224,7 @@ impl Workspace {
                 ))
             }
             "document.apply" => self.agent_apply(request, imports, window, cx),
+            "document.undo" | "document.redo" => self.agent_history(request, window, cx),
             "canvas.capture" => self.agent_capture(p::parse(request.params.clone())?, window, cx),
             "selection.set" | "canvas.focus" | "canvas.fit" => self
                 .agent_view_request(&request.method, p::parse(request.params.clone())?, cx)

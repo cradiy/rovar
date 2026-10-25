@@ -98,6 +98,12 @@ pub(crate) struct Empty {}
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+pub(crate) struct HistoryTarget {
+    pub base_revision: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct CreateTab {
     pub window_id: String,
     pub title: Option<String>,
@@ -464,6 +470,7 @@ pub(crate) fn schema(method: Option<&str>) -> Result<Value> {
         Some("schema.get") => json!(schemars::schema_for!(Schema)),
         Some("nodes.get" | "nodes.find") => json!(schemars::schema_for!(Read)),
         Some("document.apply") => json!(schemars::schema_for!(Apply)),
+        Some("document.undo" | "document.redo") => json!(schemars::schema_for!(HistoryTarget)),
         Some("canvas.capture") => json!(schemars::schema_for!(Capture)),
         Some("selection.set" | "canvas.focus" | "canvas.fit") => {
             json!(schemars::schema_for!(Targets))

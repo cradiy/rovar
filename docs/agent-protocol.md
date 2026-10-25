@@ -92,6 +92,7 @@ this transport.
 `session.describe` returns loaded sessions, their window/tab/document/page IDs, revision,
 selection UUIDs, `start_frame_id`, busy state, remaining receipt slots, and supported capabilities.
 Each session includes `active`, indicating whether its tab is selected in its window.
+`history.can_undo` and `history.can_redo` report the available document history directions.
 Select the intended session by document identity; do not assume the first session is visible.
 Loading, remote checks, closing, and pending window dialogs or drags mark sessions busy.
 Unloaded tabs have no editing session; activate them once to load them.
@@ -144,6 +145,8 @@ Window/tab IDs are opaque strings as described below. Revisions are opaque strin
 | `nodes.get` | Read specified UUIDs, or a page's nodes; returns parent UUIDs, properties, total, and next offset. |
 | `nodes.find` | Same read contract, with an optional case-insensitive name substring and exact node type filter. |
 | `document.apply` | Apply ordered node edits and prototype interaction settings atomically. |
+| `document.undo` | Undo one document history entry at the supplied revision. |
+| `document.redo` | Redo one document history entry at the supplied revision. |
 | `canvas.capture` | Render one node's subtree as a PNG using the export renderer. |
 | `selection.set` | Replace the selection with explicit UUIDs; an empty array clears it. |
 | `canvas.focus` | Center explicit UUIDs in the available canvas area, keeping the zoom. |
@@ -190,12 +193,13 @@ revision and creates no undo entry. Selection and canvas framing methods still
 require the active page and return `PAGE_NOT_ACTIVE` otherwise. `pages.activate`,
 selection, and framing also require the active tab and return `TAB_NOT_ACTIVE`
 otherwise; use `tabs.activate` explicitly when the task requires showing a document.
-Activation does not
-interrupt an editor interaction: it returns `BUSY` while the editor is being edited.
+Activation does not interrupt an editor interaction: it returns `BUSY` while the
+editor is being edited.
 
 `pages.apply` and `pages.activate` share the successful-request receipt cache with
-`document.apply`. Exact retries return the original acknowledgement, including after
-undo or later page switches; they never repeat a mutation or page switch. Use
+`document.apply`, `document.undo`, and `document.redo`. Exact retries return the
+original acknowledgement, including after undo or later page switches; they never
+repeat a mutation or page switch. Use
 `pages.list` or `session.describe` to read current state. Reads consume no receipts.
 
 ## Document tabs
@@ -204,7 +208,7 @@ Tab methods are process-scoped: omit envelope `session_id` and `document_id`.
 Use opaque string `window_id` and `tab_id` values from `tabs.list`; tab IDs are scoped
 to their window. Do not derive them from titles or array indices. Reopening a document
 or moving a tab to another window can change its tab ID. After activation, use
-`session.describe` to obtain the current editing session and revision.
+the returned `tab.session` for its current editing scope and revision.
 
 ```json
 {"request_id":"new-design","method":"tabs.create","params":{"window_id":"WINDOW_ID","title":"Music player"}}
@@ -228,13 +232,43 @@ loading tab and reports `{tab_id, title, message}` in the window's `open_errors`
 while the corresponding error dialog remains open. Pending dialogs, comparisons,
 and tab drags return `BUSY`. Closing never discards unsaved changes.
 
-Keep the same request ID and exact body when retrying a mutation after a timeout.
+Every tab snapshot includes `ready` and `session`. A loaded tab's `session` contains
+`session_id`, `document_id`, current `page_id`, `revision`, and `history` availability;
+an unloaded tab has `session:null`. `ready:true` means document content can be read or edited at
+that instant; pending editor interactions or window/tab lifecycle work make it false.
+Saving alone does not prevent editing. These fields also appear in the snapshots
+returned by create/open/activate, so an immediately ready tab needs no extra discovery
+request. If it is not ready, poll `tabs.list` and use its refreshed scope once ready.
+Readiness is a snapshot, not a reservation: subsequent calls still validate revisions
+and busy state. Cached tab-operation responses retain their original readiness/scope.
+
+Keep the same request ID and exact body when retrying a tab mutation after a timeout.
 Each process retains up to 256 successful tab-operation receipts; a repeated request
 returns its original acceptance response without executing again. Changed bodies
 with a used ID return `REQUEST_ID_REUSED`; exhausted capacity returns `RECEIPT_LIMIT`
-before any change. `tabs.list` reports `remaining_tab_receipts`. Requests are limited
+before any change. `tabs.list` reports `remaining_tab_receipts`. Tab requests are limited
 to 16 KiB. Read requests do not consume receipt slots. Poll for current state rather
 than treating a replayed snapshot as live state.
+
+## Undo and redo
+
+`document.undo` and `document.redo` require the target document/session envelope and
+`params:{"base_revision":"REVISION"}`. They operate on the document's normal history,
+including manual edits and page/component operations, rather than the current selection.
+The target tab must be active: call `tabs.activate` if needed. History replay can restore
+another page and its selection/view. Active editing, previews, or gestures return `BUSY`.
+
+Each request replays at most one entry. A prior atomic apply is one entry. The result
+contains `changed` and the resulting `revision`; an empty history direction returns
+`changed:false` without advancing the revision. Read current scope/content afterwards,
+because replay may restore or remove pages and nodes. A new edit clears the ordinary
+redo branch. History availability is exposed by `session.describe` and `tab.session`.
+
+These methods share the session receipt cache with applies and page activation.
+Identical retries return their historical acknowledgement without replaying again,
+even after subsequent edits; changing the body with a used ID is rejected. Receipt
+capacity is checked before replay. Do not replace a stale `base_revision` merely to
+force an undo through: first inspect which edit would now be affected.
 
 ## Selection and view
 
@@ -273,7 +307,7 @@ and `view` (`zoom` and `pan` in logical pixels relative to the canvas origin).
 `session.describe` also reports this view state. These operations do not modify
 document content or undo history. They re-execute on retry using the current view;
 the successful-request receipt cache applies to `document.apply`, `pages.apply`,
-and `pages.activate`, not selection or framing.
+`pages.activate`, `document.undo`, and `document.redo`, not selection or framing.
 
 ## Prototype interactions
 

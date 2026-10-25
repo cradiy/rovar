@@ -88,8 +88,10 @@ use the returned opaque `window_id` and, where required, `tab_id`.
   calls for one; it uses the window's current local/remote source.
 - `tabs.open`: `window_id`, absolute `.rovar` `path`. External files are imported into
   the workspace. An already-open path activates its existing window/tab.
-- `tabs.activate`: `window_id`, `tab_id`. Select the intended document, then call
-  `session.describe` again for its current editing scope and revision.
+- `tabs.activate`: `window_id`, `tab_id`. Select the intended document and use
+  `tab.session` from the response when `tab.ready` is true. AI can invoke this
+  directly when the task requires loading or showing that document; do not ask the
+  user to switch tabs manually or seek separate approval for an ordinary switch.
 - `tabs.save`: `window_id`, `tab_id`. Save a loaded document without switching tabs.
 - `tabs.close`: `window_id`, `tab_id`. Use when the task calls for closing that document;
   unrelated user tabs should remain open. Closing saves changes first.
@@ -98,7 +100,11 @@ Query the method schema before use. Mutations return an acceptance response, not
 completed disk operation. Poll `tabs.list` for loading/saving/closing state and errors.
 A failed save keeps the tab; a failed open appears in the window's `open_errors`,
 identified by `tab_id`. Do not proceed with editing until `session.describe` exposes
-the intended session. On `BUSY`, inspect pending state rather than flooding retries.
+the intended session or a tab snapshot provides `ready:true` and `session`.
+Each loaded tab's `session` includes session/document/page IDs, revision, and history
+availability. An unloaded tab has `session:null`. If create/open/activate returns
+`ready:false`, poll `tabs.list` and use the refreshed scope once ready. On `BUSY`,
+inspect pending state rather than flooding retries.
 After a timeout, retry the exact request ID/body to avoid creating duplicate tabs.
 There are 256 successful tab-operation receipt slots per process, reported by
 `remaining_tab_receipts`; reads consume none. Replayed responses are historical
@@ -248,6 +254,13 @@ and in-memory edits from confirmed saves.
 
 ## Recover without overwriting newer work
 
+- Use `document.undo` / `document.redo` with `base_revision` to replay one ordinary
+  document history entry. Activate the target tab yourself first if necessary.
+  One apply batch is one undo entry; history also contains manual edits. For AI
+  self-correction, undo only when the current revision still matches the edit being
+  reverted and no intervening work would be undone. Otherwise inspect and make an
+  incremental correction. Read the page/content again after replay because page
+  identity and selection may change. Exact retries never undo or redo twice.
 - `REVISION_CONFLICT`: reread the affected content and reconsider the patch. Never
   replace only the revision to force the old operations through.
 - `BUSY`: let the current interaction finish; do not cancel the user's editing.

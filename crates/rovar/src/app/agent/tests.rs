@@ -187,6 +187,18 @@ fn endpoint_discovers_instances_and_manages_scoped_document_tabs(cx: &mut TestAp
         json!({"request_id":"blocked-sessions","method":"session.describe"}),
         cx,
     );
+    let blocked_tabs = call(
+        &path,
+        json!({"request_id":"blocked-tabs","method":"tabs.list"}),
+        cx,
+    );
+    assert!(
+        blocked_tabs["result"]["windows"][0]["tabs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|tab| tab["ready"] == false)
+    );
     assert!(
         blocked_sessions["result"]["sessions"]
             .as_array()
@@ -216,10 +228,14 @@ fn endpoint_discovers_instances_and_manages_scoped_document_tabs(cx: &mut TestAp
         "selection.set",
         "canvas.focus",
         "canvas.fit",
+        "document.undo",
+        "document.redo",
     ] {
         let mut params =
             json!({"page_id":session["page_id"],"revision":background["result"]["revision"]});
-        if method != "pages.activate" {
+        if method.starts_with("document.") {
+            params = json!({"base_revision":background["result"]["revision"]});
+        } else if method != "pages.activate" {
             params["ids"] = json!([]);
         }
         let view_request = json!({"request_id":format!("inactive-{method}"),"method":method,
@@ -283,13 +299,26 @@ fn endpoint_discovers_instances_and_manages_scoped_document_tabs(cx: &mut TestAp
     assert!(schema["result"]["properties"]["operations"].is_object());
     let activate = json!({"request_id":"activate-first","method":"tabs.activate","params":{
         "window_id":window_id,"tab_id":created["result"]["tab_id"]}});
-    assert_eq!(call(&path, activate, cx)["result"]["tab"]["active"], true);
+    let activated = call(&path, activate, cx);
+    let activated_tab = &activated["result"]["tab"];
+    assert_eq!(activated_tab["active"], true);
+    assert_eq!(activated_tab["ready"], true);
+    let scope = &activated_tab["session"];
+    assert_eq!(scope["session_id"], session["session_id"]);
+    assert_eq!(scope["history"]["can_undo"], true);
+    let mut revision = scope["revision"].clone();
+    for index in 0..3 {
+        let undo = json!({"request_id":format!("undo-{index}"),"method":"document.undo",
+            "session_id":scope["session_id"],"document_id":scope["document_id"],
+            "params":{"base_revision":revision}});
+        let undone = call(&path, undo.clone(), cx);
+        assert_eq!(undone["result"]["changed"], true, "{undone}");
+        assert_eq!(call(&path, undo, cx), undone);
+        revision = undone["result"]["revision"].clone();
+    }
     handle
-        .update(cx, |studio, window, cx| {
+        .update(cx, |studio, _, cx| {
             studio.active_editor().unwrap().update(cx, |editor, cx| {
-                editor.undo_redo(false, window, cx);
-                editor.undo_redo(false, window, cx);
-                editor.undo_redo(false, window, cx);
                 let (bytes, _) = editor
                     .snapshot_document(&studio.tabs[0].document_id, cx)
                     .unwrap();
@@ -349,6 +378,16 @@ fn endpoint_discovers_instances_and_manages_scoped_document_tabs(cx: &mut TestAp
         listed["result"]["windows"][0]["active_tab_id"],
         opened["result"]["tab_id"]
     );
+    let reopened = listed["result"]["windows"][0]["tabs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|tab| tab["tab_id"] == opened["result"]["tab_id"])
+        .unwrap();
+    assert_eq!(reopened["ready"], true);
+    assert_eq!(reopened["session"]["document_id"], session["document_id"]);
+    assert_ne!(reopened["session"]["session_id"], session["session_id"]);
+    assert_eq!(reopened["session"]["history"]["can_undo"], false);
     let other_window = cx.open_window(gpui::size(px(1000.), px(800.)), |window, cx| {
         Studio::new(root.path().join("other-window"), window, cx)
     });

@@ -20,13 +20,23 @@ pub(super) fn blocked(studio: &Studio) -> bool {
         || studio.signing_out
 }
 
-fn describe_tab(tab: &Tab, active: Option<usize>, cx: &gpui::App) -> Value {
+fn describe_tab(
+    tab: &Tab,
+    active: Option<usize>,
+    blocked: bool,
+    window: &Window,
+    cx: &gpui::App,
+) -> Value {
+    let editor = tab.editor.as_ref().map(|editor| editor.read(cx));
     json!({
         "tab_id": tab.token.to_string(), "document_id": tab.document_id,
         "title": tab.file.title, "path": tab.file.path, "active": active == Some(tab.token),
         "loaded": tab.editor.is_some(), "loading": tab.loading,
         "checking_remote": tab.checking_remote, "saving": tab.saving,
         "closing": tab.close_after_save, "error": tab.error,
+        "ready": !blocked && !tab.loading && !tab.checking_remote && !tab.close_after_save
+            && editor.is_some_and(|editor| !editor.agent_busy(window, cx)),
+        "session": editor.map(|editor| editor.agent_scope(&tab.document_id)),
         "dirty": tab.editor.as_ref().is_some_and(|editor| {
             tab.needs_upgrade || tab.saved_revision != Some(editor.read(cx).document_revision())
         }),
@@ -40,12 +50,12 @@ fn list(cx: &mut gpui::App) -> Value {
         .into_iter()
         .filter_map(|w| w.downcast::<Studio>())
     {
-        let _ = handle.update(cx, |studio, _, cx| {
+        let _ = handle.update(cx, |studio, window, cx| {
             windows.push(json!({
                 "window_id": studio.window_id.to_string(),
                 "source": studio.source, "busy": blocked(studio),
                 "active_tab_id": studio.active.map(|token| token.to_string()),
-                "tabs": studio.tabs.iter().map(|tab| describe_tab(tab, studio.active, cx)).collect::<Vec<_>>(),
+                "tabs": studio.tabs.iter().map(|tab| describe_tab(tab, studio.active, blocked(studio), window, cx)).collect::<Vec<_>>(),
                 "open_errors": studio.open_errors.iter().map(|error| json!({
                     "tab_id": error.token.to_string(), "title": error.title, "message": error.detail,
                 })).collect::<Vec<_>>(),
@@ -209,6 +219,6 @@ fn execute(request: &Request, cx: &mut gpui::App) -> protocol::Result<Value> {
             window.activate_window();
         }
         Ok(json!({"window_id":window_id,"tab_id":token.to_string(),"status":"accepted",
-            "tab":studio.tabs.iter().find(|tab| tab.token == token).map(|tab| describe_tab(tab, studio.active, cx))}))
+            "tab":studio.tabs.iter().find(|tab| tab.token == token).map(|tab| describe_tab(tab, studio.active, blocked(studio), window, cx))}))
     }).map_err(|e| Error::new("WINDOW_CLOSED", e.to_string()))?
 }
