@@ -6,6 +6,7 @@ mod geometry;
 mod import;
 mod interaction;
 mod model;
+mod structure;
 #[cfg(test)]
 mod tests;
 mod view;
@@ -47,6 +48,7 @@ impl Workspace {
         json!({"session_id":self.agent.session,"document_id":document_id,"title":title,
             "page_id":self.pages.active,"revision":self.document_revision().to_string(),
             "pages":self.pages.entries.iter().map(|p| json!({"id":p.page.id,"name":p.page.name})).collect::<Vec<_>>(),
+            "components":self.components.definitions.iter().map(|(id,d)|json!({"id":id,"name":d.name})).collect::<Vec<_>>(),
             "selection":self.selection_ids().iter().filter_map(|id| identities.get(id)).collect::<Vec<_>>(),
             "view":self.agent_view(),
             "start_frame_id":page.hierarchy.start.and_then(|id| identities.get(&id)),
@@ -258,7 +260,25 @@ impl Workspace {
         let (original, _) = self.snapshot_page(cx);
         let mut page = original.clone();
         let mut refs = BTreeMap::new();
+        let mut component_refs = BTreeMap::new();
+        let mut definitions = self.components.definitions.clone();
         for (index, op) in params.operations.into_iter().enumerate() {
+            let reference = match &op {
+                p::Operation::Create { reference, .. }
+                | p::Operation::Import { reference, .. }
+                | p::Operation::Duplicate { reference, .. }
+                | p::Operation::CreateComponent { reference, .. }
+                | p::Operation::InstantiateComponent { reference, .. } => Some(reference),
+                _ => None,
+            };
+            if let Some(reference) = reference {
+                model::validate_reference(reference, &refs)
+                    .and_then(|()| model::validate_reference(reference, &component_refs))
+                    .map_err(|mut e| {
+                        e.operation = Some(index);
+                        e
+                    })?;
+            }
             let props = match &op {
                 p::Operation::Create { properties, .. }
                 | p::Operation::Update { properties, .. } => Some(properties),
@@ -293,6 +313,54 @@ impl Workspace {
             }
             let result = if matches!(
                 op,
+                p::Operation::CreateComponent { .. } | p::Operation::InstantiateComponent { .. }
+            ) {
+                (|| {
+                    // An instance created later in a batch sees earlier master edits.
+                    crate::scene::components::synchronize(
+                        std::slice::from_mut(&mut page),
+                        &mut definitions,
+                    )
+                    .map_err(|e| Error::invalid(e.to_string()))?;
+                    match op {
+                        p::Operation::CreateComponent {
+                            id,
+                            reference,
+                            name,
+                        } => {
+                            model::validate_reference(&reference, &component_refs)?;
+                            let id = model::lookup(&page, &id, &refs)?;
+                            let component =
+                                structure::create_component(&mut page, &mut definitions, id, name)?;
+                            component_refs.insert(reference, component);
+                        }
+                        p::Operation::InstantiateComponent {
+                            component,
+                            reference,
+                            parent,
+                            position,
+                        } => {
+                            model::validate_reference(&reference, &refs)?;
+                            let component =
+                                component_refs.get(&component).cloned().unwrap_or(component);
+                            let definition = definitions.get(&component).ok_or_else(|| {
+                                Error::new("COMPONENT_NOT_FOUND", "Unknown component definition")
+                            })?;
+                            let parent = parent
+                                .as_deref()
+                                .map(|id| model::lookup(&page, id, &refs))
+                                .transpose()?;
+                            let root = structure::instantiate(
+                                &mut page, definition, component, parent, position,
+                            )?;
+                            refs.insert(reference, page.node_ids()[&root].to_string());
+                        }
+                        _ => unreachable!(),
+                    }
+                    Ok(())
+                })()
+            } else if matches!(
+                op,
                 p::Operation::Import { .. } | p::Operation::ReplaceSource { .. }
             ) {
                 let asset = imports
@@ -312,18 +380,19 @@ impl Workspace {
             })?;
         }
         page.validate().map_err(|e| Error::invalid(e.to_string()))?;
+        structure::validate(&page)?;
         crate::scene::auto_layout::resolve(&mut page, window.text_system())
             .map_err(|e| Error::invalid(e.to_string()))?;
         page.validate().map_err(|e| Error::invalid(e.to_string()))?;
         model::protect(&original, &page)?;
         // Validate the edited page in its complete component/document context as well.
-        let document = crate::document::Document {
+        let mut document = crate::document::Document {
             id: request
                 .document_id
                 .clone()
                 .ok_or_else(|| Error::invalid("document_id is required"))?,
             colors: self.colors.palette.clone(),
-            components: self.components.definitions.clone(),
+            components: definitions,
             component_sets: self.components.sets.clone(),
             pages: self
                 .pages
@@ -338,10 +407,47 @@ impl Workspace {
                 })
                 .collect(),
         };
+        let before_pages = self
+            .pages
+            .entries
+            .iter()
+            .map(|entry| {
+                if entry.page.id == original.id {
+                    original.clone()
+                } else {
+                    entry.page.clone()
+                }
+            })
+            .collect::<Vec<_>>();
+        crate::scene::components::synchronize(&mut document.pages, &mut document.components)
+            .map_err(|e| Error::invalid(e.to_string()))?;
+        for (before, after) in before_pages.iter().zip(&mut document.pages) {
+            if before == after {
+                continue;
+            }
+            crate::scene::auto_layout::resolve(after, window.text_system())
+                .map_err(|e| Error::invalid(e.to_string()))?;
+            model::protect(before, after)?;
+            structure::validate(after)?;
+        }
         document
             .validate()
             .map_err(|e| Error::invalid(e.to_string()))?;
-        let changed = page != original;
+        let changed_pages = document
+            .pages
+            .iter()
+            .zip(&before_pages)
+            .filter(|(after, before)| after != before)
+            .map(|(after, _)| after.id.clone())
+            .collect::<Vec<_>>();
+        page = document
+            .pages
+            .iter()
+            .find(|p| p.id == params.page_id)
+            .unwrap()
+            .clone();
+        let changed =
+            !changed_pages.is_empty() || document.components != self.components.definitions;
         let before_ids = original.node_ids();
         let after_ids = page.node_ids();
         refs.retain(|_, uid| after_ids.values().any(|value| value.to_string() == *uid));
@@ -358,7 +464,7 @@ impl Workspace {
             .checked_add(u64::from(changed))
             .ok_or_else(|| Error::new("LIMIT_REACHED", "Document revision exhausted"))?;
         let result = json!({"revision":revision.to_string(),"page_id":page.id,
-            "changed":changed,"created":refs,"nodes":updated,
+            "changed":changed,"created":refs,"created_components":component_refs,"changed_pages":changed_pages,"nodes":updated,
             "start_frame_id":page.hierarchy.start.and_then(|id| after_ids.get(&id)),
             "deleted":before_ids.iter().filter_map(|(id,uid)|(!after_ids.contains_key(id)).then_some(uid)).collect::<Vec<_>>()});
         let fingerprint = fingerprint(request)?;
@@ -373,12 +479,23 @@ impl Workspace {
         }
         if changed {
             // All fallible work precedes this point. Reuse the ordinary page undo entry.
-            let before = self.page_edit(std::slice::from_ref(&params.page_id), cx);
+            let before = self.page_edit(&changed_pages, cx);
             let selection = self.selection_ids();
             self.history.borrow_mut().break_group();
             self.shape_paths.borrow_mut().clear();
             *self.boolean_cache.borrow_mut() = Default::default();
             self.components.revision = None;
+            self.components.definitions = document.components;
+            for updated in document.pages {
+                if let Some(state) = self
+                    .pages
+                    .entries
+                    .iter_mut()
+                    .find(|s| s.page.id == updated.id)
+                {
+                    state.page = updated;
+                }
+            }
             let remaining = crate::scene::components::ids(&page);
             self.load_page(page, window, cx);
             self.set_selection(selection.intersection(&remaining).copied().collect(), cx);

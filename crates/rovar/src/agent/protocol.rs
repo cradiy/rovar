@@ -182,6 +182,7 @@ pub(crate) enum NodeType {
     Frame,
     Rectangle,
     Ellipse,
+    Bezier,
     Text,
     Group,
 }
@@ -237,6 +238,9 @@ pub(crate) struct Properties {
     pub italic: Option<bool>,
     pub underline: Option<bool>,
     pub strikethrough: Option<bool>,
+    /// Bezier anchors and handles normalized to rect; values outside [0, 1] are allowed.
+    /// Replaces the path while retaining node identity, paint and interactions.
+    pub path: Option<Path>,
     /// Replaces the layout configuration. Only frames and groups support layout.
     pub layout: Option<Layout>,
     /// Explicitly remove auto layout; cannot be combined with layout.
@@ -244,9 +248,80 @@ pub(crate) struct Properties {
     pub remove_layout: bool,
 }
 
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Point {
+    pub x: f32,
+    pub y: f32,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct PathNode {
+    pub anchor: Point,
+    /// Omit a handle to use the anchor (a straight segment).
+    pub incoming: Option<Point>,
+    pub outgoing: Option<Point>,
+    #[serde(default)]
+    pub smooth: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Path {
+    pub closed: bool,
+    /// 2 to 4096 nodes in drawing order.
+    pub nodes: Vec<PathNode>,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub(crate) enum Operation {
+    /// Move a subtree, preserving page coordinates until auto layout resolves.
+    /// before is a sibling UUID/$ref; null places the subtree above its siblings.
+    Reparent {
+        id: String,
+        parent: Option<String>,
+        before: Option<String>,
+    },
+    /// Copy a subtree beside its source. Internal action targets are remapped;
+    /// external targets remain unchanged. Component copies become instances.
+    Duplicate {
+        id: String,
+        #[serde(rename = "ref")]
+        reference: String,
+        #[serde(default)]
+        offset: Point,
+    },
+    /// Configure an existing group. null removes clipping without deleting children.
+    SetMask {
+        id: String,
+        source: Option<String>,
+    },
+    /// Configure an existing group. null restores an ordinary group.
+    SetBoolean {
+        id: String,
+        operation: Option<crate::scene::boolean::Operation>,
+    },
+    /// Turn a subtree into a main component. ref identifies the component definition.
+    CreateComponent {
+        id: String,
+        #[serde(rename = "ref")]
+        reference: String,
+        name: String,
+    },
+    /// Place an instance by its page-space top-left position.
+    InstantiateComponent {
+        component: String,
+        #[serde(rename = "ref")]
+        reference: String,
+        parent: Option<String>,
+        position: Point,
+    },
+    /// Detach the binding on a component root, preserving its editable subtree.
+    DetachComponent {
+        id: String,
+    },
     /// Replace an asset source with the same kind, preserving node identity and styling.
     /// SVG must remain a vector asset (editable: false).
     ReplaceSource {
@@ -290,7 +365,7 @@ pub(crate) enum Operation {
         id: String,
         properties: Properties,
     },
-    /// Removes the entire subtree. Cannot delete locked or component-owned content.
+    /// Removes the entire subtree. Locked nodes and descendants remain protected.
     Delete {
         id: String,
     },

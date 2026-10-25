@@ -124,8 +124,9 @@ fn dispatch(
         return Ok(protocol::Reply::Ready(
             json!({"sessions":sessions,"capabilities":{
                 "methods":["session.describe","schema.get","tabs.list","tabs.create","tabs.open","tabs.activate","tabs.close","tabs.save","nodes.get","nodes.find","document.apply","canvas.capture","selection.set","canvas.focus","canvas.fit"],
-                "create_types":["frame","rectangle","ellipse","text","group"],
-                "operations":["create","update","delete","set_interaction","set_start_frame","import","replace_source"],
+                "create_types":["frame","rectangle","ellipse","bezier","text","group"],
+                "operations":["create","update","delete","set_interaction","set_start_frame","import","replace_source",
+                    "duplicate","reparent","set_mask","set_boolean","create_component","instantiate_component","detach_component"],
                 "import_types":["image","svg","video","audio"],
                 "import_data_types":["image","svg"],"max_import_data_bytes":crate::agent::imports::MAX_DATA_BYTES,
                 "interaction_triggers":["click","hover"],

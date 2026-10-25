@@ -136,7 +136,7 @@ Use `document.apply` with a fresh `request_id`, the inspected scope, and
 `base_revision`. Submit related operations as one atomic batch within the limits
 returned by discovery. Save the exact request until its outcome is known.
 
-- `$references` resolve earlier creates within one batch only. Use the returned UUIDs
+- `$references` resolve earlier creates, duplicates, or instances within one batch only. Use the returned UUIDs
   in subsequent batches.
 - Coordinates are page units, including children inside frames, independent of zoom
   and DPI. Check the current schema for complete compound-property requirements.
@@ -150,6 +150,26 @@ returned by discovery. Save the exact request until its outcome is known.
 
 Each changed apply is one ordinary undo entry. Its acknowledgement confirms an
 in-memory edit, not completion of saving or synchronization.
+
+For structure changes, prefer `reparent` to rebuilding a subtree and `duplicate`
+to recreating repeated content. Inspect ordered `children` and `sibling_index`;
+`before` in a reparent refers to a destination sibling in bottom-to-top order.
+Reparenting preserves page coordinates before auto-layout resolution; read the
+resolved geometry afterward. Duplicates remap internal action targets and preserve
+external targets, so review the copied interactions before changing them.
+
+Configure a plain group with `set_mask` or `set_boolean`; keep its children editable.
+The mask must be a closed vector direct child. Boolean groups need closed vector
+operands. Remove a conflicting mask, Boolean operation, or layout explicitly before
+assigning another role. Read `properties.path` before editing Bezier control points:
+the complete path is replaced, and points are normalized to the unrotated rect.
+
+Use `create_component` on an existing subtree and `instantiate_component` for linked
+reuse. Discover definitions in `session.describe.components`; inspect a node's
+`component.master` before editing. Main-component edits propagate to instances on
+other pages; instance edits retain overrides. Review `changed_pages` in the receipt.
+Use `detach_component` only when independent content is intended. Component refs
+resolve separately from node refs and are returned in `created_components`.
 
 For prototype behavior, read the node's `interactions`, `interaction_editable`, and
 `available_variants` before editing. Use `set_interaction` for only the requested

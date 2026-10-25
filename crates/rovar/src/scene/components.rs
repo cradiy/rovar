@@ -35,7 +35,7 @@ pub(crate) fn sources(page: &Page) -> Vec<crate::document::AssetSource> {
         .collect()
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) struct Definition {
     pub name: String,
     pub source: Option<String>,

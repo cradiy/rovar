@@ -16,6 +16,7 @@ use std::{
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(any(unix, windows), derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum Operation {
     Union,

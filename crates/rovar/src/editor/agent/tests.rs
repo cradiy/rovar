@@ -1,6 +1,7 @@
 use super::*;
 use gpui::TestAppContext;
 use std::collections::BTreeSet;
+mod structure;
 
 fn request(this: &Workspace, method: &str, params: Value) -> Request {
     Request {

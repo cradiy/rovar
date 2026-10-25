@@ -288,14 +288,14 @@ frame. A null target clears the explicit starting frame. Apply responses and
 
 ## Apply
 
-The current write surface includes frames, rectangles, ellipses, text, and layout
-groups. Properties cover names, geometry, solid fills, opacity, rotation, visibility,
+The write surface includes frames, rectangles, ellipses, Bezier paths, text, and
+plain or layout groups. Properties cover names, geometry, solid fills, opacity, rotation, visibility,
 rectangle corner radius, whole-box text/font styling, and horizontal/vertical layout.
-Existing image, SVG, video, audio, and Bezier nodes support basic property edits and
+Existing vector and media nodes support basic property edits, duplication, and
 deletion. Source replacement is supported for asset nodes of the same kind;
-path control-point editing is not exposed.
-Component, mask, boolean geometry, reparenting, and duplication are not exposed
-for mutation. `editable` describes property editing; `interaction_editable`
+Bezier control points are readable and writable through `properties.path`.
+Subtrees can be duplicated, reparented, masked, combined with Boolean operations,
+and bound to components. `editable` describes property editing; `interaction_editable`
 separately describes whether a node's interaction settings can be changed.
 
 ```json
@@ -345,7 +345,8 @@ separately describes whether a node's interaction settings can be changed.
 - Create requires a complete `rect`. Width and height are 1–100000; coordinates have
   magnitude at most 1000000. New frames are page roots. Other nodes may have a frame
   or group parent. Omitted/null parent means the page root.
-- New groups require a layout and a rectangle defining the layout frame. Layout
+- New groups can be plain containers; their visible bounds come from their children.
+  Their creation rectangle is used only when a layout is supplied. Layout
   requires direction, gap, padding `[top,right,bottom,left]`, main alignment and cross
   alignment. Alignments are `start`, `center`, or `end`. Layout-controlled child
   positions are resolved by the editor; updates cannot set their `rect` directly.
@@ -355,6 +356,41 @@ separately describes whether a node's interaction settings can be changed.
   intact. Fonts and stroke widths do not scale. All members must be editable and
   remain within the geometry limits; groups containing auto layout return
   `LAYOUT_CONTROLLED` so their layout frames can be edited explicitly instead.
+- `properties.path` replaces a Bezier path with `{closed, nodes}`. Each of the 2–4096
+  nodes supplies `anchor: {x,y}`, optional `incoming`/`outgoing` handles (defaulting
+  to the anchor), and optional `smooth`. Points are normalized to the node's `rect`,
+  before layer rotation; handles may lie outside `[0,1]`. Bezier creation requires
+  both `rect` and `path`. Read the current path before changing individual handles.
+- `duplicate` takes `id`, a new node `ref`, and optional `offset: {x,y}` in page units
+  (default zero). It copies the subtree under the same parent with fresh UUIDs,
+  preserves media and styling, remaps internal action targets, and retains external
+  action targets. Copied component bindings are instances, never additional masters.
+- `reparent` takes `id`, `parent` (UUID/$ref or null for the page), and optional
+  `before` (a different destination sibling). Sibling order is bottom-to-top;
+  omitting `before` places the subtree above its siblings. Page geometry is retained
+  before auto-layout resolution. Cycles and frames nested inside frames are rejected.
+  Moving an instance member outside its instance requires detaching that instance
+  first (`COMPONENT_BOUNDARY`); moving the whole instance preserves its binding.
+  Reads return ordered `children` UUIDs and `sibling_index`.
+- `set_mask` takes a group `id` and `source` (a closed vector direct child, or null
+  to remove clipping). `set_boolean` takes a group `id` and `operation` (`union`,
+  `subtract`, `intersect`, `exclude`, or null). Establish at least two closed vector
+  operands before enabling a Boolean group. Mask, Boolean, and auto-layout roles
+  are mutually exclusive. Children remain editable; invalid final structures fail
+  atomically. Reads expose `mask_source_id` and `boolean_operation`.
+- `create_component` takes an unbound subtree `id`, a component `ref`, and `name`.
+  It creates a main component. `instantiate_component` takes `component` (definition
+  UUID or earlier component `$ref`), a node `ref`, optional `parent`, and page-space
+  top-left `position: {x,y}`. `detach_component` takes a binding root `id` and keeps
+  its contents. Nested components are not supported. `session.describe` lists
+  component IDs/names; node reads expose a root's `component: {id,master}`.
+  Component references are returned separately in `created_components`; node
+  references are returned in `created`.
+- Ordinary `update`, `delete`, and structure operations can edit component content.
+  Main-component changes synchronize instances on all document pages while retaining
+  instance overrides. The apply response lists `changed_pages`; all affected pages
+  and definitions share one undo entry. Locked objects on any affected page remain
+  protected. These operations still require an open editor and an active target page.
 - Image, SVG, video, and audio nodes accept name, rect, opacity, rotation, and hidden
   updates. `rect` supplies both dimensions explicitly; preserve the source aspect
   ratio when that is desired. Assets have no solid fill. Bezier nodes accept basic

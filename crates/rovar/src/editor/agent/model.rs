@@ -43,39 +43,7 @@ pub(super) fn layer(page: &Page, id: usize) -> Option<LayerState> {
 }
 
 pub(super) fn editable(page: &Page, id: usize) -> Result<()> {
-    if page.shapes.iter().any(|n| {
-        n.id == id
-            && !matches!(
-                n.kind,
-                ShapeKind::Rectangle | ShapeKind::Ellipse | ShapeKind::Bezier
-            )
-            && !n.kind.is_asset()
-    }) {
-        return Err(Error::new(
-            "UNSUPPORTED",
-            "This shape type is read-only in the agent protocol",
-        ));
-    }
-    let mut current = Some(id);
-    while let Some(id) = current {
-        if layer(page, id).is_some_and(|n| n.locked) {
-            return Err(Error::new("LOCKED", "Node or ancestor is locked"));
-        }
-        if page.hierarchy.components.contains_key(&id)
-            || page
-                .hierarchy
-                .groups
-                .get(&id)
-                .is_some_and(|g| g.mask.is_some() || g.boolean.is_some())
-        {
-            return Err(Error::new(
-                "UNSUPPORTED",
-                "Component, mask and boolean editing is not exposed",
-            ));
-        }
-        current = components::parent(page, id);
-    }
-    Ok(())
+    super::interaction::editable(page, id)
 }
 
 pub(super) fn board(page: &Page, id: usize) -> Option<usize> {
@@ -96,6 +64,26 @@ pub(super) fn local_rect(page: &Page, board: Option<usize>, mut rect: Rect) -> R
 }
 
 pub(super) fn node(page: &Page, id: usize, identities: &BTreeMap<usize, uuid::Uuid>) -> Value {
+    let parent = components::parent(page, id);
+    let ranks: BTreeMap<_, _> = page
+        .hierarchy
+        .order
+        .iter()
+        .enumerate()
+        .map(|(rank, id)| (*id, rank))
+        .collect();
+    let mut siblings: Vec<_> = identities
+        .keys()
+        .copied()
+        .filter(|child| components::parent(page, *child) == parent)
+        .collect();
+    siblings.sort_by_key(|id| ranks.get(id).copied().unwrap_or(usize::MAX));
+    let mut children: Vec<_> = identities
+        .keys()
+        .copied()
+        .filter(|child| components::parent(page, *child) == Some(id))
+        .collect();
+    children.sort_by_key(|id| ranks.get(id).copied().unwrap_or(usize::MAX));
     let state = layer(page, id).unwrap();
     let (kind, name, fill) = if let Some(n) = page.boards.iter().find(|n| n.id == id) {
         (
@@ -140,6 +128,17 @@ pub(super) fn node(page: &Page, id: usize, identities: &BTreeMap<usize, uuid::Uu
     if let Some(n) = page
         .shapes
         .iter()
+        .find(|n| n.id == id && n.kind == ShapeKind::Bezier)
+    {
+        properties["path"] = json!({"closed": n.closed, "nodes": n.nodes.0.iter().map(|n| json!({
+            "anchor":{"x":n.anchor.x,"y":n.anchor.y},
+            "incoming":{"x":n.incoming.x,"y":n.incoming.y},
+            "outgoing":{"x":n.outgoing.x,"y":n.outgoing.y},"smooth":n.smooth
+        })).collect::<Vec<_>>()});
+    }
+    if let Some(n) = page
+        .shapes
+        .iter()
         .find(|n| n.id == id && n.kind == ShapeKind::Rectangle)
     {
         properties["radius"] = json!(n.radius);
@@ -164,6 +163,11 @@ pub(super) fn node(page: &Page, id: usize, identities: &BTreeMap<usize, uuid::Uu
             info
         });
     json!({"id":identities[&id],"type":kind,"asset":asset,
+        "sibling_index":siblings.iter().position(|value|*value==id),
+        "children":children.iter().map(|id|identities[id]).collect::<Vec<_>>(),
+        "mask_source_id":page.hierarchy.groups.get(&id).and_then(|g|g.mask).and_then(|id|identities.get(&id)),
+        "boolean_operation":page.hierarchy.groups.get(&id).and_then(|g|g.boolean),
+        "component":page.hierarchy.components.get(&id).map(|binding|json!({"id":binding.component,"master":binding.master})),
         "parent_id":components::parent(page,id).and_then(|id| identities.get(&id)),
         "locked":state.locked,"editable":editable(page,id).is_ok(),"properties":properties,
         "interaction_editable":super::interaction::editable(page,id).is_ok(),
@@ -177,6 +181,52 @@ pub(super) fn apply(
     refs: &mut BTreeMap<String, String>,
 ) -> Result<()> {
     match op {
+        p::Operation::Reparent { id, parent, before } => {
+            let id = lookup(page, &id, refs)?;
+            let parent = parent
+                .as_deref()
+                .map(|id| lookup(page, id, refs))
+                .transpose()?;
+            let before = before
+                .as_deref()
+                .map(|id| lookup(page, id, refs))
+                .transpose()?;
+            super::structure::reparent(page, id, parent, before)?;
+        }
+        p::Operation::Duplicate {
+            id,
+            reference,
+            offset,
+        } => {
+            validate_reference(&reference, refs)?;
+            let id = lookup(page, &id, refs)?;
+            let root = super::structure::duplicate(page, id, offset)?;
+            refs.insert(reference, page.node_ids()[&root].to_string());
+        }
+        p::Operation::SetMask { id, source } => {
+            let id = lookup(page, &id, refs)?;
+            let source = source
+                .as_deref()
+                .map(|id| lookup(page, id, refs))
+                .transpose()?;
+            super::structure::set_mask(page, id, source)?;
+        }
+        p::Operation::SetBoolean { id, operation } => {
+            let id = lookup(page, &id, refs)?;
+            super::structure::set_boolean(page, id, operation)?;
+        }
+        p::Operation::DetachComponent { id } => {
+            let id = lookup(page, &id, refs)?;
+            editable(page, id)?;
+            if page.hierarchy.components.remove(&id).is_none() {
+                return Err(Error::invalid("Detach requires a component root"));
+            }
+        }
+        p::Operation::CreateComponent { .. } | p::Operation::InstantiateComponent { .. } => {
+            return Err(Error::invalid(
+                "Component operation requires document context",
+            ));
+        }
         p::Operation::SetInteraction { .. }
         | p::Operation::SetStartFrame { .. }
         | p::Operation::Import { .. }
@@ -245,11 +295,16 @@ pub(super) fn apply(
                     gradient: Default::default(),
                     image_fill: Default::default(),
                 }),
-                p::NodeType::Rectangle | p::NodeType::Ellipse => {
-                    let shape_kind = if matches!(kind, p::NodeType::Rectangle) {
-                        ShapeKind::Rectangle
-                    } else {
-                        ShapeKind::Ellipse
+                p::NodeType::Rectangle | p::NodeType::Ellipse | p::NodeType::Bezier => {
+                    let shape_kind = match kind {
+                        p::NodeType::Rectangle => ShapeKind::Rectangle,
+                        p::NodeType::Ellipse => ShapeKind::Ellipse,
+                        _ => {
+                            if properties.path.is_none() {
+                                return Err(Error::invalid("Bezier creation requires path"));
+                            }
+                            ShapeKind::Bezier
+                        }
                     };
                     let mut shape = Shape::new(id, board, shape_kind, rect);
                     shape.uid = uid;
@@ -265,11 +320,6 @@ pub(super) fn apply(
                     styles: StyledText::default(),
                 }),
                 p::NodeType::Group => {
-                    if properties.layout.is_none() {
-                        return Err(Error::invalid(
-                            "Create group requires layout; its rect defines the layout frame",
-                        ));
-                    }
                     page.hierarchy.groups.insert(
                         id,
                         LayerGroup {
@@ -307,6 +357,7 @@ pub(super) fn apply(
             page.assets.retain(|n| !removed.contains(&n.object));
             let h = &mut page.hierarchy;
             h.groups.retain(|id, _| !removed.contains(id));
+            h.components.retain(|id, _| !removed.contains(id));
             h.parents
                 .retain(|id, parent| !removed.contains(id) && !removed.contains(parent));
             h.order.retain(|id| !removed.contains(id));
@@ -351,6 +402,9 @@ fn update(page: &mut Page, id: usize, props: p::Properties, creating: bool) -> R
     let is_group = page.hierarchy.groups.contains_key(&id);
     let is_text = page.texts.iter().any(|n| n.id == id);
     let is_frame = page.boards.iter().any(|n| n.id == id);
+    if let Some(path) = &props.path {
+        super::structure::set_path(page, id, path)?;
+    }
     if !is_text
         && (props.content.is_some()
             || props.font_size.is_some()
@@ -430,7 +484,11 @@ fn update(page: &mut Page, id: usize, props: p::Properties, creating: bool) -> R
                 "Node geometry is controlled by parent auto layout",
             ));
         }
-        if is_group && !page.hierarchy.layouts.contains_key(&id) && props.layout.is_none() {
+        if !creating
+            && is_group
+            && !page.hierarchy.layouts.contains_key(&id)
+            && props.layout.is_none()
+        {
             super::geometry::transform_group(page, id, rect)?;
         }
         let rect = local_rect(page, board(page, id), rect);
@@ -577,6 +635,8 @@ pub(super) fn protect(before: &Page, after: &Page) -> Result<()> {
         let unchanged = remaining.contains_key(&id) && {
             let mut old = node(before, id, &previous);
             let mut new = node(after, id, &remaining);
+            old.as_object_mut().unwrap().remove("sibling_index");
+            new.as_object_mut().unwrap().remove("sibling_index");
             if super::interaction::editable(before, id).is_ok() {
                 old.as_object_mut().unwrap().remove("interactions");
                 new.as_object_mut().unwrap().remove("interactions");
