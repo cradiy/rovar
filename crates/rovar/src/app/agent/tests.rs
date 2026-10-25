@@ -146,7 +146,135 @@ fn endpoint_discovers_instances_and_manages_scoped_document_tabs(cx: &mut TestAp
     second["request_id"] = json!("second-tab");
     let second = call(&path, second, cx);
     assert_ne!(second["result"]["tab_id"], created["result"]["tab_id"]);
-    assert_eq!(call(&path, edit, cx)["error"]["code"], "SESSION_CLOSED");
+    assert_eq!(call(&path, edit, cx), committed);
+    let background_sessions = call(
+        &path,
+        json!({"request_id":"background-sessions","method":"session.describe"}),
+        cx,
+    );
+    let sessions = background_sessions["result"]["sessions"]
+        .as_array()
+        .unwrap();
+    assert_eq!(sessions.len(), 2);
+    assert_eq!(
+        sessions
+            .iter()
+            .find(|s| s["session_id"] == session["session_id"])
+            .unwrap()["active"],
+        false
+    );
+    assert_eq!(sessions.iter().filter(|s| s["active"] == true).count(), 1);
+    let focus = cx.update(|cx| cx.focus_handle());
+    handle
+        .update(cx, |_, window, cx| focus.focus(window, cx))
+        .unwrap();
+    let background_edit = json!({"request_id":"background-edit","method":"document.apply",
+        "session_id":session["session_id"],"document_id":session["document_id"],
+        "params":{"page_id":session["page_id"],"base_revision":committed["result"]["revision"],
+            "operations":[{"op":"update","id":committed["result"]["created"]["$rect"],
+                "properties":{"name":"Edited in background","fill":"#7A4DBBFF"}}]}});
+    let mut wrong_scope = background_edit.clone();
+    wrong_scope["document_id"] = second["result"]["tab"]["document_id"].clone();
+    assert_eq!(
+        call(&path, wrong_scope, cx)["error"]["code"],
+        "SESSION_CLOSED"
+    );
+    handle
+        .update(cx, |studio, _, _| studio.closing = true)
+        .unwrap();
+    let blocked_sessions = call(
+        &path,
+        json!({"request_id":"blocked-sessions","method":"session.describe"}),
+        cx,
+    );
+    assert!(
+        blocked_sessions["result"]["sessions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|s| s["busy"] == true)
+    );
+    assert_eq!(
+        call(&path, background_edit.clone(), cx)["error"]["code"],
+        "BUSY"
+    );
+    handle
+        .update(cx, |studio, _, _| studio.closing = false)
+        .unwrap();
+    let background = call(&path, background_edit.clone(), cx);
+    assert_eq!(background["result"]["changed"], true, "{background}");
+    assert_eq!(call(&path, background_edit, cx), background);
+    let read = json!({"request_id":"background-read","method":"nodes.get", "session_id":session["session_id"],
+        "document_id":session["document_id"],"params":{"page_id":session["page_id"],"revision":background["result"]["revision"]}});
+    assert_eq!(call(&path, read, cx)["result"]["total"], 2);
+    let capture = json!({"request_id":"background-capture","method":"canvas.capture", "session_id":session["session_id"],
+        "document_id":session["document_id"],"params":{"page_id":session["page_id"],"revision":background["result"]["revision"],
+            "node_id":committed["result"]["created"]["$rect"]}});
+    assert!(call(&path, capture, cx)["result"]["data_base64"].is_string());
+    for method in [
+        "pages.activate",
+        "selection.set",
+        "canvas.focus",
+        "canvas.fit",
+    ] {
+        let mut params =
+            json!({"page_id":session["page_id"],"revision":background["result"]["revision"]});
+        if method != "pages.activate" {
+            params["ids"] = json!([]);
+        }
+        let view_request = json!({"request_id":format!("inactive-{method}"),"method":method,
+            "session_id":session["session_id"],"document_id":session["document_id"],"params":params});
+        assert_eq!(
+            call(&path, view_request, cx)["error"]["code"],
+            "TAB_NOT_ACTIVE"
+        );
+    }
+    let save = json!({"request_id":"save-background-edit","method":"tabs.save","params":{
+        "window_id":window_id,"tab_id":created["result"]["tab_id"]}});
+    assert_eq!(call(&path, save, cx)["result"]["status"], "accepted");
+    cx.run_until_parked();
+    let persisted = crate::document::load(std::path::Path::new(
+        created["result"]["tab"]["path"].as_str().unwrap(),
+    ))
+    .unwrap()
+    .into_document()
+    .unwrap();
+    assert!(
+        persisted.pages[0]
+            .hierarchy
+            .names
+            .values()
+            .any(|name| name == "Edited in background")
+    );
+    let replace_page = json!({"request_id":"background-replace-page","method":"pages.apply",
+        "session_id":session["session_id"],"document_id":session["document_id"],
+        "params":{"base_revision":background["result"]["revision"],"operations":[
+            {"op":"create","ref":"$replacement","name":"Replacement"},
+            {"op":"delete","id":session["page_id"]}]}});
+    assert_eq!(call(&path, replace_page, cx)["result"]["changed"], true);
+    handle
+        .update(cx, |studio, window, cx| {
+            assert_eq!(
+                studio.active.unwrap().to_string(),
+                second["result"]["tab_id"].as_str().unwrap()
+            );
+            assert!(
+                focus.is_focused(window),
+                "Background edits must not blur the visible document"
+            );
+            let (bytes, _) = studio
+                .active_editor()
+                .unwrap()
+                .read(cx)
+                .snapshot_document(&studio.tabs[1].document_id, cx)
+                .unwrap();
+            assert!(
+                crate::document::Document::decode(&bytes).unwrap().pages[0]
+                    .shapes
+                    .is_empty()
+            );
+        })
+        .unwrap();
     let schema = call(
         &path,
         json!({"request_id":"schema","method":"schema.get","params":{"method":"document.apply"}}),
@@ -159,6 +287,8 @@ fn endpoint_discovers_instances_and_manages_scoped_document_tabs(cx: &mut TestAp
     handle
         .update(cx, |studio, window, cx| {
             studio.active_editor().unwrap().update(cx, |editor, cx| {
+                editor.undo_redo(false, window, cx);
+                editor.undo_redo(false, window, cx);
                 editor.undo_redo(false, window, cx);
                 let (bytes, _) = editor
                     .snapshot_document(&studio.tabs[0].document_id, cx)

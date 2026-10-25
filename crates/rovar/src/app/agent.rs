@@ -88,35 +88,34 @@ fn dispatch(
         .filter_map(|w| w.downcast::<Studio>())
     {
         let _ = handle.update(cx, |studio, window, cx| {
-            // Only active tabs are exposed. Switching tabs never redirects a scoped request.
-            if studio.closing || studio.comparison.is_some() {
-                return;
+            for tab in &studio.tabs {
+                let Some(editor) = &tab.editor else {
+                    continue;
+                };
+                let active = Some(tab.token) == studio.active;
+                let blocked = tabs::blocked(studio)
+                    || tab.loading
+                    || tab.checking_remote
+                    || tab.close_after_save;
+                if request.method == "session.describe" {
+                    let mut session = editor.read(cx).agent_session(
+                        &tab.document_id,
+                        &tab.file.title,
+                        window,
+                        cx,
+                    );
+                    session["window_id"] = json!(studio.window_id.to_string());
+                    session["tab_id"] = json!(tab.token.to_string());
+                    session["active"] = json!(active);
+                    session["busy"] = json!(blocked || session["busy"] == true);
+                    sessions.push(session);
+                }
+                if request.session_id.as_deref() == Some(editor.read(cx).agent_session_id())
+                    && request.document_id.as_deref() == Some(tab.document_id.as_str())
+                {
+                    target = Some((handle, editor.clone(), active, blocked));
+                }
             }
-            let Some(tab) = studio
-                .tabs
-                .iter()
-                .find(|tab| Some(tab.token) == studio.active)
-            else {
-                return;
-            };
-            let Some(editor) = &tab.editor else {
-                return;
-            };
-            if tab.loading || tab.checking_remote || tab.close_after_save {
-                return;
-            }
-            let mut session =
-                editor
-                    .read(cx)
-                    .agent_session(&tab.document_id, &tab.file.title, window, cx);
-            session["window_id"] = json!(studio.window_id.to_string());
-            session["tab_id"] = json!(tab.token.to_string());
-            if request.session_id.as_deref() == session["session_id"].as_str()
-                && request.document_id.as_deref() == Some(tab.document_id.as_str())
-            {
-                target = Some((handle, editor.clone()));
-            }
-            sessions.push(session);
         });
     }
     if request.method == "session.describe" {
@@ -137,16 +136,22 @@ fn dispatch(
                 "max_apply_receipts":protocol::MAX_RECEIPTS,"max_request_bytes":transport::MAX_REQUEST_BYTES,
             "max_receipt_bytes":protocol::MAX_RECEIPT_BYTES,
                 "capture_renderer":"export","capture_media":false,
-                "scope":"all pages in active tabs; view operations require the active page","assets_import":true
+                "scope":"all pages in loaded tabs; view operations require the active tab and page","assets_import":true
             }}),
         ));
     }
-    let (handle, editor) = target.ok_or_else(|| Error::new("SESSION_CLOSED",
-        "No matching active session; call session.describe and use its document_id and session_id"))?;
+    let (handle, editor, active, blocked) = target.ok_or_else(|| Error::new("SESSION_CLOSED",
+        "No matching loaded session; call session.describe and use its document_id and session_id"))?;
+    if blocked {
+        return Err(Error::new(
+            "BUSY",
+            "Window or tab has a pending dialog, drag, load, comparison, or close",
+        ));
+    }
     handle
         .update(cx, |_, window, cx| {
             editor.update(cx, |editor, cx| {
-                editor.agent_request(request, imports, window, cx)
+                editor.agent_request(request, imports, active, window, cx)
             })
         })
         .map_err(|e| Error::new("SESSION_CLOSED", e.to_string()))?

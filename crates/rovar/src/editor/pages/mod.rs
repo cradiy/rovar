@@ -87,6 +87,11 @@ impl Workspace {
             .unwrap() = state;
     }
     pub(super) fn activate_page(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
+        self.restore_page(id, window, cx);
+        self.focus_canvas(window, cx);
+    }
+
+    pub(super) fn restore_page(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
         let state = self
             .pages
             .entries
@@ -112,7 +117,6 @@ impl Workspace {
         self.restore_view(state.view);
         self.sidebar.folded = state.folded;
         self.set_selection(state.selection, cx);
-        self.focus_canvas(window, cx);
         cx.notify();
     }
     pub(super) fn switch_page(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {

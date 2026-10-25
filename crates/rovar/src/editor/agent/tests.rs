@@ -27,10 +27,10 @@ fn execute(
     w: &mut Window,
     cx: &mut Context<Workspace>,
 ) -> Result<Value> {
-    match this.agent_request(r, None, w, cx)? {
+    match this.agent_request(r, None, true, w, cx)? {
         p::Reply::PrepareImports(sources) => {
             let imports = crate::agent::imports::prepare(sources)?;
-            this.agent_request(r, Some(&imports), w, cx)?.finish()
+            this.agent_request(r, Some(&imports), true, w, cx)?.finish()
         }
         reply => reply.finish(),
     }
@@ -62,12 +62,12 @@ fn imports_are_revision_guarded_atomic_and_owned_by_the_document(cx: &mut TestAp
             {"op":"set_interaction","id":"$image_data","trigger":"click","action":{"type":"back"}}
         ]);
         let stale = apply(this, operations.clone());
-        let p::Reply::PrepareImports(sources) = this.agent_request(&stale, None, window, cx).unwrap() else { panic!("Expected background import"); };
+        let p::Reply::PrepareImports(sources) = this.agent_request(&stale, None, true, window, cx).unwrap() else { panic!("Expected background import"); };
         let prepared = crate::agent::imports::prepare(sources).unwrap();
         let edit = apply(this, json!([{"op":"create","ref":"$rect","type":"rectangle",
             "properties":{"rect":{"x":0,"y":0,"width":10,"height":10}}}]));
         execute(this, &edit, window, cx).unwrap();
-        assert_eq!(this.agent_request(&stale, Some(&prepared), window, cx).err().unwrap().code, "REVISION_CONFLICT");
+        assert_eq!(this.agent_request(&stale, Some(&prepared), true, window, cx).err().unwrap().code, "REVISION_CONFLICT");
         let before = this.snapshot_page(cx).0;
         let revision = this.document_revision();
         let mut invalid_ops = operations.clone();

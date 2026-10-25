@@ -74,7 +74,7 @@ window/document; do not choose the first process or tab arbitrarily. If discover
 empty despite a running editor, check that both processes use the same user/home
 directory. Do not edit persisted `.rovar` files as a substitute for the live protocol.
 
-Before editing, record the active `session_id`, `document_id`, `page_id`, document
+Before editing, record the target `session_id`, `document_id`, `page_id`, document
 `revision`, selection, busy state, and capabilities. Query `schema.get` for the methods
 you will use. Never infer supported properties from what the editor UI can do.
 
@@ -106,6 +106,11 @@ acceptance snapshots, so use `tabs.list` for current state.
 
 ## Inspect the design
 
+- `session.describe` includes loaded background tabs. Select the intended
+  document/session explicitly and inspect `active` and `busy`; do not assume the
+  first session is the visible document. Read, edit, capture, or manage its pages
+  in the background when no view change is needed. Use `tabs.activate` only to
+  load an unloaded tab or deliberately show it before selection/framing/page activation.
 - Use `pages.list` to discover page UUIDs and counts. Node reads, `document.apply`,
   and captures can target an inactive page without changing the user's canvas.
   Revisions are document-wide; reread after edits on any page.
@@ -249,7 +254,7 @@ and in-memory edits from confirmed saves.
 - Unknown outcome after a timeout/disconnection: retry the exact request ID and body
   only while the same session remains available. Successful apply receipts prevent
   duplicate edits. Do not invent a fresh ID and repeat an uncertain create.
-- Session loss or changed active tab/page: rediscover and inspect before proceeding;
+- Session loss: rediscover and inspect before proceeding;
   do not redirect the pending patch into another document.
 - Successful apply retries return the old acknowledgement, even after undo. Reread
   current state before deriving the next edit from that acknowledgement.

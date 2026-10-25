@@ -80,7 +80,7 @@ unreachable records left by crashes. Interface startup
 failure is reported to stderr and does not prevent the editor from opening.
 The interface is available to local processes running as the same user.
 
-Document editing addresses all pages in active document tabs. `tabs.list`
+Document editing addresses all pages in loaded document tabs, including background tabs. `tabs.list`
 also exposes inactive, unloaded, saving, and loading tabs, plus windows with no documents.
 A tab/page change
 does not redirect a request to a different document. Reopening, reloading, or moving
@@ -89,8 +89,12 @@ this transport.
 
 ## Discover before editing
 
-`session.describe` returns active sessions, their window/tab/document/page IDs, revision,
+`session.describe` returns loaded sessions, their window/tab/document/page IDs, revision,
 selection UUIDs, `start_frame_id`, busy state, remaining receipt slots, and supported capabilities.
+Each session includes `active`, indicating whether its tab is selected in its window.
+Select the intended session by document identity; do not assume the first session is visible.
+Loading, remote checks, closing, and pending window dialogs or drags mark sessions busy.
+Unloaded tabs have no editing session; activate them once to load them.
 Selection is observable and can be set explicitly; document mutations always name
 their targets and never implicitly operate on the current selection.
 
@@ -126,7 +130,7 @@ Window/tab IDs are opaque strings as described below. Revisions are opaque strin
 
 | Method | Behavior |
 | --- | --- |
-| `session.describe` | List active editor sessions and capabilities; empty parameters. |
+| `session.describe` | List all loaded editor sessions, active/busy flags, and capabilities; empty parameters. |
 | `schema.get` | Get the envelope or a method's input schema. |
 | `tabs.list` | List all windows, tabs, load/save states, and opening errors; empty parameters. |
 | `tabs.create` | Create and activate a document in a window, with an optional title. |
@@ -156,6 +160,9 @@ ordered `pages` entries with `id`, `name`, `node_count`, and `frame_count`.
 `nodes.get`, `nodes.find`, `document.apply`, and `canvas.capture` accept any existing
 `page_id` in the targeted session. They do not activate that page. The revision is
 document-wide: an edit on any page invalidates earlier reads on every page.
+These methods and `pages.apply` also work in loaded background tabs. Their changes
+participate in the target document's ordinary autosave and undo history, without
+switching tabs or taking keyboard focus from the visible document.
 
 `pages.apply` takes `base_revision` and 1–128 ordered `operations`:
 
@@ -180,7 +187,10 @@ one undo entry; failures and no-ops create none. The result includes `revision`,
 
 `pages.activate` takes `page_id` and `revision`. It changes no document content or
 revision and creates no undo entry. Selection and canvas framing methods still
-require the active page and return `PAGE_NOT_ACTIVE` otherwise. Activation does not
+require the active page and return `PAGE_NOT_ACTIVE` otherwise. `pages.activate`,
+selection, and framing also require the active tab and return `TAB_NOT_ACTIVE`
+otherwise; use `tabs.activate` explicitly when the task requires showing a document.
+Activation does not
 interrupt an editor interaction: it returns `BUSY` while the editor is being edited.
 
 `pages.apply` and `pages.activate` share the successful-request receipt cache with
@@ -574,4 +584,4 @@ new request. Never replace just the revision to force a stale edit through.
 Import read/decode failures return `IMPORT_FAILED`; type/placement errors return
 `INVALID_ARGUMENT`. Errors contain `code`, `message`, and, when attributable to an operation, its zero-based
 `operation` index. Other codes include `INVALID_ARGUMENT`, `NODE_NOT_FOUND`, `LOCKED`,
-`LAYOUT_CONTROLLED`, `PAGE_NOT_FOUND`, `PAGE_NOT_ACTIVE`, and `SESSION_CLOSED`.
+`LAYOUT_CONTROLLED`, `PAGE_NOT_FOUND`, `PAGE_NOT_ACTIVE`, `TAB_NOT_ACTIVE`, and `SESSION_CLOSED`.

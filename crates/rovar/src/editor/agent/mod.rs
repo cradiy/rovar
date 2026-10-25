@@ -37,6 +37,10 @@ impl Default for State {
 }
 
 impl Workspace {
+    pub(crate) fn agent_session_id(&self) -> &str {
+        &self.agent.session
+    }
+
     pub(crate) fn agent_session(
         &self,
         document_id: &str,
@@ -89,6 +93,7 @@ impl Workspace {
         &mut self,
         request: &Request,
         imports: Option<&crate::agent::imports::Prepared>,
+        active_tab: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Result<p::Reply> {
@@ -111,6 +116,17 @@ impl Workspace {
             return Err(Error::new(
                 "BUSY",
                 "Finish the current editor interaction before requesting a snapshot or edit",
+            ));
+        }
+        if !active_tab
+            && matches!(
+                request.method.as_str(),
+                "pages.activate" | "selection.set" | "canvas.focus" | "canvas.fit"
+            )
+        {
+            return Err(Error::new(
+                "TAB_NOT_ACTIVE",
+                "Call tabs.activate before changing the view",
             ));
         }
         match request.method.as_str() {

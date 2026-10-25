@@ -246,7 +246,7 @@ impl Workspace {
                 })
                 .collect();
             if active != self.pages.active {
-                self.activate_page(&active, window, cx);
+                self.restore_page(&active, window, cx);
             }
             self.record_page_edit(before);
             cx.notify();

@@ -7,7 +7,7 @@ use std::collections::HashMap;
 pub(super) struct Receipts(HashMap<String, (Request, Value)>);
 impl gpui::Global for Receipts {}
 
-fn blocked(studio: &Studio) -> bool {
+pub(super) fn blocked(studio: &Studio) -> bool {
     studio.closing
         || studio.comparison.is_some()
         || studio.strip.drag.is_some()
