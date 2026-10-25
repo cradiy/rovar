@@ -208,6 +208,17 @@ are for non-flow children; provide only their modes and let the editor capture t
 baseline geometry. Clear them with `remove_constraints` before moving into flow.
 Read resolved bounds after applying and keep protected descendants intact.
 
+Before introducing repeated colors, call `colors.list` and reuse an appropriate
+document style. Create missing styles with `create_color_style`, then bind explicit
+fill/stroke indices or text ranges using `bind_color_style`. Inspect
+`color_style_bindings` and text-run `color_style` references before changing a paint.
+Use `update_color_style` only when the change should propagate to every bound use
+across pages and components. For a local exception, detach that binding with
+`style:null` or explicitly edit its paint. Deleting a style preserves materialized
+appearance but detaches all uses. Keep shared style edits small and inspect affected
+pages; locked references cause atomic rejection. The protocol manages document
+styles, not the application's separate local library.
+
 For structure changes, prefer `reparent` to rebuilding a subtree and `duplicate`
 to recreating repeated content. Inspect ordered `children` and `sibling_index`;
 `before` in a reparent refers to a destination sibling in bottom-to-top order.

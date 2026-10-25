@@ -182,6 +182,7 @@ pub(super) fn node(page: &Page, id: usize, identities: &BTreeMap<usize, uuid::Uu
         });
     json!({"id":identities[&id],"type":kind,"asset":asset,
         "text":text_info,
+        "color_style_bindings":super::colors::bindings(page,id),
         "sibling_index":siblings.iter().position(|value|*value==id),
         "children":children.iter().map(|id|identities[id]).collect::<Vec<_>>(),
         "mask_source_id":page.hierarchy.groups.get(&id).and_then(|g|g.mask).and_then(|id|identities.get(&id)),
@@ -251,7 +252,12 @@ pub(super) fn apply(
                 return Err(Error::invalid("Detach requires a component root"));
             }
         }
-        p::Operation::CreateComponent { .. } | p::Operation::InstantiateComponent { .. } => {
+        p::Operation::CreateComponent { .. }
+        | p::Operation::InstantiateComponent { .. }
+        | p::Operation::CreateColorStyle { .. }
+        | p::Operation::UpdateColorStyle { .. }
+        | p::Operation::DeleteColorStyle { .. }
+        | p::Operation::BindColorStyle { .. } => {
             return Err(Error::invalid(
                 "Component operation requires document context",
             ));

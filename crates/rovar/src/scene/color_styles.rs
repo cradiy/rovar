@@ -75,6 +75,16 @@ pub(crate) fn resolve(page: &mut Page, palette: &Palette) {
     });
 }
 
+pub(crate) fn resolve_with_baselines(page: &mut Page, palette: &Palette) {
+    resolve(page, palette);
+    for binding in page.hierarchy.components.values_mut() {
+        if let Ok(mut baseline) = serde_json::from_value::<Page>(binding.baseline.clone()) {
+            resolve(&mut baseline, palette);
+            binding.baseline = serde_json::to_value(baseline).unwrap();
+        }
+    }
+}
+
 pub(crate) fn visit(
     page: &mut Page,
     mut f: impl FnMut(&mut Option<String>, &mut Rgba, &mut FillMode, &mut LinearGradient),

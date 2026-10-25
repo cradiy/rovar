@@ -42,10 +42,22 @@ pub(super) fn describe(text: &Text) -> Value {
         .chain(std::iter::once(text.content.len()))
         .collect();
     json!({"offset_unit":"unicode_scalar","length":offsets.len()-1,
-        "default_style":describe_style(&text.styles.default),
+        "default_style":describe_style(&text.styles.default),"default_color_style":text.styles.default.color_style,
         "runs":text.styles.runs.iter().map(|run|json!({
             "start":offsets.binary_search(&run.range.start).unwrap(),
-            "end":offsets.binary_search(&run.range.end).unwrap(),"style":describe_style(&run.style)})).collect::<Vec<_>>()})
+            "end":offsets.binary_search(&run.range.end).unwrap(),"style":describe_style(&run.style),"color_style":run.style.color_style})).collect::<Vec<_>>()})
+}
+
+pub(super) fn range(content: &str, start: usize, end: usize) -> Result<Range<usize>> {
+    let offsets: Vec<_> = content
+        .char_indices()
+        .map(|(i, _)| i)
+        .chain(std::iter::once(content.len()))
+        .collect();
+    if start > end || end >= offsets.len() {
+        return Err(Error::invalid("Text range is outside the current content"));
+    }
+    Ok(offsets[start]..offsets[end])
 }
 
 fn changes(page: &Page, style: &dto::Style) -> Result<Vec<StyleChange>> {
@@ -178,16 +190,7 @@ pub(super) fn edit(
         .iter_mut()
         .find(|t| t.id == id)
         .ok_or_else(|| Error::invalid("edit_text requires a text node"))?;
-    let offsets: Vec<_> = text
-        .content
-        .char_indices()
-        .map(|(i, _)| i)
-        .chain(std::iter::once(text.content.len()))
-        .collect();
-    if start > end || end >= offsets.len() {
-        return Err(Error::invalid("Text range is outside the current content"));
-    }
-    let mut range = offsets[start]..offsets[end];
+    let mut range = range(&text.content, start, end)?;
     if let Some(content) = content {
         if text.content.len() - range.len() + content.len() > 65536 {
             return Err(Error::invalid("Text exceeds 64 KiB"));

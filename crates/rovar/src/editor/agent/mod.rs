@@ -3,6 +3,7 @@ use crate::agent::protocol::{self as p, Error, Request, Result};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 mod appearance;
+mod colors;
 mod geometry;
 mod history;
 mod import;
@@ -146,6 +147,12 @@ impl Workspace {
             ));
         }
         match request.method.as_str() {
+            "colors.list" => {
+                let _: p::Empty = p::parse(request.params.clone())?;
+                Ok(p::Reply::Ready(
+                    json!({"revision":self.document_revision().to_string(),"styles":colors::describe(&self.colors.palette)}),
+                ))
+            }
             "pages.list" => {
                 let _: p::Empty = p::parse(request.params.clone())?;
                 Ok(p::Reply::Ready(self.agent_page_list(cx)))
@@ -299,6 +306,8 @@ impl Workspace {
         let mut page = original.clone();
         let mut refs = BTreeMap::new();
         let mut component_refs = BTreeMap::new();
+        let mut color_refs = BTreeMap::new();
+        let mut palette = self.colors.palette.clone();
         let mut definitions = self.components.definitions.clone();
         for (index, op) in params.operations.into_iter().enumerate() {
             let reference = match &op {
@@ -307,11 +316,13 @@ impl Workspace {
                 | p::Operation::Duplicate { reference, .. }
                 | p::Operation::CreateComponent { reference, .. }
                 | p::Operation::InstantiateComponent { reference, .. } => Some(reference),
+                p::Operation::CreateColorStyle { reference, .. } => Some(reference),
                 _ => None,
             };
             if let Some(reference) = reference {
                 model::validate_reference(reference, &refs)
                     .and_then(|()| model::validate_reference(reference, &component_refs))
+                    .and_then(|()| model::validate_reference(reference, &color_refs))
                     .map_err(|mut e| {
                         e.operation = Some(index);
                         e
@@ -353,6 +364,21 @@ impl Workspace {
                 return Err(error);
             }
             let result = if matches!(
+                op,
+                p::Operation::CreateColorStyle { .. }
+                    | p::Operation::UpdateColorStyle { .. }
+                    | p::Operation::DeleteColorStyle { .. }
+                    | p::Operation::BindColorStyle { .. }
+            ) {
+                colors::apply(&mut page, &mut palette, op, &refs, &mut color_refs).map(|()| {
+                    for definition in definitions.values_mut() {
+                        crate::scene::color_styles::resolve_with_baselines(
+                            &mut definition.page,
+                            &palette,
+                        );
+                    }
+                })
+            } else if matches!(
                 op,
                 p::Operation::CreateComponent { .. } | p::Operation::InstantiateComponent { .. }
             ) {
@@ -434,7 +460,7 @@ impl Workspace {
                 .document_id
                 .clone()
                 .ok_or_else(|| Error::invalid("document_id is required"))?,
-            colors: self.colors.palette.clone(),
+            colors: palette,
             components: definitions,
             component_sets: self.components.sets.clone(),
             pages: before_pages
@@ -448,6 +474,11 @@ impl Workspace {
                 })
                 .collect(),
         };
+        if document.colors != self.colors.palette {
+            for page in &mut document.pages {
+                crate::scene::color_styles::resolve_with_baselines(page, &document.colors);
+            }
+        }
         crate::scene::components::synchronize(&mut document.pages, &mut document.components)
             .map_err(|e| Error::invalid(e.to_string()))?;
         for (before, after) in before_pages.iter().zip(&mut document.pages) {
@@ -475,8 +506,10 @@ impl Workspace {
             .find(|p| p.id == params.page_id)
             .unwrap()
             .clone();
-        let changed =
-            !changed_pages.is_empty() || document.components != self.components.definitions;
+        let changed = !changed_pages.is_empty()
+            || document.components != self.components.definitions
+            || document.colors != self.colors.palette;
+        color_refs.retain(|_, id| document.colors.contains_key(id));
         let before_ids = original.node_ids();
         let after_ids = page.node_ids();
         refs.retain(|_, uid| after_ids.values().any(|value| value.to_string() == *uid));
@@ -493,7 +526,7 @@ impl Workspace {
             .checked_add(u64::from(changed))
             .ok_or_else(|| Error::new("LIMIT_REACHED", "Document revision exhausted"))?;
         let result = json!({"revision":revision.to_string(),"page_id":page.id,
-            "changed":changed,"created":refs,"created_components":component_refs,"changed_pages":changed_pages,"nodes":updated,
+            "changed":changed,"created":refs,"created_components":component_refs,"created_color_styles":color_refs,"changed_pages":changed_pages,"nodes":updated,
             "start_frame_id":page.hierarchy.start.and_then(|id| after_ids.get(&id)),
             "deleted":before_ids.iter().filter_map(|(id,uid)|(!after_ids.contains_key(id)).then_some(uid)).collect::<Vec<_>>()});
         let (fingerprint, receipt_bytes) = self.agent_receipt(request, &result)?;
@@ -506,6 +539,7 @@ impl Workspace {
             *self.boolean_cache.borrow_mut() = Default::default();
             self.components.revision = None;
             self.components.definitions = document.components;
+            self.colors.palette = document.colors;
             for updated in document.pages {
                 if let Some(state) = self
                     .pages

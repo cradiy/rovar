@@ -2,6 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 pub(crate) mod appearance;
+pub(crate) mod colors;
 pub(crate) mod import;
 pub(crate) mod interaction;
 pub(crate) mod layout;
@@ -357,6 +358,26 @@ pub(crate) struct Path {
 #[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub(crate) enum Operation {
+    CreateColorStyle {
+        #[serde(rename = "ref")]
+        reference: String,
+        name: String,
+        paint: appearance::Paint,
+    },
+    UpdateColorStyle {
+        id: String,
+        name: Option<String>,
+        paint: Option<appearance::Paint>,
+    },
+    DeleteColorStyle {
+        id: String,
+    },
+    /// A null style detaches the binding without changing its materialized paint.
+    BindColorStyle {
+        id: String,
+        target: colors::Target,
+        style: Option<String>,
+    },
     /// Replace and/or style a text range. Offsets count Unicode scalar values,
     /// are end-exclusive, and address the current content at this operation.
     EditText {
@@ -496,7 +517,7 @@ fn one() -> u32 {
 pub(crate) fn schema(method: Option<&str>) -> Result<Value> {
     Ok(match method {
         None => json!(schemars::schema_for!(Request)),
-        Some("session.describe" | "tabs.list" | "pages.list") => {
+        Some("session.describe" | "tabs.list" | "pages.list" | "colors.list") => {
             json!(schemars::schema_for!(Empty))
         }
         Some("pages.apply") => json!(schemars::schema_for!(ApplyPages)),

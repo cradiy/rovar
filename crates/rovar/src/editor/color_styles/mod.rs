@@ -313,15 +313,7 @@ impl Workspace {
                 .values_mut()
                 .map(|d| &mut d.page),
         ) {
-            crate::scene::color_styles::resolve(page, &self.colors.palette);
-            for binding in page.hierarchy.components.values_mut() {
-                if let Ok(mut baseline) =
-                    serde_json::from_value::<crate::document::Page>(binding.baseline.clone())
-                {
-                    crate::scene::color_styles::resolve(&mut baseline, &self.colors.palette);
-                    binding.baseline = serde_json::to_value(baseline).unwrap();
-                }
-            }
+            crate::scene::color_styles::resolve_with_baselines(page, &self.colors.palette);
         }
         self.apply_component_page(self.pages.current().page.clone(), window, cx);
         self.record_page_edit(before);

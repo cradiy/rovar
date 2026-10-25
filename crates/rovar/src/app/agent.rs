@@ -122,11 +122,12 @@ fn dispatch(
         let _: protocol::Empty = protocol::parse(request.params.clone())?;
         return Ok(protocol::Reply::Ready(
             json!({"sessions":sessions,"capabilities":{
-                "methods":["session.describe","schema.get","tabs.list","tabs.create","tabs.open","tabs.activate","tabs.close","tabs.save","pages.list","pages.apply","pages.activate","nodes.get","nodes.find","document.apply","document.undo","document.redo","canvas.capture","selection.set","canvas.focus","canvas.fit"],
+                "methods":["session.describe","schema.get","tabs.list","tabs.create","tabs.open","tabs.activate","tabs.close","tabs.save","pages.list","pages.apply","pages.activate","colors.list","nodes.get","nodes.find","document.apply","document.undo","document.redo","canvas.capture","selection.set","canvas.focus","canvas.fit"],
                 "page_operations":["create","duplicate","rename","delete","reorder"],
                 "create_types":["frame","rectangle","ellipse","bezier","text","group"],
                 "operations":["create","update","delete","set_interaction","set_start_frame","import","replace_source",
-                    "duplicate","reparent","set_mask","set_boolean","create_component","instantiate_component","detach_component","edit_text"],
+                    "duplicate","reparent","set_mask","set_boolean","create_component","instantiate_component","detach_component","edit_text",
+                    "create_color_style","update_color_style","delete_color_style","bind_color_style"],
                 "import_types":["image","svg","video","audio"],
                 "import_data_types":["image","svg"],"max_import_data_bytes":crate::agent::imports::MAX_DATA_BYTES,
                 "appearance_properties":["fills","strokes","effects","blend"],

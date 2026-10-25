@@ -140,11 +140,12 @@ Window/tab IDs are opaque strings as described below. Revisions are opaque strin
 | `tabs.close` | Close a specific tab through the normal save-before-close flow. |
 | `tabs.save` | Request a save of a loaded tab without switching tabs. |
 | `pages.list` | List ordered pages, node/frame counts, the active page, and document revision. |
+| `colors.list` | List this document's color styles as `{id,name,paint}`, with its current revision; empty parameters. |
 | `pages.apply` | Atomically create, duplicate, rename, delete, or reorder pages. |
 | `pages.activate` | Switch the visible page, restoring its saved selection and view. |
 | `nodes.get` | Read specified UUIDs, or a page's nodes; returns parent UUIDs, properties, total, and next offset. |
 | `nodes.find` | Same read contract, with an optional case-insensitive name substring and exact node type filter. |
-| `document.apply` | Apply ordered node edits and prototype interaction settings atomically. |
+| `document.apply` | Apply ordered node edits, color style edits, and prototype interaction settings atomically. |
 | `document.undo` | Undo one document history entry at the supplied revision. |
 | `document.redo` | Redo one document history entry at the supplied revision. |
 | `canvas.capture` | Render one node's subtree as a PNG using the export renderer. |
@@ -152,7 +153,7 @@ Window/tab IDs are opaque strings as described below. Revisions are opaque strin
 | `canvas.focus` | Center explicit UUIDs in the available canvas area, keeping the zoom. |
 | `canvas.fit` | Fit explicit UUIDs, or all visible page content when the array is empty. |
 
-Reads and captures require a matching document revision. For pagination, keep the
+Node reads and captures require a matching document revision. For pagination, keep the
 same revision and use `next_offset`; a conflict requires restarting the read.
 Read limits are 1–200 nodes. Returned order is bottom-to-top layer order.
 
@@ -565,6 +566,56 @@ For example, update a card with two fills, an outside stroke, and a drop shadow:
       "x": 0, "y": 8, "blur": 24, "spread": 0, "color": [0, 0, 0, 0.25]}]
   }
 }
+```
+
+### Shared document colors
+
+`colors.list` discovers the document palette without switching its tab or page. Its
+`revision` can be used for the next guarded apply. Definitions contain a stable `id`,
+`name`, and solid or stop-gradient `paint`. Image and point-gradient styles are not
+supported by the editor's palette.
+
+Use these operations within `document.apply`:
+
+- `create_color_style`: unique `ref`, `name` (1–200 characters), and `paint`.
+- `update_color_style`: style `id` (or an earlier style `$ref`), optional `name`,
+  and optional `paint`. Omitted fields are preserved.
+- `delete_color_style`: style `id`. References are detached throughout the document
+  while retaining their current appearance.
+- `bind_color_style`: node `id`, `target`, and `style` (style ID, earlier `$ref`, or
+  null to detach). The target is `{"type":"fill","index":0}`,
+  `{"type":"stroke","index":0}`, or `{"type":"text"}`. Fill/stroke indices use
+  the current bottom-to-top lists, including hidden entries; the paint layer must
+  already exist. Text targets optionally accept both `start` and `end` using the
+  text range contract. Omitting both targets the whole box and its default style.
+  Explicit text ranges must be nonempty.
+
+Create responses return `created_color_styles` separately from created nodes and
+components. All three reference namespaces must use unique names within the batch.
+Missing definitions return `COLOR_STYLE_NOT_FOUND`. Query `colors.list` again after
+an edit to inspect the current definition.
+
+Node reads expose `color_style_bindings.fills` and `.strokes`, parallel to the paint
+lists, with style IDs or null. Text reads expose `text.default_color_style` and each
+run's `color_style` separately from its editable `style` patch. Binding changes only
+the paint and its reference; layer opacity, hidden state, stroke width, and other
+text formatting remain intact. Explicit paint edits detach the affected binding.
+
+Definitions and their references on all document pages, component definitions, and
+component baselines update atomically. Instance overrides remain independent.
+Changing a style that would modify locked content on any page rejects the whole
+batch. Palette-only edits also create one undo entry and advance the document
+revision. `changed_pages` lists affected pages; its empty value does not imply a
+palette edit was a no-op. This API manages document colors, not the application's
+separate local library.
+
+```json
+[
+  {"op":"create_color_style","ref":"$accent","name":"Accent",
+   "paint":{"type":"solid","color":"#A68BEAFF"}},
+  {"op":"bind_color_style","id":"CARD_UUID",
+   "target":{"type":"fill","index":0},"style":"$accent"}
+]
 ```
 
 ### Text ranges and typography
