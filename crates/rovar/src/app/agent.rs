@@ -123,7 +123,8 @@ fn dispatch(
         let _: protocol::Empty = protocol::parse(request.params.clone())?;
         return Ok(protocol::Reply::Ready(
             json!({"sessions":sessions,"capabilities":{
-                "methods":["session.describe","schema.get","tabs.list","tabs.create","tabs.open","tabs.activate","tabs.close","tabs.save","nodes.get","nodes.find","document.apply","canvas.capture","selection.set","canvas.focus","canvas.fit"],
+                "methods":["session.describe","schema.get","tabs.list","tabs.create","tabs.open","tabs.activate","tabs.close","tabs.save","pages.list","pages.apply","pages.activate","nodes.get","nodes.find","document.apply","canvas.capture","selection.set","canvas.focus","canvas.fit"],
+                "page_operations":["create","duplicate","rename","delete","reorder"],
                 "create_types":["frame","rectangle","ellipse","bezier","text","group"],
                 "operations":["create","update","delete","set_interaction","set_start_frame","import","replace_source",
                     "duplicate","reparent","set_mask","set_boolean","create_component","instantiate_component","detach_component"],
@@ -136,7 +137,7 @@ fn dispatch(
                 "max_apply_receipts":protocol::MAX_RECEIPTS,"max_request_bytes":transport::MAX_REQUEST_BYTES,
             "max_receipt_bytes":protocol::MAX_RECEIPT_BYTES,
                 "capture_renderer":"export","capture_media":false,
-                "scope":"active tabs and their active pages","assets_import":true
+                "scope":"all pages in active tabs; view operations require the active page","assets_import":true
             }}),
         ));
     }

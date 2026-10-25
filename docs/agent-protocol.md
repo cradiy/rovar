@@ -80,7 +80,7 @@ unreachable records left by crashes. Interface startup
 failure is reported to stderr and does not prevent the editor from opening.
 The interface is available to local processes running as the same user.
 
-Document editing addresses active document tabs and their active pages. `tabs.list`
+Document editing addresses all pages in active document tabs. `tabs.list`
 also exposes inactive, unloaded, saving, and loading tabs, plus windows with no documents.
 A tab/page change
 does not redirect a request to a different document. Reopening, reloading, or moving
@@ -134,6 +134,9 @@ Window/tab IDs are opaque strings as described below. Revisions are opaque strin
 | `tabs.activate` | Activate a specific tab and its window, loading the document if needed. |
 | `tabs.close` | Close a specific tab through the normal save-before-close flow. |
 | `tabs.save` | Request a save of a loaded tab without switching tabs. |
+| `pages.list` | List ordered pages, node/frame counts, the active page, and document revision. |
+| `pages.apply` | Atomically create, duplicate, rename, delete, or reorder pages. |
+| `pages.activate` | Switch the visible page, restoring its saved selection and view. |
 | `nodes.get` | Read specified UUIDs, or a page's nodes; returns parent UUIDs, properties, total, and next offset. |
 | `nodes.find` | Same read contract, with an optional case-insensitive name substring and exact node type filter. |
 | `document.apply` | Apply ordered node edits and prototype interaction settings atomically. |
@@ -145,6 +148,45 @@ Window/tab IDs are opaque strings as described below. Revisions are opaque strin
 Reads and captures require a matching document revision. For pagination, keep the
 same revision and use `next_offset`; a conflict requires restarting the read.
 Read limits are 1–200 nodes. Returned order is bottom-to-top layer order.
+
+## Pages and background editing
+
+`pages.list` takes empty parameters and returns `revision`, `active_page_id`, and
+ordered `pages` entries with `id`, `name`, `node_count`, and `frame_count`.
+`nodes.get`, `nodes.find`, `document.apply`, and `canvas.capture` accept any existing
+`page_id` in the targeted session. They do not activate that page. The revision is
+document-wide: an edit on any page invalidates earlier reads on every page.
+
+`pages.apply` takes `base_revision` and 1–128 ordered `operations`:
+
+- `create`: `ref`, `name`, optional `before` page UUID or earlier batch reference.
+- `duplicate`: source `id`, `ref`, `name`, optional `before`.
+- `rename`: `id`, `name`.
+- `delete`: `id`.
+- `reorder`: `id`, optional `before`.
+
+New references use unique `$names`, scoped to that batch. Omitted `before` appends
+to the page list; moving a page before itself is a no-op. Names must contain 1–200
+characters and cannot be blank. Duplicates retain artwork and interactions with new
+node UUIDs; copied component masters become instances of the original definition.
+At least one page must remain when the batch finishes. Page deletion removes the
+entire page, including locked content, just as the editor's page deletion does.
+
+Creating or copying a page keeps the current page visible. If the active page is
+deleted, the next surviving page in the original order becomes active, falling back
+to the previous survivor, then the first newly created page. A changed batch creates
+one undo entry; failures and no-ops create none. The result includes `revision`,
+`active_page_id`, `changed`, `created` reference mappings, and ordered `pages`.
+
+`pages.activate` takes `page_id` and `revision`. It changes no document content or
+revision and creates no undo entry. Selection and canvas framing methods still
+require the active page and return `PAGE_NOT_ACTIVE` otherwise. Activation does not
+interrupt an editor interaction: it returns `BUSY` while the editor is being edited.
+
+`pages.apply` and `pages.activate` share the successful-request receipt cache with
+`document.apply`. Exact retries return the original acknowledgement, including after
+undo or later page switches; they never repeat a mutation or page switch. Use
+`pages.list` or `session.describe` to read current state. Reads consume no receipts.
 
 ## Document tabs
 
@@ -220,7 +262,8 @@ Responses return `page_id`, the unchanged document `revision`, actual `selection
 and `view` (`zoom` and `pan` in logical pixels relative to the canvas origin).
 `session.describe` also reports this view state. These operations do not modify
 document content or undo history. They re-execute on retry using the current view;
-the successful-apply receipt cache described below applies only to `document.apply`.
+the successful-request receipt cache applies to `document.apply`, `pages.apply`,
+and `pages.activate`, not selection or framing.
 
 ## Prototype interactions
 
@@ -245,7 +288,7 @@ Use `set_interaction` within `document.apply` to replace one trigger's action:
 - Triggers are `click` and `hover`. Changing one preserves the other.
 - Actions are `none`, `navigate`, `back`, `open_overlay`, `close_overlay`,
   `change_variant`, `media`, and `set_property`. Query `document.apply`'s schema for their fields.
-- Frame, media, and property targets use active-page node UUIDs or earlier batch `$references`.
+- Frame, media, and property targets use the requested page's node UUIDs or earlier batch `$references`.
   Variant targets must be among the source's `available_variants`.
 - `open_overlay` requires `settings`: `position` (`center`, `bottom`, `right`),
   `backdrop`, and `dismiss_outside`.
@@ -267,7 +310,7 @@ Use `set_interaction` within `document.apply` to replace one trigger's action:
   `color` (`#RRGGBB` or `#RRGGBBAA`), `mode`, `gradient`, `image`, and `image_hash`.
   Edit that returned value incrementally. Fill supports solid, gradient, image, and point
   paints where supported by the target; text and strokes support solid and gradient paints.
-  Image hashes must reference an existing image on the active page. Layer opacity is 0–1,
+  Image hashes must reference an existing image on the requested page. Layer opacity is 0–1,
   and font families must be installed.
   Properties affect the isolated playback scene, restore on hover exit when configured,
   and reset on restart. They never edit the source document or component definition.
@@ -282,7 +325,7 @@ Use `set_interaction` within `document.apply` to replace one trigger's action:
   Target type, media command, and variant membership are validated before committing
   the batch. The same revision, retry, and undo contracts apply as for node edits.
 
-`{"op":"set_start_frame","target":"FRAME_UUID"}` sets the active page's starting
+`{"op":"set_start_frame","target":"FRAME_UUID"}` sets the requested page's starting
 frame. A null target clears the explicit starting frame. Apply responses and
 `session.describe` return `start_frame_id`.
 
@@ -477,7 +520,7 @@ not silently substitute an asset. SVG asset nodes report `asset.svg_editable` an
 The returned root UUID references the converted group or preserved asset.
 
 File reads, decoding, and SVG parsing run in the background. Before committing, the
-editor checks session, active page, document revision, busy state, and request
+editor checks session, page existence, document revision, busy state, and request
 deadline again. Failure or stale state leaves the document and history unchanged.
 Imported source bytes are owned by the document and embedded by normal saving;
 removing the original path afterwards does not break undo/redo or saved documents.
@@ -531,4 +574,4 @@ new request. Never replace just the revision to force a stale edit through.
 Import read/decode failures return `IMPORT_FAILED`; type/placement errors return
 `INVALID_ARGUMENT`. Errors contain `code`, `message`, and, when attributable to an operation, its zero-based
 `operation` index. Other codes include `INVALID_ARGUMENT`, `NODE_NOT_FOUND`, `LOCKED`,
-`LAYOUT_CONTROLLED`, `PAGE_NOT_ACTIVE`, and `SESSION_CLOSED`.
+`LAYOUT_CONTROLLED`, `PAGE_NOT_FOUND`, `PAGE_NOT_ACTIVE`, and `SESSION_CLOSED`.

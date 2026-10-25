@@ -86,7 +86,7 @@ impl Workspace {
             .find(|p| p.page.id == self.pages.active)
             .unwrap() = state;
     }
-    fn activate_page(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn activate_page(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
         let state = self
             .pages
             .entries

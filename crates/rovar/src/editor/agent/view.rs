@@ -13,6 +13,12 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) -> Result<Value> {
         self.agent_guard(&params.page_id, &params.revision)?;
+        if params.page_id != self.pages.active {
+            return Err(Error::new(
+                "PAGE_NOT_ACTIVE",
+                "Call pages.activate before changing the view",
+            ));
+        }
         if params.ids.len() > p::MAX_NODES {
             return Err(Error::invalid("ID count must not exceed 200"));
         }

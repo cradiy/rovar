@@ -127,6 +127,50 @@ pub(crate) struct Schema {
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+pub(crate) struct PageTarget {
+    pub page_id: String,
+    pub revision: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ApplyPages {
+    pub base_revision: String,
+    pub operations: Vec<PageOperation>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
+pub(crate) enum PageOperation {
+    Create {
+        #[serde(rename = "ref")]
+        reference: String,
+        name: String,
+        /// Insert before this page UUID or earlier batch reference; omitted means append.
+        before: Option<String>,
+    },
+    Duplicate {
+        id: String,
+        #[serde(rename = "ref")]
+        reference: String,
+        name: String,
+        before: Option<String>,
+    },
+    Rename {
+        id: String,
+        name: String,
+    },
+    Delete {
+        id: String,
+    },
+    Reorder {
+        id: String,
+        before: Option<String>,
+    },
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct Read {
     pub page_id: String,
     /// Must match the current document revision, including when paging results.
@@ -407,7 +451,11 @@ fn one() -> u32 {
 pub(crate) fn schema(method: Option<&str>) -> Result<Value> {
     Ok(match method {
         None => json!(schemars::schema_for!(Request)),
-        Some("session.describe" | "tabs.list") => json!(schemars::schema_for!(Empty)),
+        Some("session.describe" | "tabs.list" | "pages.list") => {
+            json!(schemars::schema_for!(Empty))
+        }
+        Some("pages.apply") => json!(schemars::schema_for!(ApplyPages)),
+        Some("pages.activate") => json!(schemars::schema_for!(PageTarget)),
         Some("tabs.create") => json!(schemars::schema_for!(CreateTab)),
         Some("tabs.open") => json!(schemars::schema_for!(OpenTab)),
         Some("tabs.activate" | "tabs.close" | "tabs.save") => {

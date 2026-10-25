@@ -12,6 +12,8 @@ use std::{
 };
 use uic::components::dropdown::{Dropdown, DropdownPlacement, DropdownState, dropdown};
 mod controls;
+mod snapshot;
+pub(super) use snapshot::Snapshot;
 
 pub(super) struct ExportState {
     pub busy: bool,
@@ -41,6 +43,25 @@ impl Workspace {
         self.export.failure.take()
     }
 
+    pub(super) fn component_export_jobs(
+        &self,
+        window: &Window,
+        cx: &gpui::App,
+    ) -> Result<Vec<Job>> {
+        self.export_jobs(self.selection_ids(), window, cx)
+    }
+
+    pub(super) fn export_jobs(
+        &self,
+        roots: BTreeSet<usize>,
+        window: &Window,
+        cx: &gpui::App,
+    ) -> Result<Vec<Job>> {
+        Snapshot::new(self.snapshot_page(cx).0).jobs(roots, window)
+    }
+}
+
+impl Snapshot {
     fn export_bounds(&self, id: usize) -> Option<Rect> {
         let mut r = self.world_rect(id)?;
         let boolean = crate::scene::boolean::is_boolean(&self.hierarchy, id)
@@ -100,23 +121,10 @@ impl Workspace {
         Some(r)
     }
 
-    pub(super) fn component_export_jobs(
-        &self,
-        window: &Window,
-        cx: &gpui::App,
-    ) -> Result<Vec<Job>> {
-        self.export_jobs(self.selection_ids(), window, cx)
-    }
-
-    pub(super) fn export_jobs(
-        &self,
-        roots: BTreeSet<usize>,
-        window: &Window,
-        cx: &gpui::App,
-    ) -> Result<Vec<Job>> {
-        let (doc, assets) = self.snapshot_page(cx);
-        let json = Arc::new(serde_json::to_vec(&doc)?);
-        let assets = Arc::new(assets);
+    pub(super) fn jobs(&self, roots: BTreeSet<usize>, window: &Window) -> Result<Vec<Job>> {
+        let doc = &self.page;
+        let json = Arc::new(serde_json::to_vec(doc)?);
+        let assets = Arc::new(crate::scene::components::sources(doc));
         let mut jobs = Vec::new();
         let masks = crate::scene::mask::outlines(
             &self.hierarchy,
@@ -124,11 +132,12 @@ impl Workspace {
             &self.boards,
             &mut self.boolean_cache.borrow_mut(),
         );
+        let paint_order = self.paint_order();
         for root in roots {
             let ids = self.descendants(&BTreeSet::from([root]));
-            let order: Vec<_> = self
-                .paint_order()
-                .into_iter()
+            let order: Vec<_> = paint_order
+                .iter()
+                .copied()
                 .filter(|id| ids.contains(id))
                 .filter(|id| {
                     *id == root
@@ -159,7 +168,7 @@ impl Workspace {
                 jobs.push(Job {
                     preset: Default::default(),
                     original: Some(source),
-                    name: self.layer_name(root, cx),
+                    name: self.layer_name(root),
                     json: json.clone(),
                     assets: assets.clone(),
                     order,
@@ -237,7 +246,7 @@ impl Workspace {
             jobs.push(Job {
                 preset: Default::default(),
                 original: None,
-                name: self.layer_name(root, cx),
+                name: self.layer_name(root),
                 json: json.clone(),
                 assets: assets.clone(),
                 order,
@@ -249,7 +258,9 @@ impl Workspace {
         ensure!(!jobs.is_empty(), "{}", t("export-empty-selection"));
         Ok(jobs)
     }
+}
 
+impl Workspace {
     pub(super) fn export_selection(
         &mut self,
         quick_format: Option<Format>,

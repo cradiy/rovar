@@ -106,6 +106,9 @@ acceptance snapshots, so use `tabs.list` for current state.
 
 ## Inspect the design
 
+- Use `pages.list` to discover page UUIDs and counts. Node reads, `document.apply`,
+  and captures can target an inactive page without changing the user's canvas.
+  Revisions are document-wide; reread after edits on any page.
 - For a selection-based request, resolve the current selection with `nodes.get`.
   Do not guess the selected element from an old screenshot or its name.
 - Use `nodes.find` to locate relevant content and `nodes.get` to inspect parents,
@@ -125,6 +128,19 @@ existing elements; create only what is missing and delete only what the task mak
 obsolete. Do not delete and recreate a frame, page, or all its children on each pass.
 Rebuild a whole region only when the user requests a redesign or the existing
 structure cannot express the requested change; keep the replacement scoped to that region.
+
+Use `pages.apply` for page creation, duplication, renaming, deletion, and ordering;
+inspect its schema first. Each batch uses `base_revision` and is one undo entry.
+Create and duplicate require a name and unique `$ref`; optional `before` controls
+page ordering, otherwise they append. Copies get new node UUIDs and copied component
+masters become instances. Preserve existing pages unless removal is requested.
+These operations keep the current page visible unless it is deleted.
+
+Call `pages.activate` with `page_id` and `revision` only when the task requires
+showing that page or changing its selection/view. It restores the page's saved view
+without changing document revision. Page mutations and activation share the apply
+receipt cache: an exact retry acknowledges the earlier result without repeating it.
+Use a fresh request ID for a deliberate later switch and reread current state after retries.
 
 For a new design, establish the frame and major layout first, inspect the result,
 then add and refine content. For an existing design, change the specific geometry,

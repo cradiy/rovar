@@ -6,6 +6,7 @@ mod geometry;
 mod import;
 mod interaction;
 mod model;
+mod pages;
 mod structure;
 #[cfg(test)]
 mod tests;
@@ -97,9 +98,7 @@ impl Workspace {
                 "Session changed; call session.describe",
             ));
         }
-        if request.method == "document.apply"
-            && let Some((original, result)) = self.agent.receipts.get(&request.request_id)
-        {
+        if let Some((original, result)) = self.agent.receipts.get(&request.request_id) {
             if *original != fingerprint(request)? {
                 return Err(Error::new(
                     "REQUEST_ID_REUSED",
@@ -115,6 +114,12 @@ impl Workspace {
             ));
         }
         match request.method.as_str() {
+            "pages.list" => {
+                let _: p::Empty = p::parse(request.params.clone())?;
+                Ok(p::Reply::Ready(self.agent_page_list(cx)))
+            }
+            "pages.apply" => self.agent_apply_pages(request, window, cx),
+            "pages.activate" => self.agent_activate_page(request, window, cx),
             "nodes.get" | "nodes.find" => {
                 let params: p::Read = p::parse(request.params.clone())?;
                 self.agent_guard(&params.page_id, &params.revision)?;
@@ -131,7 +136,7 @@ impl Workspace {
                 {
                     return Err(Error::invalid("Use nodes.find for name/type filters"));
                 }
-                let (page, _) = self.snapshot_page(cx);
+                let page = self.agent_page(&params.page_id, cx);
                 let identities = page.node_ids();
                 let mut ids = identities.keys().copied().collect::<Vec<_>>();
                 if !params.ids.is_empty() {
@@ -202,10 +207,10 @@ impl Workspace {
     }
 
     fn agent_guard(&self, page: &str, revision: &str) -> Result<()> {
-        if page != self.pages.active {
+        if !self.pages.entries.iter().any(|entry| entry.page.id == page) {
             return Err(Error::new(
-                "PAGE_NOT_ACTIVE",
-                "Activate the requested page in the editor, then read session.describe",
+                "PAGE_NOT_FOUND",
+                "Page no longer exists; call pages.list",
             ));
         }
         if revision != self.document_revision().to_string() {
@@ -257,7 +262,7 @@ impl Workspace {
                 return Ok(p::Reply::PrepareImports(sources));
             }
         }
-        let (original, _) = self.snapshot_page(cx);
+        let original = self.agent_page(&params.page_id, cx);
         let mut page = original.clone();
         let mut refs = BTreeMap::new();
         let mut component_refs = BTreeMap::new();
@@ -386,6 +391,7 @@ impl Workspace {
         page.validate().map_err(|e| Error::invalid(e.to_string()))?;
         model::protect(&original, &page)?;
         // Validate the edited page in its complete component/document context as well.
+        let before_pages = self.agent_pages(cx);
         let mut document = crate::document::Document {
             id: request
                 .document_id
@@ -394,31 +400,17 @@ impl Workspace {
             colors: self.colors.palette.clone(),
             components: definitions,
             component_sets: self.components.sets.clone(),
-            pages: self
-                .pages
-                .entries
+            pages: before_pages
                 .iter()
                 .map(|p| {
-                    if p.page.id == page.id {
+                    if p.id == page.id {
                         page.clone()
                     } else {
-                        p.page.clone()
+                        p.clone()
                     }
                 })
                 .collect(),
         };
-        let before_pages = self
-            .pages
-            .entries
-            .iter()
-            .map(|entry| {
-                if entry.page.id == original.id {
-                    original.clone()
-                } else {
-                    entry.page.clone()
-                }
-            })
-            .collect::<Vec<_>>();
         crate::scene::components::synchronize(&mut document.pages, &mut document.components)
             .map_err(|e| Error::invalid(e.to_string()))?;
         for (before, after) in before_pages.iter().zip(&mut document.pages) {
@@ -467,16 +459,7 @@ impl Workspace {
             "changed":changed,"created":refs,"created_components":component_refs,"changed_pages":changed_pages,"nodes":updated,
             "start_frame_id":page.hierarchy.start.and_then(|id| after_ids.get(&id)),
             "deleted":before_ids.iter().filter_map(|(id,uid)|(!after_ids.contains_key(id)).then_some(uid)).collect::<Vec<_>>()});
-        let fingerprint = fingerprint(request)?;
-        let receipt_bytes = serde_json::to_vec(&(fingerprint, &result))
-            .map_err(|e| Error::invalid(e.to_string()))?
-            .len();
-        if self.agent.receipt_bytes.saturating_add(receipt_bytes) > p::MAX_RECEIPT_BYTES {
-            return Err(Error::new(
-                "LIMIT_REACHED",
-                "Session receipt capacity reached; reopen the document for a new session",
-            ));
-        }
+        let (fingerprint, receipt_bytes) = self.agent_receipt(request, &result)?;
         if changed {
             // All fallible work precedes this point. Reuse the ordinary page undo entry.
             let before = self.page_edit(&changed_pages, cx);
@@ -493,12 +476,18 @@ impl Workspace {
                     .iter_mut()
                     .find(|s| s.page.id == updated.id)
                 {
+                    let remaining = crate::scene::components::ids(&updated);
+                    state.selection.retain(|id| remaining.contains(id));
+                    state.folded.retain(|id| remaining.contains(id));
                     state.page = updated;
                 }
             }
-            let remaining = crate::scene::components::ids(&page);
-            self.load_page(page, window, cx);
-            self.set_selection(selection.intersection(&remaining).copied().collect(), cx);
+            if changed_pages.contains(&self.pages.active) {
+                let active = self.pages.current().page.clone();
+                let remaining = crate::scene::components::ids(&active);
+                self.load_page(active, window, cx);
+                self.set_selection(selection.intersection(&remaining).copied().collect(), cx);
+            }
             self.record_page_edit(before);
             cx.notify();
         }
@@ -519,7 +508,7 @@ impl Workspace {
         if !(1..=4).contains(&params.scale) {
             return Err(Error::invalid("scale must be 1 through 4"));
         }
-        let (page, _) = self.snapshot_page(cx);
+        let page = self.agent_page(&params.page_id, cx);
         let id = model::lookup(&page, &params.node_id, &BTreeMap::new())?;
         let subtree = crate::scene::components::subtree(&page, id);
         if page
@@ -532,8 +521,8 @@ impl Workspace {
                 "Media capture is not supported by the export renderer",
             ));
         }
-        let mut jobs = self
-            .export_jobs([id].into(), window, cx)
+        let mut jobs = super::export::Snapshot::new(page)
+            .jobs([id].into(), window)
             .map_err(|e| Error::new("CAPTURE_FAILED", e.to_string()))?;
         let job = jobs.remove(0);
         let width = (job.bounds.width * params.scale as f32).ceil();
