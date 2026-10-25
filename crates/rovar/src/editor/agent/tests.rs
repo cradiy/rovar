@@ -5,6 +5,7 @@ mod appearance;
 mod history;
 mod pages;
 mod structure;
+mod typography_layout;
 
 fn request(this: &Workspace, method: &str, params: Value) -> Request {
     Request {

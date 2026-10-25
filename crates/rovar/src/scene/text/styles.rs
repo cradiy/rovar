@@ -4,6 +4,18 @@ use crate::scene::property::TextProperty;
 use gpui::{Rgba, SharedString, TextAlign};
 use std::ops::Range;
 
+pub(crate) fn paragraph_range(content: &str, range: Range<usize>) -> Range<usize> {
+    let start = content[..range.start].rfind('\n').map_or(0, |i| i + 1);
+    let last = content[..range.end]
+        .char_indices()
+        .next_back()
+        .map_or(0, |(i, _)| i);
+    let end = content[last..]
+        .find('\n')
+        .map_or(content.len(), |i| last + i + 1);
+    start..end
+}
+
 #[derive(Clone, Debug)]
 pub(crate) enum StyleChange {
     ColorStyle(Option<String>, crate::scene::color_styles::ColorStyle),

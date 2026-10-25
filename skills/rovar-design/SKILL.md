@@ -191,6 +191,23 @@ for gradient, image-placement, and effect fields, including enum casing and colo
 formats; effect and point-gradient colors are normalized RGBA arrays. Observe the
 node-specific paint/effect constraints and capture the result to verify composition.
 
+For mixed typography, inspect the node's `text.runs` and `text.offset_unit`, then use
+`edit_text` for the intended range. Offsets count Unicode scalar values, not UTF-8
+bytes or JavaScript UTF-16 string indices; use returned run boundaries or count code
+points explicitly. Offsets address the current content after earlier batch edits.
+Patch only the requested style fields. Use local replacements to preserve formatting
+outside the edit. Line height and horizontal alignment affect whole intersecting
+paragraphs. Inspect the resulting runs and capture to verify wrapping and emphasis.
+
+For layout, read and preserve the full `layout` and `sizing` objects before editing.
+Use Grid columns/spans, wrapping, Hug/Fill, size limits, and constraints to express
+responsive relationships rather than repeatedly patching absolute rectangles.
+Fill requires a flow child; Hug must not depend on Fill on the same axis. Explicit
+geometry requires `sizing.absolute:true` for children of auto layout. Constraints
+are for non-flow children; provide only their modes and let the editor capture the
+baseline geometry. Clear them with `remove_constraints` before moving into flow.
+Read resolved bounds after applying and keep protected descendants intact.
+
 For structure changes, prefer `reparent` to rebuilding a subtree and `duplicate`
 to recreating repeated content. Inspect ordered `children` and `sibling_index`;
 `before` in a reparent refers to a destination sibling in bottom-to-top order.

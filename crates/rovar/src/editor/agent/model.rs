@@ -6,7 +6,7 @@ use crate::{
         auto_layout, components,
         layer::{LayerGroup, LayerState},
         shape::{Shape, ShapeKind},
-        text::{StyleChange, styles::StyledText},
+        text::styles::StyledText,
     },
 };
 use serde_json::{Value, json};
@@ -110,6 +110,11 @@ pub(super) fn node(page: &Page, id: usize, identities: &BTreeMap<usize, uuid::Uu
             None,
         )
     };
+    let text_info = page
+        .texts
+        .iter()
+        .find(|n| n.id == id)
+        .map(super::typography::describe);
     let mut properties = json!({
         "name":page.hierarchy.names.get(&id).unwrap_or(&name),
         "rect":components::bounds(page,id), "opacity":state.opacity,
@@ -125,6 +130,16 @@ pub(super) fn node(page: &Page, id: usize, identities: &BTreeMap<usize, uuid::Uu
         properties["italic"] = json!(n.styles.default.italic);
         properties["underline"] = json!(n.styles.default.underline);
         properties["strikethrough"] = json!(n.styles.default.strikethrough);
+        let style = &text_info.as_ref().unwrap()["default_style"];
+        for key in [
+            "line_height",
+            "letter_spacing",
+            "text_align",
+            "vertical_align",
+        ] {
+            properties[key] = style[key].clone();
+        }
+        properties["text_paint"] = style["paint"].clone();
     }
     if let Some(n) = page
         .shapes
@@ -146,10 +161,12 @@ pub(super) fn node(page: &Page, id: usize, identities: &BTreeMap<usize, uuid::Uu
     }
     if let Some(layout) = page.hierarchy.layouts.get(&id) {
         properties["layout"] = json!({"direction":format!("{:?}",layout.axis).to_lowercase(),
+            "columns":layout.columns,"column_width":layout.column_width,"wrap":layout.wrap,"line_gap":layout.line_gap,
             "gap":layout.gap,"padding":layout.padding,
             "main_align":format!("{:?}",layout.main).to_lowercase(),
             "cross_align":format!("{:?}",layout.cross).to_lowercase()});
     }
+    super::layout::describe(page, id, &mut properties);
     let asset = page
         .shapes
         .iter()
@@ -164,6 +181,7 @@ pub(super) fn node(page: &Page, id: usize, identities: &BTreeMap<usize, uuid::Uu
             info
         });
     json!({"id":identities[&id],"type":kind,"asset":asset,
+        "text":text_info,
         "sibling_index":siblings.iter().position(|value|*value==id),
         "children":children.iter().map(|id|identities[id]).collect::<Vec<_>>(),
         "mask_source_id":page.hierarchy.groups.get(&id).and_then(|g|g.mask).and_then(|id|identities.get(&id)),
@@ -182,6 +200,16 @@ pub(super) fn apply(
     refs: &mut BTreeMap<String, String>,
 ) -> Result<()> {
     match op {
+        p::Operation::EditText {
+            id,
+            start,
+            end,
+            content,
+            style,
+        } => {
+            let id = lookup(page, &id, refs)?;
+            super::typography::edit(page, id, start, end, content, style)?;
+        }
         p::Operation::Reparent { id, parent, before } => {
             let id = lookup(page, &id, refs)?;
             let parent = parent
@@ -414,7 +442,12 @@ fn update(page: &mut Page, id: usize, props: p::Properties, creating: bool) -> R
             || props.font_weight.is_some()
             || props.italic.is_some()
             || props.underline.is_some()
-            || props.strikethrough.is_some())
+            || props.strikethrough.is_some()
+            || props.line_height.is_some()
+            || props.letter_spacing.is_some()
+            || props.text_align.is_some()
+            || props.vertical_align.is_some()
+            || props.text_paint.is_some())
     {
         return Err(Error::invalid("Text properties require a text node"));
     }
@@ -474,6 +507,7 @@ fn update(page: &mut Page, id: usize, props: p::Properties, creating: bool) -> R
     if props.remove_layout {
         page.hierarchy.layouts.remove(&id);
     }
+    super::layout::sizing(page, id, &props)?;
     if let Some(rect) = props.rect {
         let rect: Rect = rect.into();
         validate_rect(rect)?;
@@ -512,11 +546,16 @@ fn update(page: &mut Page, id: usize, props: p::Properties, creating: bool) -> R
         .map(Into::into)
         .or_else(|| components::bounds(page, id));
     if let Some(layout) = &props.layout {
-        let frame = local_rect(
+        let frame = if props.rect.is_none() {
+            page.hierarchy.layouts.get(&id).map(|l| l.frame)
+        } else {
+            None
+        }
+        .unwrap_or(local_rect(
             page,
             board(page, id),
             frame.ok_or_else(|| Error::invalid("Layout requires rect"))?,
-        );
+        ));
         validate_rect(frame)?;
         let align = |v| match v {
             p::Align::Start => auto_layout::Align::Start,
@@ -527,13 +566,19 @@ fn update(page: &mut Page, id: usize, props: p::Properties, creating: bool) -> R
         container.axis = match layout.direction {
             p::Axis::Horizontal => auto_layout::Axis::Horizontal,
             p::Axis::Vertical => auto_layout::Axis::Vertical,
+            p::Axis::Grid => auto_layout::Axis::Grid,
         };
+        container.columns = layout.columns;
+        container.column_width = layout.column_width;
+        container.wrap = layout.wrap;
+        container.line_gap = layout.line_gap;
         container.gap = layout.gap;
         container.padding = layout.padding;
         container.main = align(layout.main_align);
         container.cross = align(layout.cross_align);
         page.hierarchy.layouts.insert(id, container);
     }
+    super::layout::constraints(page, id, &props)?;
     if let Some(name) = &props.name {
         page.hierarchy.names.insert(id, name.clone());
         if let Some(n) = page.boards.iter_mut().find(|n| n.id == id) {
@@ -574,42 +619,7 @@ fn update(page: &mut Page, id: usize, props: p::Properties, creating: bool) -> R
     }
     if let Some(n) = page.texts.iter_mut().find(|n| n.id == id) {
         patch_layer(&mut n.layer, &props);
-        if let Some(content) = props.content {
-            if content.len() > 65536 {
-                return Err(Error::invalid("Text exceeds 64 KiB"));
-            }
-            n.styles.replace(0..n.content.len(), content.len());
-            n.content = content;
-        }
-        let mut changes = Vec::new();
-        if let Some(value) = props.font_family {
-            changes.push(StyleChange::Family(value.into()));
-        }
-        if let Some(value) = props.font_size {
-            changes.push(StyleChange::Size(value));
-        }
-        if let Some(value) = props.font_weight {
-            changes.push(StyleChange::Weight(value));
-        }
-        if let Some(value) = props.italic {
-            changes.push(StyleChange::Italic(value));
-        }
-        if let Some(value) = props.underline {
-            changes.push(StyleChange::Underline(value));
-        }
-        if let Some(value) = props.strikethrough {
-            changes.push(StyleChange::Strikethrough(value));
-        }
-        if let Some(value) = color {
-            changes.extend([
-                StyleChange::Color(value),
-                StyleChange::Opacity(value.a),
-                StyleChange::FillMode(FillMode::Solid),
-            ]);
-        }
-        for change in changes {
-            n.styles.apply(0..n.content.len(), &change, true);
-        }
+        super::typography::whole(page, id, &props)?;
     }
     Ok(())
 }

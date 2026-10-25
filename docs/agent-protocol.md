@@ -377,7 +377,7 @@ frame. A null target clears the explicit starting frame. Apply responses and
 
 The write surface includes frames, rectangles, ellipses, Bezier paths, text, and
 plain or layout groups. Properties cover names, geometry, layered paints, effects, blend modes, opacity, rotation, visibility,
-rectangle corner radius, whole-box text/font styling, and horizontal/vertical layout.
+rectangle corner radius, whole-box and range text styling, and horizontal/vertical/grid layout.
 Existing vector and media nodes support basic property edits, duplication, and
 deletion. Source replacement is supported for asset nodes of the same kind;
 Bezier control points are readable and writable through `properties.path`.
@@ -566,6 +566,79 @@ For example, update a card with two fills, an outside stroke, and a drop shadow:
   }
 }
 ```
+
+### Text ranges and typography
+
+Text nodes return `text: {offset_unit, length, default_style, runs}` alongside
+`properties`. `offset_unit` is `unicode_scalar`: count Unicode code points, not
+UTF-8 bytes, UTF-16 code units, or grapheme clusters. Every run has end-exclusive
+`start`, `end`, and its complete `style`. Use these returned boundaries when editing
+mixed styles. Combined emoji and combining marks can contain several code points.
+
+`edit_text` takes `id`, `start`, `end`, and `content`, `style`, or both. The range
+addresses the node's content at that operation, including earlier operations in the
+batch. Equal offsets insert text; an empty `content` deletes the range. Replacement
+inherits the editor's existing style at the insertion/replacement point and retains
+unaffected runs. If both fields are supplied, the style applies to the inserted text.
+Style-only edits require a nonempty range, except `0..0` can set an empty box's default
+style. Replacing a range with identical content preserves its existing mixed styles.
+
+The style is a patch: omitted fields are unchanged. It accepts `font_family`,
+`font_size`, `font_weight`, `italic`, `underline`, `strikethrough`, `line_height`,
+`letter_spacing`, `text_align`, `vertical_align`, and `paint`. Paint supports solid
+and stop gradients using the appearance schema. `line_height` is a multiplier
+(0.5–10), `letter_spacing` is in canvas units (-1000–1000), and `text_align` is
+`left`, `center`, or `right`. `vertical_align` (`baseline`, `top`, `center`, `bottom`)
+aligns differently sized runs on a line; it does not position text within its box.
+Line height and horizontal alignment expand to the intersecting paragraphs, matching
+the editor. Other style fields affect only the selected range. Font availability,
+64 KiB content limits, locks, revision guards, and atomic rollback still apply.
+
+Whole-box updates accept the same fields in `properties`, with `text_paint` instead
+of `paint`. It conflicts with `fill`. Returned whole-box properties describe the
+default style; inspect `text.runs` for mixed formatting.
+
+```json
+{"op":"edit_text","id":"TEXT_UUID","start":0,"end":2,
+ "style":{"font_weight":700,"letter_spacing":0.5}}
+```
+
+### Layout, sizing, and constraints
+
+`layout` replaces the container configuration. Read the existing object before
+changing one field. In addition to `direction`, `gap`, `padding`, `main_align`, and
+`cross_align`, it includes:
+
+- `direction: "grid"`, `columns` (1–256, default 2), and `column_width` (optional
+  fixed width; null distributes available width across columns).
+- `wrap` (default false) for horizontal/vertical flow; `line_gap` (default 0) for
+  wrapped lines or grid rows. `gap` controls items or grid columns.
+
+`sizing` replaces the node's complete sizing configuration: required `width` and
+`height` are `fixed`, `hug`, or `fill`; `absolute` defaults to false. Optional
+`min_width`, `max_width`, `min_height`, and `max_height` constrain resolved sizes;
+null removes a limit. Grid children also accept `column_span` and `row_span` (1–256,
+default 1). Sizing preserves separately configured constraints.
+
+Hug applies to text and layout containers. A grid needs fixed column widths to hug
+its width; wrapped layouts cannot hug their flow axis. Fill requires a non-absolute
+child of auto layout and must not create a Hug/Fill dependency cycle. Unsupported
+combinations fail atomically. Change `sizing.absolute` to true to position a child
+manually; `rect` can accompany that update. Flow items retain `LAYOUT_CONTROLLED`
+protection against explicit geometry updates.
+
+`constraints: {horizontal,vertical}` sets `start`, `end`, `center`, `stretch`, or
+`scale` independently. This requires a child of a frame or layout group that is not
+in auto-layout flow. The editor records the current child geometry relative to its
+parent as the reference; callers do not supply internal baseline geometry. Stretch
+and scale use fixed sizing on their axis. Resubmitting identical constraint modes
+preserves that baseline; changing the child's explicit rect refreshes it.
+`remove_constraints:true` clears constraints and conflicts with `constraints`.
+Clear constraints before moving a child into auto-layout flow.
+
+Layout resolution uses the editor's text measurement and layout engine. Read the
+resulting geometry after each batch, especially with Hug, Fill, limits, and wrapping.
+If resizing or reflow would modify a locked descendant, the whole batch is rejected.
 
 ### Atomicity and retries
 

@@ -15,7 +15,7 @@ fn color(value: &str) -> Result<gpui::Rgba> {
         .ok_or_else(|| Error::invalid("Color must be #RRGGBB or #RRGGBBAA"))
 }
 
-fn describe_paint(
+pub(super) fn describe_paint(
     color: gpui::Rgba,
     mode: FillMode,
     gradient: &LinearGradient,
@@ -135,7 +135,7 @@ pub(super) fn describe(page: &Page, id: usize, properties: &mut Value) {
     }
 }
 
-fn paint(page: &Page, value: &dto::Paint) -> Result<Fill> {
+pub(super) fn paint(page: &Page, value: &dto::Paint) -> Result<Fill> {
     use dto::{GradientKind as K, Paint};
     let mut fill = Fill {
         enabled: true,

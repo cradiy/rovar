@@ -4,6 +4,8 @@ use serde_json::{Value, json};
 pub(crate) mod appearance;
 pub(crate) mod import;
 pub(crate) mod interaction;
+pub(crate) mod layout;
+pub(crate) mod typography;
 
 pub(crate) const MAX_OPERATIONS: usize = 128;
 pub(crate) const MAX_RECEIPTS: usize = 256;
@@ -243,6 +245,7 @@ pub(crate) enum NodeType {
 pub(crate) enum Axis {
     Horizontal,
     Vertical,
+    Grid,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, JsonSchema)]
@@ -257,6 +260,13 @@ pub(crate) enum Align {
 #[serde(deny_unknown_fields)]
 pub(crate) struct Layout {
     pub direction: Axis,
+    #[serde(default = "layout::default_columns")]
+    pub columns: u16,
+    pub column_width: Option<f32>,
+    #[serde(default)]
+    pub wrap: bool,
+    #[serde(default)]
+    pub line_gap: f32,
     pub gap: f32,
     /// Top, right, bottom, left in logical canvas units.
     pub padding: [f32; 4],
@@ -296,11 +306,23 @@ pub(crate) struct Properties {
     pub italic: Option<bool>,
     pub underline: Option<bool>,
     pub strikethrough: Option<bool>,
+    pub line_height: Option<f32>,
+    pub letter_spacing: Option<f32>,
+    pub text_align: Option<typography::Align>,
+    pub vertical_align: Option<typography::VerticalAlign>,
+    /// Solid or gradient paint for the whole text box; conflicts with fill.
+    pub text_paint: Option<appearance::Paint>,
     /// Bezier anchors and handles normalized to rect; values outside [0, 1] are allowed.
     /// Replaces the path while retaining node identity, paint and interactions.
     pub path: Option<Path>,
     /// Replaces the layout configuration. Only frames and groups support layout.
     pub layout: Option<Layout>,
+    /// Complete sizing configuration, preserving separately configured constraints.
+    pub sizing: Option<layout::Sizing>,
+    /// Constraints for a non-flow child of a frame or layout group.
+    pub constraints: Option<layout::Constraints>,
+    #[serde(default)]
+    pub remove_constraints: bool,
     /// Explicitly remove auto layout; cannot be combined with layout.
     #[serde(default)]
     pub remove_layout: bool,
@@ -335,6 +357,15 @@ pub(crate) struct Path {
 #[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub(crate) enum Operation {
+    /// Replace and/or style a text range. Offsets count Unicode scalar values,
+    /// are end-exclusive, and address the current content at this operation.
+    EditText {
+        id: String,
+        start: usize,
+        end: usize,
+        content: Option<String>,
+        style: Option<typography::Style>,
+    },
     /// Move a subtree, preserving page coordinates until auto layout resolves.
     /// before is a sibling UUID/$ref; null places the subtree above its siblings.
     Reparent {

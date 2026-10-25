@@ -316,14 +316,7 @@ impl TextEditor {
         let whole = !self.has_style_selection();
         let mut range = self.style_range();
         if change.is_paragraph() && !whole {
-            range.start = self.content[..range.start].rfind('\n').map_or(0, |i| i + 1);
-            let end = self.content[..range.end]
-                .char_indices()
-                .next_back()
-                .map_or(0, |(i, _)| i);
-            range.end = self.content[end..]
-                .find('\n')
-                .map_or(self.content.len(), |i| end + i + 1);
+            range = styles::paragraph_range(&self.content, range);
         }
         let group = Group::Style(self.id, change.key(), range.clone());
         let before = (!self.history.borrow().can_merge(Some(&group))).then(|| self.snapshot());

@@ -7,11 +7,13 @@ mod geometry;
 mod history;
 mod import;
 mod interaction;
+mod layout;
 mod model;
 mod pages;
 mod structure;
 #[cfg(test)]
 mod tests;
+mod typography;
 mod view;
 
 pub(super) struct State {
@@ -321,6 +323,9 @@ impl Workspace {
                 _ => None,
             };
             let family = match &op {
+                p::Operation::EditText { style, .. } => {
+                    style.as_ref().and_then(|s| s.font_family.as_ref())
+                }
                 p::Operation::SetInteraction {
                     action:
                         p::interaction::Action::SetProperty {
@@ -417,6 +422,7 @@ impl Workspace {
         }
         page.validate().map_err(|e| Error::invalid(e.to_string()))?;
         structure::validate(&page)?;
+        layout::validate(&page)?;
         crate::scene::auto_layout::resolve(&mut page, window.text_system())
             .map_err(|e| Error::invalid(e.to_string()))?;
         page.validate().map_err(|e| Error::invalid(e.to_string()))?;
