@@ -1,6 +1,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+pub(crate) mod appearance;
 pub(crate) mod import;
 pub(crate) mod interaction;
 
@@ -273,6 +274,13 @@ pub(crate) struct Properties {
     /// Solid sRGB color, exactly #RRGGBBAA. Text applies to the whole text box.
     /// Assets and open paths have no solid fill.
     pub fill: Option<String>,
+    /// Complete fill stack, bottom-to-top. [] removes all fills; conflicts with fill.
+    pub fills: Option<Vec<appearance::Fill>>,
+    /// Complete shape stroke stack, bottom-to-top. [] removes all strokes.
+    pub strokes: Option<Vec<appearance::Stroke>>,
+    /// Complete effect list. [] removes effects. Uses the editor's effect model.
+    pub effects: Option<Vec<crate::scene::effects::Effect>>,
+    pub blend: Option<crate::scene::blend::Mode>,
     /// Layer opacity in [0, 1].
     pub opacity: Option<f32>,
     /// Clockwise degrees around the node center, not inherited by children.

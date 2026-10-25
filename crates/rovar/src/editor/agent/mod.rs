@@ -2,6 +2,7 @@ use super::*;
 use crate::agent::protocol::{self as p, Error, Request, Result};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
+mod appearance;
 mod geometry;
 mod history;
 mod import;

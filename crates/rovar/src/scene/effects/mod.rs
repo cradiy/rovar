@@ -71,6 +71,7 @@ pub(crate) fn upgrade_json_effects(value: &mut serde_json::Value) {
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(any(unix, windows), derive(schemars::JsonSchema))]
 pub(crate) enum Effect {
     Shadow(Shadow),
     LayerBlur { enabled: bool, radius: f32 },
@@ -169,6 +170,7 @@ pub(crate) fn padding(effects: &[Effect]) -> f32 {
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(any(unix, windows), derive(schemars::JsonSchema))]
 pub(crate) enum ShadowKind {
     #[default]
     Drop,
@@ -176,6 +178,7 @@ pub(crate) enum ShadowKind {
 }
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(any(unix, windows), derive(schemars::JsonSchema))]
 pub(crate) struct Shadow {
     pub kind: ShadowKind,
     pub enabled: bool,
@@ -185,6 +188,7 @@ pub(crate) struct Shadow {
     pub blur: f32,
     pub spread: f32,
     #[serde(with = "crate::document::rgba")]
+    #[cfg_attr(any(unix, windows), schemars(with = "[f32; 4]"))]
     pub color: Rgba,
 }
 

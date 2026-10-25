@@ -116,6 +116,7 @@ pub(super) fn node(page: &Page, id: usize, identities: &BTreeMap<usize, uuid::Uu
         "rotation":state.rotation, "hidden":state.hidden,
         "fill":fill.filter(|(_,mode)| matches!(mode,FillMode::Solid)).map(|(color,_)| format!("#{:08X}", u32::from(color))),
     });
+    super::appearance::describe(page, id, &mut properties);
     if let Some(n) = page.texts.iter().find(|n| n.id == id) {
         properties["content"] = json!(n.content);
         properties["font_family"] = json!(n.styles.default.family);
@@ -405,6 +406,7 @@ fn update(page: &mut Page, id: usize, props: p::Properties, creating: bool) -> R
     if let Some(path) = &props.path {
         super::structure::set_path(page, id, path)?;
     }
+    super::appearance::apply(page, id, &props)?;
     if !is_text
         && (props.content.is_some()
             || props.font_size.is_some()
@@ -613,6 +615,9 @@ fn update(page: &mut Page, id: usize, props: p::Properties, creating: bool) -> R
 }
 
 fn patch_layer(layer: &mut LayerState, props: &p::Properties) {
+    if let Some(value) = props.blend {
+        layer.blend = value;
+    }
     if let Some(value) = props.opacity {
         layer.opacity = value;
     }

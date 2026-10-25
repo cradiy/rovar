@@ -178,6 +178,19 @@ returned by discovery. Save the exact request until its outcome is known.
 Each changed apply is one ordinary undo entry. Its acknowledgement confirms an
 in-memory edit, not completion of saving or synchronization.
 
+For appearance edits, read `properties.fills`, `strokes`, `effects`, and `blend`.
+Paint stacks are bottom-to-top; modify the intended entry in the returned list and
+preserve every other entry. Submit only the changed list, not the entire node.
+Use a layer's `hidden` to toggle it without deletion and `opacity` to fade the whole
+paint without rewriting gradient-stop alpha. An empty list removes that stack.
+Keep existing gradient stop IDs; omit IDs when adding stops. Do not submit the
+simple `fill` alongside `fills`. Changing paint detaches its color style; unchanged
+paints at the same indices preserve bindings. Import image/SVG sources first and
+use the returned asset hash for image paints on the same page. Consult `schema.get`
+for gradient, image-placement, and effect fields, including enum casing and color
+formats; effect and point-gradient colors are normalized RGBA arrays. Observe the
+node-specific paint/effect constraints and capture the result to verify composition.
+
 For structure changes, prefer `reparent` to rebuilding a subtree and `duplicate`
 to recreating repeated content. Inspect ordered `children` and `sibling_index`;
 `before` in a reparent refers to a destination sibling in bottom-to-top order.

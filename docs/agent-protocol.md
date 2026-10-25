@@ -376,7 +376,7 @@ frame. A null target clears the explicit starting frame. Apply responses and
 ## Apply
 
 The write surface includes frames, rectangles, ellipses, Bezier paths, text, and
-plain or layout groups. Properties cover names, geometry, solid fills, opacity, rotation, visibility,
+plain or layout groups. Properties cover names, geometry, layered paints, effects, blend modes, opacity, rotation, visibility,
 rectangle corner radius, whole-box text/font styling, and horizontal/vertical layout.
 Existing vector and media nodes support basic property edits, duplication, and
 deletion. Source replacement is supported for asset nodes of the same kind;
@@ -477,16 +477,18 @@ separately describes whether a node's interaction settings can be changed.
   Main-component changes synchronize instances on all document pages while retaining
   instance overrides. The apply response lists `changed_pages`; all affected pages
   and definitions share one undo entry. Locked objects on any affected page remain
-  protected. These operations still require an open editor and an active target page.
+  protected. These operations require an open editor; the target page may be inactive.
 - Image, SVG, video, and audio nodes accept name, rect, opacity, rotation, and hidden
   updates. `rect` supplies both dimensions explicitly; preserve the source aspect
   ratio when that is desired. Assets have no solid fill. Bezier nodes accept basic
-  transforms and layer styling; solid fill is available only for closed paths.
+  transforms and layer styling; fills are available only for closed paths.
 - Omitted/null property values leave the property unchanged. Supplied compound
   properties such as `rect` and `layout` replace that complete property. Use
   `remove_layout:true` to remove layout; it conflicts with a supplied layout.
-- Colors are solid sRGB `#RRGGBBAA`; opacity is 0–1. Setting fill replaces the current
-  paint with a solid fill and detaches its color style. Text styles apply to the
+- Paint colors accept sRGB `#RRGGBB` or `#RRGGBBAA`; the `fill` shorthand requires
+  `#RRGGBBAA`. Opacity is 0–1. Setting `fill`
+  replaces the base paint with a solid fill and detaches its color style, preserving
+  additional layers. It conflicts with `fills` in the same update. Text styles apply to the
   entire text box. Replacing text follows the editor's style inheritance rules.
 - Font size is 1–1000 and weight 100–900. An explicit family must exist; otherwise
   `FONT_NOT_FOUND` is returned. Omit it to use the editor default.
@@ -495,6 +497,77 @@ separately describes whether a node's interaction settings can be changed.
 - Locked nodes and descendants of locked nodes cannot be edited or deleted. Layout
   edits that move protected descendants also fail. Active editing/dragging/previews
   return `BUSY` rather than finishing or interrupting the user's gesture.
+
+### Appearance stacks
+
+`properties.fills`, `strokes`, and `effects` each replace their complete ordered list;
+omitting a list preserves it and supplying `[]` removes it. Read the current list,
+modify only the intended entries, and submit only the changed property. Fills and
+strokes are ordered **bottom to top**. Each paint layer has `opacity` (default 1) and
+`hidden` (default false); hiding retains the layer and its settings. Layer opacity
+multiplies the paint's own alpha rather than overwriting gradient-stop alpha.
+
+Fills are supported on frames and closed vector shapes. Strokes are supported on
+shapes, including asset nodes, but not frames, text, or groups. Text retains the
+whole-box solid `fill` shorthand. Stroke entries also accept `width` (default 1,
+0–100000) and `align` (`inside`, `center`, `outside`; default `inside`).
+
+Paints use a `type` discriminator:
+
+- `solid`: `color`.
+- `gradient`: `kind` (`linear`, `radial`, `angular`, `diamond`; default `linear`),
+  `angle` in degrees (default 90), `seam_width` (0–0.5, default 0.12), and 2–4096
+  `stops` sorted by `position` (0–1). Each stop has `color`, optional `id`, and
+  `midpoint` (0.01–0.99, default 0.5). Omit IDs for new stops; preserve returned IDs
+  when editing existing stops.
+- `points`: `gradient` uses the editor's four-point gradient schema. Each of its
+  four `points` has normalized `position: {x,y}`, `color: [r,g,b,a]` with components
+  in 0–1, and `radius` in 0.01–4.
+- `image`: `hash` references an image or SVG already imported on the requested page.
+  Import the source and read its `asset.hash` first. Optional `fit` is `Cover` or
+  `Contain` (default `Cover`), `placement` is `{zoom,offset:[x,y]}` (default zoom 1,
+  zero offset; zoom 1–16), and paint `opacity` defaults to 1. The fill retains the
+  media resource even after the source node is deleted.
+
+Strokes accept only solid and gradient paints. Re-submitting an unchanged paint at
+the same list index preserves its style binding and dormant editor settings;
+changing that paint detaches its color style. Reads expose both the simple `fill`
+and full `fills` where supported: submit only one of them.
+
+`blend` accepts `normal`, `multiply`, `screen`, `overlay`, `darken`, or `lighten`.
+`effects` uses the native effect schema, up to eight entries per node. All effect
+fields are required; colors use normalized `[r,g,b,a]` arrays:
+
+- `shadow`: `kind` (`drop` or `inner`), `enabled`, `x`, `y`, `blur`, `spread`, `color`.
+- `layer_blur` or `background_blur`: `enabled`, `radius`.
+- `glow`: `enabled`, `color`, `radius`, `edge_width`, `intensity`, `threshold`.
+
+Groups cannot have effects. Background blur requires a frame, rectangle, ellipse,
+or image; layer blur requires text or a non-playable shape. The editor's normal
+effect bounds and target validation apply to the entire atomic batch.
+
+For example, update a card with two fills, an outside stroke, and a drop shadow:
+
+```json
+{
+  "op": "update",
+  "id": "CARD_UUID",
+  "properties": {
+    "fills": [
+      {"paint": {"type": "solid", "color": "#242530FF"}},
+      {"paint": {"type": "gradient", "angle": 35, "stops": [
+        {"position": 0, "color": "#BAA4FFFF"},
+        {"position": 1, "color": "#BAA4FF00"}
+      ]}, "opacity": 0.4}
+    ],
+    "strokes": [{"paint": {"type": "solid", "color": "#FFFFFF30"}, "width": 1, "align": "outside"}],
+    "effects": [{"type": "shadow", "kind": "drop", "enabled": true,
+      "x": 0, "y": 8, "blur": 24, "spread": 0, "color": [0, 0, 0, 0.25]}]
+  }
+}
+```
+
+### Atomicity and retries
 
 All operations run on a copy and are validated, including resolved layout, before
 commit. Failure leaves the document and undo history unchanged. A changed batch

@@ -5,9 +5,11 @@ use gpui::{Bounds, EffectShader, EffectUniforms, Pixels, Rgba, SubtreeEffectPass
 mod tests;
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(any(unix, windows), derive(schemars::JsonSchema))]
 pub(crate) struct Glow {
     pub enabled: bool,
     #[serde(with = "crate::document::rgba")]
+    #[cfg_attr(any(unix, windows), schemars(with = "[f32; 4]"))]
     pub color: Rgba,
     pub radius: f32,
     pub edge_width: f32,

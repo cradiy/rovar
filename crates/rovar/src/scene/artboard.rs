@@ -118,6 +118,30 @@ impl Default for LinearGradient {
 }
 
 impl LinearGradient {
+    #[cfg(any(unix, windows))]
+    pub(crate) fn from_stops(
+        angle: f32,
+        kind: gpui::GradientKind,
+        seam_width: f32,
+        stops: Vec<GradientStop>,
+    ) -> anyhow::Result<Self> {
+        let next_id = stops
+            .iter()
+            .map(|stop| stop.id)
+            .max()
+            .unwrap_or(0)
+            .checked_add(1)
+            .ok_or_else(|| anyhow::anyhow!("Gradient stop ID exhausted"))?;
+        let gradient = Self {
+            angle,
+            kind,
+            seam_width,
+            stops,
+            next_id,
+        };
+        gradient.validate()?;
+        Ok(gradient)
+    }
     pub(crate) fn validate(&self) -> anyhow::Result<()> {
         anyhow::ensure!(self.stops.len() >= 2, "Invalid gradient stop count");
         let mut ids = std::collections::BTreeSet::new();

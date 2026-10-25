@@ -1,6 +1,7 @@
 use super::*;
 use gpui::TestAppContext;
 use std::collections::BTreeSet;
+mod appearance;
 mod history;
 mod pages;
 mod structure;
