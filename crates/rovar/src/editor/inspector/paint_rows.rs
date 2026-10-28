@@ -25,6 +25,7 @@ pub(super) struct Field {
     pub mode: FillMode,
     pub swatch: gpui::Background,
     pub image: crate::scene::image_fill::ImageFill,
+    pub opacity: f32,
     pub active: bool,
 }
 
@@ -37,6 +38,7 @@ impl Workspace {
         FillMode,
         gpui::Background,
         crate::scene::image_fill::ImageFill,
+        f32,
     )> {
         let (mode, gradient, color, image, width, opacity) = if self.selected_shape.is_some() {
             let s = self.paint_shape_at(
@@ -106,7 +108,7 @@ impl Workspace {
         } else {
             color.into()
         };
-        Some((value, mode, swatch.opacity(opacity), image))
+        Some((value, mode, swatch.opacity(opacity), image, opacity))
     }
 
     pub(in crate::editor) fn sync_paint_rows(
@@ -315,7 +317,7 @@ impl Workspace {
             index,
         };
         let row = self.inspector.paint_rows.iter().find(|r| r.key == key)?;
-        let (value, mode, swatch, image) = self.row_value(key)?;
+        let (value, mode, swatch, image, opacity) = self.row_value(key)?;
         Some(Field {
             key,
             input: row.input.clone(),
@@ -324,6 +326,7 @@ impl Workspace {
             mode,
             swatch,
             image,
+            opacity,
             active: self.paint_layer_index(stroke) == layer,
         })
     }

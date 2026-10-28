@@ -5,8 +5,12 @@ use crate::ui::theme::Color;
 
 impl Workspace {
     pub(in crate::editor) fn current_image_fill(&self) -> Option<&ImageFill> {
+        self.current_image_paint().map(|(image, _)| image)
+    }
+
+    pub(super) fn current_image_paint(&self) -> Option<(&ImageFill, f32)> {
         if let Some(paint) = self.action_paint() {
-            return Some(&paint.image);
+            return Some((&paint.image, 1.));
         }
         if self.selected_text.is_some()
             || (self.selected_shape.is_some() && self.inspector.stroke_editing)
@@ -15,15 +19,23 @@ impl Workspace {
         }
         self.selected_shape()
             .map(|s| {
-                self.paint_layer_index(false)
-                    .checked_sub(1)
-                    .map_or(&s.image_fill, |i| &s.fill_layers[i].image_fill)
+                self.paint_layer_index(false).checked_sub(1).map_or(
+                    (&s.image_fill, s.fill_opacity),
+                    |i| {
+                        let fill = &s.fill_layers[i];
+                        (&fill.image_fill, fill.opacity)
+                    },
+                )
             })
             .or_else(|| {
                 self.selected_board().map(|b| {
-                    self.paint_layer_index(false)
-                        .checked_sub(1)
-                        .map_or(&b.image_fill, |i| &b.fill_layers[i].image_fill)
+                    self.paint_layer_index(false).checked_sub(1).map_or(
+                        (&b.image_fill, b.fill_opacity),
+                        |i| {
+                            let fill = &b.fill_layers[i];
+                            (&fill.image_fill, fill.opacity)
+                        },
+                    )
                 })
             })
     }
@@ -215,7 +227,7 @@ impl Workspace {
     }
 
     pub(super) fn image_fill_controls(&self, cx: &mut Context<Self>) -> Div {
-        let Some(fill) = self.current_image_fill() else {
+        let Some((fill, opacity)) = self.current_image_paint() else {
             return div();
         };
         let loading = self.action_paint().is_none()
@@ -278,7 +290,12 @@ impl Workspace {
                             .inset_0()
                             .bg(gpui::checkerboard(Color::Checker.color(), 8.)),
                     )
-                    .child(fill.element().absolute().inset_0()),
+                    .child(
+                        fill.element()
+                            .absolute()
+                            .inset_0()
+                            .opacity(fill.opacity * opacity),
+                    ),
             )
             .child(
                 div()

@@ -236,19 +236,22 @@ impl Workspace {
                                 .overflow_hidden()
                                 .relative()
                                 .bg(gpui::checkerboard(Color::Checker.color(), 4.))
-                                .when_some(swatch, |el, paint| {
+                                .when_some(swatch.filter(|_| !image_color), |el, paint| {
                                     el.child(div().absolute().inset_0().bg(paint))
                                 })
                                 .when(image_color, |el| {
                                     let fill = if let Some(row) = &row {
-                                        Some(&row.image)
-                                    } else if action {
-                                        self.action_paint().map(|p| &p.image)
+                                        Some((&row.image, row.opacity))
                                     } else {
-                                        self.current_image_fill()
+                                        self.current_image_paint()
                                     };
-                                    el.when_some(fill, |el, fill| {
-                                        el.child(fill.element().absolute().inset_0())
+                                    el.when_some(fill, |el, (fill, opacity)| {
+                                        el.child(
+                                            fill.element()
+                                                .absolute()
+                                                .inset_0()
+                                                .opacity(fill.opacity * opacity),
+                                        )
                                     })
                                 }),
                         )
