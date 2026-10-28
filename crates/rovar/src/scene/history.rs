@@ -47,10 +47,22 @@ pub(crate) struct SavedText {
     pub text: Snapshot,
 }
 
+#[derive(Clone, Copy)]
+pub(crate) struct PaintTarget {
+    pub id: usize,
+    pub layers: [usize; 2],
+    pub stops: [usize; 2],
+    pub stroke: bool,
+}
+
 /// Each change stores the state to restore. Replaying captures its inverse.
 /// No entities are retained, so deleted objects do not retain UI subscriptions.
 #[derive(Clone)]
 pub(crate) enum Change {
+    PaintTarget {
+        before: PaintTarget,
+        after: PaintTarget,
+    },
     Pages {
         value: PageEdit,
     },

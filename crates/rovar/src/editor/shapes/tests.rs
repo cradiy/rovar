@@ -141,6 +141,18 @@ fn paint_layer_reordering_and_removal_keep_the_edit_target(cx: &mut TestAppConte
         };
         click(&mut visual, add);
         click(&mut visual, add);
+        window
+            .update(&mut visual.cx, |w, window, cx| {
+                let undo = w.history.borrow().undo_len();
+                w.select_paint_layer(stroke, 0, window, cx);
+                w.replay_history(false, window, cx);
+                assert_eq!(w.paint_layer_index(stroke), 1);
+                assert_eq!(w.history.borrow().undo_len(), undo - 1);
+                w.replay_history(true, window, cx);
+                assert_eq!(w.paint_layer_index(stroke), 2);
+                assert_eq!(w.history.borrow().undo_len(), undo);
+            })
+            .unwrap();
         click(&mut visual, swatch);
         click(&mut visual, "fill-linear");
         click(&mut visual, "gradient-stop-1");
@@ -148,12 +160,25 @@ fn paint_layer_reordering_and_removal_keep_the_edit_target(cx: &mut TestAppConte
         draw(&mut visual);
         click(&mut visual, down);
         window
-            .update(&mut visual.cx, |w, _, _| {
+            .update(&mut visual.cx, |w, window, cx| {
                 assert_eq!(w.paint_layer_index(stroke), 1);
                 assert_eq!(
                     w.inspector.active_stop, 1,
                     "reordering must preserve the stop"
                 );
+                w.replay_history(false, window, cx);
+                assert_eq!(
+                    w.paint_layer_index(stroke),
+                    2,
+                    "undo must follow the moved paint"
+                );
+                assert_eq!(w.inspector.active_stop, 1);
+                assert_eq!(w.fill_state(cx).unwrap().0, FillMode::Linear);
+                w.select_paint_layer(stroke, 0, window, cx);
+                w.replay_history(true, window, cx);
+                assert_eq!(w.paint_layer_index(stroke), 1);
+                assert_eq!(w.inspector.active_stop, 1);
+                assert_eq!(w.fill_state(cx).unwrap().0, FillMode::Linear);
             })
             .unwrap();
         click(
@@ -173,12 +198,20 @@ fn paint_layer_reordering_and_removal_keep_the_edit_target(cx: &mut TestAppConte
             .unwrap();
         click(&mut visual, remove);
         window
-            .update(&mut visual.cx, |w, _, cx| {
+            .update(&mut visual.cx, |w, window, cx| {
                 assert_eq!(w.paint_layer_index(stroke), 0);
                 assert_eq!(
                     w.inspector.active_stop, 1,
                     "removing another layer must preserve the stop"
                 );
+                assert_eq!(w.fill_state(cx).unwrap().0, FillMode::Linear);
+                w.replay_history(false, window, cx);
+                assert_eq!(w.paint_layer_index(stroke), 1);
+                assert_eq!(w.inspector.active_stop, 1);
+                assert_eq!(w.fill_state(cx).unwrap().0, FillMode::Linear);
+                w.replay_history(true, window, cx);
+                assert_eq!(w.paint_layer_index(stroke), 0);
+                assert_eq!(w.inspector.active_stop, 1);
                 assert_eq!(w.fill_state(cx).unwrap().0, FillMode::Linear);
             })
             .unwrap();

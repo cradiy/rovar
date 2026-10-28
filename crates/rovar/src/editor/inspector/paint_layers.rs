@@ -1,8 +1,50 @@
 use super::*;
+use crate::scene::history::PaintTarget;
 use crate::scene::paint_layers::Fill;
 use std::borrow::Cow;
 
 impl Workspace {
+    fn paint_target(&self) -> Option<PaintTarget> {
+        let mut stops = self.inspector.paint_stops;
+        stops[self.inspector.stroke_editing as usize] = self.inspector.active_stop;
+        Some(PaintTarget {
+            id: self.selected_shape.or(self.selected)?,
+            layers: [self.paint_layer_index(false), self.paint_layer_index(true)],
+            stops,
+            stroke: self.inspector.stroke_editing,
+        })
+    }
+
+    fn begin_paint_stack_edit(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<PaintTarget> {
+        if self.gesture.is_some() || self.preview_read_only() {
+            return None;
+        }
+        let target = self
+            .paint_target()
+            .filter(|target| self.layer_editable(target.id))?;
+        if self.image_crop.is_some() {
+            self.finish_image_crop(false, window, cx);
+        }
+        self.history.borrow_mut().begin_preview();
+        Some(target)
+    }
+
+    fn finish_paint_stack_edit(&mut self, before: PaintTarget) {
+        let mut changes = self.history.borrow_mut().end_preview(false);
+        if changes.is_empty() {
+            return;
+        }
+        changes.push(Change::PaintTarget {
+            before,
+            after: self.paint_target().unwrap(),
+        });
+        self.history.borrow_mut().record(changes, None);
+    }
+
     pub(in crate::editor) fn paint_layer_index(&self, stroke: bool) -> usize {
         if self.inspector.paint_object != self.selected_shape.or(self.selected)
             || self.inspector.paint_page != self.pages.active
@@ -193,7 +235,9 @@ impl Workspace {
     }
 
     fn add_paint_layer(&mut self, stroke: bool, window: &mut Window, cx: &mut Context<Self>) {
-        self.history.borrow_mut().break_group();
+        let Some(before) = self.begin_paint_stack_edit(window, cx) else {
+            return;
+        };
         let index = if self.selected_shape.is_some() {
             self.edit_shape(|s| {
                 if stroke {
@@ -235,6 +279,7 @@ impl Workspace {
         if let Some(index) = index {
             self.select_paint_layer(stroke, index, window, cx);
         }
+        self.finish_paint_stack_edit(before);
     }
 
     fn remove_paint_layer(
@@ -244,8 +289,10 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let Some(before) = self.begin_paint_stack_edit(window, cx) else {
+            return;
+        };
         let active = self.paint_layer_index(stroke);
-        self.history.borrow_mut().break_group();
         if self.selected_shape.is_some() {
             self.edit_shape(|s| {
                 if stroke {
@@ -292,6 +339,7 @@ impl Workspace {
         };
         self.inspector.paint_layers[stroke as usize] = next;
         self.select_paint_layer(stroke, next, window, cx);
+        self.finish_paint_stack_edit(before);
     }
 
     fn toggle_paint_layer(
@@ -324,10 +372,12 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let Some(before) = self.begin_paint_stack_edit(window, cx) else {
+            return;
+        };
         let from = self.paint_layer_index(stroke);
         let lower = from.min(to);
         let upper = from.max(to);
-        self.history.borrow_mut().break_group();
         if self.selected_shape.is_some() {
             self.edit_shape(|s| {
                 if stroke {
@@ -358,6 +408,7 @@ impl Workspace {
         // Only the stack index changed; keep editing the same paint and stop.
         self.inspector.paint_layers[stroke as usize] = to;
         self.select_paint_layer(stroke, to, window, cx);
+        self.finish_paint_stack_edit(before);
     }
 
     pub(in crate::editor) fn paint_layer_section(

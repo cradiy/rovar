@@ -455,15 +455,17 @@ impl Workspace {
                 | Change::Text { id, .. }
                 | Change::Shape { id, .. }
                 | Change::TextRect { id, .. } => Some(*id),
-                Change::Hierarchy { .. } | Change::NodeSelection { .. } | Change::Pages { .. } => {
-                    None
-                }
+                Change::Hierarchy { .. }
+                | Change::NodeSelection { .. }
+                | Change::PaintTarget { .. }
+                | Change::Pages { .. } => None,
             })
             .collect();
         let previous_selection = self.selection_ids();
         let previous_vector = self.vector_edit;
         let mut restored_selection = None;
         let mut restored_node = None;
+        let mut restored_paint = None;
         self.multi_selection.clear();
         self.draw_tool = None;
         let old_component = (self.selected_text.is_some(), self.selected_shape.is_some());
@@ -480,6 +482,13 @@ impl Workspace {
         for change in changes.into_iter().rev() {
             match change {
                 Change::Pages { .. } => unreachable!("page operations are replayed atomically"),
+                Change::PaintTarget { before, after } => {
+                    inverse.push(Change::PaintTarget {
+                        before: after,
+                        after: before,
+                    });
+                    restored_paint = Some(before);
+                }
                 Change::NodeSelection { value } => {
                     inverse.push(Change::NodeSelection {
                         value: self.selected_node,
@@ -619,6 +628,22 @@ impl Workspace {
                 })
             })
         };
+        if let Some(paint) = restored_paint.filter(|paint| {
+            self.selected_text.is_none() && self.selected_shape.or(self.selected) == Some(paint.id)
+        }) {
+            self.inspector.paint_object = Some(paint.id);
+            self.inspector.paint_page = self.pages.active.clone();
+            self.inspector.paint_layers = paint.layers;
+            self.inspector.paint_stops = paint.stops;
+            self.inspector.stroke_editing = paint.stroke;
+            self.inspector.active_stop = paint.stops[paint.stroke as usize];
+            self.select_paint_layer(
+                paint.stroke,
+                paint.layers[paint.stroke as usize],
+                window,
+                cx,
+            );
+        }
         for text in &self.texts {
             text.editor.update(cx, |editor, _| {
                 editor.editing = Some(text.id) == text_id && (editor.editing || was_text_focus);
@@ -631,6 +656,7 @@ impl Workspace {
                 self.focus.focus(window, cx);
             }
         } else if removed
+            || restored_paint.is_some()
             || self.paint_row_focus_removed(window, cx)
             || (self.selected.is_none() && text_id.is_none() && shape_id.is_none())
             || old_component != (text_id.is_some(), shape_id.is_some())
