@@ -250,7 +250,7 @@ mod tests {
     #[test]
     fn catalogs_format_all_messages_and_support_plural_counts() {
         let mut args = FluentArgs::new();
-        for name in ["id", "name", "kind", "label", "error"] {
+        for name in ["id", "name", "kind", "label", "error", "version"] {
             args.set(name, "Sample");
         }
         args.set("count", 2);

@@ -47,6 +47,7 @@ fn register(
         "executable": std::env::current_exe()?,
         "endpoint": endpoint,
         "application_version": env!("CARGO_PKG_VERSION"),
+        "skill_sha256": super::skill::fingerprint(),
         "started_at_unix_ms": std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)?.as_millis() as u64,
         "transport": if cfg!(windows) { "named_pipe" } else { "unix_socket" },

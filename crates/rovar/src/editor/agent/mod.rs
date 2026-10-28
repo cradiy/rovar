@@ -415,6 +415,7 @@ impl Workspace {
                 op,
                 p::Operation::CreateComponent { .. }
                     | p::Operation::InstantiateComponent { .. }
+                    | p::Operation::ResetComponent { .. }
                     | p::Operation::CreateVariantSet { .. }
                     | p::Operation::AddVariant { .. }
                     | p::Operation::RenameVariantSet { .. }

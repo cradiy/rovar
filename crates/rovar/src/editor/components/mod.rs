@@ -448,37 +448,24 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let Some(link) = self
+        if !self
             .hierarchy
             .components
             .get(&root)
-            .filter(|l| !l.master)
-            .cloned()
-        else {
+            .is_some_and(|l| !l.master)
+            || self
+                .descendants(&BTreeSet::from([root]))
+                .iter()
+                .any(|id| !self.layer_editable(*id))
+        {
             return;
-        };
+        }
         let before = self.page_edit(std::slice::from_ref(&self.pages.active), cx);
-        let page = self.snapshot_page(cx).0;
-        if let Ok(current) = model::extract(&page, root) {
-            let mut reverse: std::collections::BTreeMap<_, _> =
-                link.nodes.iter().map(|(a, b)| (*b, *a)).collect();
-            let mut next = self.components.definitions[&link.component]
-                .page
-                .next_id
-                .max(link.nodes.keys().last().copied().unwrap_or(0) + 1);
-            for id in model::ids(&current) {
-                reverse.entry(id).or_insert_with(|| {
-                    let id = next;
-                    next += 1;
-                    id
-                });
-            }
-            let template = model::place(&current, &reverse, [0., 0.], None);
-            let binding = self.hierarchy.components.get_mut(&root).unwrap();
-            binding
-                .nodes
-                .extend(reverse.into_iter().map(|(a, b)| (b, a)));
-            binding.baseline = serde_json::to_value(template).unwrap();
+        let mut page = self.snapshot_page(cx).0;
+        let mut definitions = self.components.definitions.clone();
+        if model::reset_instance(&mut page, root, &mut definitions).is_ok() {
+            self.components.definitions = definitions;
+            self.apply_component_page(page, window, cx);
             self.components.revision = None;
             self.sync_components(window, cx);
             self.record_page_edit(before);

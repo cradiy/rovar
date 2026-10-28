@@ -15,12 +15,20 @@ to be open. Every desktop process atomically publishes a discovery record at:
 
 Read these files first; finding Rovar does not require PATH or guessing an installation
 directory. Each record contains `executable` (the absolute running executable path),
-`endpoint`, `pid`, `application_version`, `started_at_unix_ms`, and `transport`
+`endpoint`, `pid`, `application_version`, `skill_sha256`, `started_at_unix_ms`, and `transport`
 (`unix_socket` or `named_pipe`). Use the recorded executable for CLI commands and
 the matching endpoint for that process. Multiple instances have separate records.
 If there are multiple candidates, inspect their sessions/tabs to choose the intended editor.
 Records are removed on normal exit. A crash may leave a stale record, so connection
 success, not file existence or PID alone, determines whether an instance is live.
+
+`skill_sha256` is the SHA-256 digest of the complete bundled `SKILL.md` after
+substituting the application's package version. Desktop Settings → AI design
+installs this file in `~/.agents/skills/rovar-design` or a chosen skills directory.
+Its frontmatter `metadata.rovar-version` identifies the corresponding application
+version. Compare both version and file digest before using installed instructions;
+the digest also detects different skill contents in builds with the same version.
+This metadata does not pin or change the protocol schema.
 
 Using the recorded executable, discover reachable running editors:
 
@@ -524,6 +532,10 @@ The following operations are atomic members of `document.apply`:
 - `switch_variant`: instance root node `id` and target `component` definition ID.
   Both definitions must belong to the same set. Main components cannot switch;
   use their roots from `components.list` to inspect or edit the desired main component.
+- `reset_component`: instance root node `id`. Discard local content, style,
+  interaction, and structural overrides using its current definition, retaining
+  the instance binding and placement. Local additions are removed. Locked content
+  is protected and the entire reset is undoable. Main components cannot be reset.
 
 Names must contain 1–200 characters and variant names must be unique within a set.
 Members may not belong to multiple sets. Metadata edits check associated main

@@ -7,7 +7,12 @@ use crate::{
 use gpui::SharedString;
 use uic::{components::dropdown::dropdown, desktop::TitleBarMode};
 
+#[cfg(any(unix, windows))]
+mod skill;
+
 pub(super) struct Panel {
+    #[cfg(any(unix, windows))]
+    skill: skill::State,
     font: Option<Entity<FontPicker>>,
     language: Entity<DropdownState>,
     titlebar: Entity<DropdownState>,
@@ -57,6 +62,8 @@ impl Studio {
         };
         let focus = cx.focus_handle();
         self.preferences = Some(Panel {
+            #[cfg(any(unix, windows))]
+            skill: skill::State::new(),
             font,
             language: cx.new(|cx| DropdownState::new(window, cx)),
             titlebar: cx.new(|cx| DropdownState::new(window, cx)),
@@ -67,6 +74,8 @@ impl Studio {
             detecting: false,
             _font_subscription: subscription,
         });
+        #[cfg(any(unix, windows))]
+        self.refresh_skill(false, cx);
         self.focus.focus(window, cx);
         window.on_next_frame(move |window, cx| focus.focus(window, cx));
         cx.notify();
@@ -259,7 +268,7 @@ impl Studio {
             .w(px(520.))
             .max_w_full()
             .max_h_full()
-            .overflow_y_scroll()
+            .overflow_hidden()
             .rounded(px(16.))
             .border_1()
             .border_color(Color::Text.color().opacity(0.1020))
@@ -273,6 +282,7 @@ impl Studio {
                 div()
                     .px(px(24.))
                     .py(px(20.))
+                    .flex_shrink_0()
                     .flex()
                     .items_center()
                     .gap(px(12.))
@@ -309,6 +319,9 @@ impl Studio {
             .child(div().h(px(1.)).bg(Color::Text.color().opacity(0.0471)))
             .child(
                 div()
+                    .id("settings-content")
+                    .min_h_0()
+                    .overflow_y_scroll()
                     .p(px(24.))
                     .flex()
                     .flex_col()
@@ -412,6 +425,16 @@ impl Studio {
                                     ),
                             )
                     })
+                    .map(|el| {
+                        #[cfg(any(unix, windows))]
+                        {
+                            el.child(self.skill_panel(cx))
+                        }
+                        #[cfg(not(any(unix, windows)))]
+                        {
+                            el
+                        }
+                    })
                     .child(
                         div()
                             .flex()
@@ -441,18 +464,12 @@ impl Studio {
                 div()
                     .px(px(24.))
                     .py(px(16.))
+                    .flex_shrink_0()
                     .border_t_1()
                     .border_color(Color::Text.color().opacity(0.0471))
                     .flex()
                     .items_center()
-                    .justify_between()
-                    .gap(px(16.))
-                    .child(
-                        div()
-                            .text_size(px(11.))
-                            .text_color(MUTED.color())
-                            .child(t("settings-auto-save")),
-                    )
+                    .justify_end()
                     .child(
                         div()
                             .id("settings-done")

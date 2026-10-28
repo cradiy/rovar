@@ -22,6 +22,48 @@ fn id(page: &crate::document::Page, value: &Value) -> usize {
 }
 
 #[gpui::test]
+fn resetting_instances_restores_content_and_structure_atomically(cx: &mut TestAppContext) {
+    let handle = crate::editor::tests::open(cx);
+    handle.update(cx, |w, window, cx| {
+        let setup = setup(w);
+        let result = execute(w, &setup, window, cx).unwrap();
+        let nodes = &result["created"];
+        let page = w.snapshot_page(cx).0;
+        let root = id(&page, &nodes["$instance"]);
+        let source = id(&page, &nodes["$label"]);
+        let label = page.hierarchy.components[&root].nodes[&source];
+        let uid = page.node_ids()[&label];
+        let edit = apply(w, json!([
+            {"op":"update","id":uid,"properties":{"content":"Local text"}},
+            {"op":"create","ref":"$extra","type":"rectangle","parent":nodes["$instance"],"properties":{"rect":{"x":370,"y":90,"width":10,"height":10}}},
+            {"op":"set_interaction","id":nodes["$instance"],"trigger":"click","action":{"type":"back"}}
+        ]));
+        let extras = execute(w, &edit, window, cx).unwrap();
+        let before = w.snapshot_page(cx).0;
+        let reset = apply(w, json!([{"op":"reset_component","id":nodes["$instance"]}]));
+        execute(w, &reset, window, cx).unwrap();
+        let after = w.snapshot_page(cx).0;
+        assert_eq!(after.node_ids()[&label], uid);
+        assert_eq!(after.texts.iter().find(|t|t.id == label).unwrap().content, "Default");
+        assert_eq!(components::bounds(&before, root), components::bounds(&after, root));
+        assert!(!after.node_ids().values().any(|id|id.to_string() == extras["created"]["$extra"].as_str().unwrap()));
+        assert!(after.hierarchy.interactions.get(&root).is_none_or(|i|i.click.is_none()));
+        w.undo_redo(false, window, cx);
+        assert!(w.snapshot_page(cx).0 == before);
+        w.undo_redo(true, window, cx);
+        assert!(w.snapshot_page(cx).0 == after);
+        w.undo_redo(false, window, cx);
+        w.texts.iter_mut().find(|t|t.id == label).unwrap().layer.locked = true;
+        let protected = w.snapshot_page(cx).0;
+        let reset = apply(w, reset.params["operations"].clone());
+        assert_eq!(execute(w, &reset, window, cx).unwrap_err().code, "LOCKED");
+        assert!(w.snapshot_page(cx).0 == protected);
+        let invalid = apply(w, json!([{"op":"reset_component","id":nodes["$master"]}]));
+        assert!(execute(w, &invalid, window, cx).is_err());
+    }).unwrap();
+}
+
+#[gpui::test]
 fn switching_variants_preserves_instance_identity_overrides_interactions_and_undo(
     cx: &mut TestAppContext,
 ) {

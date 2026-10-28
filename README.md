@@ -60,13 +60,15 @@ cargo run --locked -p rovar
 
 Use an AI agent that supports skills and local command execution to work in the running Windows, macOS, or Linux desktop editor. The agent can inspect your selection, create and refine editable layers, import assets, set prototype actions, and check rendered previews. Edits participate in the editor's normal undo and save/sync flow.
 
-Install [just](https://github.com/casey/just) and [Nushell](https://www.nushell.sh/), then run from the repository root:
+Install the bundled skill from **Settings → AI design**. The default destination is `~/.agents/skills`; choose another skills folder if your agent uses a different location. Settings checks both the software version and skill contents, and offers an update when they differ from the running build.
+
+For installation from source, install [just](https://github.com/casey/just) and [Nushell](https://www.nushell.sh/), then run from the repository root:
 
 ```sh
 just install-skill
 ```
 
-This installs or updates the [Rovar design skill](skills/rovar-design/SKILL.md) in `~/.agents/skills`. For an agent that uses a different skills directory, run `just install-skill-to /path/to/skills`.
+The command installs or updates the [Rovar design skill](skills/rovar-design/SKILL.md) in `~/.agents/skills`. For another skills directory, run `just install-skill-to /path/to/skills`. Both installers stamp the corresponding Rovar version into the skill.
 
 Start a new agent session to load the skill, open a document in Rovar, and ask the agent to use `rovar-design`. For example:
 

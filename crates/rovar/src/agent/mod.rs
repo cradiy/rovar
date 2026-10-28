@@ -1,5 +1,6 @@
 //! Local editor protocol. The transport never edits persisted document files.
 pub(crate) mod protocol;
+pub(crate) mod skill;
 pub(crate) mod transport;
 
 use clap::Parser;

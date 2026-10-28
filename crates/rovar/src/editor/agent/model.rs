@@ -254,6 +254,7 @@ pub(super) fn apply(
         }
         p::Operation::CreateComponent { .. }
         | p::Operation::InstantiateComponent { .. }
+        | p::Operation::ResetComponent { .. }
         | p::Operation::CreateColorStyle { .. }
         | p::Operation::UpdateColorStyle { .. }
         | p::Operation::DeleteColorStyle { .. }

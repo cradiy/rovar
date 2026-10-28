@@ -128,7 +128,7 @@ fn dispatch(
                 "operations":["create","update","delete","set_interaction","set_start_frame","import","replace_source",
                     "duplicate","reparent","set_mask","set_boolean","create_component","instantiate_component","detach_component","edit_text",
                     "create_color_style","update_color_style","delete_color_style","bind_color_style",
-                    "create_variant_set","add_variant","rename_variant_set","rename_variant","switch_variant"],
+                    "create_variant_set","add_variant","rename_variant_set","rename_variant","switch_variant","reset_component"],
                 "import_types":["image","svg","video","audio"],
                 "import_data_types":["image","svg"],"max_import_data_bytes":crate::agent::imports::MAX_DATA_BYTES,
                 "appearance_properties":["fills","strokes","effects","blend"],

@@ -198,6 +198,12 @@ impl Edit<'_> {
                 native::switch(page, root, &component, self.definitions, self.sets)
                     .map_err(|e| Error::invalid(e.to_string()))?;
             }
+            p::Operation::ResetComponent { id } => {
+                let root = model::lookup(page, &id, refs)?;
+                model::editable(page, root)?;
+                components::reset_instance(page, root, self.definitions)
+                    .map_err(|e| Error::invalid(e.to_string()))?;
+            }
             _ => return Err(Error::invalid("Expected a component operation")),
         }
         native::validate(self.sets, self.definitions).map_err(|e| Error::invalid(e.to_string()))

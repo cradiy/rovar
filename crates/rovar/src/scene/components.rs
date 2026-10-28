@@ -387,6 +387,43 @@ fn merge_objects<T: Serialize + serde::de::DeserializeOwned + Clone>(
     Ok(())
 }
 
+pub(crate) fn reset_instance(
+    page: &mut Page,
+    root: usize,
+    definitions: &mut Definitions,
+) -> anyhow::Result<()> {
+    let link = page
+        .hierarchy
+        .components
+        .get(&root)
+        .filter(|link| !link.master)
+        .cloned()
+        .ok_or_else(|| anyhow::anyhow!("Reset requires a component instance root"))?;
+    let definition = definitions
+        .get(&link.component)
+        .ok_or_else(|| anyhow::anyhow!("Missing component definition"))?;
+    let current = extract(page, root)?;
+    let mut reverse: BTreeMap<_, _> = link.nodes.iter().map(|(a, b)| (*b, *a)).collect();
+    let mut next = definition
+        .page
+        .next_id
+        .max(link.nodes.keys().last().copied().unwrap_or(0) + 1);
+    for id in ids(&current) {
+        reverse.entry(id).or_insert_with(|| {
+            let id = next;
+            next += 1;
+            id
+        });
+    }
+    let template = place(&current, &reverse, [0., 0.], None);
+    let binding = page.hierarchy.components.get_mut(&root).unwrap();
+    binding
+        .nodes
+        .extend(reverse.into_iter().map(|(a, b)| (b, a)));
+    binding.baseline = serde_json::to_value(template)?;
+    synchronize(std::slice::from_mut(page), definitions)
+}
+
 pub(crate) fn synchronize(pages: &mut [Page], definitions: &mut Definitions) -> anyhow::Result<()> {
     // Refresh document masters before updating instances on any page.
     for page in pages.iter_mut() {

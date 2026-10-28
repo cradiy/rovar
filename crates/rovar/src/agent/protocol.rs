@@ -462,6 +462,10 @@ pub(crate) enum Operation {
     DetachComponent {
         id: String,
     },
+    /// Restore an instance from its current definition, discarding local overrides.
+    ResetComponent {
+        id: String,
+    },
     /// Replace an asset source with the same kind, preserving node identity and styling.
     /// SVG must remain a vector asset (editable: false).
     ReplaceSource {

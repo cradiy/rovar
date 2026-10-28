@@ -60,13 +60,15 @@ cargo run --locked -p rovar
 
 使用支持 skill 和本地命令执行的 AI agent，连接运行中的 Windows、macOS 或 Linux 桌面编辑器。agent 可以读取选区、创建和调整可编辑图层、导入素材、设置原型动作，并检查渲染预览。修改沿用编辑器的撤销和保存、同步流程。
 
-安装 [just](https://github.com/casey/just) 和 [Nushell](https://www.nushell.sh/) 后，在仓库根目录运行：
+在软件的**设置 → AI 设计**中安装内置 skill。默认安装到 `~/.agents/skills`；如果 agent 使用其他位置，可以选择对应的 skills 目录。设置会检查软件版本及 skill 内容，与运行中的构建不一致时提供更新。
+
+如需从源码安装，安装 [just](https://github.com/casey/just) 和 [Nushell](https://www.nushell.sh/) 后，在仓库根目录运行：
 
 ```sh
 just install-skill
 ```
 
-命令会将 [Rovar 设计 skill](skills/rovar-design/SKILL.md) 安装或更新到 `~/.agents/skills`。如果 agent 使用其他技能目录，运行 `just install-skill-to /path/to/skills`。
+命令会将 [Rovar 设计 skill](skills/rovar-design/SKILL.md) 安装或更新到 `~/.agents/skills`。如果 agent 使用其他技能目录，运行 `just install-skill-to /path/to/skills`。两种安装方式都会在 skill 中写入对应的 Rovar 版本号。
 
 新建一个 agent 会话以加载 skill，在 Rovar 中打开文档，再让 agent 使用 `rovar-design`，例如：
 

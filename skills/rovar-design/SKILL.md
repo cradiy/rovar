@@ -1,6 +1,8 @@
 ---
 name: rovar-design
 description: Create and refine editable designs in a running Rovar editor through its local protocol. Use for canvas design, selected-element edits, layout refinement, and visual verification in Rovar, not for developing the editor's source code.
+metadata:
+  rovar-version: "__ROVAR_VERSION__"
 ---
 
 # Rovar design
@@ -8,6 +10,10 @@ description: Create and refine editable designs in a running Rovar editor throug
 Work in the user's running editor. Keep designs editable and iterate on existing
 elements. Treat the running application's capabilities and schemas as authoritative;
 there is no pinned protocol version or legacy compatibility mode.
+
+Use `reset_component` only when the user wants to discard an instance's local
+overrides and restore its current main component. It also removes local additions
+and restores interactions. Use incremental `update` operations for selective edits.
 
 ## Connect and discover
 
@@ -22,6 +28,13 @@ endpoint from the same record. Do not guess build directories, installation path
 or socket names. Honor a path explicitly supplied by the user. If no live record
 exists, ask the user to start Rovar normally; stale records left by crashes are not
 proof of a running editor. Do not launch duplicate editors merely to find a session.
+
+Compare this skill's `metadata.rovar-version` with the record's `application_version`.
+The record's `skill_sha256` is the SHA-256 of the complete bundled `SKILL.md` bytes;
+compare it with this installed file to detect changes within the same app version.
+If either differs, install the bundled skill from Rovar Settings → AI design and
+reload the skill before editing. This checks the installed instructions, not a
+protocol version; continue to discover the live capabilities and schemas.
 
 In the commands below, replace `rovar` with the recorded executable path, quoted
 when needed. `--list-sessions` checks reachability and returns the same metadata.
