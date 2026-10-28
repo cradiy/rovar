@@ -3,6 +3,112 @@ use super::{ShapeKind, *};
 use gpui::{TestAppContext, VisualTestContext};
 
 #[gpui::test]
+fn paint_row_blur_does_not_reselect_the_previous_layer(cx: &mut TestAppContext) {
+    for (tool, stroke) in [
+        ("add-artboard", false),
+        ("add-rectangle", false),
+        ("add-rectangle", true),
+    ] {
+        let window = open(cx);
+        let mut visual = VisualTestContext::from_window(window.into(), cx);
+        visual.simulate_resize(size(px(1280.), px(1400.)));
+        create(&mut visual, tool);
+        if stroke {
+            click(&mut visual, "add-stroke-layer");
+        }
+        let [add, opacity, base, top, color] = if stroke {
+            [
+                "add-stroke-layer",
+                "property-17",
+                "stroke-layer-0",
+                "stroke-layer-1",
+                "property-16",
+            ]
+        } else {
+            [
+                "add-fill-layer",
+                "property-6",
+                "fill-layer-0",
+                "fill-layer-1",
+                "property-5",
+            ]
+        };
+        click(&mut visual, add);
+        click(&mut visual, opacity);
+        visual.simulate_keystrokes("secondary-a");
+        visual.simulate_input("35.0");
+        click(&mut visual, base);
+        window
+            .update(&mut visual.cx, |w, _, _| {
+                assert_eq!(w.paint_layer_index(stroke), 0);
+                if let Some(shape) = w.selected_shape() {
+                    assert_eq!(
+                        if stroke {
+                            shape.stroke.opacity
+                        } else {
+                            shape.fill_opacity
+                        },
+                        1.
+                    );
+                    assert_eq!(
+                        if stroke {
+                            shape.stroke_layers[0].opacity
+                        } else {
+                            shape.fill_layers[0].opacity
+                        },
+                        0.35
+                    );
+                } else {
+                    let board = w.selected_board().unwrap();
+                    assert_eq!(board.fill_opacity, 1.);
+                    assert_eq!(board.fill_layers[0].opacity, 0.35);
+                }
+            })
+            .unwrap();
+        click(&mut visual, top);
+        click(&mut visual, color);
+        visual.simulate_keystrokes("secondary-a");
+        visual.simulate_input("12ab34");
+        click(&mut visual, base);
+        window
+            .update(&mut visual.cx, |w, window, cx| {
+                assert_eq!(w.paint_layer_index(stroke), 0);
+                assert_ne!(
+                    w.inspector.fields[if stroke { 16 } else { 5 }]
+                        .read(cx)
+                        .value()
+                        .as_ref(),
+                    "12AB34"
+                );
+                w.select_paint_layer(stroke, 1, window, cx);
+                assert_eq!(
+                    w.inspector.fields[if stroke { 16 } else { 5 }]
+                        .read(cx)
+                        .value()
+                        .as_ref(),
+                    "12AB34"
+                );
+                w.replay_history(false, window, cx);
+                assert_ne!(
+                    w.inspector.fields[if stroke { 16 } else { 5 }]
+                        .read(cx)
+                        .value()
+                        .as_ref(),
+                    "12AB34"
+                );
+                assert_eq!(
+                    w.inspector.fields[if stroke { 17 } else { 6 }]
+                        .read(cx)
+                        .value()
+                        .as_ref(),
+                    "35"
+                );
+            })
+            .unwrap();
+    }
+}
+
+#[gpui::test]
 fn paint_layer_reordering_and_removal_keep_the_edit_target(cx: &mut TestAppContext) {
     for (tool, stroke) in [
         ("add-artboard", false),

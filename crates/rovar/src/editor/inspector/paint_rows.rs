@@ -184,12 +184,8 @@ impl Workspace {
                 let request_owner = owner.clone();
                 let blur = cx.on_blur(&focus, window, move |this, _, cx| {
                     if this.inspector.paint_row_owner.as_ref() == Some(&request_owner) {
-                        if let Some(row) = this.inspector.paint_rows.iter().find(|r| r.key == key)
-                            && row.input.read(cx).value().as_ref() != row.last
-                        {
-                            let value = row.input.read(cx).value();
-                            this.edit_paint_row(key, &InputEvent::Submit(value), cx);
-                        }
+                        // Changes are applied while typing. Blur only normalizes the
+                        // display; resubmitting here can reselect a layer after a click.
                         this.sync_paint_row(key, true, cx);
                         this.history.borrow_mut().break_group();
                     }
