@@ -1,6 +1,30 @@
 # Changelog
 
-## 0.3.0 (Released)
+## 0.4.0 (Released)
+
+### Added
+
+- Layered fills and strokes with independent paint, opacity, visibility, and ordering controls.
+- Bold, italic, underline, and strikethrough text formatting.
+- Expanded AI design controls for tabs, pages, components, variants, masks, Boolean operations, path editing, text ranges, layouts, effects, and shared color styles, including background document editing and undo/redo.
+- Install the bundled `rovar-design` skill from Settings and check that it matches the running application.
+- A dedicated settings page with startup update notifications and manual release checks.
+
+### Improved
+
+- Softer editor sidebars with clearer groups and spacing.
+- Redesigned color style picker with inline saving, and gradient panels that grow with available space while keeping their position stable.
+- Discover running editor instances and their executable paths through a shared location.
+- Use the system certificate store for HTTPS connections.
+
+### Fixed
+
+- Release image atlas resources when their last owner is dropped.
+- Keep paint layer selection and gradient stops consistent when rearranging layers or using undo/redo.
+- Keep paint opacity controls and image fill previews in sync, and prevent input blur from reselecting another layer.
+- Match document preview and project thumbnail backgrounds to the active theme.
+
+## 0.3.0
 
 AI agents can now create and refine editable designs in the running desktop editor, with a local protocol and the `rovar-design` skill.
 
