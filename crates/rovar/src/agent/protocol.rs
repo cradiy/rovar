@@ -7,6 +7,7 @@ pub(crate) mod import;
 pub(crate) mod interaction;
 pub(crate) mod layout;
 pub(crate) mod typography;
+pub(crate) mod variants;
 
 pub(crate) const MAX_OPERATIONS: usize = 128;
 pub(crate) const MAX_RECEIPTS: usize = 256;
@@ -358,6 +359,35 @@ pub(crate) struct Path {
 #[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub(crate) enum Operation {
+    CreateVariantSet {
+        #[serde(rename = "ref")]
+        reference: String,
+        name: String,
+        variants: Vec<variants::Member>,
+    },
+    /// Clone a definition already in a set and place a new main component.
+    AddVariant {
+        source: String,
+        #[serde(rename = "ref")]
+        reference: String,
+        component_ref: String,
+        name: String,
+        parent: Option<String>,
+        position: Point,
+    },
+    RenameVariantSet {
+        id: String,
+        name: String,
+    },
+    RenameVariant {
+        component: String,
+        name: String,
+    },
+    /// Switch an instance root to another definition in its set. Main components cannot switch.
+    SwitchVariant {
+        id: String,
+        component: String,
+    },
     CreateColorStyle {
         #[serde(rename = "ref")]
         reference: String,
@@ -517,7 +547,9 @@ fn one() -> u32 {
 pub(crate) fn schema(method: Option<&str>) -> Result<Value> {
     Ok(match method {
         None => json!(schemars::schema_for!(Request)),
-        Some("session.describe" | "tabs.list" | "pages.list" | "colors.list") => {
+        Some(
+            "session.describe" | "tabs.list" | "pages.list" | "colors.list" | "components.list",
+        ) => {
             json!(schemars::schema_for!(Empty))
         }
         Some("pages.apply") => json!(schemars::schema_for!(ApplyPages)),

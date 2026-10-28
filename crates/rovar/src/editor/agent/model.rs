@@ -257,7 +257,12 @@ pub(super) fn apply(
         | p::Operation::CreateColorStyle { .. }
         | p::Operation::UpdateColorStyle { .. }
         | p::Operation::DeleteColorStyle { .. }
-        | p::Operation::BindColorStyle { .. } => {
+        | p::Operation::BindColorStyle { .. }
+        | p::Operation::CreateVariantSet { .. }
+        | p::Operation::AddVariant { .. }
+        | p::Operation::RenameVariantSet { .. }
+        | p::Operation::RenameVariant { .. }
+        | p::Operation::SwitchVariant { .. } => {
             return Err(Error::invalid(
                 "Component operation requires document context",
             ));

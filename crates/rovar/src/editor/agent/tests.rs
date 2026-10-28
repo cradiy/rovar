@@ -7,6 +7,7 @@ mod history;
 mod pages;
 mod structure;
 mod typography_layout;
+mod variants;
 
 fn request(this: &Workspace, method: &str, params: Value) -> Request {
     Request {

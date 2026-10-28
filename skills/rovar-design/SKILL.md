@@ -233,11 +233,23 @@ assigning another role. Read `properties.path` before editing Bezier control poi
 the complete path is replaced, and points are normalized to the unrotated rect.
 
 Use `create_component` on an existing subtree and `instantiate_component` for linked
-reuse. Discover definitions in `session.describe.components`; inspect a node's
+reuse. Discover definitions and roots with `components.list`; inspect a node's
 `component.master` before editing. Main-component edits propagate to instances on
 other pages; instance edits retain overrides. Review `changed_pages` in the receipt.
 Use `detach_component` only when independent content is intended. Component refs
 resolve separately from node refs and are returned in `created_components`.
+
+For reusable component states, inspect `components.list.sets` and each definition's
+`roots`. Use `create_variant_set` to combine compatible definitions or start with
+one member, then `add_variant` to clone a current definition into a new main
+component. Supply distinct node `ref` and `component_ref` values. Edit the new main
+subtree incrementally instead of recreating all states. Use `rename_variant_set`
+and `rename_variant` for their display names. Apply `switch_variant` to an instance
+root using a definition ID from the same set; do not detach and reconstruct the
+instance. Inspect the resulting subtree because matching preserves corresponding
+nodes and overrides while unmatched content may be added or removed. Switching a
+main component is not supported; locate the desired main root instead. Metadata
+and switches participate in ordinary atomic apply, revision checks, locks, and undo.
 
 For prototype behavior, read the node's `interactions`, `interaction_editable`, and
 `available_variants` before editing. Use `set_interaction` for only the requested

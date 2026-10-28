@@ -141,11 +141,12 @@ Window/tab IDs are opaque strings as described below. Revisions are opaque strin
 | `tabs.save` | Request a save of a loaded tab without switching tabs. |
 | `pages.list` | List ordered pages, node/frame counts, the active page, and document revision. |
 | `colors.list` | List this document's color styles as `{id,name,paint}`, with its current revision; empty parameters. |
+| `components.list` | List definitions, variant sets, and component roots across document pages, with the current revision; empty parameters. |
 | `pages.apply` | Atomically create, duplicate, rename, delete, or reorder pages. |
 | `pages.activate` | Switch the visible page, restoring its saved selection and view. |
 | `nodes.get` | Read specified UUIDs, or a page's nodes; returns parent UUIDs, properties, total, and next offset. |
 | `nodes.find` | Same read contract, with an optional case-insensitive name substring and exact node type filter. |
-| `document.apply` | Apply ordered node edits, color style edits, and prototype interaction settings atomically. |
+| `document.apply` | Apply ordered node, color style, component variant, and prototype interaction edits atomically. |
 | `document.undo` | Undo one document history entry at the supplied revision. |
 | `document.redo` | Redo one document history entry at the supplied revision. |
 | `canvas.capture` | Render one node's subtree as a PNG using the export renderer. |
@@ -499,6 +500,58 @@ separately describes whether a node's interaction settings can be changed.
   edits that move protected descendants also fail. Active editing/dragging/previews
   return `BUSY` rather than finishing or interrupting the user's gesture.
 
+### Component variants
+
+`components.list` returns `revision`, `components`, and `sets`. Each component has
+its definition `id`, definition `name`, optional `set_id` and `variant_name`, and
+`roots: [{page_id,id,master}]` identifying its main component and instances across
+the document. Each set has `id`, `name`, and `variants: [{component,name}]`. Definition
+IDs, set IDs, and page node UUIDs are distinct; use the appropriate returned field.
+
+The following operations are atomic members of `document.apply`:
+
+- `create_variant_set`: `ref`, `name`, and 1–128 `variants` with `component` and
+  `name`. Components must exist, have compatible root types, and not already belong
+  to a set. One initial member is allowed so a set can be expanded incrementally.
+- `add_variant`: `source` definition ID, node `ref`, `component_ref`, variant `name`,
+  page-space `position: {x,y}`, and optional `parent` node. The source must belong
+  to a set. The operation clones its current definition, clears its library-source
+  association, joins the same set, and places a new main component on the requested
+  page. The source remains unchanged. Node and component references must differ.
+- `rename_variant_set`: set `id` and `name`.
+- `rename_variant`: `component` definition ID and variant `name`. This updates the
+  set's display name for that member, not its independent definition name.
+- `switch_variant`: instance root node `id` and target `component` definition ID.
+  Both definitions must belong to the same set. Main components cannot switch;
+  use their roots from `components.list` to inspect or edit the desired main component.
+
+Names must contain 1–200 characters and variant names must be unique within a set.
+Members may not belong to multiple sets. Metadata edits check associated main
+components for locks across pages. Switching also protects locked descendants from
+indirect changes and uses the editor's native variant matching: corresponding
+nodes retain identities and instance overrides; unmatched content follows normal
+component synchronization. Read the resulting subtree to inspect added/removed
+nodes, overrides, geometry, and actions. Repeating a switch to the current variant
+is a no-op. The visible tab/page and selection are not explicitly changed.
+
+The receipt returns new sets in `created_variant_sets`, definitions in
+`created_components`, and placed main nodes in `created`. References across node,
+component, set, and color-style namespaces must all be distinct. Subsequent
+operations in the same batch may use earlier component/set references. Prototype
+`change_variant` action and hover-exit targets also accept earlier component refs.
+All metadata, definitions, page edits, and instance changes share one undo entry;
+metadata-only updates advance revision even when `changed_pages` is empty.
+
+```json
+[
+  {"op":"create_variant_set","ref":"$button_set","name":"Button",
+   "variants":[{"component":"DEFAULT_COMPONENT_UUID","name":"Default"}]},
+  {"op":"add_variant","source":"DEFAULT_COMPONENT_UUID","ref":"$pressed_master",
+   "component_ref":"$pressed","name":"Pressed","position":{"x":400,"y":80}},
+  {"op":"switch_variant","id":"INSTANCE_NODE_UUID","component":"$pressed"}
+]
+```
+
 ### Appearance stacks
 
 `properties.fills`, `strokes`, and `effects` each replace their complete ordered list;
@@ -591,7 +644,7 @@ Use these operations within `document.apply`:
   Explicit text ranges must be nonempty.
 
 Create responses return `created_color_styles` separately from created nodes and
-components. All three reference namespaces must use unique names within the batch.
+components. Node, component, variant-set, and color-style references must use unique names within the batch.
 Missing definitions return `COLOR_STYLE_NOT_FOUND`. Query `colors.list` again after
 an edit to inspect the current definition.
 

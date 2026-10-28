@@ -15,6 +15,7 @@ mod structure;
 #[cfg(test)]
 mod tests;
 mod typography;
+mod variants;
 mod view;
 
 pub(super) struct State {
@@ -147,6 +148,16 @@ impl Workspace {
             ));
         }
         match request.method.as_str() {
+            "components.list" => {
+                let _: p::Empty = p::parse(request.params.clone())?;
+                let mut result = variants::describe(
+                    &self.components.definitions,
+                    &self.components.sets,
+                    &self.agent_pages(cx),
+                );
+                result["revision"] = json!(self.document_revision().to_string());
+                Ok(p::Reply::Ready(result))
+            }
             "colors.list" => {
                 let _: p::Empty = p::parse(request.params.clone())?;
                 Ok(p::Reply::Ready(
@@ -302,27 +313,49 @@ impl Workspace {
                 return Ok(p::Reply::PrepareImports(sources));
             }
         }
-        let original = self.agent_page(&params.page_id, cx);
+        let before_pages = self.agent_pages(cx);
+        let original = before_pages
+            .iter()
+            .find(|page| page.id == params.page_id)
+            .unwrap()
+            .clone();
         let mut page = original.clone();
         let mut refs = BTreeMap::new();
         let mut component_refs = BTreeMap::new();
+        let mut set_refs = BTreeMap::new();
+        let mut sets = self.components.sets.clone();
         let mut color_refs = BTreeMap::new();
         let mut palette = self.colors.palette.clone();
         let mut definitions = self.components.definitions.clone();
-        for (index, op) in params.operations.into_iter().enumerate() {
-            let reference = match &op {
+        for (index, mut op) in params.operations.into_iter().enumerate() {
+            let references = match &op {
                 p::Operation::Create { reference, .. }
                 | p::Operation::Import { reference, .. }
                 | p::Operation::Duplicate { reference, .. }
                 | p::Operation::CreateComponent { reference, .. }
-                | p::Operation::InstantiateComponent { reference, .. } => Some(reference),
-                p::Operation::CreateColorStyle { reference, .. } => Some(reference),
-                _ => None,
+                | p::Operation::InstantiateComponent { reference, .. }
+                | p::Operation::CreateVariantSet { reference, .. }
+                | p::Operation::CreateColorStyle { reference, .. } => vec![reference],
+                p::Operation::AddVariant {
+                    reference,
+                    component_ref,
+                    ..
+                } => vec![reference, component_ref],
+                _ => vec![],
             };
-            if let Some(reference) = reference {
+            let mut seen = std::collections::BTreeSet::new();
+            for reference in references {
                 model::validate_reference(reference, &refs)
                     .and_then(|()| model::validate_reference(reference, &component_refs))
                     .and_then(|()| model::validate_reference(reference, &color_refs))
+                    .and_then(|()| model::validate_reference(reference, &set_refs))
+                    .and_then(|()| {
+                        if seen.insert(reference) {
+                            Ok(())
+                        } else {
+                            Err(Error::invalid("Batch references must be distinct"))
+                        }
+                    })
                     .map_err(|mut e| {
                         e.operation = Some(index);
                         e
@@ -380,52 +413,22 @@ impl Workspace {
                 })
             } else if matches!(
                 op,
-                p::Operation::CreateComponent { .. } | p::Operation::InstantiateComponent { .. }
+                p::Operation::CreateComponent { .. }
+                    | p::Operation::InstantiateComponent { .. }
+                    | p::Operation::CreateVariantSet { .. }
+                    | p::Operation::AddVariant { .. }
+                    | p::Operation::RenameVariantSet { .. }
+                    | p::Operation::RenameVariant { .. }
+                    | p::Operation::SwitchVariant { .. }
             ) {
-                (|| {
-                    // An instance created later in a batch sees earlier master edits.
-                    crate::scene::components::synchronize(
-                        std::slice::from_mut(&mut page),
-                        &mut definitions,
-                    )
-                    .map_err(|e| Error::invalid(e.to_string()))?;
-                    match op {
-                        p::Operation::CreateComponent {
-                            id,
-                            reference,
-                            name,
-                        } => {
-                            model::validate_reference(&reference, &component_refs)?;
-                            let id = model::lookup(&page, &id, &refs)?;
-                            let component =
-                                structure::create_component(&mut page, &mut definitions, id, name)?;
-                            component_refs.insert(reference, component);
-                        }
-                        p::Operation::InstantiateComponent {
-                            component,
-                            reference,
-                            parent,
-                            position,
-                        } => {
-                            model::validate_reference(&reference, &refs)?;
-                            let component =
-                                component_refs.get(&component).cloned().unwrap_or(component);
-                            let definition = definitions.get(&component).ok_or_else(|| {
-                                Error::new("COMPONENT_NOT_FOUND", "Unknown component definition")
-                            })?;
-                            let parent = parent
-                                .as_deref()
-                                .map(|id| model::lookup(&page, id, &refs))
-                                .transpose()?;
-                            let root = structure::instantiate(
-                                &mut page, definition, component, parent, position,
-                            )?;
-                            refs.insert(reference, page.node_ids()[&root].to_string());
-                        }
-                        _ => unreachable!(),
-                    }
-                    Ok(())
-                })()
+                variants::Edit {
+                    definitions: &mut definitions,
+                    sets: &mut sets,
+                    components: &mut component_refs,
+                    set_refs: &mut set_refs,
+                    pages: &before_pages,
+                }
+                .apply(&mut page, op, &mut refs)
             } else if matches!(
                 op,
                 p::Operation::Import { .. } | p::Operation::ReplaceSource { .. }
@@ -439,7 +442,8 @@ impl Workspace {
                     import::insert(&mut page, op, asset.clone(), &mut refs)
                 }
             } else {
-                interaction::apply(&mut page, op, &mut refs, &self.components.sets)
+                variants::resolve_action_refs(&mut op, &component_refs);
+                interaction::apply(&mut page, op, &mut refs, &sets)
             };
             result.map_err(|mut e| {
                 e.operation = Some(index);
@@ -454,7 +458,6 @@ impl Workspace {
         page.validate().map_err(|e| Error::invalid(e.to_string()))?;
         model::protect(&original, &page)?;
         // Validate the edited page in its complete component/document context as well.
-        let before_pages = self.agent_pages(cx);
         let mut document = crate::document::Document {
             id: request
                 .document_id
@@ -462,7 +465,7 @@ impl Workspace {
                 .ok_or_else(|| Error::invalid("document_id is required"))?,
             colors: palette,
             components: definitions,
-            component_sets: self.components.sets.clone(),
+            component_sets: sets,
             pages: before_pages
                 .iter()
                 .map(|p| {
@@ -508,6 +511,7 @@ impl Workspace {
             .clone();
         let changed = !changed_pages.is_empty()
             || document.components != self.components.definitions
+            || document.component_sets != self.components.sets
             || document.colors != self.colors.palette;
         color_refs.retain(|_, id| document.colors.contains_key(id));
         let before_ids = original.node_ids();
@@ -526,7 +530,7 @@ impl Workspace {
             .checked_add(u64::from(changed))
             .ok_or_else(|| Error::new("LIMIT_REACHED", "Document revision exhausted"))?;
         let result = json!({"revision":revision.to_string(),"page_id":page.id,
-            "changed":changed,"created":refs,"created_components":component_refs,"created_color_styles":color_refs,"changed_pages":changed_pages,"nodes":updated,
+            "changed":changed,"created":refs,"created_components":component_refs,"created_variant_sets":set_refs,"created_color_styles":color_refs,"changed_pages":changed_pages,"nodes":updated,
             "start_frame_id":page.hierarchy.start.and_then(|id| after_ids.get(&id)),
             "deleted":before_ids.iter().filter_map(|(id,uid)|(!after_ids.contains_key(id)).then_some(uid)).collect::<Vec<_>>()});
         let (fingerprint, receipt_bytes) = self.agent_receipt(request, &result)?;
@@ -539,6 +543,7 @@ impl Workspace {
             *self.boolean_cache.borrow_mut() = Default::default();
             self.components.revision = None;
             self.components.definitions = document.components;
+            self.components.sets = document.component_sets;
             self.colors.palette = document.colors;
             for updated in document.pages {
                 if let Some(state) = self
