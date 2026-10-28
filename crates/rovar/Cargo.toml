@@ -61,6 +61,7 @@ unicode-segmentation = "1.12"
 unicode-linebreak = "0.1"
 
 [target.'cfg(any(unix, windows))'.dependencies]
+semver = "1"
 clap = { version = "4", features = ["derive"] }
 schemars = "1"
 tempfile = "3"

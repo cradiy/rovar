@@ -9,8 +9,11 @@ use uic::{components::dropdown::dropdown, desktop::TitleBarMode};
 
 #[cfg(any(unix, windows))]
 mod skill;
+mod view;
+use view::Section;
 
 pub(super) struct Panel {
+    section: Section,
     #[cfg(any(unix, windows))]
     skill: skill::State,
     font: Option<Entity<FontPicker>>,
@@ -37,6 +40,7 @@ impl Studio {
         if self.preferences.is_some() {
             return;
         }
+        self.dismiss_tab_preview(cx);
         if let Some(editor) = self.active_editor() {
             editor.update(cx, |editor, cx| editor.suspend(window, cx));
         }
@@ -62,6 +66,7 @@ impl Studio {
         };
         let focus = cx.focus_handle();
         self.preferences = Some(Panel {
+            section: Section::General,
             #[cfg(any(unix, windows))]
             skill: skill::State::new(),
             font,
@@ -171,7 +176,11 @@ impl Studio {
         cx.notify();
     }
 
-    pub(super) fn settings_dialog(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+    pub(super) fn settings_page(
+        &self,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement + use<> {
         let panel = self.preferences.as_ref().unwrap();
         let mode = crate::ui::theme::preference(cx);
         let theme = dropdown(&panel.theme)
@@ -262,141 +271,111 @@ impl Studio {
                 ),
             );
         let body = div()
-            .id("settings-dialog")
-            .debug_selector(|| "settings-dialog".into())
-            .track_focus(&panel.focus)
-            .w(px(520.))
-            .max_w_full()
-            .max_h_full()
-            .overflow_hidden()
-            .rounded(px(16.))
-            .border_1()
-            .border_color(Color::Text.color().opacity(0.1020))
-            .bg(Color::Panel.color())
-            .shadow_xl()
+            .w_full()
+            .max_w(px(720.))
             .flex()
             .flex_col()
             .text_size(px(13.))
-            .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
+            .gap(px(32.))
             .child(
                 div()
-                    .px(px(24.))
-                    .py(px(20.))
-                    .flex_shrink_0()
-                    .flex()
-                    .items_center()
-                    .gap(px(12.))
-                    .child(
-                        div()
-                            .size(px(36.))
-                            .rounded(px(10.))
-                            .bg(Color::Accent.color().opacity(0.0941))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .text_color(ACCENT.color())
-                            .child(icon(GpuiIcons::LucideSettings, 19.)),
-                    )
-                    .child(div().flex_1().text_size(px(18.)).child(t("settings")))
-                    .child(
-                        div()
-                            .id("close-settings")
-                            .debug_selector(|| "close-settings".into())
-                            .size(px(28.))
-                            .rounded(px(6.))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .text_color(MUTED.color())
-                            .cursor_pointer()
-                            .hover(|s| s.bg(Color::Text.color().opacity(0.0471)))
-                            .child(icon(GpuiIcons::LucideX, 16.))
-                            .on_click(
-                                cx.listener(|this, _, window, cx| this.close_settings(window, cx)),
-                            ),
-                    ),
-            )
-            .child(div().h(px(1.)).bg(Color::Text.color().opacity(0.0471)))
-            .child(
-                div()
-                    .id("settings-content")
-                    .min_h_0()
-                    .overflow_y_scroll()
-                    .p(px(24.))
                     .flex()
                     .flex_col()
-                    .gap(px(22.))
+                    .gap(px(10.))
                     .child(
                         div()
-                            .flex()
-                            .items_center()
-                            .justify_between()
-                            .gap(px(20.))
-                            .child(t("language"))
-                            .child(div().w(px(230.)).child(language)),
+                            .text_size(px(26.))
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .child(panel.section.label()),
                     )
                     .child(
                         div()
-                            .flex()
-                            .items_center()
-                            .justify_between()
-                            .gap(px(20.))
-                            .child(t("settings-theme"))
-                            .child(div().w(px(230.)).child(theme)),
-                    )
-                    .when(cfg!(target_os = "linux"), |el| {
+                            .text_color(MUTED.color())
+                            .child(panel.section.description()),
+                    ),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(28.))
+                    .when(panel.section == Section::General, |el| {
                         el.child(
-                            div()
+                            view::card()
                                 .flex()
-                                .flex_col()
-                                .gap(px(10.))
-                                .child(
-                                    div()
-                                        .flex()
-                                        .items_center()
-                                        .justify_between()
-                                        .child(t("settings-ui-font"))
-                                        .when(panel.font.is_some(), |el| {
-                                            el.child(
-                                                div()
-                                                    .id("settings-system-font")
-                                                    .debug_selector(|| {
-                                                        "settings-system-font".into()
-                                                    })
-                                                    .text_size(px(11.))
-                                                    .text_color(if panel.detecting {
-                                                        MUTED.color()
-                                                    } else {
-                                                        ACCENT.color()
-                                                    })
-                                                    .child(t("settings-use-system-font"))
-                                                    .when(!panel.detecting, |el| {
-                                                        el.cursor_pointer().on_click(cx.listener(
-                                                            |this, _, _, cx| {
-                                                                this.use_system_font(cx)
-                                                            },
-                                                        ))
-                                                    }),
-                                            )
-                                        }),
-                                )
-                                .when_some(panel.font.clone(), |el, font| el.child(font))
-                                .child(
-                                    div()
-                                        .p(px(14.))
-                                        .rounded(px(8.))
-                                        .bg(Color::Input.color())
-                                        .border_1()
-                                        .border_color(Color::Text.color().opacity(0.0314))
-                                        .text_size(px(16.))
-                                        .child(t("settings-font-preview")),
-                                ),
+                                .items_center()
+                                .justify_between()
+                                .gap(px(20.))
+                                .child(t("language"))
+                                .child(div().w(px(230.)).child(language)),
                         )
                     })
-                    .when(cfg!(target_os = "linux"), |el| {
-                        el.child(div().h(px(1.)).bg(Color::Text.color().opacity(0.0471)))
-                            .child(
-                                div()
+                    .when(panel.section == Section::Appearance, |el| {
+                        el.child(
+                            view::card()
+                                .flex()
+                                .items_center()
+                                .justify_between()
+                                .gap(px(20.))
+                                .child(t("settings-theme"))
+                                .child(div().w(px(230.)).child(theme)),
+                        )
+                    })
+                    .when(
+                        panel.section == Section::Appearance && cfg!(target_os = "linux"),
+                        |el| {
+                            el.child(
+                                view::card()
+                                    .flex()
+                                    .flex_col()
+                                    .gap(px(10.))
+                                    .child(
+                                        div()
+                                            .flex()
+                                            .items_center()
+                                            .justify_between()
+                                            .child(t("settings-ui-font"))
+                                            .when(panel.font.is_some(), |el| {
+                                                el.child(
+                                                    div()
+                                                        .id("settings-system-font")
+                                                        .debug_selector(|| {
+                                                            "settings-system-font".into()
+                                                        })
+                                                        .text_size(px(11.))
+                                                        .text_color(if panel.detecting {
+                                                            MUTED.color()
+                                                        } else {
+                                                            ACCENT.color()
+                                                        })
+                                                        .child(t("settings-use-system-font"))
+                                                        .when(!panel.detecting, |el| {
+                                                            el.cursor_pointer().on_click(
+                                                                cx.listener(|this, _, _, cx| {
+                                                                    this.use_system_font(cx)
+                                                                }),
+                                                            )
+                                                        }),
+                                                )
+                                            }),
+                                    )
+                                    .when_some(panel.font.clone(), |el, font| el.child(font))
+                                    .child(
+                                        div()
+                                            .p(px(14.))
+                                            .rounded(px(8.))
+                                            .bg(Color::Workspace.color())
+                                            .text_size(px(16.))
+                                            .child(t("settings-font-preview")),
+                                    ),
+                            )
+                        },
+                    )
+                    .when(
+                        panel.section == Section::Appearance && cfg!(target_os = "linux"),
+                        |el| {
+                            el.child(
+                                view::card()
                                     .flex()
                                     .flex_col()
                                     .gap(px(8.))
@@ -424,30 +403,46 @@ impl Studio {
                                             })),
                                     ),
                             )
-                    })
+                        },
+                    )
                     .map(|el| {
                         #[cfg(any(unix, windows))]
                         {
-                            el.child(self.skill_panel(cx))
+                            el.when(panel.section == Section::Ai, |el| {
+                                el.child(self.skill_panel(cx))
+                            })
                         }
                         #[cfg(not(any(unix, windows)))]
                         {
                             el
                         }
                     })
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .gap(px(4.))
-                            .child(format!("Rovar {}", env!("CARGO_PKG_VERSION")))
-                            .child(
-                                div()
-                                    .text_size(px(11.))
-                                    .text_color(MUTED.color())
-                                    .child(platform_info()),
-                            ),
-                    )
+                    .when(panel.section == Section::About, |el| {
+                        el.child(
+                            view::card()
+                                .flex()
+                                .flex_col()
+                                .gap(px(4.))
+                                .child(format!("Rovar {}", env!("CARGO_PKG_VERSION")))
+                                .child(
+                                    div()
+                                        .text_size(px(11.))
+                                        .text_color(MUTED.color())
+                                        .child(platform_info()),
+                                )
+                                .map(|el| {
+                                    #[cfg(any(unix, windows))]
+                                    {
+                                        el.child(div().my(px(18.)).h(px(1.)).bg(BORDER.color()))
+                                            .child(self.update_settings(cx))
+                                    }
+                                    #[cfg(not(any(unix, windows)))]
+                                    {
+                                        el
+                                    }
+                                }),
+                        )
+                    })
                     .when_some(panel.error.clone(), |el, error| {
                         el.child(
                             div()
@@ -459,51 +454,8 @@ impl Studio {
                                 .child(i18n::message("settings-save-error", &[("error", error)])),
                         )
                     }),
-            )
-            .child(
-                div()
-                    .px(px(24.))
-                    .py(px(16.))
-                    .flex_shrink_0()
-                    .border_t_1()
-                    .border_color(Color::Text.color().opacity(0.0471))
-                    .flex()
-                    .items_center()
-                    .justify_end()
-                    .child(
-                        div()
-                            .id("settings-done")
-                            .debug_selector(|| "settings-done".into())
-                            .px(px(20.))
-                            .h(px(32.))
-                            .rounded(px(7.))
-                            .bg(Color::Selected.color())
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .cursor_pointer()
-                            .hover(|s| s.bg(Color::Hover.color()))
-                            .child(t("close"))
-                            .on_click(
-                                cx.listener(|this, _, window, cx| this.close_settings(window, cx)),
-                            ),
-                    ),
             );
-        gpui::deferred(
-            div()
-                .absolute()
-                .inset_0()
-                .occlude()
-                .bg(Color::Overlay.color())
-                .flex()
-                .items_center()
-                .justify_center()
-                .p(px(20.))
-                .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
-                .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
-                .child(body),
-        )
-        .with_priority(30)
+        self.settings_shell(body, window, cx)
     }
 }
 
@@ -589,21 +541,34 @@ mod tests {
     }
 
     #[gpui::test]
-    fn settings_menu_modal_and_nested_popups_keep_keyboard_focus(cx: &mut TestAppContext) {
+    fn settings_page_returns_to_document_and_nested_popups_keep_keyboard_focus(
+        cx: &mut TestAppContext,
+    ) {
         cx.update(uic::init);
         let directory = rovar_storage::tempfile::tempdir().unwrap();
         let window = cx.open_window(size(px(1280.), px(800.)), |window, cx| {
             Studio::new(directory.path().into(), window, cx)
         });
+        let active = window
+            .update(cx, |studio, window, cx| {
+                studio.new_document(window, cx);
+                studio
+                    .active_editor()
+                    .unwrap()
+                    .update(cx, |editor, _| editor.restore_view([17., 29., 1.5]));
+                studio.active
+            })
+            .unwrap();
         let mut visual = VisualTestContext::from_window(window.into(), cx);
         click(&mut visual, "app-menu");
         click(&mut visual, "settings");
-        assert!(visual.debug_bounds("settings-dialog").is_some());
+        assert!(visual.debug_bounds("settings-page").is_some());
+        assert!(visual.debug_bounds("document-tabs").is_none());
         visual.simulate_keystrokes("secondary-n");
         draw(&mut visual);
         window
             .update(&mut visual.cx, |studio, _, _| {
-                assert!(studio.tabs.is_empty())
+                assert_eq!(studio.tabs.len(), 1)
             })
             .unwrap();
 
@@ -612,8 +577,9 @@ mod tests {
         visual.simulate_keystrokes("escape");
         draw(&mut visual);
         assert!(visual.debug_bounds("settings-option-en-US").is_none());
-        assert!(visual.debug_bounds("settings-dialog").is_some());
+        assert!(visual.debug_bounds("settings-page").is_some());
 
+        click(&mut visual, "settings-appearance");
         click(&mut visual, "settings-theme");
         assert!(visual.debug_bounds("theme-system").is_some());
         assert!(visual.debug_bounds("theme-light").is_some());
@@ -621,7 +587,7 @@ mod tests {
         visual.simulate_keystrokes("escape");
         draw(&mut visual);
         assert!(visual.debug_bounds("theme-light").is_none());
-        assert!(visual.debug_bounds("settings-dialog").is_some());
+        assert!(visual.debug_bounds("settings-page").is_some());
 
         if cfg!(target_os = "linux") {
             click(&mut visual, "settings-titlebar");
@@ -641,11 +607,11 @@ mod tests {
             click(&mut visual, "font-search");
             visual.simulate_input("Sans");
             draw(&mut visual);
-            assert!(visual.debug_bounds("settings-dialog").is_some());
+            assert!(visual.debug_bounds("settings-page").is_some());
             visual.simulate_keystrokes("escape");
             draw(&mut visual);
             assert!(visual.debug_bounds("font-search").is_none());
-            assert!(visual.debug_bounds("settings-dialog").is_some());
+            assert!(visual.debug_bounds("settings-page").is_some());
         } else {
             assert!(visual.debug_bounds("settings-titlebar").is_none());
             assert!(visual.debug_bounds("font-picker").is_none());
@@ -654,11 +620,20 @@ mod tests {
 
         visual.simulate_keystrokes("escape");
         draw(&mut visual);
-        assert!(visual.debug_bounds("settings-dialog").is_none());
+        assert!(visual.debug_bounds("settings-page").is_none());
         visual.simulate_keystrokes("secondary-,");
         draw(&mut visual);
-        assert!(visual.debug_bounds("settings-dialog").is_some());
-        click(&mut visual, "settings-done");
-        assert!(visual.debug_bounds("settings-dialog").is_none());
+        assert!(visual.debug_bounds("settings-page").is_some());
+        click(&mut visual, "settings-back");
+        assert!(visual.debug_bounds("settings-page").is_none());
+        window
+            .update(&mut visual.cx, |studio, _, cx| {
+                assert_eq!(studio.active, active);
+                assert_eq!(
+                    studio.active_editor().unwrap().read(cx).view_state(),
+                    [17., 29., 1.5]
+                );
+            })
+            .unwrap();
     }
 }

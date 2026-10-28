@@ -6240,6 +6240,7 @@ dependencies = [
  "rovar-svg",
  "rust-embed",
  "schemars",
+ "semver",
  "serde",
  "serde_json",
  "sha2 0.11.0",

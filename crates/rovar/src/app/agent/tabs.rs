@@ -14,6 +14,7 @@ pub(super) fn blocked(studio: &Studio) -> bool {
         || studio.dragging.is_some()
         || !studio.open_errors.is_empty()
         || studio.preferences.is_some()
+        || studio.update_prompt.is_some()
         || studio.renaming.is_some()
         || studio.deleting_document.is_some()
         || studio.server_action.is_some()

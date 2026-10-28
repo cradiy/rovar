@@ -66,6 +66,10 @@ pub(crate) fn start() {
             cx.quit();
         } else {
             cx.activate(true);
+            #[cfg(any(unix, windows))]
+            if let Ok(handle) = result {
+                let _ = handle.update(cx, |studio, _, cx| studio.check_updates(false, cx));
+            }
         }
     });
 }

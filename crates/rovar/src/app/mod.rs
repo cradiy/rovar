@@ -30,6 +30,8 @@ mod tabs;
 mod tests;
 #[cfg(test)]
 mod transfer_tests;
+#[cfg(any(unix, windows))]
+mod updates;
 mod window_controls;
 mod windows;
 
@@ -130,6 +132,8 @@ pub(crate) struct Studio {
     menu: Entity<DropdownState>,
     language_menu: Entity<DropdownState>,
     preferences: Option<preferences::Panel>,
+    #[cfg(any(unix, windows))]
+    update_prompt: Option<updates::Prompt>,
     focus: FocusHandle,
     error: Option<String>,
     closing: bool,
@@ -346,6 +350,8 @@ impl Studio {
             menu: cx.new(|cx| DropdownState::new(window, cx)),
             language_menu: cx.new(|cx| DropdownState::new(window, cx)),
             preferences: None,
+            #[cfg(any(unix, windows))]
+            update_prompt: None,
             focus,
             error,
             closing: false,
@@ -512,6 +518,15 @@ impl Render for Studio {
                 }
             }))
             .capture_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, window, cx| {
+                #[cfg(any(unix, windows))]
+                if this.update_prompt.is_some() {
+                    if event.keystroke.key == "escape" {
+                        this.dismiss_update(false, window, cx);
+                    }
+                    cx.stop_propagation();
+                    window.prevent_default();
+                    return;
+                }
                 if let Some(panel) = &this.comparison {
                     if event.keystroke.key == "escape" {
                         this.close_comparison(window, cx);
@@ -630,7 +645,9 @@ impl Render for Studio {
                 cx.stop_propagation();
                 window.prevent_default();
             }))
-            .child(self.tab_bar(window, cx))
+            .when(self.preferences.is_none(), |el| {
+                el.child(self.tab_bar(window, cx))
+            })
             .when_some(self.remote_status(cx), |el, status| {
                 el.child(
                     div()
@@ -681,40 +698,45 @@ impl Render for Studio {
                         ),
                 )
             })
-            .child(
-                div()
-                    .flex_1()
-                    .min_h_0()
-                    .flex()
-                    .when_some(
-                        self.active_editor().filter(|_| self.comparison.is_none()),
-                        |el, editor| el.child(editor),
-                    )
-                    .when(self.active.is_none(), |el| el.child(self.home(window, cx)))
-                    .when(
-                        self.active.is_some() && self.active_editor().is_none(),
-                        |el| {
-                            el.child(
-                                div()
-                                    .size_full()
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .text_color(MUTED.color())
-                                    .child(loading::view(self.active.unwrap())),
-                            )
-                        },
-                    ),
-            )
-            .when(self.active_editor().is_none(), |el| {
-                el.child(uic::components::context_menu::layer(cx))
+            .when(self.preferences.is_none(), |el| {
+                el.child(
+                    div()
+                        .flex_1()
+                        .min_h_0()
+                        .flex()
+                        .when_some(
+                            self.active_editor().filter(|_| self.comparison.is_none()),
+                            |el, editor| el.child(editor),
+                        )
+                        .when(self.active.is_none(), |el| el.child(self.home(window, cx)))
+                        .when(
+                            self.active.is_some() && self.active_editor().is_none(),
+                            |el| {
+                                el.child(
+                                    div()
+                                        .size_full()
+                                        .flex()
+                                        .items_center()
+                                        .justify_center()
+                                        .text_color(MUTED.color())
+                                        .child(loading::view(self.active.unwrap())),
+                                )
+                            },
+                        ),
+                )
             })
-            .children(self.tab_preview(window, cx))
+            .when(
+                self.active_editor().is_none() && self.preferences.is_none(),
+                |el| el.child(uic::components::context_menu::layer(cx)),
+            )
+            .when(self.preferences.is_none(), |el| {
+                el.children(self.tab_preview(window, cx))
+            })
             .when(self.renaming.is_some(), |el| {
                 el.child(self.rename_dialog(cx))
             })
             .when(self.preferences.is_some(), |el| {
-                el.child(self.settings_dialog(cx))
+                el.child(self.settings_page(window, cx))
             })
             .when(self.spaces.is_some(), |el| el.child(self.spaces_dialog(cx)))
             .when(self.servers.is_some(), |el| {
@@ -733,6 +755,10 @@ impl Render for Studio {
                 el.child(self.comparison_view(window, cx))
             })
             .map(|el| {
+                #[cfg(any(unix, windows))]
+                let el = el.when(self.update_prompt.is_some(), |el| {
+                    el.child(self.update_dialog(cx))
+                });
                 #[cfg(target_os = "macos")]
                 let el = self.native_menu_actions(el, cx);
                 #[cfg(target_os = "linux")]
