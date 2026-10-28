@@ -244,6 +244,7 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let active = self.paint_layer_index(stroke);
         self.history.borrow_mut().break_group();
         if self.selected_shape.is_some() {
             self.edit_shape(|s| {
@@ -280,7 +281,17 @@ impl Workspace {
                 }
             });
         }
-        self.select_paint_layer(stroke, index.saturating_sub(1), window, cx);
+        let next = if active == index {
+            self.inspector.paint_stops[stroke as usize] = 0;
+            if self.inspector.stroke_editing == stroke {
+                self.inspector.active_stop = 0;
+            }
+            index.saturating_sub(1)
+        } else {
+            active - usize::from(index < active)
+        };
+        self.inspector.paint_layers[stroke as usize] = next;
+        self.select_paint_layer(stroke, next, window, cx);
     }
 
     fn toggle_paint_layer(
@@ -344,6 +355,8 @@ impl Workspace {
                 }
             });
         }
+        // Only the stack index changed; keep editing the same paint and stop.
+        self.inspector.paint_layers[stroke as usize] = to;
         self.select_paint_layer(stroke, to, window, cx);
     }
 
@@ -479,6 +492,7 @@ impl Workspace {
                             .cursor_pointer()
                             .hover(|s| s.bg(Color::Selected.color()))
                             .child(icon(GpuiIcons::LucideMinus, 14.))
+                            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                             .on_click(cx.listener(move |this, _, window, cx| {
                                 this.remove_paint_layer(stroke, index, window, cx)
                             }))

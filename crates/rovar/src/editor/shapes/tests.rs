@@ -3,6 +3,99 @@ use super::{ShapeKind, *};
 use gpui::{TestAppContext, VisualTestContext};
 
 #[gpui::test]
+fn paint_layer_reordering_and_removal_keep_the_edit_target(cx: &mut TestAppContext) {
+    for (tool, stroke) in [
+        ("add-artboard", false),
+        ("add-rectangle", false),
+        ("add-rectangle", true),
+    ] {
+        let window = open(cx);
+        let mut visual = VisualTestContext::from_window(window.into(), cx);
+        visual.simulate_resize(size(px(1280.), px(1400.)));
+        create(&mut visual, tool);
+        if stroke {
+            click(&mut visual, "add-stroke-layer");
+        }
+        let [add, swatch, down, remove, color] = if stroke {
+            [
+                "add-stroke-layer",
+                "property-drag-16",
+                "move-stroke-down",
+                "remove-stroke-layer-0",
+                "property-16",
+            ]
+        } else {
+            [
+                "add-fill-layer",
+                "property-drag-5",
+                "move-fill-down",
+                "remove-fill-layer-0",
+                "property-5",
+            ]
+        };
+        click(&mut visual, add);
+        click(&mut visual, add);
+        click(&mut visual, swatch);
+        click(&mut visual, "fill-linear");
+        click(&mut visual, "gradient-stop-1");
+        visual.simulate_keystrokes("escape");
+        draw(&mut visual);
+        click(&mut visual, down);
+        window
+            .update(&mut visual.cx, |w, _, _| {
+                assert_eq!(w.paint_layer_index(stroke), 1);
+                assert_eq!(
+                    w.inspector.active_stop, 1,
+                    "reordering must preserve the stop"
+                );
+            })
+            .unwrap();
+        click(
+            &mut visual,
+            if stroke {
+                "remove-stroke-layer-2"
+            } else {
+                "remove-fill-layer-2"
+            },
+        );
+        window
+            .update(&mut visual.cx, |w, _, cx| {
+                assert_eq!(w.paint_layer_index(stroke), 1);
+                assert_eq!(w.inspector.active_stop, 1);
+                assert_eq!(w.fill_state(cx).unwrap().0, FillMode::Linear);
+            })
+            .unwrap();
+        click(&mut visual, remove);
+        window
+            .update(&mut visual.cx, |w, _, cx| {
+                assert_eq!(w.paint_layer_index(stroke), 0);
+                assert_eq!(
+                    w.inspector.active_stop, 1,
+                    "removing another layer must preserve the stop"
+                );
+                assert_eq!(w.fill_state(cx).unwrap().0, FillMode::Linear);
+            })
+            .unwrap();
+        click(&mut visual, color);
+        visual.simulate_keystrokes("secondary-a");
+        visual.simulate_input("12AB34");
+        visual.simulate_keystrokes("enter");
+        window
+            .update(&mut visual.cx, |w, window, cx| {
+                let gradient = w.fill_state(cx).unwrap().1;
+                assert_eq!(gradient.stop(1).unwrap().color, rgb(0x12ab34));
+                assert_ne!(gradient.stop(0).unwrap().color, rgb(0x12ab34));
+                w.replay_history(false, window, cx);
+                assert_ne!(
+                    w.fill_state(cx).unwrap().1.stop(1).unwrap().color,
+                    rgb(0x12ab34)
+                );
+            })
+            .unwrap();
+    }
+}
+
+#[gpui::test]
 fn paint_layers_edit_reorder_remove_and_undo_without_changing_other_layers(
     cx: &mut TestAppContext,
 ) {
