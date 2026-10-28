@@ -150,7 +150,9 @@ impl Studio {
                     crate::render::raster::prepare_preview().await;
                     document::save(&output, &bytes, &assets, &expected, &text_system)?;
                     Ok::<_, anyhow::Error>(
-                        document::cache_preview(&output, &previews).ok().flatten(),
+                        document::cache_document_preview(&output, &previews, &text_system)
+                            .ok()
+                            .flatten(),
                     )
                 })
                 .await;
@@ -391,7 +393,9 @@ impl Studio {
                         document,
                         json,
                         needs_upgrade,
-                        document::cache_preview(&path, &previews).ok().flatten(),
+                        document::cache_document_preview(&path, &previews, &text_system)
+                            .ok()
+                            .flatten(),
                         path,
                     ))
                 })
@@ -591,7 +595,10 @@ pub(super) fn is_internal(directory: &std::path::Path, path: &std::path::Path) -
         && path.extension().is_some_and(|ext| ext == "rovar")
 }
 
-pub(super) fn recover_documents(directory: PathBuf) -> Vec<Recent> {
+pub(super) fn recover_documents(
+    directory: PathBuf,
+    text_system: &std::sync::Arc<gpui::TextSystem>,
+) -> Vec<Recent> {
     let Ok(entries) = rovar_storage::fs::read_dir(directory.join("documents")) else {
         return Vec::new();
     };
@@ -620,9 +627,10 @@ pub(super) fn recover_documents(directory: PathBuf) -> Vec<Recent> {
                 .duration_since(UNIX_EPOCH)
                 .ok()?
                 .as_secs();
-            let preview = document::cache_preview(&path, &directory.join("previews"))
-                .ok()
-                .flatten();
+            let preview =
+                document::cache_document_preview(&path, &directory.join("previews"), text_system)
+                    .ok()
+                    .flatten();
             Some(Recent {
                 path,
                 title: String::new(),

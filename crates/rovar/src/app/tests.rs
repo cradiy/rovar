@@ -155,7 +155,8 @@ fn closing_during_first_save_flushes_newer_edits_and_recovers_without_session(
         1
     );
     std::fs::remove_file(directory.path().join("session.json")).unwrap();
-    let recovered = files::recover_documents(directory.path().into());
+    let text_system = cx.update(|cx| cx.text_system().clone());
+    let recovered = files::recover_documents(directory.path().into(), &text_system);
     assert_eq!(recovered.len(), 1);
     assert_eq!(
         std::fs::canonicalize(&recovered[0].path).unwrap(),

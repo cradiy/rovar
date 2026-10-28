@@ -434,6 +434,7 @@ impl Studio {
                                 .overflow_hidden()
                                 .border_1()
                                 .border_color(Color::Text.color().opacity(0.0824))
+                                .bg(Color::Workspace.color())
                                 .flex()
                                 .items_center()
                                 .justify_center()

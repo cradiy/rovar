@@ -16,6 +16,7 @@ use std::{
 pub(crate) mod export;
 pub(crate) mod library;
 mod preview;
+pub(crate) use preview::cache as cache_document_preview;
 pub(crate) use preview::render as render_preview;
 #[cfg(test)]
 mod tests;

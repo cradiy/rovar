@@ -205,10 +205,14 @@ impl Studio {
             cx.observe(&rename_input, |_, _, cx| cx.notify()),
         ];
         let recovery_directory = directory.clone();
+        let recovery_text_system = cx.text_system().clone();
         cx.spawn_in(window, async move |this, cx| {
+            crate::render::raster::prepare_preview().await;
             let files = cx
                 .background_executor()
-                .spawn(async move { files::recover_documents(recovery_directory) })
+                .spawn(async move {
+                    files::recover_documents(recovery_directory, &recovery_text_system)
+                })
                 .await;
             let _ = this.update_in(cx, |this, _, cx| {
                 let mut changed = false;

@@ -4,6 +4,66 @@ use crate::render::svg::{self, Output, Scene};
 #[cfg(test)]
 mod tests;
 
+pub(crate) fn cache(
+    path: &Path,
+    directory: &Path,
+    text_system: &Arc<gpui::TextSystem>,
+) -> Result<Option<String>> {
+    let Some(original) = super::cache_preview(path, directory)? else {
+        return Ok(None);
+    };
+    let reader = rovar_format::Reader::open(path)?;
+    let mut digest = Sha256::new();
+    for (key, block) in reader.entries() {
+        digest.update(key.len().to_le_bytes());
+        digest.update(key.as_bytes());
+        digest.update(block.hash);
+    }
+    let name = format!("{}-transparent.png", hex::encode(digest.finalize()));
+    let output = directory.join(&name);
+    if rovar_storage::exists(&output) {
+        return Ok(Some(name));
+    }
+    let result = (|| -> Result<Vec<u8>> {
+        let bytes = rovar_storage::fs::read(directory.join(&original))?;
+        let mut reader =
+            image::ImageReader::new(std::io::Cursor::new(&bytes)).with_guessed_format()?;
+        let mut limits = image::Limits::default();
+        limits.max_image_width = Some(560);
+        limits.max_image_height = Some(336);
+        reader.limits(limits);
+        let pixels = reader.decode()?.into_rgba8();
+        if pixels.pixels().any(|p| p[3] < 255) {
+            return Ok(bytes);
+        }
+        // Legacy previews baked in a dark canvas. Render the document again;
+        // removing matching pixels would also erase artwork of the same color.
+        let loaded = super::load(path)?;
+        let document = Document::decode(&loaded.json)?;
+        let sources = loaded
+            .assets
+            .values()
+            .map(|asset| AssetSource {
+                hash: asset.hash.clone(),
+                name: asset.name(),
+                path: asset.source.clone(),
+                size: [asset.width, asset.height],
+            })
+            .collect::<Vec<_>>();
+        render(document.first_page(), &sources, text_system)
+    })();
+    match result {
+        Ok(bytes) => {
+            crate::remote::write_atomic(&output, &bytes)?;
+            Ok(Some(name))
+        }
+        Err(error) => {
+            eprintln!("Could not refresh document preview: {error:#}");
+            Ok(Some(original))
+        }
+    }
+}
+
 pub(crate) fn render(
     doc: &Page,
     sources: &[AssetSource],
@@ -190,5 +250,5 @@ pub(crate) fn render(
         (560. / (r - l + pad * 2.).max(1.)).min(336. / (b - t + pad * 2.).max(1.)),
     )?;
     let options = svg::render_options(!doc.texts.is_empty())?;
-    crate::render::raster::render(&svg, [560, 336], 1., true, false, &options)
+    crate::render::raster::render(&svg, [560, 336], 1., false, false, &options)
 }
