@@ -2,6 +2,7 @@ use crate::scene::{artboard::Viewport, mask::Outline};
 use gpui::*;
 
 pub(super) struct Masked {
+    pub id: usize,
     pub child: AnyElement,
     pub outline: Outline,
     pub view: Viewport,
@@ -18,7 +19,7 @@ impl Element for Masked {
     type RequestLayoutState = ();
     type PrepaintState = Option<Path<Pixels>>;
     fn id(&self) -> Option<ElementId> {
-        None
+        Some(("mask", self.id).into())
     }
     fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
         None
@@ -34,7 +35,7 @@ impl Element for Masked {
     }
     fn prepaint(
         &mut self,
-        _: Option<&GlobalElementId>,
+        id: Option<&GlobalElementId>,
         _: Option<&InspectorElementId>,
         bounds: Bounds<Pixels>,
         _: &mut (),
@@ -47,22 +48,23 @@ impl Element for Masked {
         if self.outline.0.is_empty() {
             return None;
         }
-        let mut builder = PathBuilder::fill().with_style(PathStyle::Fill(
-            FillOptions::default().with_fill_rule(FillRule::EvenOdd),
-        ));
-        for contour in &self.outline.0 {
-            for (i, p) in contour.iter().enumerate() {
-                let p = self.view.screen(*p);
-                let p = bounds.origin + point(px(p.x), px(p.y));
-                if i == 0 {
-                    builder.move_to(p);
-                } else {
-                    builder.line_to(p);
-                }
-            }
-            builder.close();
+        let mut path = window.with_element_state(
+            id.expect("mask has an element id"),
+            |cached: Option<(Outline, f32, Option<Path<Pixels>>)>, _| {
+                let cached = cached
+                    .filter(|(outline, zoom, _)| {
+                        *outline == self.outline && *zoom == self.view.zoom
+                    })
+                    .unwrap_or_else(|| (self.outline.clone(), self.view.zoom, self.path()));
+                (cached.2.clone(), cached)
+            },
+        )?;
+        let offset = bounds.origin + point(px(self.view.pan.x), px(self.view.pan.y));
+        path.bounds.origin += offset;
+        for vertex in &mut path.vertices {
+            vertex.xy_position += offset;
         }
-        builder.build().ok()
+        Some(path)
     }
     fn paint(
         &mut self,
@@ -92,5 +94,25 @@ impl Element for Masked {
                 SubtreeInput::Second => self.child.paint(window, cx),
             },
         );
+    }
+}
+
+impl Masked {
+    fn path(&self) -> Option<Path<Pixels>> {
+        let mut builder = PathBuilder::fill().with_style(PathStyle::Fill(
+            FillOptions::default().with_fill_rule(FillRule::EvenOdd),
+        ));
+        for contour in &self.outline.0 {
+            for (i, p) in contour.iter().enumerate() {
+                let p = point(px(p.x * self.view.zoom), px(p.y * self.view.zoom));
+                if i == 0 {
+                    builder.move_to(p);
+                } else {
+                    builder.line_to(p);
+                }
+            }
+            builder.close();
+        }
+        builder.build().ok()
     }
 }

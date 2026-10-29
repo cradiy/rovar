@@ -354,6 +354,7 @@ impl Workspace {
                 if let Some(outline) = masks.get(&id) {
                     content.push(
                         self.mask_element(
+                            id,
                             div()
                                 .absolute()
                                 .inset_0()

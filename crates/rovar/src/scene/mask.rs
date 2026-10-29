@@ -41,7 +41,7 @@ pub(crate) fn is_source(h: &Hierarchy, id: usize, included: &BTreeSet<usize>) ->
     false
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, PartialEq)]
 pub(crate) struct Outline(pub Vec<Vec<Point<f32>>>);
 
 impl Outline {

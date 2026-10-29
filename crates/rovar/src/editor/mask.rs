@@ -141,10 +141,12 @@ impl Workspace {
 
     pub(super) fn mask_element(
         &self,
+        id: usize,
         element: gpui::AnyElement,
         outline: mask::Outline,
     ) -> gpui::AnyElement {
         paint::Masked {
+            id,
             child: element,
             outline,
             view: self.view,
