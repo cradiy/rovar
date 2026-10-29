@@ -823,6 +823,7 @@ impl Workspace {
                     let playback = gpui_media_backend::SystemBackend.open_playback(
                         MediaPlaybackRequest {
                             source: asset.source.media_source()?,
+                            mode: gpui_media::MediaPlaybackMode::AudioVideo,
                             output_capabilities: None,
                         },
                         sink,
