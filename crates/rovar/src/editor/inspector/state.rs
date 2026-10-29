@@ -21,7 +21,7 @@ pub(in crate::editor) struct State {
     pub paint_row_owner: Option<(String, usize)>,
     pub(super) paint_rows: Vec<super::paint_rows::RowInput>,
     pub(super) row_scrub: Option<super::paint_rows::Key>,
-    pub paint_popovers: [Entity<uic::components::popover::PopoverState>; 2],
+    pub paint_popovers: [Entity<uic::components::popover::PopoverState>; 3],
     pub inspector_scroll: gpui::ScrollHandle,
     pub fields: Vec<Entity<TextInput>>,
     pub name_scroll: Rc<Cell<Pixels>>,
@@ -32,6 +32,7 @@ pub(in crate::editor) struct State {
     pub(super) gradient_popup_layout: Rc<Cell<Option<super::paint::GradientPopupLayout>>>,
     pub picker: Entity<ColorPickerState>,
     pub alpha_picker: Entity<ColorPickerState>,
+    pub background_picker: Entity<ColorPickerState>,
     pub font_picker: Entity<font_picker::FontPicker>,
     _subscriptions: Vec<Subscription>,
 }
@@ -55,6 +56,7 @@ impl State {
         });
         let picker = cx.new(|cx| ColorPickerState::new(rgb(0xffffff), cx));
         let alpha_picker = cx.new(|cx| ColorPickerState::new(rgb(0xffffff), cx));
+        let background_picker = cx.new(|cx| ColorPickerState::new(rgb(0xffe066), cx));
         let mut subscriptions = Vec::new();
         subscriptions.push(cx.observe(&fields[0], |_, _, cx| cx.notify()));
         for (index, popover) in paint_popovers.iter().enumerate() {
@@ -64,17 +66,22 @@ impl State {
                 move |this, _, event: &uic::components::popover::PopoverEvent, window, cx| {
                     if *event == uic::components::popover::PopoverEvent::Opened {
                         this.inspector.gradient_popup_layout.set(None);
-                        this.inspector.paint_popovers[1 - index].update(cx, |state, cx| {
-                            state.dismiss(
-                                uic::components::popover::PopoverDismissReason::Programmatic,
-                                false,
-                                window,
-                                cx,
-                            )
-                        });
+                        for (other, popover) in this.inspector.paint_popovers.iter().enumerate() {
+                            if other == index {
+                                continue;
+                            }
+                            popover.update(cx, |state, cx| {
+                                state.dismiss(
+                                    uic::components::popover::PopoverDismissReason::Programmatic,
+                                    false,
+                                    window,
+                                    cx,
+                                )
+                            });
+                        }
                         if this.action_paint().is_some() {
                             this.sync_fields(cx);
-                        } else if this.selected_shape.is_some() {
+                        } else if this.selected_shape.is_some() && index < 2 {
                             this.activate_paint(index == 1, cx);
                         }
                     }
@@ -238,6 +245,26 @@ impl State {
                 },
             ));
         }
+        subscriptions.push(cx.subscribe(
+            &background_picker,
+            |this, _, event: &ColorPickerEvent, cx| {
+                if !this.inspector.paint_popovers[2].read(cx).is_open() {
+                    return;
+                }
+                let (ColorPickerEvent::Preview(color) | ColorPickerEvent::Commit(color)) = *event;
+                if let Some(text) = this.selected_text() {
+                    text.editor.update(cx, |editor, cx| {
+                        editor.apply_style(StyleChange::Background(Some(color)), cx)
+                    });
+                }
+                if matches!(event, ColorPickerEvent::Commit(_)) {
+                    this.history.borrow_mut().break_group();
+                }
+                this.sync_field(22, cx);
+                this.sync_field(23, cx);
+                cx.notify();
+            },
+        ));
         Self {
             action_target: None,
             action_key: None,
@@ -264,6 +291,7 @@ impl State {
             gradient_popup_layout: Rc::new(Cell::new(None)),
             picker,
             alpha_picker,
+            background_picker,
             font_picker,
             _subscriptions: subscriptions,
         }

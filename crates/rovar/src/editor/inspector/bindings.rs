@@ -69,6 +69,11 @@ impl Workspace {
                 Height => number(text.rect.height),
                 Color => hex(style.editable_color(self.inspector.active_stop)),
                 Opacity => number(style.editable_color(self.inspector.active_stop).a * 100.),
+                TextBackgroundColor => style.background.map(hex).unwrap_or_default(),
+                TextBackgroundOpacity => style
+                    .background
+                    .map(|color| number(color.a * 100.))
+                    .unwrap_or_default(),
                 FontSize => number(style.size),
                 LineHeight => number(style.line_height),
                 LetterSpacing => number(style.spacing),
@@ -206,6 +211,7 @@ impl Workspace {
     }
 
     pub(in crate::editor) fn sync_fields(&mut self, cx: &mut Context<Self>) {
+        self.sync_text_background(cx);
         if let Some((mode, gradient)) = self.fill_state(cx) {
             if matches!(mode, FillMode::Points(_)) {
                 self.inspector.active_stop = self.inspector.active_stop.min(3);
@@ -254,6 +260,7 @@ impl Workspace {
         window: &Window,
         cx: &mut Context<Self>,
     ) {
+        self.sync_text_background(cx);
         for index in 0..self.inspector.fields.len() {
             if !self.inspector.fields[index]
                 .focus_handle(cx)
@@ -432,6 +439,7 @@ impl Workspace {
             self.sync_field(index, cx);
         }
         self.sync_input_peers(slot, cx);
+        self.sync_text_background(cx);
         cx.notify();
     }
 

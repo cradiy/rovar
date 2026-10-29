@@ -722,6 +722,27 @@ pub(crate) mod rgba {
         }
         Ok(gpui::Rgba { r, g, b, a })
     }
+
+    pub(crate) mod optional {
+        use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+        #[derive(Serialize, Deserialize)]
+        #[serde(transparent)]
+        struct Color(#[serde(with = "super")] gpui::Rgba);
+
+        pub fn serialize<S: Serializer>(
+            color: &Option<gpui::Rgba>,
+            s: S,
+        ) -> Result<S::Ok, S::Error> {
+            color.map(Color).serialize(s)
+        }
+
+        pub fn deserialize<'de, D: Deserializer<'de>>(
+            d: D,
+        ) -> Result<Option<gpui::Rgba>, D::Error> {
+            Option::<Color>::deserialize(d).map(|color| color.map(|color| color.0))
+        }
+    }
 }
 
 pub(crate) mod gradient_kind {

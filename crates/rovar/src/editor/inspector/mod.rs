@@ -20,6 +20,7 @@ mod properties;
 mod scrub;
 mod state;
 mod target;
+mod text_background;
 mod view;
 
 use super::*;
@@ -32,7 +33,7 @@ use uic::components::{
     popover::{Popover, PopoverPlacement},
 };
 
-pub(super) const PROPERTY_COUNT: usize = 22;
+pub(super) const PROPERTY_COUNT: usize = 24;
 // Independent inputs for the sidebar, solid, gradient, and image editors.
 pub(super) const PROPERTY_SURFACES: usize = 4;
 

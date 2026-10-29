@@ -52,6 +52,12 @@ pub struct TextStyle {
     pub spacing: f32,
     #[serde(with = "crate::document::rgba")]
     pub color: Rgba,
+    #[serde(
+        default,
+        with = "crate::document::rgba::optional",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub background: Option<Rgba>,
     pub align: TextAlign,
     pub vertical_align: VerticalAlign,
     pub fill_mode: FillMode,
@@ -73,6 +79,7 @@ impl Default for TextStyle {
             line_height: 1.5,
             spacing: 0.,
             color: rgb(0x20232b),
+            background: None,
             align: TextAlign::Left,
             vertical_align: VerticalAlign::Baseline,
             fill_mode: FillMode::Solid,
@@ -703,9 +710,6 @@ pub fn element(
                     let selection = if text.editing { text.selection() } else { 0..0 };
                     let cursor = text.cursor;
                     let marked = text.marked.clone();
-                    window.with_content_mask(Some(gpui::ContentMask { bounds }), |window| {
-                        layout.paint_selection(selection.clone(), window);
-                    });
                     crate::scene::effects::paint_effects(
                         bounds,
                         &effects,
@@ -721,6 +725,7 @@ pub fn element(
                         },
                     );
                     window.with_content_mask(Some(gpui::ContentMask { bounds }), |window| {
+                        layout.paint_selection(selection.clone(), window);
                         layout.paint_editing(selection, cursor, marked, focused, window);
                     });
                     window.handle_input(

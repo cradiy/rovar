@@ -28,6 +28,9 @@ pub(crate) enum StyleChange {
     Size(f32),
     Color(Rgba),
     Opacity(f32),
+    Background(Option<Rgba>),
+    BackgroundColor(Rgba),
+    BackgroundOpacity(f32),
     LineHeight(f32),
     Spacing(f32),
     Align(TextAlign),
@@ -46,6 +49,8 @@ impl StyleChange {
             Self::Family(_) => TextProperty::Family,
             Self::Color(_) => TextProperty::Color,
             Self::Opacity(_) => TextProperty::Opacity,
+            Self::Background(_) | Self::BackgroundColor(_) => TextProperty::BackgroundColor,
+            Self::BackgroundOpacity(_) => TextProperty::BackgroundOpacity,
             Self::Size(_) => TextProperty::Size,
             Self::LineHeight(_) => TextProperty::LineHeight,
             Self::Spacing(_) => TextProperty::Spacing,
@@ -79,6 +84,18 @@ impl StyleChange {
             Self::Strikethrough(value) => style.strikethrough = *value,
             Self::Size(value) => style.size = *value,
             Self::Opacity(value) => style.color.a = *value,
+            Self::Background(value) => style.background = *value,
+            Self::BackgroundColor(value) => {
+                let color = style.background.get_or_insert(*value);
+                color.r = value.r;
+                color.g = value.g;
+                color.b = value.b;
+            }
+            Self::BackgroundOpacity(value) => {
+                if let Some(color) = &mut style.background {
+                    color.a = *value;
+                }
+            }
             Self::Color(value) => {
                 style.color.r = value.r;
                 style.color.g = value.g;
@@ -104,6 +121,13 @@ impl TextStyle {
                     && self.color.b == other.color.b
             }
             TextProperty::Opacity => self.color.a == other.color.a,
+            TextProperty::BackgroundColor => {
+                self.background.map(|c| (c.r, c.g, c.b))
+                    == other.background.map(|c| (c.r, c.g, c.b))
+            }
+            TextProperty::BackgroundOpacity => {
+                self.background.map(|c| c.a) == other.background.map(|c| c.a)
+            }
             TextProperty::Size => self.size == other.size,
             TextProperty::LineHeight => self.line_height == other.line_height,
             TextProperty::Spacing => self.spacing == other.spacing,

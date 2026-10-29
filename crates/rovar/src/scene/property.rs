@@ -3,6 +3,8 @@ pub(crate) enum TextProperty {
     Family,
     Color,
     Opacity,
+    BackgroundColor,
+    BackgroundOpacity,
     Size,
     LineHeight,
     Spacing,
@@ -37,6 +39,8 @@ impl Corner {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Property {
     LayerOpacity,
+    TextBackgroundColor,
+    TextBackgroundOpacity,
     Name,
     X,
     Y,
@@ -75,7 +79,9 @@ impl Property {
         match self {
             X | Y | StartX | StartY | EndX | EndY | Rotation => (-1_000_000., 1_000_000., 1., 1.),
             Width | Height => (MIN_SIZE, MAX_SIZE, 1., 1.),
-            Opacity | LayerOpacity | GradientPosition | PointX | PointY => (0., 100., 1., 1.),
+            Opacity | TextBackgroundOpacity | LayerOpacity | GradientPosition | PointX | PointY => {
+                (0., 100., 1., 1.)
+            }
             PointRadius => (1., 400., 1., 1.),
             GradientAngle => (0., 360., 1., 1.),
             FontSize => (1., 1000., 1., 1.),
@@ -85,7 +91,7 @@ impl Property {
             Vertices => (3., 60., 0.1, 1.),
             InnerRadius => (1., 99., 1., 1.),
             Radius | Corner(_) | StrokeWidth | Gap | LineGap | Padding => (0., MAX_SIZE, 1., 1.),
-            Name | Color => unreachable!("non-numeric property"),
+            Name | Color | TextBackgroundColor => unreachable!("non-numeric property"),
         }
     }
 
@@ -98,6 +104,8 @@ impl Property {
         Some(match self {
             Self::Color => TextProperty::Color,
             Self::Opacity => TextProperty::Opacity,
+            Self::TextBackgroundColor => TextProperty::BackgroundColor,
+            Self::TextBackgroundOpacity => TextProperty::BackgroundOpacity,
             Self::FontSize => TextProperty::Size,
             Self::LineHeight => TextProperty::LineHeight,
             Self::LetterSpacing => TextProperty::Spacing,

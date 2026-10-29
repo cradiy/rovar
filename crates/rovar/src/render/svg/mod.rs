@@ -177,6 +177,22 @@ impl Scene<'_> {
                 let key = format!("text-clip-{id}");
                 clip(&mut defs, &key, &rect_path(rect));
                 write!(body, "<g clip-path=\"url(#{key})\" xml:space=\"preserve\">")?;
+                for fragment in self.text.get(id).context("Missing text layout")? {
+                    if let Some(color) = fragment.style.background {
+                        let mut background = fragment.bounds;
+                        background.x += rect.x;
+                        background.y += rect.y;
+                        let fill = paint::paint(
+                            FillMode::Solid,
+                            color,
+                            &fragment.style.gradient,
+                            background,
+                            &mut defs,
+                            &format!("text-background-{id}"),
+                        )?;
+                        write!(body, "<path d=\"{}\" {fill}/>", rect_path(background))?;
+                    }
+                }
                 for (index, fragment) in self
                     .text
                     .get(id)

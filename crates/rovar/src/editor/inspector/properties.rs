@@ -59,6 +59,8 @@ impl Workspace {
                 12 => Some(GradientAngle),
                 13 => Some(GradientPosition),
                 15 => Some(Rotation),
+                22 => Some(TextBackgroundColor),
+                23 => Some(TextBackgroundOpacity),
                 _ => None,
             };
         }
@@ -223,7 +225,7 @@ pub(super) fn apply_text_field(
     stop: usize,
     cx: &mut Context<Workspace>,
 ) -> bool {
-    if property == Color {
+    if matches!(property, Color | TextBackgroundColor) {
         let hex = value.trim().trim_start_matches('#');
         if hex.len() != 6 || !hex.bytes().all(|c| c.is_ascii_hexdigit()) {
             return false;
@@ -232,7 +234,11 @@ pub(super) fn apply_text_field(
             return false;
         };
         text.editor.update(cx, |editor, cx| {
-            editor.apply_color(rgb(color), stop, false, cx)
+            if property == TextBackgroundColor {
+                editor.apply_style(StyleChange::BackgroundColor(rgb(color)), cx);
+            } else {
+                editor.apply_color(rgb(color), stop, false, cx);
+            }
         });
         return true;
     }
@@ -258,6 +264,11 @@ pub(super) fn apply_text_field(
             color.a = value / 100.;
             editor.apply_color(color, stop, true, cx);
         }),
+        TextBackgroundOpacity if property.accepts_number(value) => {
+            text.editor.update(cx, |editor, cx| {
+                editor.apply_style(StyleChange::BackgroundOpacity(value / 100.), cx);
+            })
+        }
         FontSize if property.accepts_number(value) => text
             .editor
             .update(cx, |e, cx| e.apply_style(StyleChange::Size(value), cx)),

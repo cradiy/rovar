@@ -6,6 +6,7 @@ pub(crate) struct TextFragment {
     pub text: String,
     pub x: f32,
     pub baseline: f32,
+    pub bounds: Rect,
     pub style: TextStyle,
 }
 
@@ -364,6 +365,26 @@ impl TextLayout {
     }
 
     pub fn paint_artwork(&self, window: &mut Window, cx: &mut App) {
+        for row in self
+            .rows
+            .iter()
+            .take_while(|r| r.origin.y < self.bounds.size.height)
+        {
+            for fragment in &row.fragments {
+                if let Some(color) = fragment.style.background {
+                    window.paint_quad(fill(
+                        Bounds::new(
+                            self.bounds.origin + fragment.origin,
+                            size(
+                                fragment.line.width(),
+                                fragment.line.ascent + fragment.line.descent.abs(),
+                            ),
+                        ),
+                        color,
+                    ));
+                }
+            }
+        }
         // Rows are ordered vertically; clipped overflow needs no paint traversal.
         for row in self
             .rows
@@ -456,6 +477,12 @@ pub(crate) fn export_fragments(
             text: fragment.line.text.to_string(),
             x: fragment.origin.x.into(),
             baseline: (fragment.origin.y + fragment.line.ascent).into(),
+            bounds: Rect {
+                x: fragment.origin.x.into(),
+                y: fragment.origin.y.into(),
+                width: fragment.line.width().into(),
+                height: (fragment.line.ascent + fragment.line.descent.abs()).into(),
+            },
             style: fragment.style.clone(),
         })
         .collect()

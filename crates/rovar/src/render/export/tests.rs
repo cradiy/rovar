@@ -662,6 +662,7 @@ fn svg_text_is_outlined_and_png_contains_the_glyphs() {
             text: "Hello".into(),
             x: 5.,
             baseline: 30.,
+            bounds: rect(5., 6., 65., 28.),
             style,
         }],
     );
@@ -679,6 +680,7 @@ fn svg_text_is_outlined_and_png_contains_the_glyphs() {
         crate::scene::text::StyleChange::Weight(700.),
         crate::scene::text::StyleChange::Underline(true),
         crate::scene::text::StyleChange::Strikethrough(true),
+        crate::scene::text::StyleChange::Background(Some(gpui::rgba(0x00ff0080))),
     ] {
         let mut styles = doc.texts[0].styles.clone();
         styles.apply(0..5, &change, true);
@@ -687,6 +689,10 @@ fn svg_text_is_outlined_and_png_contains_the_glyphs() {
             .unwrap()
             .into_rgba8();
         assert_ne!(styled, baseline, "{change:?} must affect exported pixels");
+        if matches!(change, crate::scene::text::StyleChange::Background(_)) {
+            assert_eq!(styled.get_pixel(6, 7).0, [0, 255, 0, 128]);
+            assert_eq!(styled.get_pixel(180, 7).0[3], 0);
+        }
         if matches!(
             change,
             crate::scene::text::StyleChange::Underline(_)

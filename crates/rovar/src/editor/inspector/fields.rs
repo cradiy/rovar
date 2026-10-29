@@ -41,7 +41,12 @@ impl Workspace {
         row: Option<super::paint_rows::Field>,
         cx: &mut Context<Self>,
     ) -> Div {
-        let is_color = matches!(index, 5 | 16);
+        let is_color = matches!(index, 5 | 16 | 22);
+        let popover_index = if index >= 22 {
+            2
+        } else {
+            usize::from(index >= 16)
+        };
         let sizing =
             if matches!(index, 3 | 4) && !self.paint_shape().is_some_and(|s| s.kind.is_line()) {
                 self.sizing_control(index - 3, cx)
@@ -75,12 +80,12 @@ impl Workspace {
         };
         let sidebar_duplicate = popup
             && row.as_ref().is_none_or(|r| r.active)
-            && matches!(index, 5 | 6 | 16 | 17)
-            && self.inspector.paint_popovers[usize::from(index >= 16)]
+            && matches!(index, 5 | 6 | 16 | 17 | 22 | 23)
+            && self.inspector.paint_popovers[popover_index]
                 .read(cx)
                 .is_open();
         let readonly = image_color || (matches!(index, 3 | 4) && self.boolean_result_empty());
-        let numeric = !matches!(index, 0 | 5 | 16);
+        let numeric = !matches!(index, 0 | 5 | 16 | 22);
         let draggable =
             if self.inspector_action().is_none() && !self.multi_selection.is_empty() && index != 18
             {
@@ -117,7 +122,11 @@ impl Workspace {
             value if value == t("name") => Some(GpuiIcons::LucidePencil),
             _ => None,
         };
-        let swatch = if is_color && action {
+        let swatch = if index == 22 {
+            self.selected_text()
+                .and_then(|text| text.editor.read(cx).effective_style().background)
+                .map(Into::into)
+        } else if is_color && action {
             self.action_paint().map(|p| {
                 if popup && p.mode == FillMode::Linear {
                     p.gradient.background()
@@ -161,7 +170,7 @@ impl Workspace {
             .as_ref()
             .map_or(&self.inspector.fields[slot], |r| &r.input)
             .focus_handle(cx);
-        let popup_focus = self.inspector.paint_popovers[usize::from(index >= 16)]
+        let popup_focus = self.inspector.paint_popovers[popover_index]
             .read(cx)
             .focus_handle(cx);
         div()
@@ -290,7 +299,7 @@ impl Workspace {
                         .into_any_element()
                 } else if is_color && popup {
                     let weak = cx.entity().downgrade();
-                    Popover::new(&self.inspector.paint_popovers[usize::from(index == 16)])
+                    Popover::new(&self.inspector.paint_popovers[popover_index])
                         .label(t("color"))
                         .placement(PopoverPlacement::LeftStart)
                         .collision(uic::components::popover::PopoverCollision::Shift)
@@ -302,8 +311,14 @@ impl Workspace {
                         .trigger(prefix)
                         .content(move |window, cx| {
                             div().children(
-                                weak.update(cx, |this, cx| this.color_panel(window, cx))
-                                    .ok(),
+                                weak.update(cx, |this, cx| {
+                                    if index == 22 {
+                                        this.text_background_panel(cx).into_any_element()
+                                    } else {
+                                        this.color_panel(window, cx).into_any_element()
+                                    }
+                                })
+                                .ok(),
                             )
                         })
                         .into_any_element()
