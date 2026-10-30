@@ -10,7 +10,80 @@ use crate::{
     },
 };
 use serde_json::{Value, json};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
+
+pub(super) struct NodeIndex {
+    parents: HashMap<usize, Option<usize>>,
+    children: HashMap<Option<usize>, Vec<usize>>,
+    positions: HashMap<usize, usize>,
+    headers: HashMap<usize, (String, String)>,
+}
+
+impl NodeIndex {
+    pub fn new(page: &Page) -> Self {
+        let ranks: HashMap<_, _> = page
+            .hierarchy
+            .order
+            .iter()
+            .enumerate()
+            .map(|(i, id)| (*id, i))
+            .collect();
+        let mut index = Self {
+            parents: HashMap::new(),
+            children: HashMap::new(),
+            positions: HashMap::new(),
+            headers: HashMap::new(),
+        };
+        let objects = page
+            .boards
+            .iter()
+            .map(|b| (b.id, None, "frame".to_owned(), b.name.clone()))
+            .chain(page.shapes.iter().map(|s| {
+                (
+                    s.id,
+                    s.board,
+                    format!("{:?}", s.kind).to_lowercase(),
+                    s.name.clone(),
+                )
+            }))
+            .chain(page.texts.iter().map(|t| {
+                (
+                    t.id,
+                    t.board,
+                    "text".to_owned(),
+                    t.content.chars().take(60).collect(),
+                )
+            }))
+            .chain(
+                page.hierarchy
+                    .groups
+                    .iter()
+                    .map(|(id, g)| (*id, g.board, "group".to_owned(), g.name.clone())),
+            );
+        for (id, board, kind, name) in objects {
+            let parent = page.hierarchy.parents.get(&id).copied().or(board);
+            index.parents.insert(id, parent);
+            index.children.entry(parent).or_default().push(id);
+            index.headers.insert(
+                id,
+                (kind, page.hierarchy.names.get(&id).cloned().unwrap_or(name)),
+            );
+        }
+        for children in index.children.values_mut() {
+            children.sort_unstable_by_key(|id| (ranks.get(id).copied().unwrap_or(usize::MAX), *id));
+            index
+                .positions
+                .extend(children.iter().enumerate().map(|(i, id)| (*id, i)));
+        }
+        index
+    }
+
+    pub fn matches(&self, id: usize, name: Option<&str>, kind: Option<&str>) -> bool {
+        let (node_kind, node_name) = &self.headers[&id];
+        kind.is_none_or(|kind| kind == node_kind)
+            && name.is_none_or(|name| node_name.to_lowercase().contains(name))
+    }
+}
 
 pub(super) fn lookup(
     page: &Page,
@@ -63,52 +136,23 @@ pub(super) fn local_rect(page: &Page, board: Option<usize>, mut rect: Rect) -> R
     rect
 }
 
-pub(super) fn node(page: &Page, id: usize, identities: &BTreeMap<usize, uuid::Uuid>) -> Value {
-    let parent = components::parent(page, id);
-    let ranks: BTreeMap<_, _> = page
-        .hierarchy
-        .order
-        .iter()
-        .enumerate()
-        .map(|(rank, id)| (*id, rank))
-        .collect();
-    let mut siblings: Vec<_> = identities
-        .keys()
-        .copied()
-        .filter(|child| components::parent(page, *child) == parent)
-        .collect();
-    siblings.sort_by_key(|id| ranks.get(id).copied().unwrap_or(usize::MAX));
-    let mut children: Vec<_> = identities
-        .keys()
-        .copied()
-        .filter(|child| components::parent(page, *child) == Some(id))
-        .collect();
-    children.sort_by_key(|id| ranks.get(id).copied().unwrap_or(usize::MAX));
+pub(super) fn node(
+    page: &Page,
+    id: usize,
+    identities: &BTreeMap<usize, uuid::Uuid>,
+    index: &NodeIndex,
+) -> Value {
     let state = layer(page, id).unwrap();
-    let (kind, name, fill) = if let Some(n) = page.boards.iter().find(|n| n.id == id) {
-        (
-            "frame".to_string(),
-            n.name.clone(),
-            n.fill_enabled.then_some((n.color, n.fill_mode)),
-        )
+    let (kind, name) = &index.headers[&id];
+    let fill = if let Some(n) = page.boards.iter().find(|n| n.id == id) {
+        n.fill_enabled.then_some((n.color, n.fill_mode))
     } else if let Some(n) = page.shapes.iter().find(|n| n.id == id) {
-        (
-            format!("{:?}", n.kind).to_lowercase(),
-            n.name.clone(),
-            (n.fill_enabled && n.can_fill()).then_some((n.color, n.fill_mode)),
-        )
-    } else if let Some(n) = page.texts.iter().find(|n| n.id == id) {
-        (
-            "text".into(),
-            n.content.chars().take(60).collect(),
-            Some((n.styles.default.color, n.styles.default.fill_mode)),
-        )
+        (n.fill_enabled && n.can_fill()).then_some((n.color, n.fill_mode))
     } else {
-        (
-            "group".into(),
-            page.hierarchy.groups[&id].name.clone(),
-            None,
-        )
+        page.texts
+            .iter()
+            .find(|n| n.id == id)
+            .map(|n| (n.styles.default.color, n.styles.default.fill_mode))
     };
     let text_info = page
         .texts
@@ -116,7 +160,7 @@ pub(super) fn node(page: &Page, id: usize, identities: &BTreeMap<usize, uuid::Uu
         .find(|n| n.id == id)
         .map(super::typography::describe);
     let mut properties = json!({
-        "name":page.hierarchy.names.get(&id).unwrap_or(&name),
+        "name":name,
         "rect":components::bounds(page,id), "opacity":state.opacity,
         "rotation":state.rotation, "hidden":state.hidden,
         "fill":fill.filter(|(_,mode)| matches!(mode,FillMode::Solid)).map(|(color,_)| format!("#{:08X}", u32::from(color))),
@@ -183,12 +227,12 @@ pub(super) fn node(page: &Page, id: usize, identities: &BTreeMap<usize, uuid::Uu
     json!({"id":identities[&id],"type":kind,"asset":asset,
         "text":text_info,
         "color_style_bindings":super::colors::bindings(page,id),
-        "sibling_index":siblings.iter().position(|value|*value==id),
-        "children":children.iter().map(|id|identities[id]).collect::<Vec<_>>(),
+        "sibling_index":index.positions[&id],
+        "children":index.children.get(&Some(id)).into_iter().flatten().map(|id|identities[id]).collect::<Vec<_>>(),
         "mask_source_id":page.hierarchy.groups.get(&id).and_then(|g|g.mask).and_then(|id|identities.get(&id)),
         "boolean_operation":page.hierarchy.groups.get(&id).and_then(|g|g.boolean),
         "component":page.hierarchy.components.get(&id).map(|binding|json!({"id":binding.component,"master":binding.master})),
-        "parent_id":components::parent(page,id).and_then(|id| identities.get(&id)),
+        "parent_id":index.parents[&id].and_then(|id| identities.get(&id)),
         "locked":state.locked,"editable":editable(page,id).is_ok(),"properties":properties,
         "interaction_editable":super::interaction::editable(page,id).is_ok(),
         "action_properties":crate::scene::presentation::property::defaults(page,id),
@@ -655,13 +699,16 @@ fn patch_layer(layer: &mut LayerState, props: &p::Properties) {
 pub(super) fn protect(before: &Page, after: &Page) -> Result<()> {
     let previous = before.node_ids();
     let remaining = after.node_ids();
+    let mut indices = None;
     for id in previous.keys().copied() {
         let Err(error) = editable(before, id) else {
             continue;
         };
         let unchanged = remaining.contains_key(&id) && {
-            let mut old = node(before, id, &previous);
-            let mut new = node(after, id, &remaining);
+            let (before_index, after_index) =
+                indices.get_or_insert_with(|| (NodeIndex::new(before), NodeIndex::new(after)));
+            let mut old = node(before, id, &previous, before_index);
+            let mut new = node(after, id, &remaining, after_index);
             old.as_object_mut().unwrap().remove("sibling_index");
             new.as_object_mut().unwrap().remove("sibling_index");
             if super::interaction::editable(before, id).is_ok() {

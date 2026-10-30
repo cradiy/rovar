@@ -204,13 +204,16 @@ impl Workspace {
                     .map(|(i, id)| (*id, i))
                     .collect();
                 ids.sort_by_key(|id| ranks.get(id).map_or((1, *id), |i| (0, *i)));
-                let mut nodes = Vec::new();
-                let mut total = 0;
+                let index = model::NodeIndex::new(&page);
                 let name = params.name.as_ref().map(|name| name.to_lowercase());
-                for node in ids
+                ids.retain(|id| index.matches(*id, name.as_deref(), params.node_type.as_deref()));
+                let total = ids.len();
+                let nodes: Vec<_> = ids
                     .into_iter()
+                    .skip(params.offset)
+                    .take(params.limit)
                     .map(|id| {
-                        let mut node = model::node(&page, id, &identities);
+                        let mut node = model::node(&page, id, &identities, &index);
                         node["available_variants"] = json!(
                             interaction::variants(&page, id, &self.components.sets)
                                 .into_iter()
@@ -219,24 +222,7 @@ impl Workspace {
                         );
                         node
                     })
-                    .filter(|node| {
-                        name.as_ref().is_none_or(|name| {
-                            node["properties"]["name"]
-                                .as_str()
-                                .unwrap_or("")
-                                .to_lowercase()
-                                .contains(name)
-                        }) && params
-                            .node_type
-                            .as_ref()
-                            .is_none_or(|kind| node["type"].as_str() == Some(kind))
-                    })
-                {
-                    if total >= params.offset && nodes.len() < params.limit {
-                        nodes.push(node);
-                    }
-                    total += 1;
-                }
+                    .collect();
                 let end = params.offset.saturating_add(params.limit).min(total);
                 Ok(p::Reply::Ready(
                     json!({"revision":self.document_revision().to_string(),"page_id":page.id,
@@ -517,13 +503,16 @@ impl Workspace {
         color_refs.retain(|_, id| document.colors.contains_key(id));
         let before_ids = original.node_ids();
         let after_ids = page.node_ids();
+        let before_index = model::NodeIndex::new(&original);
+        let after_index = model::NodeIndex::new(&page);
         refs.retain(|_, uid| after_ids.values().any(|value| value.to_string() == *uid));
         let updated = after_ids
             .keys()
             .filter_map(|id| {
-                let value = model::node(&page, *id, &after_ids);
-                (!before_ids.contains_key(id) || value != model::node(&original, *id, &before_ids))
-                    .then_some(value)
+                let value = model::node(&page, *id, &after_ids, &after_index);
+                (!before_ids.contains_key(id)
+                    || value != model::node(&original, *id, &before_ids, &before_index))
+                .then_some(value)
             })
             .collect::<Vec<_>>();
         let revision = self

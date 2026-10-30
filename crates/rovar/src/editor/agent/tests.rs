@@ -318,10 +318,20 @@ fn batches_rollback_retry_and_share_the_editors_undo_history(cx: &mut TestAppCon
         let first=execute(this,&read,window,cx).unwrap();
         assert_eq!(first["total"],2);
         assert_eq!(first["nodes"].as_array().unwrap().len(),1);
+        assert_eq!(first["nodes"][0]["children"],json!([result["created"]["$shape"]]));
+        assert!(first["nodes"][0]["parent_id"].is_null());
         read.params["offset"]=first["next_offset"].clone();
         let second=execute(this,&read,window,cx).unwrap();
         assert!(second["next_offset"].is_null());
         assert_eq!(second["nodes"][0]["properties"]["rect"]["x"],120.);
+        assert_eq!(second["nodes"][0]["parent_id"],result["created"]["$frame"]);
+        assert_eq!(second["nodes"][0]["sibling_index"],0);
+        let filtered=request(this,"nodes.find",json!({"page_id":this.pages.active,
+            "revision":result["revision"],"name":"cArD","node_type":"frame","limit":1}));
+        let found=execute(this,&filtered,window,cx).unwrap();
+        assert_eq!(found["total"],1);
+        assert_eq!(found["nodes"][0]["id"],result["created"]["$frame"]);
+        assert!(found["next_offset"].is_null());
 
         let capture=request(this,"canvas.capture",json!({"page_id":this.pages.active,
             "revision":this.document_revision().to_string(),"node_id":result["created"]["$frame"]}));

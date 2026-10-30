@@ -7,10 +7,12 @@ use gpui::{CursorStyle, DispatchPhase, HitboxBehavior, MouseMoveEvent, MouseUpEv
 // text shaping and paint commands; normal document interactions render it afresh.
 pub(super) struct CanvasScene {
     workspace: gpui::WeakEntity<Workspace>,
+    index: Option<Rc<super::scene_index::Index>>,
 }
 
 pub(super) struct ArtworkScene {
     workspace: gpui::WeakEntity<Workspace>,
+    index: Option<Rc<super::scene_index::Index>>,
     key: Option<ArtworkKey>,
     view: Option<Viewport>,
     #[cfg(test)]
@@ -41,6 +43,7 @@ impl ArtworkScene {
     pub fn new(workspace: gpui::WeakEntity<Workspace>) -> Self {
         Self {
             workspace,
+            index: None,
             key: None,
             view: None,
             #[cfg(test)]
@@ -56,12 +59,19 @@ impl Render for ArtworkScene {
             self.renders += 1;
         }
         let cache = self.key.is_some();
+        let index = self.index.clone().expect("artwork has a frame scene index");
         self.workspace
             .update(cx, |workspace, cx| {
-                let content = div()
-                    .absolute()
-                    .size_full()
-                    .children(workspace.content_elements(window, cx));
+                let content =
+                    div()
+                        .absolute()
+                        .size_full()
+                        .children(workspace.content_elements_indexed(
+                            window,
+                            cx,
+                            workspace.presentation.playback.as_ref().map(|p| p.current),
+                            index,
+                        ));
                 if cache {
                     gpui_effects::subtree_effect(content, gpui_effects::subtree_identity_shader())
                         .into_any_element()
@@ -74,22 +84,33 @@ impl Render for ArtworkScene {
 }
 impl CanvasScene {
     pub fn new(workspace: gpui::WeakEntity<Workspace>) -> Self {
-        Self { workspace }
+        Self {
+            workspace,
+            index: None,
+        }
     }
 }
 impl Render for CanvasScene {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         crate::ui::theme::activate(window, cx);
+        let index = self.index.clone().expect("canvas has a frame scene index");
         self.workspace
             .update(cx, |workspace, cx| {
-                workspace.scene_content(window, cx).into_any_element()
+                workspace
+                    .scene_content(window, index, cx)
+                    .into_any_element()
             })
             .unwrap_or_else(|_| div().into_any_element())
     }
 }
 
 impl Workspace {
-    fn artwork_controls(&self, window: &Window, cx: &mut Context<Self>) -> Div {
+    fn artwork_controls(
+        &self,
+        index: &super::scene_index::Index,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> Div {
         if self.presentation.playback.is_some() {
             return div();
         }
@@ -101,7 +122,6 @@ impl Workspace {
             width: f32::from(size.width) / self.view.zoom,
             height: f32::from(size.height) / self.view.zoom,
         };
-        let index = self.scene_index();
         let retained = self.selection_ids().into_iter().chain(self.vector_edit);
         let ids = index.visible_order(viewport, self.view.zoom, retained);
         div()
@@ -129,7 +149,11 @@ impl Workspace {
             )
     }
 
-    fn artwork(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
+    fn artwork(
+        &self,
+        index: Rc<super::scene_index::Index>,
+        cx: &mut Context<Self>,
+    ) -> gpui::AnyElement {
         let cacheable = !self.history.borrow().is_previewing()
             && self.gesture.is_none()
             && self.vector_edit.is_none()
@@ -149,11 +173,12 @@ impl Workspace {
             revision: self.history.borrow().revision(),
             page: self.pages.active.clone(),
             view: self.view,
-            index: self.scene_index(),
+            index: index.clone(),
             selection: self.selection_ids(),
             dark: crate::ui::theme::is_dark(),
         });
         let unchanged = self.artwork.update(cx, |artwork, cx| {
+            artwork.index = Some(index);
             artwork.view = Some(self.view);
             let unchanged = key.is_some() && artwork.key == key;
             if artwork.key != key {
@@ -172,6 +197,17 @@ impl Workspace {
         }
     }
     pub(super) fn editor(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let index = self.scene_index();
+        self.scene.update(cx, |scene, cx| {
+            if scene
+                .index
+                .as_ref()
+                .is_none_or(|old| !Rc::ptr_eq(old, &index))
+            {
+                scene.index = Some(index.clone());
+                cx.notify();
+            }
+        });
         let bounds_state = self.bounds.clone();
         let capture = self.capture.clone();
         let weak = cx.entity().downgrade();
@@ -429,7 +465,7 @@ impl Workspace {
                 |el| el.child(self.view_controls(cx)),
             )
             .when(self.preview.is_none(), |el| {
-                el.child(self.sidebar(cx))
+                el.child(self.sidebar(&index, cx))
                     .child(self.properties(cx))
                     .when(self.image_crop.is_none(), |el| el.child(self.tool_bar(cx)))
             })
@@ -555,17 +591,18 @@ impl Workspace {
     pub(super) fn scene_content(
         &self,
         window: &Window,
+        index: Rc<super::scene_index::Index>,
         cx: &mut Context<Self>,
     ) -> impl IntoElement + use<> {
         div()
             .absolute()
             .size_full()
             .when(self.view.zoom < 8., |el| el.child(self.canvas_grid(false)))
-            .child(self.artwork(cx))
+            .child(self.artwork(index.clone(), cx))
             // Paint over artwork too, while keeping selection and guides on top.
             // Canvas does not insert a hitbox, so editing remains unobstructed.
             .when(self.view.zoom >= 8., |el| el.child(self.canvas_grid(true)))
-            .child(self.artwork_controls(window, cx))
+            .child(self.artwork_controls(&index, window, cx))
             .children(self.bezier_hover_preview())
             .children(self.creation_preview())
             .child(self.grid_guides())

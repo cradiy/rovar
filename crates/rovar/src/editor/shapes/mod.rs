@@ -98,6 +98,7 @@ impl Workspace {
         self.sync_fields(cx);
         cx.notify();
     }
+    #[cfg(test)]
     pub(super) fn content_elements(
         &self,
         window: &Window,
@@ -116,7 +117,16 @@ impl Workspace {
         cx: &mut Context<Self>,
         frame: Option<usize>,
     ) -> Vec<AnyElement> {
-        let index = self.scene_index();
+        self.content_elements_indexed(window, cx, frame, self.scene_index())
+    }
+
+    pub(super) fn content_elements_indexed(
+        &self,
+        window: &Window,
+        cx: &mut Context<Self>,
+        frame: Option<usize>,
+        index: Rc<super::scene_index::Index>,
+    ) -> Vec<AnyElement> {
         let board_at = |id: &usize| index.boards.get(id).map(|i| &self.boards[*i]);
         let text_at = |id: &usize| index.texts.get(id).map(|i| &self.texts[*i]);
         let shape_at = |id: &usize| index.shapes.get(id).map(|i| &self.shapes[*i]);

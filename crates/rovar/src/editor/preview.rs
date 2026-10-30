@@ -139,7 +139,7 @@ impl Workspace {
             .text_color(TEXT.color())
             .font_family(crate::ui::font::family(cx))
             .on_paint_before_children(move |rect, _, _, _| bounds.set(rect))
-            .child(self.scene_content(window, cx))
+            .child(self.scene_content(window, self.scene_index(), cx))
             // Cover all editable scene children; selection is handled here so
             // text editing, resize handles, drop and context menus cannot mutate
             // the server snapshot.

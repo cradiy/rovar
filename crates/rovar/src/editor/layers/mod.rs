@@ -126,10 +126,9 @@ impl Workspace {
             )
     }
 
-    fn layer_rows(&self) -> Rc<Vec<Layer>> {
-        let index = self.scene_index();
+    fn layer_rows(&self, index: &Rc<super::scene_index::Index>) -> Rc<Vec<Layer>> {
         if let Some(cached) = self.sidebar.rows.borrow().as_ref()
-            && Rc::ptr_eq(&cached.index, &index)
+            && Rc::ptr_eq(&cached.index, index)
             && cached.folded == self.sidebar.folded
         {
             return cached.rows.clone();
@@ -189,7 +188,7 @@ impl Workspace {
         visit(None, 0, &children, &kinds, &self.sidebar.folded, &mut rows);
         let rows = Rc::new(rows);
         *self.sidebar.rows.borrow_mut() = Some(RowsCache {
-            index,
+            index: index.clone(),
             folded: self.sidebar.folded.clone(),
             rows: rows.clone(),
         });
@@ -408,7 +407,11 @@ impl Workspace {
             )
     }
 
-    pub(super) fn sidebar(&self, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn sidebar(
+        &self,
+        index: &Rc<super::scene_index::Index>,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         self.layer_row_bounds.borrow_mut().clear();
         let surface = sidebar_surface()
             .id("layers-panel")
@@ -505,7 +508,7 @@ impl Workspace {
                     .child(self.pages_panel(cx))
                     .child(self.organization_actions(cx))
                     .child(self.layer_summary(cx));
-                let rows = self.layer_rows();
+                let rows = self.layer_rows(index);
                 if rows.is_empty() {
                     el.child(panels::empty_state(
                         GpuiIcons::LucideLayers,
