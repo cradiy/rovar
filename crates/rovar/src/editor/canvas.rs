@@ -89,6 +89,46 @@ impl Render for CanvasScene {
 }
 
 impl Workspace {
+    fn artwork_controls(&self, window: &Window, cx: &mut Context<Self>) -> Div {
+        if self.presentation.playback.is_some() {
+            return div();
+        }
+        let origin = self.view.world(point(0., 0.));
+        let size = window.viewport_size();
+        let viewport = Rect {
+            x: origin.x,
+            y: origin.y,
+            width: f32::from(size.width) / self.view.zoom,
+            height: f32::from(size.height) / self.view.zoom,
+        };
+        let index = self.scene_index();
+        let retained = self.selection_ids().into_iter().chain(self.vector_edit);
+        let ids = index.visible_order(viewport, self.view.zoom, retained);
+        div()
+            .absolute()
+            .size_full()
+            .children(ids.into_iter().filter_map(|id| {
+                if let Some(i) = index.boards.get(&id) {
+                    Some(self.board_controls(&self.boards[*i], cx).into_any_element())
+                } else if let Some(i) = index.shapes.get(&id)
+                    && (self.selected_shape == Some(id) || self.vector_edit == Some(id))
+                {
+                    Some(self.shape_controls(&self.shapes[*i], cx).into_any_element())
+                } else if let Some(i) = index.texts.get(&id)
+                    && self.selected_text == Some(id)
+                {
+                    Some(self.text_controls(&self.texts[*i], cx).into_any_element())
+                } else {
+                    None
+                }
+            }))
+            .children(
+                self.bezier_draft
+                    .as_ref()
+                    .map(|draft| self.shape_controls(&draft.shape, cx)),
+            )
+    }
+
     fn artwork(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
         let cacheable = !self.history.borrow().is_previewing()
             && self.gesture.is_none()
@@ -514,7 +554,7 @@ impl Workspace {
 
     pub(super) fn scene_content(
         &self,
-        _window: &Window,
+        window: &Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement + use<> {
         div()
@@ -525,6 +565,7 @@ impl Workspace {
             // Paint over artwork too, while keeping selection and guides on top.
             // Canvas does not insert a hitbox, so editing remains unobstructed.
             .when(self.view.zoom >= 8., |el| el.child(self.canvas_grid(true)))
+            .child(self.artwork_controls(window, cx))
             .children(self.bezier_hover_preview())
             .children(self.creation_preview())
             .child(self.grid_guides())
@@ -577,9 +618,6 @@ impl Workspace {
         let position = self.view.screen(point(board.rect.x, board.rect.y));
         let width = board.rect.width * self.view.zoom;
         let height = board.rect.height * self.view.zoom;
-        let selected = self.selected == Some(id)
-            && self.selected_text.is_none()
-            && self.selected_shape.is_none();
         div()
             .id(("artboard", id))
             .debug_selector(move || format!("artboard-{id}"))
@@ -694,107 +732,111 @@ impl Workspace {
                         .size_full(),
                     )
             })
+    }
+
+    fn board_controls(&self, board: &Artboard, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+        let id = board.id;
+        let position = self.view.screen(point(board.rect.x, board.rect.y));
+        let width = board.rect.width * self.view.zoom;
+        let height = board.rect.height * self.view.zoom;
+        let selected = self.selected == Some(id)
+            && self.selected_text.is_none()
+            && self.selected_shape.is_none();
+        div()
+            .id(("artboard-controls", id))
+            .absolute()
+            .left(px(position.x))
+            .top(px(position.y))
+            .w(px(width))
+            .h(px(height))
             .child(
-                self.mask_overlay(
-                    id,
-                    div()
-                        .absolute()
-                        .left_0()
-                        .top(px(-26.))
-                        .h(px(24.))
-                        .max_w(px(width.max(100.)))
-                        .overflow_hidden()
-                        .text_size(px(11.))
-                        .text_color(if selected {
-                            ACCENT.color()
-                        } else {
-                            MUTED.color()
-                        })
-                        .child(board.name.clone()),
-                ),
+                div()
+                    .debug_selector(move || format!("artboard-title-{id}"))
+                    .absolute()
+                    .left_0()
+                    .top(px(-26.))
+                    .h(px(24.))
+                    .max_w(px(width.max(100.)))
+                    .overflow_hidden()
+                    .text_size(px(11.))
+                    .text_color(if selected {
+                        ACCENT.color()
+                    } else {
+                        MUTED.color()
+                    })
+                    .child(board.name.clone()),
             )
             .when(selected && self.image_crop.is_none(), |el| {
                 el.child(
-                    self.mask_overlay(
-                        id,
-                        div()
-                            .absolute()
-                            .inset_0()
-                            .border_1()
-                            .border_color(ACCENT.color()),
-                    ),
+                    div()
+                        .absolute()
+                        .inset_0()
+                        .border_1()
+                        .border_color(ACCENT.color()),
                 )
-                .children(
-                    Handle::ALL
-                        .into_iter()
-                        .enumerate()
-                        .map(|(index, handle)| {
-                            let x = (handle.0 as f32 + 1.) * 0.5 * width;
-                            let y = (handle.1 as f32 + 1.) * 0.5 * height;
-                            let cursor = resize_cursor(handle);
-                            let corner = handle.0 != 0 && handle.1 != 0;
-                            let (left, top, hit_width, hit_height) = if handle.0 == 0 {
-                                (6., y - 6., (width - 12.).max(0.), 12.)
-                            } else if handle.1 == 0 {
-                                (x - 6., 6., 12., (height - 12.).max(0.))
-                            } else {
-                                (x - 6., y - 6., 12., 12.)
-                            };
-                            div()
-                                .id(("resize-handle", index))
-                                .debug_selector(move || format!("handle-{index}"))
-                                .absolute()
-                                .left(px(left))
-                                .top(px(top))
-                                .w(px(hit_width))
-                                .h(px(hit_height))
-                                .cursor(cursor)
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .when(corner, |el| {
-                                    el.child(
-                                        div()
-                                            .debug_selector(move || format!("board-corner-{index}"))
-                                            .size(px(7.))
-                                            .bg(Color::Handle.color())
-                                            .border_1()
-                                            .border_color(ACCENT.color()),
-                                    )
-                                })
-                                .on_mouse_down(
-                                    MouseButton::Left,
-                                    cx.listener(
-                                        move |this, event: &gpui::MouseDownEvent, window, cx| {
-                                            if this.space_down {
-                                                this.begin(
-                                                    GestureKind::Pan {
-                                                        original: this.view.pan,
-                                                    },
-                                                    event.position,
-                                                    event.button,
-                                                    window,
-                                                    cx,
-                                                );
-                                            } else if let Some(board) = this.selected_board() {
-                                                this.begin(
-                                                    GestureKind::Resize {
-                                                        id,
-                                                        original: board.rect,
-                                                        handle,
-                                                    },
-                                                    event.position,
-                                                    event.button,
-                                                    window,
-                                                    cx,
-                                                );
-                                            }
-                                        },
-                                    ),
-                                )
+                .children(Handle::ALL.into_iter().enumerate().map(|(index, handle)| {
+                    let x = (handle.0 as f32 + 1.) * 0.5 * width;
+                    let y = (handle.1 as f32 + 1.) * 0.5 * height;
+                    let cursor = resize_cursor(handle);
+                    let corner = handle.0 != 0 && handle.1 != 0;
+                    let (left, top, hit_width, hit_height) = if handle.0 == 0 {
+                        (6., y - 6., (width - 12.).max(0.), 12.)
+                    } else if handle.1 == 0 {
+                        (x - 6., 6., 12., (height - 12.).max(0.))
+                    } else {
+                        (x - 6., y - 6., 12., 12.)
+                    };
+                    div()
+                        .id(("resize-handle", index))
+                        .debug_selector(move || format!("handle-{index}"))
+                        .absolute()
+                        .left(px(left))
+                        .top(px(top))
+                        .w(px(hit_width))
+                        .h(px(hit_height))
+                        .cursor(cursor)
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .when(corner, |el| {
+                            el.child(
+                                div()
+                                    .debug_selector(move || format!("board-corner-{index}"))
+                                    .size(px(7.))
+                                    .bg(Color::Handle.color())
+                                    .border_1()
+                                    .border_color(ACCENT.color()),
+                            )
                         })
-                        .map(|el| self.mask_overlay(id, el)),
-                )
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(move |this, event: &gpui::MouseDownEvent, window, cx| {
+                                if this.space_down {
+                                    this.begin(
+                                        GestureKind::Pan {
+                                            original: this.view.pan,
+                                        },
+                                        event.position,
+                                        event.button,
+                                        window,
+                                        cx,
+                                    );
+                                } else if let Some(board) = this.selected_board() {
+                                    this.begin(
+                                        GestureKind::Resize {
+                                            id,
+                                            original: board.rect,
+                                            handle,
+                                        },
+                                        event.position,
+                                        event.button,
+                                        window,
+                                        cx,
+                                    );
+                                }
+                            }),
+                        )
+                }))
             })
     }
 

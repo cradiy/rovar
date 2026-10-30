@@ -232,7 +232,6 @@ impl Workspace {
         let position = self.view.screen(origin + point(text.rect.x, text.rect.y));
         let width = text.rect.width * self.view.zoom;
         let height = text.rect.height * self.view.zoom;
-        let selected = self.selected_text == Some(id);
         let element = div()
             .id(("text-box", id))
             .on_mouse_down(
@@ -313,76 +312,87 @@ impl Workspace {
                 self.focus.clone(),
                 self.hierarchy.effects.get(&id).cloned().unwrap_or_default(),
                 cx,
-            ))
-            .when(selected, |el| {
+            ));
+        crate::scene::rotation::surface(
+            element,
+            text.layer.rotation,
+            width,
+            height,
+            self.effect_padding(id),
+        )
+    }
+
+    pub(super) fn text_controls(
+        &self,
+        text: &TextBox,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement + use<> {
+        let id = text.id;
+        let origin = self.parent_origin(text.board);
+        let position = self.view.screen(origin + point(text.rect.x, text.rect.y));
+        let width = text.rect.width * self.view.zoom;
+        let height = text.rect.height * self.view.zoom;
+        let element = div()
+            .id(("text-controls", id))
+            .absolute()
+            .left(px(position.x))
+            .top(px(position.y))
+            .w(px(width))
+            .h(px(height))
+            .when(self.selected_text == Some(id), |el| {
                 el.child(
-                    self.mask_overlay(
-                        id,
-                        div()
-                            .absolute()
-                            .inset_0()
-                            .border_1()
-                            .border_color(ACCENT.color()),
-                    ),
+                    div()
+                        .absolute()
+                        .inset_0()
+                        .border_1()
+                        .border_color(ACCENT.color()),
                 )
-                .children(
-                    Handle::ALL
-                        .into_iter()
-                        .enumerate()
-                        .map(|(index, handle)| {
-                            let x = (handle.0 as f32 + 1.) * 0.5 * width;
-                            let y = (handle.1 as f32 + 1.) * 0.5 * height;
-                            let cursor = rotation::handle_cursor(handle, text.layer.rotation);
+                .children(Handle::ALL.into_iter().enumerate().map(|(index, handle)| {
+                    let x = (handle.0 as f32 + 1.) * 0.5 * width;
+                    let y = (handle.1 as f32 + 1.) * 0.5 * height;
+                    let cursor = rotation::handle_cursor(handle, text.layer.rotation);
+                    div()
+                        .id(("text-handle", index))
+                        .debug_selector(move || format!("text-handle-{index}"))
+                        .absolute()
+                        .left(px(x - 6.))
+                        .top(px(y - 6.))
+                        .size(px(12.))
+                        .cursor(cursor)
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .child(
                             div()
-                                .id(("text-handle", index))
-                                .debug_selector(move || format!("text-handle-{index}"))
-                                .absolute()
-                                .left(px(x - 6.))
-                                .top(px(y - 6.))
-                                .size(px(12.))
-                                .cursor(cursor)
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .child(
-                                    div()
-                                        .size(px(7.))
-                                        .bg(Color::Handle.color())
-                                        .border_1()
-                                        .border_color(ACCENT.color()),
-                                )
-                                .on_mouse_down(
-                                    MouseButton::Left,
-                                    cx.listener(
-                                        move |this, event: &gpui::MouseDownEvent, window, cx| {
-                                            let event = &gpui::MouseDownEvent {
-                                                position: window.raw_mouse_position(),
-                                                ..event.clone()
-                                            };
-                                            if let Some(text) = this.selected_text() {
-                                                this.begin(
-                                                    GestureKind::Text {
-                                                        id,
-                                                        original: text.rect,
-                                                        handle: Some(handle),
-                                                    },
-                                                    event.position,
-                                                    event.button,
-                                                    window,
-                                                    cx,
-                                                );
-                                            }
+                                .size(px(7.))
+                                .bg(Color::Handle.color())
+                                .border_1()
+                                .border_color(ACCENT.color()),
+                        )
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(move |this, event: &gpui::MouseDownEvent, window, cx| {
+                                let event = &gpui::MouseDownEvent {
+                                    position: window.raw_mouse_position(),
+                                    ..event.clone()
+                                };
+                                if let Some(text) = this.selected_text() {
+                                    this.begin(
+                                        GestureKind::Text {
+                                            id,
+                                            original: text.rect,
+                                            handle: Some(handle),
                                         },
-                                    ),
-                                )
-                        })
-                        .map(|el| self.mask_overlay(id, el)),
-                )
-                .children(
-                    self.rotation_handles(id, width, height, 0., cx)
-                        .into_iter()
-                        .map(|el| self.mask_overlay(id, el)),
-                )
+                                        event.position,
+                                        event.button,
+                                        window,
+                                        cx,
+                                    );
+                                }
+                            }),
+                        )
+                }))
+                .children(self.rotation_handles(id, width, height, 0., cx))
             });
         crate::scene::rotation::surface(
             element,

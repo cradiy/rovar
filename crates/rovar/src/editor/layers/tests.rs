@@ -125,6 +125,45 @@ fn floating_sidebar_blocks_drawing_and_scroll_and_resources_remain_empty(cx: &mu
             assert_eq!(this.shapes[0].board, None);
         })
         .unwrap();
+    // A selected frame's resize target stays behind the sidebar even when
+    // document effects require isolated artwork captures.
+    let covered_corner = point(panel.right() - px(30.), panel.bottom() - px(40.));
+    window
+        .update(&mut visual.cx, |this, _, cx| {
+            this.draw_tool = None;
+            this.view.pan = point(0., 0.);
+            this.view.zoom = 1.;
+            let position = covered_corner - this.bounds.get().origin;
+            this.add_artboard(
+                Rect {
+                    x: f32::from(position.x),
+                    y: f32::from(position.y),
+                    width: 400.,
+                    height: 300.,
+                },
+                cx,
+            );
+            this.hierarchy.effects.insert(
+                this.selected.unwrap(),
+                vec![crate::scene::effects::Effect::BackgroundBlur {
+                    enabled: true,
+                    radius: 16.,
+                }],
+            );
+            cx.notify();
+        })
+        .unwrap();
+    draw(&mut visual);
+    visual.simulate_mouse_down(covered_corner, MouseButton::Left, Default::default());
+    window
+        .update(&mut visual.cx, |this, _, _| {
+            assert!(
+                this.gesture.is_none(),
+                "Covered resize handles must not receive input"
+            );
+        })
+        .unwrap();
+    visual.simulate_mouse_up(covered_corner, MouseButton::Left, Default::default());
 }
 
 #[gpui::test]

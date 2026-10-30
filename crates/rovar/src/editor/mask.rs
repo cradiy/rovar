@@ -19,23 +19,6 @@ impl Workspace {
         )
     }
 
-    pub(super) fn mask_overlay(&self, id: usize, element: impl IntoElement) -> gpui::AnyElement {
-        if self.presentation.playback.is_some() {
-            return div().into_any_element();
-        }
-        // A later blended layer can capture any preceding artwork. Keep editor
-        // controls outside those captures, including controls on other layers.
-        if self.scene_index.borrow().defer_overlays
-            || self
-                .ancestors(id)
-                .iter()
-                .any(|id| mask::source(&self.hierarchy, *id).is_some())
-        {
-            gpui::deferred(element).into_any_element()
-        } else {
-            element.into_any_element()
-        }
-    }
     pub(super) fn mask_hit(&self, id: usize, world: Point<f32>) -> bool {
         let included = self.layer_ids().into_iter().collect();
         let mut groups = mask::ancestors(&self.hierarchy, id, &included);

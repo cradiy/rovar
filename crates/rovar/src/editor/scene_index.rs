@@ -231,8 +231,6 @@ pub(super) struct Cache {
     order: Vec<usize>,
     parents: std::collections::BTreeMap<usize, usize>,
     index: Option<Rc<Index>>,
-    // Refreshed before constructing artwork and its editing controls each frame.
-    pub defer_overlays: bool,
 }
 
 impl Workspace {

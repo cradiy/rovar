@@ -4,7 +4,7 @@ use crate::i18n::t;
 use crate::ui::theme::Color;
 use gpui::{AnyElement, uniform_list};
 #[cfg(not(target_family = "wasm"))]
-use gpui_effects::{LiquidGlass, LiquidGlassAppearance};
+use gpui_effects::{FrostedGlass, FrostedGlassAppearance, LiquidGlass, LiquidGlassAppearance};
 use std::collections::HashSet;
 mod state;
 
@@ -31,8 +31,18 @@ pub(super) fn glass_surface() -> LiquidGlass {
 }
 
 #[cfg(not(target_family = "wasm"))]
-pub(super) fn sidebar_surface() -> LiquidGlass {
-    glass_surface_with_tint(Color::Panel.color().opacity(0.96))
+pub(super) fn sidebar_surface() -> FrostedGlass {
+    FrostedGlass::with_appearance(FrostedGlassAppearance {
+        blur_radius: px(32.),
+        tint: Color::Panel.color().opacity(0.96).into(),
+        edge_width: px(0.),
+        sheen: 0.,
+        ..if crate::ui::theme::is_dark() {
+            FrostedGlassAppearance::dark()
+        } else {
+            FrostedGlassAppearance::light()
+        }
+    })
 }
 
 #[cfg(not(target_family = "wasm"))]

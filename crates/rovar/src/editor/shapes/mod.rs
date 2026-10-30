@@ -200,7 +200,6 @@ impl Workspace {
             &mut self.boolean_cache.borrow_mut(),
             &active_masks,
         );
-        let mut compositing = false;
         let scopes: std::collections::BTreeSet<_> = self
             .boards
             .iter()
@@ -208,20 +207,10 @@ impl Workspace {
             .chain(self.shapes.iter().map(|s| (s.id, s.layer)))
             .chain(self.texts.iter().map(|t| (t.id, t.layer)))
             .chain(self.hierarchy.groups.iter().map(|(id, g)| (*id, g.layer)))
-            .filter(|(id, layer)| {
-                let composited = layer.composited();
-                compositing |= composited;
-                composited || masks.contains_key(id)
-            })
+            .filter(|(id, layer)| layer.composited() || masks.contains_key(id))
             .map(|(id, _)| id)
             .filter(|id| included.contains(id))
             .collect();
-        self.scene_index.borrow_mut().defer_overlays = compositing
-            || self
-                .hierarchy
-                .effects
-                .values()
-                .any(|effects| crate::scene::effects::backdrop::radius(effects) > 0.);
         let mut elements: Vec<_> = visible_order
             .iter()
             .copied()
@@ -501,7 +490,6 @@ impl Workspace {
         let position = self.view.screen(origin + point(shape.rect.x, shape.rect.y));
         let width = shape.rect.width * self.view.zoom;
         let height = shape.rect.height * self.view.zoom;
-        let selected = self.selected_shape == Some(id);
         // The bucket's upper zoom preserves tessellation precision throughout it.
         let geometry_zoom = self.view.zoom.log2().ceil().exp2();
         let geometry_scale = self.view.zoom / geometry_zoom;
@@ -874,7 +862,35 @@ impl Workspace {
             )
             .when(shape.kind.is_playable(), |el| {
                 el.child(self.media_surface(shape, outset))
-            })
+            });
+        crate::scene::rotation::surface(
+            element,
+            shape.layer.rotation,
+            width + outset * 2.,
+            height + outset * 2.,
+            self.effect_padding(id),
+        )
+    }
+
+    pub(super) fn shape_controls(
+        &self,
+        shape: &Shape,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement + use<> {
+        let id = shape.id;
+        let origin = self.parent_origin(shape.board);
+        let position = self.view.screen(origin + point(shape.rect.x, shape.rect.y));
+        let width = shape.rect.width * self.view.zoom;
+        let height = shape.rect.height * self.view.zoom;
+        let outset = GeometryKey::outset(shape, self.view.zoom);
+        let selected = self.selected_shape == Some(id);
+        let element = div()
+            .id(("shape-controls", id))
+            .absolute()
+            .left(px(position.x - outset))
+            .top(px(position.y - outset))
+            .w(px(width + outset * 2.))
+            .h(px(height + outset * 2.))
             .when(
                 selected
                     && self.vector_edit != Some(id)
@@ -882,131 +898,99 @@ impl Workspace {
                     && self.image_crop.is_none(),
                 |el| {
                     el.child(
-                        self.mask_overlay(
-                            id,
-                            div()
-                                .absolute()
-                                .left(px(outset))
-                                .top(px(outset))
-                                .w(px(width))
-                                .h(px(height))
-                                .border_1()
-                                .border_color(ACCENT.color()),
-                        ),
+                        div()
+                            .absolute()
+                            .left(px(outset))
+                            .top(px(outset))
+                            .w(px(width))
+                            .h(px(height))
+                            .border_1()
+                            .border_color(ACCENT.color()),
                     )
-                    .children(
-                        Handle::ALL
-                            .into_iter()
-                            .enumerate()
-                            .map(|(index, handle)| {
-                                let x = (handle.0 as f32 + 1.) * 0.5 * width + outset;
-                                let y = (handle.1 as f32 + 1.) * 0.5 * height + outset;
-                                let cursor = rotation::handle_cursor(handle, shape.layer.rotation);
-                                let corner = handle.0 != 0 && handle.1 != 0;
-                                // Reserve the corner targets; the rest of each edge resizes
-                                // without adding a visible midpoint or changing the hit slop.
-                                let (left, top, hit_width, hit_height) = if handle.0 == 0 {
-                                    (outset + 6., y - 6., (width - 12.).max(0.), 12.)
-                                } else if handle.1 == 0 {
-                                    (x - 6., outset + 6., 12., (height - 12.).max(0.))
-                                } else {
-                                    (x - 6., y - 6., 12., 12.)
-                                };
-                                div()
-                                    .id(("shape-handle", index))
-                                    .debug_selector(move || format!("shape-handle-{index}"))
-                                    .absolute()
-                                    .left(px(left))
-                                    .top(px(top))
-                                    .w(px(hit_width))
-                                    .h(px(hit_height))
-                                    .cursor(cursor)
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .when(corner, |el| {
-                                        el.child(
-                                            div()
-                                                .debug_selector(move || {
-                                                    format!("shape-corner-{index}")
-                                                })
-                                                .size(px(7.))
-                                                .bg(Color::Handle.color())
-                                                .border_1()
-                                                .border_color(ACCENT.color()),
-                                        )
-                                    })
-                                    .on_mouse_down(
-                                        MouseButton::Left,
-                                        cx.listener(
-                                            move |this,
-                                                  event: &gpui::MouseDownEvent,
-                                                  window,
-                                                  cx| {
-                                                let event = &gpui::MouseDownEvent {
-                                                    position: window.raw_mouse_position(),
-                                                    ..event.clone()
-                                                };
-                                                if this.space_down {
-                                                    this.begin(
-                                                        GestureKind::Pan {
-                                                            original: this.view.pan,
-                                                        },
-                                                        event.position,
-                                                        event.button,
-                                                        window,
-                                                        cx,
-                                                    );
-                                                } else if let Some(shape) = this.selected_shape() {
-                                                    this.begin(
-                                                        GestureKind::Shape {
-                                                            id,
-                                                            original: shape.rect,
-                                                            handle: Some(handle),
-                                                        },
-                                                        event.position,
-                                                        event.button,
-                                                        window,
-                                                        cx,
-                                                    );
-                                                }
-                                            },
-                                        ),
-                                    )
+                    .children(Handle::ALL.into_iter().enumerate().map(|(index, handle)| {
+                        let x = (handle.0 as f32 + 1.) * 0.5 * width + outset;
+                        let y = (handle.1 as f32 + 1.) * 0.5 * height + outset;
+                        let cursor = rotation::handle_cursor(handle, shape.layer.rotation);
+                        let corner = handle.0 != 0 && handle.1 != 0;
+                        // Reserve the corner targets; the rest of each edge resizes
+                        // without adding a visible midpoint or changing the hit slop.
+                        let (left, top, hit_width, hit_height) = if handle.0 == 0 {
+                            (outset + 6., y - 6., (width - 12.).max(0.), 12.)
+                        } else if handle.1 == 0 {
+                            (x - 6., outset + 6., 12., (height - 12.).max(0.))
+                        } else {
+                            (x - 6., y - 6., 12., 12.)
+                        };
+                        div()
+                            .id(("shape-handle", index))
+                            .debug_selector(move || format!("shape-handle-{index}"))
+                            .absolute()
+                            .left(px(left))
+                            .top(px(top))
+                            .w(px(hit_width))
+                            .h(px(hit_height))
+                            .cursor(cursor)
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .when(corner, |el| {
+                                el.child(
+                                    div()
+                                        .debug_selector(move || format!("shape-corner-{index}"))
+                                        .size(px(7.))
+                                        .bg(Color::Handle.color())
+                                        .border_1()
+                                        .border_color(ACCENT.color()),
+                                )
                             })
-                            .map(|el| self.mask_overlay(id, el)),
-                    )
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(
+                                    move |this, event: &gpui::MouseDownEvent, window, cx| {
+                                        let event = &gpui::MouseDownEvent {
+                                            position: window.raw_mouse_position(),
+                                            ..event.clone()
+                                        };
+                                        if this.space_down {
+                                            this.begin(
+                                                GestureKind::Pan {
+                                                    original: this.view.pan,
+                                                },
+                                                event.position,
+                                                event.button,
+                                                window,
+                                                cx,
+                                            );
+                                        } else if let Some(shape) = this.selected_shape() {
+                                            this.begin(
+                                                GestureKind::Shape {
+                                                    id,
+                                                    original: shape.rect,
+                                                    handle: Some(handle),
+                                                },
+                                                event.position,
+                                                event.button,
+                                                window,
+                                                cx,
+                                            );
+                                        }
+                                    },
+                                ),
+                            )
+                    }))
                 },
             )
             .when(
                 selected && shape.kind.is_line() && self.vector_edit != Some(id),
-                |el| {
-                    el.children(
-                        self.line_handles(shape, outset, cx)
-                            .into_iter()
-                            .map(|el| self.mask_overlay(id, el)),
-                    )
-                },
+                |el| el.children(self.line_handles(shape, outset, cx)),
             )
             .when(
                 self.vector_edit == Some(id) || (shape.kind == ShapeKind::Bezier && id == 0),
-                |el| {
-                    el.children(
-                        self.bezier_handles(&self.vector_handle_shape(shape), outset, cx)
-                            .into_iter()
-                            .map(|el| self.mask_overlay(id, el)),
-                    )
-                },
+                |el| el.children(self.bezier_handles(&self.vector_handle_shape(shape), outset, cx)),
             )
             .when(
                 selected && self.vector_edit != Some(id) && self.image_crop.is_none(),
-                |el| {
-                    el.children(
-                        self.rotation_handles(id, width, height, outset, cx)
-                            .into_iter()
-                            .map(|el| self.mask_overlay(id, el)),
-                    )
-                },
+                |el| el.children(self.rotation_handles(id, width, height, outset, cx)),
             );
         crate::scene::rotation::surface(
             element,
