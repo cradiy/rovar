@@ -598,6 +598,43 @@ impl Workspace {
             Vec::new()
         };
         let zoom = self.view.zoom;
+        // Opaque fills cover native shadows' interior clip. Broad kernels also
+        // keep the native corner quadrature from exposing narrow-edge artifacts.
+        let corner_radius = shape.displayed_radii().into_iter().fold(0., f32::max);
+        let native_shadows = (paint
+            && rounded_rect.is_some()
+            && shape.kind == ShapeKind::Rectangle
+            && shape.fill_enabled
+            && !shape.fill_hidden
+            && shape.fill_mode == FillMode::Solid
+            && shape.fill_opacity == 1.
+            && shape.color.a == 1.
+            && shape.fill_layers.is_empty()
+            && key.stroke_width == 0.
+            && key.stroke_layers.is_empty()
+            && !effects.is_empty()
+            && effects.iter().all(|effect| {
+                matches!(effect, crate::scene::effects::Effect::Shadow(shadow)
+                    if shadow.kind == crate::scene::effects::ShadowKind::Drop
+                        && shadow.blur >= corner_radius * 3.
+                        && shape.rect.width + shadow.spread * 2. > 0.
+                        && shape.rect.height + shadow.spread * 2. > 0.)
+            }))
+        .then(|| {
+            effects
+                .iter()
+                .rev()
+                .filter_map(crate::scene::effects::Effect::shadow)
+                .filter(|shadow| shadow.visible())
+                .map(|shadow| gpui::BoxShadow {
+                    color: shadow.color.into(),
+                    offset: point(px(shadow.x * zoom), px(shadow.y * zoom)),
+                    blur_radius: px(shadow.blur * 0.5 * zoom),
+                    spread_radius: px(shadow.spread * zoom),
+                    inset: false,
+                })
+                .collect::<Vec<_>>()
+        });
         let needs_paths = rounded_rect.is_none()
             || key.stroke_width > 0.
             || !key.stroke_layers.is_empty()
@@ -736,7 +773,16 @@ impl Workspace {
                     }
                 }
             };
-            crate::scene::effects::paint_effects(bounds, &effects, zoom, window, &mut paint);
+            if let Some(shadows) = &native_shadows {
+                let rect = Bounds::new(
+                    bounds.origin + point(px(outset), px(outset)),
+                    gpui::size(px(width), px(height)),
+                );
+                window.paint_drop_shadows(rect, rounded_rect.unwrap(), shadows);
+                paint(window);
+            } else {
+                crate::scene::effects::paint_effects(bounds, &effects, zoom, window, &mut paint);
+            }
             if edit_hatch && let Some(geometry) = &geometry {
                 // Reuse the actual filled contour, including holes and curves.
                 // This is only a paint overlay; document fills and hitboxes stay intact.
