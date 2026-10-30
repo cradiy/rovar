@@ -9,6 +9,7 @@ mod files;
 mod home;
 mod language;
 mod loading;
+mod memory;
 mod menu;
 #[cfg(target_os = "macos")]
 pub(crate) mod native_menu;

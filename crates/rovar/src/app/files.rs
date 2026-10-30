@@ -505,6 +505,7 @@ impl Studio {
         }
         self.tabs.retain(|tab| tab.token != token);
         self.persist_session();
+        self.release_unused_memory(cx);
         cx.notify();
     }
     pub(super) fn begin_close(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -566,6 +567,7 @@ impl Studio {
                 self.tabs.clear();
             }
             self.persist_session();
+            self.release_unused_memory(cx);
             window.remove_window();
         }
     }
