@@ -83,7 +83,7 @@ impl Workspace {
                     canvas(
                         move |_, _, _| path.clone(),
                         |bounds, path, window, _| {
-                            paint_path(&path, bounds.origin, ACCENT.color().into(), window);
+                            paint_path(&path, bounds.origin, 1., ACCENT.color().into(), window);
                         },
                     )
                     .size_full(),
@@ -382,7 +382,7 @@ impl Workspace {
                         move |_, _, _| path.clone(),
                         |bounds, path, window, _| {
                             if let Some(path) = path {
-                                paint_path(&path, bounds.origin, ACCENT.color().into(), window);
+                                paint_path(&path, bounds.origin, 1., ACCENT.color().into(), window);
                             }
                         },
                     )

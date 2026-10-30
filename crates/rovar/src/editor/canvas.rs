@@ -8,6 +8,70 @@ use gpui::{CursorStyle, DispatchPhase, HitboxBehavior, MouseMoveEvent, MouseUpEv
 pub(super) struct CanvasScene {
     workspace: gpui::WeakEntity<Workspace>,
 }
+
+pub(super) struct ArtworkScene {
+    workspace: gpui::WeakEntity<Workspace>,
+    key: Option<ArtworkKey>,
+    view: Option<Viewport>,
+    #[cfg(test)]
+    pub renders: usize,
+}
+
+struct ArtworkKey {
+    revision: u64,
+    page: String,
+    view: Viewport,
+    index: Rc<super::scene_index::Index>,
+    selection: std::collections::BTreeSet<usize>,
+    dark: bool,
+}
+
+impl PartialEq for ArtworkKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.revision == other.revision
+            && self.page == other.page
+            && self.view == other.view
+            && Rc::ptr_eq(&self.index, &other.index)
+            && self.selection == other.selection
+            && self.dark == other.dark
+    }
+}
+
+impl ArtworkScene {
+    pub fn new(workspace: gpui::WeakEntity<Workspace>) -> Self {
+        Self {
+            workspace,
+            key: None,
+            view: None,
+            #[cfg(test)]
+            renders: 0,
+        }
+    }
+}
+
+impl Render for ArtworkScene {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        #[cfg(test)]
+        {
+            self.renders += 1;
+        }
+        let cache = self.key.is_some();
+        self.workspace
+            .update(cx, |workspace, cx| {
+                let content = div()
+                    .absolute()
+                    .size_full()
+                    .children(workspace.content_elements(window, cx));
+                if cache {
+                    gpui_effects::subtree_effect(content, gpui_effects::subtree_identity_shader())
+                        .into_any_element()
+                } else {
+                    content.into_any_element()
+                }
+            })
+            .unwrap_or_else(|_| div().into_any_element())
+    }
+}
 impl CanvasScene {
     pub fn new(workspace: gpui::WeakEntity<Workspace>) -> Self {
         Self { workspace }
@@ -25,6 +89,48 @@ impl Render for CanvasScene {
 }
 
 impl Workspace {
+    fn artwork(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
+        let cacheable = !self.history.borrow().is_previewing()
+            && self.gesture.is_none()
+            && self.vector_edit.is_none()
+            && self.draft.is_none()
+            && self.bezier_draft.is_none()
+            && self.image_crop.is_none()
+            && self.colors.dialog.is_none()
+            && !self.media.importing
+            && self.media.decoding.is_empty()
+            && self.media.image_loading.is_none()
+            && !self.svg.loading
+            && self.svg.pending.is_none()
+            && !self.shapes.iter().any(|s| s.kind.is_playable())
+            && !self.texts.iter().any(|t| t.editor.read(cx).editing);
+        let stationary = self.artwork.read(cx).view == Some(self.view);
+        let key = (cacheable && stationary).then(|| ArtworkKey {
+            revision: self.history.borrow().revision(),
+            page: self.pages.active.clone(),
+            view: self.view,
+            index: self.scene_index(),
+            selection: self.selection_ids(),
+            dark: crate::ui::theme::is_dark(),
+        });
+        let unchanged = self.artwork.update(cx, |artwork, cx| {
+            artwork.view = Some(self.view);
+            let unchanged = key.is_some() && artwork.key == key;
+            if artwork.key != key {
+                artwork.key = key;
+                cx.notify();
+            }
+            unchanged
+        });
+        if unchanged {
+            self.artwork
+                .clone()
+                .cached(div().absolute().size_full().style().clone())
+                .into_any_element()
+        } else {
+            self.artwork.clone().into_any_element()
+        }
+    }
     pub(super) fn editor(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let bounds_state = self.bounds.clone();
         let capture = self.capture.clone();
@@ -408,14 +514,14 @@ impl Workspace {
 
     pub(super) fn scene_content(
         &self,
-        window: &Window,
+        _window: &Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement + use<> {
         div()
             .absolute()
             .size_full()
             .when(self.view.zoom < 8., |el| el.child(self.canvas_grid(false)))
-            .children(self.content_elements(window, cx))
+            .child(self.artwork(cx))
             // Paint over artwork too, while keeping selection and guides on top.
             // Canvas does not insert a hitbox, so editing remains unobstructed.
             .when(self.view.zoom >= 8., |el| el.child(self.canvas_grid(true)))
@@ -763,5 +869,86 @@ impl Workspace {
             self.view.zoom * factor,
         );
         cx.notify();
+    }
+}
+
+#[cfg(test)]
+mod cache_tests {
+    use super::*;
+    use crate::editor::tests::{draw, open};
+
+    #[gpui::test]
+    fn artwork_reuses_overlays_and_refreshes_document_and_preview_changes(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let handle = open(cx);
+        handle
+            .update(cx, |w, _, cx| {
+                w.shapes.push(Shape::new(
+                    1,
+                    None,
+                    ShapeKind::Rectangle,
+                    Rect {
+                        x: 40.,
+                        y: 40.,
+                        width: 80.,
+                        height: 60.,
+                    },
+                ));
+                cx.notify();
+            })
+            .unwrap();
+        let mut visual = gpui::VisualTestContext::from_window(handle.into(), cx);
+        draw(&mut visual);
+        draw(&mut visual);
+        let renders = handle
+            .update(&mut visual.cx, |w, _, cx| w.artwork.read(cx).renders)
+            .unwrap();
+        handle
+            .update(&mut visual.cx, |w, _, cx| {
+                w.pick_hover = Some(1);
+                cx.notify();
+            })
+            .unwrap();
+        draw(&mut visual);
+        assert_eq!(
+            handle
+                .update(&mut visual.cx, |w, _, cx| w.artwork.read(cx).renders)
+                .unwrap(),
+            renders
+        );
+        assert!(visual.debug_bounds("shape-1").is_some());
+
+        for change in 0..4 {
+            let before = handle
+                .update(&mut visual.cx, |w, _, cx| w.artwork.read(cx).renders)
+                .unwrap();
+            handle
+                .update(&mut visual.cx, |w, _, cx| {
+                    match change {
+                        0 => w.view.pan.x += 15.,
+                        1 => {
+                            w.shapes[0].color = gpui::rgb(0x194e73);
+                            w.history.borrow_mut().mark_changed();
+                        }
+                        2 => {
+                            w.shapes[0].rect.width += 20.;
+                        }
+                        _ => {
+                            w.history.borrow_mut().begin_preview();
+                            w.shapes[0].color = gpui::rgb(0x739a24);
+                        }
+                    }
+                    cx.notify();
+                })
+                .unwrap();
+            draw(&mut visual);
+            assert!(
+                handle
+                    .update(&mut visual.cx, |w, _, cx| w.artwork.read(cx).renders)
+                    .unwrap()
+                    > before
+            );
+        }
     }
 }

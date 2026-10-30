@@ -6,7 +6,80 @@ use super::{
     shape::Shape,
 };
 use gpui::{Point, point};
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    rc::Rc,
+};
+
+#[derive(PartialEq)]
+struct OutlineKey {
+    shape: Shape,
+    contours: Option<boolean::Contours>,
+    origin: Point<f32>,
+}
+
+#[derive(Default)]
+pub(crate) struct Cache(BTreeMap<usize, (OutlineKey, Rc<Outline>)>);
+
+impl Cache {
+    pub fn get(
+        &mut self,
+        h: &Hierarchy,
+        shapes: &[Shape],
+        boards: &[Artboard],
+        booleans: &mut boolean::Cache,
+        id: usize,
+    ) -> Rc<Outline> {
+        let (shape, contours) =
+            if let Some(s) = shapes.iter().find(|s| s.id == id && boolean::supported(s)) {
+                (s.clone(), None)
+            } else if let Some(g) = booleans.get(h, shapes, id) {
+                (g.shape, Some(g.contours))
+            } else {
+                self.0.remove(&id);
+                return Rc::default();
+            };
+        let origin = shape
+            .board
+            .and_then(|id| boards.iter().find(|b| b.id == id))
+            .map_or(point(0., 0.), |b| point(b.rect.x, b.rect.y));
+        let key = OutlineKey {
+            shape,
+            contours,
+            origin,
+        };
+        if let Some((old, outline)) = self.0.get(&id)
+            && *old == key
+        {
+            return outline.clone();
+        }
+        let outline = Rc::new(outline(h, shapes, boards, booleans, id));
+        self.0.insert(id, (key, outline.clone()));
+        outline
+    }
+
+    pub fn outlines(
+        &mut self,
+        h: &Hierarchy,
+        shapes: &[Shape],
+        boards: &[Artboard],
+        booleans: &mut boolean::Cache,
+        active: &BTreeSet<usize>,
+    ) -> BTreeMap<usize, Rc<Outline>> {
+        let sources: BTreeMap<_, _> = h
+            .groups
+            .keys()
+            .filter_map(|id| source(h, *id).map(|source| (*id, source)))
+            .collect();
+        let retained: BTreeSet<_> = sources.values().copied().collect();
+        self.0.retain(|id, _| retained.contains(id));
+        sources
+            .into_iter()
+            .filter(|(id, _)| active.contains(id))
+            .map(|(id, source)| (id, self.get(h, shapes, boards, booleans, source)))
+            .collect()
+    }
+}
 
 pub(crate) fn source(h: &Hierarchy, group: usize) -> Option<usize> {
     h.groups

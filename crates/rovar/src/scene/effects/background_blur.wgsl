@@ -22,7 +22,10 @@ fn effect(input: EffectInput, params: EffectParams) -> vec4<f32> {
     let inside = all(position >= clip.xy) && all(position < clip.zw);
     let coverage = (1.0 - smoothstep(-0.5, 0.5, distance)) * params.slots[3].w * select(0.0, 1.0, inside);
     let original = sample_effect_image(input, input.uv);
-    let blurred = sample_effect_second_image(input, input.uv);
-    let result = mix(vec4<f32>(original.rgb * original.a, original.a), vec4<f32>(blurred.rgb * blurred.a, blurred.a), coverage);
+    var result = vec4<f32>(original.rgb * original.a, original.a);
+    if coverage > 0.0 {
+        let blurred = sample_effect_second_image(input, input.uv);
+        result = mix(result, vec4<f32>(blurred.rgb * blurred.a, blurred.a), coverage);
+    }
     return vec4<f32>(result.rgb / max(result.a, 0.000001), result.a);
 }

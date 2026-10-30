@@ -54,7 +54,8 @@ impl Workspace {
         }));
         let toolbar = toolbar::Toolbar::new(window, cx);
         let workspace = cx.entity().downgrade();
-        let scene = cx.new(|_| canvas::CanvasScene::new(workspace));
+        let scene = cx.new(|_| canvas::CanvasScene::new(workspace.clone()));
+        let artwork = cx.new(|_| canvas::ArtworkScene::new(workspace));
         let pages = pages::State::new(window, cx);
         let history = SharedHistory::default();
         history.borrow_mut().set_page(pages.active.clone());
@@ -86,6 +87,7 @@ impl Workspace {
             batch_before: Vec::new(),
             batch_values: Vec::new(),
             scene,
+            artwork,
             toolbar,
             sidebar: Default::default(),
             panels: Default::default(),
@@ -103,6 +105,7 @@ impl Workspace {
             shape_paths: Default::default(),
             scene_index: Default::default(),
             boolean_cache: Default::default(),
+            mask_cache: Default::default(),
             media: Default::default(),
             svg: Default::default(),
             zoom_menu,

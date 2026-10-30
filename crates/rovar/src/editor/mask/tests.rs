@@ -26,6 +26,51 @@ fn setup(this: &mut Workspace, cx: &mut Context<Workspace>) {
 }
 
 #[gpui::test]
+fn mask_outline_cache_tracks_curve_edits_undo_and_board_movement(cx: &mut TestAppContext) {
+    open(cx)
+        .update(cx, |this, window, cx| {
+            setup(this, cx);
+            this.create_mask(window, cx);
+            let original = this.mask_outline(1);
+            this.view.pan = point(200., 300.);
+            this.view.zoom = 0.25;
+            assert!(Rc::ptr_eq(&original, &this.mask_outline(1)));
+            this.view.pan = point(10000., 10000.);
+            this.set_selection(BTreeSet::new(), cx);
+            assert!(this.content_elements(window, cx).is_empty());
+            this.view.pan = point(200., 300.);
+            assert!(original.contains(point(85., 15.)));
+            this.set_selection(BTreeSet::from([1]), cx);
+            let mut nodes = this.shapes[0].editable_nodes();
+            this.edit_shape(|shape| shape.apply_vector_nodes(&nodes, true));
+            let bounds = this.shapes[0].rect;
+            nodes[0].outgoing.x -= 10.;
+            this.edit_shape(|shape| shape.apply_vector_nodes(&nodes, true));
+            assert_eq!(this.shapes[0].rect, bounds);
+            assert!(!this.mask_outline(1).contains(point(85., 15.)));
+            this.undo_redo(false, window, cx);
+            assert!(this.mask_outline(1).contains(point(85., 15.)));
+            this.add_artboard(rect(200., 300., 400., 400.), cx);
+            this.shapes[0].board = this.boards.last().map(|b| b.id);
+            assert!(this.mask_outline(1).contains(point(285., 315.)));
+            this.boards.last_mut().unwrap().rect.x += 100.;
+            let moved = this.mask_outline(1);
+            assert!(!moved.contains(point(285., 315.)));
+            assert!(moved.contains(point(385., 315.)));
+            this.hierarchy.groups.clear();
+            this.mask_cache.borrow_mut().outlines(
+                &this.hierarchy,
+                &this.shapes,
+                &this.boards,
+                &mut this.boolean_cache.borrow_mut(),
+                &BTreeSet::new(),
+            );
+            assert_eq!(Rc::strong_count(&moved), 1);
+        })
+        .unwrap();
+}
+
+#[gpui::test]
 fn clipped_content_handles_remain_interactive_outside_the_mask(cx: &mut TestAppContext) {
     let handle = open(cx);
     handle
@@ -245,6 +290,8 @@ fn boolean_mask_holes_nested_masks_and_component_instances(cx: &mut TestAppConte
             this.set_selection(BTreeSet::from([3, 4]), cx);
             this.create_mask(window, cx);
             assert_eq!(this.selected_mask(), Some(5));
+            assert!(this.mask_hit(4, point(90., 10.)));
+            assert!(!this.mask_hit(4, point(50., 50.)));
             let options = crate::render::svg::render_options(false).unwrap();
             let jobs = this.component_export_jobs(window, cx).unwrap();
             let image = image::load_from_memory(&jobs[0].render(Format::Png, 1, &options).unwrap())
@@ -261,6 +308,7 @@ fn boolean_mask_holes_nested_masks_and_component_instances(cx: &mut TestAppConte
             this.snapshot_page(cx).0.validate().unwrap();
             this.set_selection(BTreeSet::from([1]), cx);
             this.edit_shape(|s| s.rect.width = 80.);
+            assert!(!this.mask_hit(4, point(90., 10.)));
             this.sync_components(window, cx);
             assert_eq!(this.group_bounds(instance).unwrap().width, 80.);
             this.shapes.push(Shape::new(

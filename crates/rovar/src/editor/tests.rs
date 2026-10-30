@@ -52,10 +52,11 @@ fn profile_canvas_document(cx: &mut TestAppContext) {
     let handle = open(cx);
     handle
         .update(cx, |w, window, cx| {
+            window.set_frame_diagnostics_enabled(true);
             let started = std::time::Instant::now();
             w.load_prepared_document(document, window, cx);
             eprintln!("load={:?}", started.elapsed());
-            w.panels.right_collapsed = true;
+            w.sidebar.collapsed = false;
         })
         .unwrap();
     let mut visual = VisualTestContext::from_window(handle.into(), cx);
@@ -70,9 +71,10 @@ fn profile_canvas_document(cx: &mut TestAppContext) {
                 cx.notify();
             })
             .unwrap();
-        let started = std::time::Instant::now();
-        draw(&mut visual);
-        eprintln!("first draw={:?}", started.elapsed());
+        let frame_time = |visual: &mut VisualTestContext| {
+            visual.update(|window, _| window.frame_diagnostics().unwrap().build_time)
+        };
+        eprintln!("first draw={:?}", frame_time(&mut visual));
         let mut elapsed = std::time::Duration::ZERO;
         for _ in 0..5 {
             handle
@@ -81,11 +83,7 @@ fn profile_canvas_document(cx: &mut TestAppContext) {
                     cx.notify();
                 })
                 .unwrap();
-            elapsed += visual.update(|window, cx| {
-                let started = std::time::Instant::now();
-                window.draw(cx).clear();
-                started.elapsed()
-            });
+            elapsed += frame_time(&mut visual);
         }
         eprintln!("pan frame average={:?}", elapsed / 5);
         let mut elapsed = std::time::Duration::ZERO;
@@ -96,27 +94,39 @@ fn profile_canvas_document(cx: &mut TestAppContext) {
                     cx.notify();
                 })
                 .unwrap();
-            elapsed += visual.update(|window, cx| {
-                let started = std::time::Instant::now();
-                window.draw(cx).clear();
-                started.elapsed()
-            });
+            elapsed += frame_time(&mut visual);
         }
         eprintln!("zoom frame average={:?}", elapsed / 5);
+        let hover = handle
+            .update(&mut visual.cx, |w, _, _| w.shapes.first().map(|s| s.id))
+            .unwrap();
+        let mut frames = Vec::new();
+        for i in 0..40 {
+            handle
+                .update(&mut visual.cx, |w, _, cx| {
+                    w.pick_hover = if i % 2 == 0 { hover } else { None };
+                    cx.notify();
+                })
+                .unwrap();
+            let elapsed = frame_time(&mut visual);
+            if i >= 5 {
+                frames.push(elapsed);
+            }
+        }
+        frames.sort_unstable();
+        eprintln!("hover frame: p50={:?} p95={:?}", frames[17], frames[33]);
     }
     let mut frames = Vec::new();
     for i in 0..120 {
         let phase = (i % 60) as f32 / 30.;
         let zoom = 0.08 * 10_f32.powf(if phase <= 1. { phase } else { 2. - phase });
-        let started = std::time::Instant::now();
         handle
             .update(&mut visual.cx, |w, _, cx| {
                 w.view.zoom_at(point(640., 400.), zoom);
                 cx.notify();
             })
             .unwrap();
-        visual.update(|window, cx| window.draw(cx).clear());
-        frames.push(started.elapsed());
+        frames.push(visual.update(|window, _| window.frame_diagnostics().unwrap().build_time));
     }
     frames.sort_unstable();
     eprintln!(
@@ -193,6 +203,21 @@ fn canvas_culls_offscreen_artwork_but_preserves_edges_and_editing(cx: &mut TestA
             stroked.stroke.align = crate::scene::shape::StrokeAlign::Outside;
             this.shapes.push(stroked);
             assert_eq!(this.content_elements(window, cx).len(), 2);
+            this.hierarchy.order = vec![2, 3, 1];
+            this.hierarchy.effects.insert(
+                1,
+                vec![crate::scene::effects::Effect::BackgroundBlur {
+                    enabled: true,
+                    radius: 24.,
+                }],
+            );
+            assert_eq!(
+                this.content_elements(window, cx).len(),
+                2,
+                "Offscreen background filters must not capture visible artwork"
+            );
+            this.hierarchy.effects.remove(&1);
+            this.hierarchy.order.clear();
             let text = this.make_text(
                 4,
                 None,

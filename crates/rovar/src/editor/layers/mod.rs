@@ -14,6 +14,14 @@ pub(super) struct Sidebar {
     pub(super) resources: bool,
     pub renaming: Option<usize>,
     pub(in crate::editor) folded: HashSet<usize>,
+    rows: std::cell::RefCell<Option<RowsCache>>,
+}
+
+#[derive(Clone)]
+struct RowsCache {
+    index: Rc<super::scene_index::Index>,
+    folded: HashSet<usize>,
+    rows: Rc<Vec<Layer>>,
 }
 
 // Only the enclosing surfaces sample the backdrop; their contents stay sharp.
@@ -108,7 +116,14 @@ impl Workspace {
             )
     }
 
-    fn layer_rows(&self) -> Vec<Layer> {
+    fn layer_rows(&self) -> Rc<Vec<Layer>> {
+        let index = self.scene_index();
+        if let Some(cached) = self.sidebar.rows.borrow().as_ref()
+            && Rc::ptr_eq(&cached.index, &index)
+            && cached.folded == self.sidebar.folded
+        {
+            return cached.rows.clone();
+        }
         use std::collections::HashMap;
         let children = self.hierarchy_children();
         let kinds: HashMap<_, _> = self
@@ -162,6 +177,12 @@ impl Workspace {
         }
         let mut rows = Vec::new();
         visit(None, 0, &children, &kinds, &self.sidebar.folded, &mut rows);
+        let rows = Rc::new(rows);
+        *self.sidebar.rows.borrow_mut() = Some(RowsCache {
+            index,
+            folded: self.sidebar.folded.clone(),
+            rows: rows.clone(),
+        });
         rows
     }
 

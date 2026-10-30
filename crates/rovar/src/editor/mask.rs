@@ -9,6 +9,16 @@ mod paint;
 mod tests;
 
 impl Workspace {
+    pub(super) fn mask_outline(&self, source: usize) -> Rc<mask::Outline> {
+        self.mask_cache.borrow_mut().get(
+            &self.hierarchy,
+            &self.shapes,
+            &self.boards,
+            &mut self.boolean_cache.borrow_mut(),
+            source,
+        )
+    }
+
     pub(super) fn mask_overlay(&self, id: usize, element: impl IntoElement) -> gpui::AnyElement {
         if self.presentation.playback.is_some() {
             return div().into_any_element();
@@ -34,14 +44,7 @@ impl Workspace {
         }
         groups.into_iter().all(|id| {
             let source = mask::source(&self.hierarchy, id).unwrap();
-            mask::outline(
-                &self.hierarchy,
-                &self.shapes,
-                &self.boards,
-                &mut self.boolean_cache.borrow_mut(),
-                source,
-            )
-            .contains(world)
+            self.mask_outline(source).contains(world)
         })
     }
     pub(super) fn prune_masks(&mut self) {
@@ -143,7 +146,7 @@ impl Workspace {
         &self,
         id: usize,
         element: gpui::AnyElement,
-        outline: mask::Outline,
+        outline: Rc<mask::Outline>,
     ) -> gpui::AnyElement {
         paint::Masked {
             id,

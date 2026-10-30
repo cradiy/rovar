@@ -1,5 +1,12 @@
 fn effect(input: EffectInput, params: EffectParams) -> vec4<f32> {
     let footprint = params.slots[2].zw;
+    let half_size = params.slots[0].xy * 0.5;
+    let rotation = abs(params.slots[0].zw);
+    let extent = vec2<f32>(dot(rotation, half_size), dot(rotation.yx, half_size));
+    let margin = vec2<f32>(params.slots[5].x * 1.5 + 0.5) + footprint * 3.0;
+    if any(abs(input.uv * input.size - params.slots[3].xy) > extent + margin) {
+        return vec4<f32>(0.0);
+    }
     let taps = vec2<i32>(ceil(footprint));
     var total = vec4<f32>(0.0);
     for (var y = 0; y < taps.y; y += 1) {

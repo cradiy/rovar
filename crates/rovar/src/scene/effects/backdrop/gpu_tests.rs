@@ -117,6 +117,56 @@ fn gpu_background_blur_preserves_alpha_and_world_radius_across_zoom() {
         readback.unmap();
         bytes
     };
+    let mut uniform = Scene::default();
+    let viewport = bounds(0., 0., 512., 512.);
+    let mut color = rgb(0x4f7a9e);
+    color.a = 0.4;
+    uniform.insert_primitive(Quad {
+        bounds: viewport,
+        content_mask: ContentMask { bounds: viewport },
+        background: color.into(),
+        ..Default::default()
+    });
+    uniform.finish();
+    let reference = render(&uniform);
+    for (rotation, ellipse) in [(37., false), (-23., true)] {
+        for radius in [12., 80.] {
+            let mut source = Scene::default();
+            source.replay(0..uniform.len(), &uniform);
+            source.finish();
+            let output = render(&filtered(
+                source,
+                Filter {
+                    region: Region {
+                        rect: Rect {
+                            x: 184.,
+                            y: 224.,
+                            width: 144.,
+                            height: 64.,
+                        },
+                        rotation,
+                        corners: [12.; 4],
+                        ellipse,
+                    },
+                    radius,
+                    opacity: 0.7,
+                    clip: ellipse.then_some(Rect {
+                        x: 224.,
+                        y: 224.,
+                        width: 80.,
+                        height: 80.,
+                    }),
+                },
+            ));
+            assert!(
+                output
+                    .iter()
+                    .zip(&reference)
+                    .all(|(a, b)| a.abs_diff(*b) <= 2),
+                "cropped blur changed a uniform translucent source, rotation={rotation}, ellipse={ellipse}, radius={radius}"
+            );
+        }
+    }
     for radius in [12., 80., 256.] {
         let mut reference: Option<Vec<u8>> = None;
         for zoom in [1., 2., 4.] {

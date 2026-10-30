@@ -420,7 +420,7 @@ impl Workspace {
                             .hierarchy
                             .groups
                             .get(&id)
-                            .is_some_and(|g| g.mask.is_some() || g.boolean.is_some())),
+                            .is_some_and(|g| g.boolean.is_some())),
             })
     }
 }

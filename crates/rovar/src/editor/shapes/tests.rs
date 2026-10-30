@@ -3,6 +3,67 @@ use super::{ShapeKind, *};
 use gpui::{TestAppContext, VisualTestContext};
 
 #[gpui::test]
+fn zoom_reuses_curve_meshes_until_more_precision_or_edited_geometry_is_needed(
+    cx: &mut TestAppContext,
+) {
+    let handle = open(cx);
+    handle
+        .update(cx, |w, _, cx| {
+            let mut shape = Shape::new(
+                1,
+                None,
+                ShapeKind::Ellipse,
+                Rect {
+                    x: 100.,
+                    y: 80.,
+                    width: 120.,
+                    height: 90.,
+                },
+            );
+            shape.stroke.enabled = true;
+            shape.stroke.width = 7.;
+            w.shapes.push(shape);
+            w.view.pan = point(300., 200.);
+            cx.notify();
+        })
+        .unwrap();
+    let mut visual = VisualTestContext::from_window(handle.into(), cx);
+    let mut previous = None;
+    for (zoom, edited) in [(0.7, false), (0.9, false), (1.4, false), (1.6, true)] {
+        handle
+            .update(&mut visual.cx, |w, _, cx| {
+                w.view.zoom = zoom;
+                if edited {
+                    w.shapes[0].rect.width += 30.;
+                }
+                cx.notify();
+            })
+            .unwrap();
+        draw(&mut visual);
+        let mesh = handle
+            .update(&mut visual.cx, |w, _, _| w.shape_paths.borrow()[&1].clone())
+            .unwrap();
+        if let Some(previous) = previous {
+            assert_eq!(Rc::ptr_eq(&previous, &mesh), zoom == 0.9);
+        }
+        let actual = visual.debug_bounds("shape-1").unwrap();
+        let outset = handle
+            .update(&mut visual.cx, |w, _, _| {
+                GeometryKey::outset(&w.shapes[0], zoom)
+            })
+            .unwrap();
+        assert!(
+            (f32::from(actual.size.width)
+                - (if edited { 150. } else { 120. }) * zoom
+                - outset * 2.)
+                .abs()
+                < 0.01
+        );
+        previous = Some(mesh);
+    }
+}
+
+#[gpui::test]
 fn paint_row_blur_does_not_reselect_the_previous_layer(cx: &mut TestAppContext) {
     for (tool, stroke) in [
         ("add-artboard", false),

@@ -194,8 +194,8 @@ impl Workspace {
         visited
     }
 
-    /// Accumulate primitive bounds once for all ordinary groups, including hidden
-    /// descendants. Special mask, boolean and layout bounds are resolved separately.
+    /// Accumulate conservative group bounds, including hidden descendants.
+    /// Special groups resolve exact paint and hit bounds separately.
     pub(super) fn group_content_bounds(&self) -> HashMap<usize, Rect> {
         let boards: HashMap<_, _> = self.boards.iter().map(|b| (b.id, b.rect)).collect();
         let objects: Vec<_> = self
@@ -274,14 +274,7 @@ impl Workspace {
 
     pub(super) fn group_bounds(&self, id: usize) -> Option<Rect> {
         if let Some(source) = crate::scene::mask::source(&self.hierarchy, id)
-            && let Some(bounds) = crate::scene::mask::outline(
-                &self.hierarchy,
-                &self.shapes,
-                &self.boards,
-                &mut self.boolean_cache.borrow_mut(),
-                source,
-            )
-            .bounds()
+            && let Some(bounds) = self.mask_outline(source).bounds()
         {
             return Some(bounds);
         }

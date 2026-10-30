@@ -1,10 +1,11 @@
 use crate::scene::{artboard::Viewport, mask::Outline};
 use gpui::*;
+use std::rc::Rc;
 
 pub(super) struct Masked {
     pub id: usize,
     pub child: AnyElement,
-    pub outline: Outline,
+    pub outline: Rc<Outline>,
     pub view: Viewport,
 }
 
@@ -50,19 +51,20 @@ impl Element for Masked {
         }
         let mut path = window.with_element_state(
             id.expect("mask has an element id"),
-            |cached: Option<(Outline, f32, Option<Path<Pixels>>)>, _| {
+            |cached: Option<(Rc<Outline>, Option<Path<Pixels>>)>, _| {
                 let cached = cached
-                    .filter(|(outline, zoom, _)| {
-                        *outline == self.outline && *zoom == self.view.zoom
+                    .filter(|(outline, _)| {
+                        Rc::ptr_eq(outline, &self.outline) || *outline == self.outline
                     })
-                    .unwrap_or_else(|| (self.outline.clone(), self.view.zoom, self.path()));
-                (cached.2.clone(), cached)
+                    .unwrap_or_else(|| (self.outline.clone(), self.path()));
+                (cached.1.clone(), cached)
             },
         )?;
         let offset = bounds.origin + point(px(self.view.pan.x), px(self.view.pan.y));
-        path.bounds.origin += offset;
+        path.bounds.origin = path.bounds.origin * self.view.zoom + offset;
+        path.bounds.size = path.bounds.size.map(|v| v * self.view.zoom);
         for vertex in &mut path.vertices {
-            vertex.xy_position += offset;
+            vertex.xy_position = vertex.xy_position * self.view.zoom + offset;
         }
         Some(path)
     }
@@ -104,7 +106,7 @@ impl Masked {
         ));
         for contour in &self.outline.0 {
             for (i, p) in contour.iter().enumerate() {
-                let p = point(px(p.x * self.view.zoom), px(p.y * self.view.zoom));
+                let p = point(px(p.x), px(p.y));
                 if i == 0 {
                     builder.move_to(p);
                 } else {

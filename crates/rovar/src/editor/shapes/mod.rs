@@ -160,11 +160,45 @@ impl Workspace {
             |id| has_booleans && crate::scene::boolean::consumed(&self.hierarchy, id, included);
         let mask_source =
             |id| has_masks && crate::scene::mask::is_source(&self.hierarchy, id, included);
-        let masks = crate::scene::mask::outlines(
+        let retained = self
+            .selection_ids()
+            .into_iter()
+            .chain(self.vector_edit)
+            .chain(
+                self.texts
+                    .iter()
+                    .filter(|t| t.editor.read(cx).editing)
+                    .map(|t| t.id),
+            );
+        let visible_order = index.visible_order(viewport, self.view.zoom, retained);
+        let mut active_nodes = BTreeSet::new();
+        for id in &visible_order {
+            let mut next = Some(*id);
+            while let Some(id) = next.filter(|id| included.contains(id)) {
+                if !active_nodes.insert(id) {
+                    break;
+                }
+                next = self
+                    .hierarchy
+                    .parents
+                    .get(&id)
+                    .copied()
+                    .or_else(|| self.hierarchy.groups.get(&id).and_then(|g| g.board))
+                    .or_else(|| shape_at(&id).and_then(|s| s.board))
+                    .or_else(|| text_at(&id).and_then(|t| t.board));
+            }
+        }
+        let active_masks = active_nodes
+            .iter()
+            .copied()
+            .filter(|id| crate::scene::mask::source(&self.hierarchy, *id).is_some())
+            .collect();
+        let masks = self.mask_cache.borrow_mut().outlines(
             &self.hierarchy,
             &self.shapes,
             &self.boards,
             &mut self.boolean_cache.borrow_mut(),
+            &active_masks,
         );
         let mut compositing = false;
         let scopes: std::collections::BTreeSet<_> = self
@@ -188,17 +222,6 @@ impl Workspace {
                 .effects
                 .values()
                 .any(|effects| crate::scene::effects::backdrop::radius(effects) > 0.);
-        let retained = self
-            .selection_ids()
-            .into_iter()
-            .chain(self.vector_edit)
-            .chain(
-                self.texts
-                    .iter()
-                    .filter(|t| t.editor.read(cx).editing)
-                    .map(|t| t.id),
-            );
-        let visible_order = index.visible_order(viewport, self.view.zoom, retained);
         let mut elements: Vec<_> = visible_order
             .iter()
             .copied()
@@ -304,11 +327,9 @@ impl Workspace {
                 .unwrap_or_default()
         };
         if scopes.is_empty()
-            && !self
-                .hierarchy
-                .effects
-                .keys()
-                .any(|id| included.contains(id) && self.background_blur_filter(*id).is_some())
+            && !self.hierarchy.effects.keys().any(|id| {
+                included.contains(id) && self.background_blur_filter(*id, viewport).is_some()
+            })
         {
             return elements.into_iter().map(|(_, el)| el).collect();
         }
@@ -319,7 +340,12 @@ impl Workspace {
         // The order visits parents before children. Resolve each object's
         // nearest compositing scope once instead of rescanning scene objects.
         let mut scope_parents = HashMap::new();
-        for id in order.iter() {
+        let render_order: Vec<_> = order
+            .iter()
+            .copied()
+            .filter(|id| active_nodes.contains(id))
+            .collect();
+        for id in &render_order {
             let parent = self
                 .hierarchy
                 .parents
@@ -341,7 +367,7 @@ impl Workspace {
         let mut groups: HashMap<usize, Vec<super::blend::paint::Layer>> = HashMap::new();
         let mut roots = Vec::new();
         let mut overlays = Vec::new();
-        for id in order.iter().rev().copied() {
+        for id in render_order.iter().rev().copied() {
             let mut content = rendered.remove(&id).unwrap_or_default();
             if mask_source(id) {
                 overlays.extend(content);
@@ -351,7 +377,7 @@ impl Workspace {
                 let children = super::blend::paint::compose(
                     groups.remove(&id).unwrap_or_default().into_iter().rev(),
                 );
-                if let Some(outline) = masks.get(&id) {
+                if let Some(outline) = masks.get(&id).filter(|_| !children.is_empty()) {
                     content.push(
                         self.mask_element(
                             id,
@@ -374,7 +400,7 @@ impl Workspace {
                 &mut roots
             };
             let backdrop = (!consumed(id))
-                .then(|| self.background_blur_filter(id))
+                .then(|| self.background_blur_filter(id, viewport))
                 .flatten();
             siblings.push((state, content, backdrop));
         }
@@ -385,7 +411,11 @@ impl Workspace {
             .collect()
     }
 
-    fn background_blur_filter(&self, id: usize) -> Option<crate::scene::effects::backdrop::Filter> {
+    fn background_blur_filter(
+        &self,
+        id: usize,
+        viewport: Rect,
+    ) -> Option<crate::scene::effects::backdrop::Filter> {
         use crate::scene::effects::backdrop::{self, Region};
         let radius = backdrop::radius(self.hierarchy.effects.get(&id)?);
         if radius == 0. {
@@ -408,6 +438,22 @@ impl Workspace {
                 )
             };
         let zoom = self.view.zoom;
+        let margin = 2. / zoom;
+        if viewport.width > 0.
+            && viewport.height > 0.
+            && !crate::scene::rotation::intersects(
+                rect,
+                rotation,
+                Rect {
+                    x: viewport.x - margin,
+                    y: viewport.y - margin,
+                    width: viewport.width + margin * 2.,
+                    height: viewport.height + margin * 2.,
+                },
+            )
+        {
+            return None;
+        }
         let position = self.view.screen(point(rect.x, rect.y));
         let region = Region {
             rect: Rect {
@@ -456,7 +502,10 @@ impl Workspace {
         let width = shape.rect.width * self.view.zoom;
         let height = shape.rect.height * self.view.zoom;
         let selected = self.selected_shape == Some(id);
-        let mut key = GeometryKey::new(shape, self.view.zoom);
+        // The bucket's upper zoom preserves tessellation precision throughout it.
+        let geometry_zoom = self.view.zoom.log2().ceil().exp2();
+        let geometry_scale = self.view.zoom / geometry_zoom;
+        let mut key = GeometryKey::new(shape, geometry_zoom);
         key.contours = contours;
         if !paint {
             key.stroke_width = 0.;
@@ -468,7 +517,8 @@ impl Workspace {
                 ShapeKind::Rectangle | ShapeKind::Image | ShapeKind::Svg
             ))
         .then(|| {
-            let [top_left, top_right, bottom_right, bottom_left] = key.radii.map(px);
+            let [top_left, top_right, bottom_right, bottom_left] =
+                key.radii.map(|r| px(r * geometry_scale));
             gpui::Corners {
                 top_left,
                 top_right,
@@ -477,7 +527,7 @@ impl Workspace {
             }
         });
         let outset = GeometryKey::outset(shape, self.view.zoom);
-        let path_offset = outset - key.outset;
+        let path_offset = outset - key.outset * geometry_scale;
         let fill = (paint
             && shape.fill_enabled
             && !shape.fill_hidden
@@ -583,7 +633,13 @@ impl Workspace {
                             );
                             window.paint_quad(gpui::fill(rect, fill.clone()).corner_radii(radii));
                         } else if let Some(geometry) = &geometry {
-                            paint_path(&geometry.fill, path_origin, fill.clone(), window);
+                            paint_path(
+                                &geometry.fill,
+                                path_origin,
+                                geometry_scale,
+                                fill.clone(),
+                                window,
+                            );
                         }
                     }
                     if let Some(gradient) = point_fill
@@ -607,6 +663,7 @@ impl Workspace {
                                     gpui::SubtreeInput::First => paint_path(
                                         &geometry.fill,
                                         path_origin,
+                                        geometry_scale,
                                         gpui::rgb(0xffffff).into(),
                                         window,
                                     ),
@@ -650,6 +707,7 @@ impl Workspace {
                                         gpui::SubtreeInput::First => paint_path(
                                             &geometry.fill,
                                             path_origin,
+                                            geometry_scale,
                                             Color::Handle.color().into(),
                                             window,
                                         ),
@@ -664,14 +722,15 @@ impl Workspace {
                 }
                 if let Some(g) = &geometry {
                     if let Some(path) = &g.stroke {
-                        paint_path(path, path_origin, stroke.clone(), window);
+                        paint_path(path, path_origin, geometry_scale, stroke.clone(), window);
                     }
                     for (layer, background) in g.layers.iter().zip(&stroke_layers) {
                         if let Some(path) = &layer.stroke {
-                            let offset = outset - layer.key.outset;
+                            let offset = outset - layer.key.outset * geometry_scale;
                             paint_path(
                                 path,
                                 bounds.origin + point(px(offset), px(offset)),
+                                geometry_scale,
                                 background.clone(),
                                 window,
                             );
@@ -687,6 +746,7 @@ impl Workspace {
                 paint_path(
                     &geometry.fill,
                     bounds.origin + point(px(path_offset), px(path_offset)),
+                    geometry_scale,
                     gpui::pattern_slash(ACCENT.color().opacity(0.65), 1.5 * scale, 14. * scale),
                     window,
                 );
@@ -977,13 +1037,15 @@ impl Workspace {
 fn paint_path(
     path: &Path<Pixels>,
     origin: Point<Pixels>,
+    scale: f32,
     color: gpui::Background,
     window: &mut Window,
 ) {
     let mut path = path.clone();
-    path.bounds.origin += origin;
+    path.bounds.origin = path.bounds.origin * scale + origin;
+    path.bounds.size = path.bounds.size.map(|v| v * scale);
     for vertex in &mut path.vertices {
-        vertex.xy_position += origin;
+        vertex.xy_position = vertex.xy_position * scale + origin;
     }
     window.paint_path(path, color);
 }
