@@ -226,7 +226,7 @@ pub(crate) fn save(
     write_document(&mut writer, &document, sources, text_system)?;
     // Reclaim superseded blocks only when there is substantial garbage.
     if let Err(error) = writer.compact_if_needed(path, 4 * 1024 * 1024) {
-        eprintln!("Document saved; container compaction deferred: {error:#}");
+        log::warn!("Document saved; container compaction deferred: {error:#}");
     }
     Ok(())
 }
@@ -335,7 +335,7 @@ fn write_document(
                 writer.put_bytes("preview", "png", &png)?;
                 keys.insert("preview".into());
             }
-            Err(error) => eprintln!("Could not render document preview: {error:#}"),
+            Err(error) => log::warn!("Could not render document preview: {error:#}"),
         }
     }
     writer.retain(&keys);

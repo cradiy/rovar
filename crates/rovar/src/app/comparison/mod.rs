@@ -268,7 +268,7 @@ impl Studio {
                         panel.navigate(panel.server_visible, panel.page, window, cx);
                     }
                     Err(error) => {
-                        eprintln!("Could not compare server version: {error:#}");
+                        log::warn!("Could not compare server version: {error:#}");
                         panel.failed = true;
                     }
                 }

@@ -30,7 +30,7 @@ impl Catalogs {
                 Ok(entries) => entries,
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
                 Err(error) => {
-                    eprintln!(
+                    log::warn!(
                         "Could not read language directory {}: {error}",
                         directory.display()
                     );
@@ -61,7 +61,7 @@ impl Catalogs {
                         .entry(language.to_string())
                         .or_default()
                         .push(resource),
-                    Err(error) => eprintln!("Skipping language file {}: {error}", path.display()),
+                    Err(error) => log::warn!("Skipping language file {}: {error}", path.display()),
                 }
             }
         }

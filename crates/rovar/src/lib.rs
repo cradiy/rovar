@@ -5,6 +5,8 @@ mod asset;
 mod document;
 mod editor;
 mod i18n;
+#[cfg(not(target_family = "wasm"))]
+mod logging;
 mod platform;
 mod remote;
 mod render;

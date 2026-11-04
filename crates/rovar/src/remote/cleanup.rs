@@ -24,7 +24,7 @@ impl Remote {
                     self.baseline_cleanup.last = None;
                 }
                 Ok(()) => {}
-                Err(error) => eprintln!("Sync baseline cleanup failed: {error}"),
+                Err(error) => log::warn!("Sync baseline cleanup failed: {error}"),
             }
         }
         if self.baseline_cleanup.scanning
@@ -53,7 +53,7 @@ impl Remote {
                         this.baseline_cleanup.pending = Some(candidates);
                     }
                     Ok(_) => {}
-                    Err(error) => eprintln!("Sync baseline scan failed: {error}"),
+                    Err(error) => log::warn!("Sync baseline scan failed: {error}"),
                 }
             });
         })

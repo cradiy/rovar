@@ -151,7 +151,7 @@ pub(crate) fn init() {
 
 fn load_settings(path: Option<PathBuf>) {
     let config = read_config(path.as_deref()).unwrap_or_else(|error| {
-        eprintln!("Could not read Rovar settings: {error}");
+        log::warn!("Could not read Rovar settings: {error}");
         serde_json::json!({})
     });
     let mut directories = Vec::new();

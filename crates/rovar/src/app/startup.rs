@@ -21,6 +21,8 @@ pub(super) fn window_options(cx: &gpui::App) -> WindowOptions {
 
 pub(crate) fn start() {
     #[cfg(not(target_family = "wasm"))]
+    let _logging = crate::logging::init();
+    #[cfg(not(target_family = "wasm"))]
     let application = gpui_platform::application();
     #[cfg(target_family = "wasm")]
     let application =
@@ -28,30 +30,31 @@ pub(crate) fn start() {
     application.with_assets(assets::Assets).run(|cx| {
         uic::init(cx);
         if let Err(error) = crate::ui::theme::init(cx) {
-            eprintln!("Could not initialize theme settings: {error}");
+            log::error!("Could not initialize theme settings: {error}");
             cx.quit();
             return;
         }
         #[cfg(target_family = "wasm")]
         web::load_fonts(cx);
         if let Err(error) = titlebar::init(cx) {
-            eprintln!("Could not initialize titlebar settings: {error}");
+            log::error!("Could not initialize titlebar settings: {error}");
             cx.quit();
             return;
         }
         i18n::init();
         #[cfg(any(unix, windows))]
         if let Err(error) = super::agent::start(&crate::agent::transport::directory(), cx) {
-            eprintln!("Could not start agent socket: {error:#}");
+            log::error!("Could not start agent socket: {error:#}");
         }
         #[cfg(target_os = "macos")]
         super::native_menu::init(cx);
         if let Err(error) = font::init(cx) {
-            eprintln!("Could not initialize UI font settings: {error}");
+            log::error!("Could not initialize UI font settings: {error}");
             cx.quit();
             return;
         }
         cx.on_window_closed(|cx, _| {
+            log::info!("Window closed; remaining={}", cx.windows().len());
             if cx.windows().is_empty() {
                 cx.quit();
             }
@@ -62,9 +65,13 @@ pub(crate) fn start() {
             cx.new(|cx| Studio::new(platform::workspace_directory(), window, cx))
         });
         if let Err(error) = result {
-            eprintln!("Could not open Rovar window: {error:#}");
+            log::error!("Could not open Rovar window: {error:#}");
             cx.quit();
         } else {
+            log::info!(
+                "Editor window opened; ui_font={}",
+                font::selected_family(cx)
+            );
             cx.activate(true);
             #[cfg(any(unix, windows))]
             if let Ok(handle) = result {

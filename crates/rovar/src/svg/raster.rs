@@ -73,7 +73,7 @@ impl SvgAsset {
                         }
                         Err(error) => {
                             state.failed = Some(Instant::now());
-                            eprintln!("Could not rasterize SVG: {error}");
+                            log::warn!("Could not rasterize SVG: {error}");
                         }
                     }
                 };

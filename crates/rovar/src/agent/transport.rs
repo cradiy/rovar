@@ -36,6 +36,9 @@ fn register(
     base: &std::path::Path,
     endpoint: &std::path::Path,
 ) -> anyhow::Result<tempfile::TempDir> {
+    if let Err(error) = discover(base) {
+        log::warn!("Could not clean up agent instance registrations: {error:#}");
+    }
     std::fs::create_dir_all(base)?;
     let directory = tempfile::Builder::new()
         .prefix("rovar-live-")
@@ -56,6 +59,23 @@ fn register(
     serde_json::to_writer(&mut file, &record)?;
     file.persist(directory.path().join("session.json"))?;
     Ok(directory)
+}
+
+fn remove_stale_registration(path: &std::path::Path) -> bool {
+    match std::fs::remove_dir_all(path) {
+        Ok(()) => {
+            log::debug!("Removed stale agent instance {}", path.display());
+            true
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+        Err(error) => {
+            log::warn!(
+                "Could not remove stale agent instance {}: {error}",
+                path.display()
+            );
+            false
+        }
+    }
 }
 
 pub(crate) const MAX_REQUEST_BYTES: usize = 24 * 1024 * 1024;
@@ -151,6 +171,7 @@ pub(crate) fn listen(base: &Path) -> anyhow::Result<(Server, mpsc::Receiver<Pend
 #[cfg(unix)]
 pub(crate) fn discover(base: &Path) -> anyhow::Result<serde_json::Value> {
     let mut sessions = Vec::new();
+    let mut removed = 0;
     let entries = match std::fs::read_dir(base) {
         Ok(entries) => entries,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
@@ -178,10 +199,23 @@ pub(crate) fn discover(base: &Path) -> anyhow::Result<serde_json::Value> {
         if let Some(record) = record
             && record["pid"].as_u64().is_some()
             && let Some(endpoint) = record["endpoint"].as_str()
-            && UnixStream::connect(endpoint).is_ok()
         {
-            sessions.push(record);
+            match UnixStream::connect(endpoint) {
+                Ok(_) => sessions.push(record),
+                Err(error)
+                    if matches!(
+                        error.kind(),
+                        std::io::ErrorKind::NotFound | std::io::ErrorKind::ConnectionRefused
+                    ) =>
+                {
+                    removed += usize::from(remove_stale_registration(&path));
+                }
+                Err(_) => {}
+            }
         }
+    }
+    if removed > 0 {
+        log::info!("Cleaned up {removed} stale agent instance registrations");
     }
     sessions.sort_by(|a, b| a["endpoint"].as_str().cmp(&b["endpoint"].as_str()));
     Ok(serde_json::json!(sessions))

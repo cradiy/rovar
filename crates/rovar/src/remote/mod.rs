@@ -551,7 +551,7 @@ impl Remote {
             cx.background_executor()
                 .spawn(async move {
                     if let Err(error) = Client::cleanup_downloads(&downloads) {
-                        eprintln!("Download cache cleanup failed: {error}");
+                        log::warn!("Download cache cleanup failed: {error}");
                     }
                 })
                 .detach();

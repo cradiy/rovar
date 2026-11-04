@@ -342,7 +342,7 @@ impl Workspace {
             Ok(tracks) => *self.auto_layout.grid.tracks.borrow_mut() = tracks,
             Err(error) => {
                 self.auto_layout.grid.tracks.borrow_mut().clear();
-                eprintln!("Could not resolve automatic layout: {error:#}");
+                log::warn!("Could not resolve automatic layout: {error:#}");
             }
         }
         let sources = crate::scene::components::sources(&page);

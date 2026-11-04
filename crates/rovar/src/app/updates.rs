@@ -81,7 +81,7 @@ impl Studio {
         cx.spawn(async move |_, cx| {
             let result = task.await;
             if let Err(error) = &result {
-                eprintln!("Could not check for Rovar updates: {error}");
+                log::warn!("Could not check for Rovar updates: {error}");
             }
             cx.update(|cx| {
                 let config = crate::settings::read(crate::settings::path().as_deref()).ok();

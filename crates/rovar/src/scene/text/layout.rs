@@ -412,7 +412,7 @@ impl TextLayout {
                     paint(window)
                 };
                 if let Err(error) = result {
-                    eprintln!("Could not render text: {error}");
+                    log::warn!("Could not render text: {error}");
                 }
             }
         }

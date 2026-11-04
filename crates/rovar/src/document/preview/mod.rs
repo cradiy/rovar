@@ -58,7 +58,7 @@ pub(crate) fn cache(
             Ok(Some(name))
         }
         Err(error) => {
-            eprintln!("Could not refresh document preview: {error:#}");
+            log::warn!("Could not refresh document preview: {error:#}");
             Ok(Some(original))
         }
     }

@@ -290,6 +290,7 @@ pub(crate) fn discover(base: &Path) -> anyhow::Result<serde_json::Value> {
         Err(error) => return Err(error.into()),
     };
     let mut sessions = Vec::new();
+    let mut removed = 0;
     for entry in entries.flatten() {
         if !entry
             .file_name()
@@ -307,10 +308,25 @@ pub(crate) fn discover(base: &Path) -> anyhow::Result<serde_json::Value> {
         if let Some(record) = record
             && record["pid"].as_u64().is_some()
             && let Some(endpoint) = record["endpoint"].as_str()
-            && connect(Path::new(endpoint)).is_ok()
         {
-            sessions.push(record);
+            match connect(Path::new(endpoint)) {
+                Ok(_) => sessions.push(record),
+                Err(error)
+                    if error.downcast_ref::<io::Error>().is_some_and(|error| {
+                        matches!(
+                            error.kind(),
+                            io::ErrorKind::NotFound | io::ErrorKind::ConnectionRefused
+                        )
+                    }) =>
+                {
+                    removed += usize::from(super::remove_stale_registration(&entry.path()));
+                }
+                Err(_) => {}
+            }
         }
+    }
+    if removed > 0 {
+        log::info!("Cleaned up {removed} stale agent instance registrations");
     }
     sessions.sort_by(|a, b| a["endpoint"].as_str().cmp(&b["endpoint"].as_str()));
     Ok(serde_json::json!(sessions))

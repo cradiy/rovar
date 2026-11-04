@@ -136,7 +136,7 @@ impl FontPicker {
                     }
                     Err(error) => {
                         this.failed = true;
-                        eprintln!("Could not read system fonts: {error}");
+                        log::warn!("Could not read system fonts: {error}");
                     }
                 }
                 this.filter(cx);

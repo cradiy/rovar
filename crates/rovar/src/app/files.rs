@@ -62,6 +62,7 @@ impl Studio {
             Ok(())
         })();
         if let Err(error) = result {
+            log::error!("Could not save session: {error:#}");
             self.error = Some(error.to_string());
         }
     }
@@ -163,6 +164,7 @@ impl Studio {
                 tab.saving = false;
                 match result {
                     Ok(preview) => {
+                        log::debug!("Document saved tab={token} revision={revision}");
                         tab.file.preview = preview;
                         tab.last_saved = json;
                         tab.saved_revision = Some(revision);
@@ -183,6 +185,7 @@ impl Studio {
                         }
                     }
                     Err(error) => {
+                        log::error!("Could not save document tab={token}: {error:#}");
                         tab.save_requested = false;
                         tab.error = Some(error.to_string());
                         tab.close_after_save = false;
@@ -328,6 +331,8 @@ impl Studio {
         let documents = self.directory.join("documents");
         let previews = self.directory.join("previews");
         let text_system = cx.text_system().clone();
+        log::info!("Loading document window={} tab={token}", self.window_id);
+        log::debug!("Loading document path={}", path.display());
         cx.spawn_in(window, async move |this, cx| {
             // The loading tab is not editable while its cached revision is checked.
             // Refresh requests remain queued even when all transfer slots are busy.
@@ -439,6 +444,7 @@ impl Studio {
                 });
                 match result {
                     Ok((editor, id, json)) => {
+                        log::info!("Document loaded tab={token} document={id}");
                         tab.saved_revision = Some(editor.read(cx).document_revision());
                         tab._subscription = Some(cx.observe(&editor, |_, _, cx| cx.notify()));
                         tab.editor = Some(editor);
@@ -460,6 +466,7 @@ impl Studio {
                         this.persist_session();
                     }
                     Err(error) => {
+                        log::error!("Could not load document tab={token}: {error:#}");
                         let title = tab.file.title.clone();
                         this.remove_tab(token, window, cx);
                         this.show_open_error(token, title, error.to_string(), window, cx);
@@ -500,6 +507,7 @@ impl Studio {
         }
     }
     fn remove_tab(&mut self, token: usize, window: &mut Window, cx: &mut Context<Self>) {
+        log::info!("Closing document window={} tab={token}", self.window_id);
         if self.active == Some(token) {
             self.select_tab(None, window, cx);
         }

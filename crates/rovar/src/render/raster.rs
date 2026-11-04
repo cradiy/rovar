@@ -26,7 +26,7 @@ pub(crate) async fn prepare() -> Result<()> {
 /// A thumbnail failure must not prevent saving the document itself.
 pub(crate) async fn prepare_preview() {
     if let Err(error) = prepare().await {
-        eprintln!("Could not load preview renderer: {error:#}");
+        log::warn!("Could not load preview renderer: {error:#}");
     }
 }
 

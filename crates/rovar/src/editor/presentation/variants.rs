@@ -115,7 +115,7 @@ impl Workspace {
             &self.components.definitions,
             &self.components.sets,
         ) {
-            eprintln!("Could not switch preview variant: {error:#}");
+            log::warn!("Could not switch preview variant: {error:#}");
             return;
         }
         self.pause_media(cx);

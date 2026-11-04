@@ -137,7 +137,7 @@ impl Cache {
         self.save()?;
         self.file.seek(SeekFrom::Start(0))?;
         if let Err(error) = Client::cleanup_downloads(self.checkpoint.parent().unwrap()) {
-            eprintln!("Download cache cleanup failed: {error}");
+            log::warn!("Download cache cleanup failed: {error}");
         }
         Ok(self.file)
     }

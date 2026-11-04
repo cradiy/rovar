@@ -11,6 +11,7 @@ mod tests;
 
 pub(super) fn start(base: &std::path::Path, cx: &mut gpui::App) -> anyhow::Result<()> {
     let (server, mut requests) = transport::listen(base)?;
+    log::info!("Agent endpoint started");
     let stop = server.stop.clone();
     cx.set_global(server);
     cx.set_global(tabs::Receipts::default());
@@ -21,6 +22,7 @@ pub(super) fn start(base: &std::path::Path, cx: &mut gpui::App) -> anyhow::Resul
     .detach();
     cx.spawn(async move |cx| {
         while let Some(pending) = requests.next().await {
+            let started = std::time::Instant::now();
             let mut prepared = cx.update(|cx| {
                 if stop.load(std::sync::atomic::Ordering::Acquire) {
                     return Err(Error::new("SESSION_CLOSED", "Editor endpoint has closed"));
@@ -56,6 +58,22 @@ pub(super) fn start(base: &std::path::Path, cx: &mut gpui::App) -> anyhow::Resul
                 }
                 Err(error) => Err(error),
             };
+            match &result {
+                Ok(_) => log::debug!(
+                    "Agent request method={} id={} elapsed_ms={}",
+                    pending.request.method,
+                    pending.request.request_id,
+                    started.elapsed().as_millis()
+                ),
+                Err(error) => log::warn!(
+                    "Agent request failed method={} id={} elapsed_ms={} code={} message={}",
+                    pending.request.method,
+                    pending.request.request_id,
+                    started.elapsed().as_millis(),
+                    error.code,
+                    error.message
+                ),
+            }
             let _ = pending
                 .reply
                 .send(protocol::response(&pending.request, result));
