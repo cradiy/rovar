@@ -313,6 +313,7 @@ pub(super) fn apply(
             ));
         }
         p::Operation::SetInteraction { .. }
+        | p::Operation::SetPrototype { .. }
         | p::Operation::SetStartFrame { .. }
         | p::Operation::Import { .. }
         | p::Operation::ReplaceSource { .. } => {
@@ -562,6 +563,14 @@ fn update(page: &mut Page, id: usize, props: p::Properties, creating: bool) -> R
         .transpose()?;
     if props.remove_layout {
         page.hierarchy.layouts.remove(&id);
+        if page.hierarchy.groups.contains_key(&id)
+            && let Some(interaction) = page.hierarchy.interactions.get_mut(&id)
+        {
+            interaction.scroll = crate::scene::presentation::ScrollAxis::None;
+            if interaction.is_empty() {
+                page.hierarchy.interactions.remove(&id);
+            }
+        }
     }
     super::layout::sizing(page, id, &props)?;
     if let Some(rect) = props.rect {

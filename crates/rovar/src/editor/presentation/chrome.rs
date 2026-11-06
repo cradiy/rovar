@@ -98,6 +98,9 @@ impl Workspace {
                             p.transition = Transition::Instant;
                             p.visual = transition::Visual::default();
                             p.overlay = None;
+                            this.presentation.scroll = scroll::State::default();
+                            this.presentation.scroll.active = true;
+                            this.presentation.raised.clear();
                             this.pause_media(cx);
                             cx.notify();
                         })),

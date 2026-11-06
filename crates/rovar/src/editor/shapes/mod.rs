@@ -141,6 +141,9 @@ impl Workspace {
             height: f32::from(viewport_size.height) / self.view.zoom,
         };
         let visible = |mut rect: Rect, board: Option<usize>, rotation: f32, margin: f32| {
+            if self.presentation.scroll.scrolling {
+                return true;
+            }
             // Before the canvas has its first layout, retain all objects.
             if viewport.width <= 0. || viewport.height <= 0. {
                 return true;
@@ -180,7 +183,15 @@ impl Workspace {
                     .filter(|t| t.editor.read(cx).editing)
                     .map(|t| t.id),
             );
-        let visible_order = index.visible_order(viewport, self.view.zoom, retained);
+        let visible_order = if self.presentation.scroll.scrolling {
+            order
+                .iter()
+                .copied()
+                .filter(|id| self.playback_visible(*id, viewport))
+                .collect()
+        } else {
+            index.visible_order(viewport, self.view.zoom, retained)
+        };
         let mut active_nodes = BTreeSet::new();
         for id in &visible_order {
             let mut next = Some(*id);
@@ -315,6 +326,10 @@ impl Workspace {
                 self.shape_element(&draft.shape, cx).into_any_element(),
             ));
         }
+        let elements: Vec<_> = elements
+            .into_iter()
+            .map(|(id, element)| (id, self.playback_scrolled_element(id, element)))
+            .collect();
         let layer_state = |id| {
             self.hierarchy
                 .groups
@@ -420,7 +435,10 @@ impl Workspace {
         if radius == 0. {
             return None;
         }
-        let rect = self.world_rect(id)?;
+        let mut rect = self.world_rect(id)?;
+        let offset = self.playback_scroll_offset(id);
+        rect.x -= offset.x;
+        rect.y -= offset.y;
         let (rotation, corners, ellipse, parent) =
             if let Some(board) = self.boards.iter().find(|b| b.id == id) {
                 (board.layer.rotation, [0.; 4], false, None)

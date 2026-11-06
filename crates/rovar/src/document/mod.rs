@@ -429,6 +429,12 @@ impl Page {
         for (id, interaction) in &self.hierarchy.interactions {
             ensure!(ids.contains(id), "Invalid interaction source");
             ensure!(
+                interaction.scroll.is_none()
+                    || boards.contains(id)
+                    || self.hierarchy.layouts.contains_key(id),
+                "Scrolling requires a frame or auto-layout container"
+            );
+            ensure!(
                 interaction.click_transition.valid() && interaction.hover_transition.valid(),
                 "Invalid transition duration"
             );
@@ -453,6 +459,9 @@ impl Page {
                                     self.shapes.iter().any(|shape| {
                                         shape.id == target && command.supports(shape.kind)
                                     })
+                                }
+                                crate::scene::presentation::Action::ScrollTo { .. } => {
+                                    ids.contains(&target)
                                 }
                                 _ => boards.contains(&target),
                             };

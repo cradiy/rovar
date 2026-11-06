@@ -13,6 +13,7 @@ impl Workspace {
         &self,
         source: usize,
         world: Point<f32>,
+        scroll_to: bool,
         property: Option<(
             &crate::scene::presentation::property::Property,
             &crate::document::Page,
@@ -30,6 +31,18 @@ impl Workspace {
                 || world.y > rect.y + rect.height
             {
                 return None;
+            }
+            if scroll_to {
+                return self
+                    .ancestors(id)
+                    .iter()
+                    .any(|parent| {
+                        self.hierarchy
+                            .interactions
+                            .get(parent)
+                            .is_some_and(|i| !i.scroll.is_none())
+                    })
+                    .then_some((id, Action::ScrollTo { target: id }));
             }
             if let Some((property, page)) = property {
                 return property.supports(page, id).then(|| {
@@ -74,6 +87,12 @@ impl Workspace {
             return;
         };
         let source = connection.source;
+        let scroll_to = self
+            .hierarchy
+            .interactions
+            .get(&source)
+            .and_then(|i| i.get(connection.trigger))
+            .is_some_and(|a| matches!(a, Action::ScrollTo { .. }));
         let property = self
             .hierarchy
             .interactions
@@ -92,7 +111,9 @@ impl Workspace {
             && f32::from(local.x) >= left
             && f32::from(local.x) <= f32::from(bounds.size.width) - right;
         let target = over_canvas
-            .then(|| self.connection_target(source, end, property.as_ref().zip(page.as_ref())))
+            .then(|| {
+                self.connection_target(source, end, scroll_to, property.as_ref().zip(page.as_ref()))
+            })
             .flatten();
         if let Some(connection) = &mut self.presentation.connection {
             connection.end = end;
@@ -179,6 +200,7 @@ impl Workspace {
             Action::Navigate { target }
             | Action::OpenOverlay { target, .. }
             | Action::Media { target, .. }
+            | Action::ScrollTo { target }
             | Action::SetProperty { target, .. } => self.world_bounds(target),
             Action::ChangeVariant { target } => self
                 .hierarchy

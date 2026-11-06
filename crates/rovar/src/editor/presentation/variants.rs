@@ -15,6 +15,7 @@ pub(super) struct Hover {
 }
 
 struct HoverSnapshot {
+    raised: Vec<usize>,
     media: Option<(usize, super::super::media::MediaSnapshot)>,
     page: crate::document::Page,
     current: usize,
@@ -67,12 +68,31 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if let Action::ScrollTo { target } = action {
+            self.playback_scroll_to(target, window, cx);
+            return;
+        }
         if let Action::SetProperty { target, property } = &action {
             if self.presentation.playback.is_some() {
                 let (mut page, _) = self.snapshot_page(cx);
                 if property.apply(&mut page, *target).is_ok() {
                     self.freeze_playback_visual(window, cx);
+                    let visibility = matches!(
+                        property,
+                        crate::scene::presentation::property::Property::Visible(_)
+                    )
+                    .then(|| page.hierarchy.groups.get(target))
+                    .flatten()
+                    .filter(|group| group.boolean.is_none())
+                    .map(|group| !group.layer.hidden);
                     self.apply_component_page(page, window, cx);
+                    if let Some(visible) = visibility {
+                        // Revealed containers form a playback-only stack above sibling controls.
+                        self.presentation.raised.retain(|id| id != target);
+                        if visible {
+                            self.presentation.raised.push(*target);
+                        }
+                    }
                     self.presentation.playback.as_mut().unwrap().visual =
                         transition::Visual::default();
                     cx.notify();
@@ -190,6 +210,12 @@ impl Workspace {
                         );
                     }
                     let included = self.layer_ids().into_iter().collect();
+                    let offset = self.playback_scroll_offset(source);
+                    for contour in &mut region.0 {
+                        for p in contour {
+                            *p -= offset;
+                        }
+                    }
                     let mut groups = mask::ancestors(&self.hierarchy, source, &included);
                     if mask::source(&self.hierarchy, source).is_some() {
                         groups.push(source);
@@ -197,18 +223,42 @@ impl Workspace {
                     let masks = groups
                         .into_iter()
                         .map(|id| {
-                            mask::outline(
+                            let source = mask::source(&self.hierarchy, id).unwrap();
+                            let mut outline = mask::outline(
                                 &self.hierarchy,
                                 &self.shapes,
                                 &self.boards,
                                 &mut self.boolean_cache.borrow_mut(),
-                                mask::source(&self.hierarchy, id).unwrap(),
-                            )
+                                source,
+                            );
+                            let offset = self.playback_scroll_offset(source);
+                            for contour in &mut outline.0 {
+                                for p in contour {
+                                    *p -= offset;
+                                }
+                            }
+                            outline
                         })
+                        .chain(
+                            self.presentation
+                                .scroll
+                                .nodes
+                                .get(&source)
+                                .and_then(|n| n.clip)
+                                .map(|clip| {
+                                    mask::Outline(vec![vec![
+                                        clip.origin,
+                                        clip.top_right(),
+                                        clip.bottom_right(),
+                                        clip.bottom_left(),
+                                    ]])
+                                }),
+                        )
                         .collect();
                     let page = self.snapshot_page(cx).0;
                     let p = self.presentation.playback.as_ref().unwrap();
                     let restore = Some(HoverSnapshot {
+                        raised: self.presentation.raised.clone(),
                         media: match action {
                             Action::Media { target, .. } => {
                                 Some((target, self.media_snapshot(target, cx)))
@@ -270,6 +320,7 @@ impl Workspace {
             self.freeze_playback_visual(window, cx);
         }
         self.apply_component_page(snapshot.page, window, cx);
+        self.presentation.raised = snapshot.raised;
         self.restore_playback_visual(snapshot.visual);
         let p = self.presentation.playback.as_mut().unwrap();
         p.current = snapshot.current;

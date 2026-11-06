@@ -19,6 +19,7 @@ fn action_label(action: &Option<Action>) -> &'static str {
         Some(Action::ChangeVariant { .. }) => "prototype-variant-action",
         Some(Action::Media { .. }) => "prototype-media-control",
         Some(Action::SetProperty { .. }) => "prototype-set-property",
+        Some(Action::ScrollTo { .. }) => "prototype-scroll-to",
     }
 }
 
@@ -74,6 +75,7 @@ impl Workspace {
                         Action::SetProperty { property, .. } => {
                             property.supports(&self.snapshot_page(cx).0, target)
                         }
+                        Action::ScrollTo { .. } => self.layer_ids().contains(&target),
                         Action::Media { command, .. } => self
                             .shapes
                             .iter()
@@ -119,6 +121,7 @@ impl Workspace {
                         .child(self.presentation_menu(None, Menu::Action, cx)),
                 );
         if let Some(id) = selected {
+            section = section.child(self.prototype_scroll_controls(id, cx));
             let trigger = self.presentation.trigger;
             let action = self
                 .hierarchy
@@ -225,6 +228,7 @@ impl Workspace {
                                         | Action::ChangeVariant { .. }
                                         | Action::Media { .. }
                                         | Action::SetProperty { .. }
+                                        | Action::ScrollTo { .. }
                                 )
                             ),
                             |el| {
@@ -233,7 +237,10 @@ impl Workspace {
                                         "prototype-variant-target"
                                     } else if matches!(action, Some(Action::Media { .. })) {
                                         "prototype-video-target"
-                                    } else if matches!(action, Some(Action::SetProperty { .. })) {
+                                    } else if matches!(
+                                        action,
+                                        Some(Action::SetProperty { .. } | Action::ScrollTo { .. })
+                                    ) {
                                         "prototype-element-target"
                                     } else {
                                         "prototype-frame-target"
@@ -246,7 +253,11 @@ impl Workspace {
                         .children(self.media_action_controls(id, trigger, action.clone(), cx))
                         .children(self.property_action_controls(id, trigger, &action, cx))
                         .when(
-                            action.is_some() && !matches!(action, Some(Action::Media { .. })),
+                            action.is_some()
+                                && !matches!(
+                                    action,
+                                    Some(Action::Media { .. } | Action::ScrollTo { .. })
+                                ),
                             |el| el.child(self.transition_controls(id, trigger, cx)),
                         )
                         .when(trigger == Trigger::Hover && action.is_some(), |el| {
@@ -293,7 +304,8 @@ impl Workspace {
             Action::Navigate { target }
             | Action::OpenOverlay { target, .. }
             | Action::Media { target, .. }
-            | Action::SetProperty { target, .. },
+            | Action::SetProperty { target, .. }
+            | Action::ScrollTo { target },
         ) = action
         {
             Some(target)
@@ -316,8 +328,11 @@ impl Workspace {
                 .find_map(|set| set.variants.get(&target.to_string()))
                 .cloned()
                 .unwrap_or_else(|| t("prototype-missing-variant").into())
-        } else if let Some(Action::Media { target, .. } | Action::SetProperty { target, .. }) =
-            action
+        } else if let Some(
+            Action::Media { target, .. }
+            | Action::SetProperty { target, .. }
+            | Action::ScrollTo { target },
+        ) = action
         {
             self.layer_name(target, cx)
         } else {
@@ -337,6 +352,7 @@ impl Workspace {
                         Action::ChangeVariant { .. }
                             | Action::Media { .. }
                             | Action::SetProperty { .. }
+                            | Action::ScrollTo { .. }
                     )
                 ))
         {
@@ -384,6 +400,13 @@ impl Workspace {
                                 Some(Action::Media { target, command }),
                             )
                         }),
+                );
+            } else if target_menu && matches!(action, Some(Action::ScrollTo { .. })) {
+                options.extend(
+                    self.prototype_scroll_targets(cx)
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, (target, name))| (i, name, Some(Action::ScrollTo { target }))),
                 );
             } else if target_menu && let Some(Action::SetProperty { ref property, .. }) = action {
                 let page = self.snapshot_page(cx).0;
@@ -438,6 +461,13 @@ impl Workspace {
                     t("prototype-set-property").to_owned(),
                     Some(property_action),
                 ));
+                if let Some((target, _)) = self.prototype_scroll_targets(cx).first() {
+                    options.push((
+                        8,
+                        t("prototype-scroll-to").to_owned(),
+                        Some(Action::ScrollTo { target: *target }),
+                    ));
+                }
                 options.push((0, t("prototype-none").to_owned(), None));
                 options.push((1, t("prototype-back").to_owned(), Some(Action::Back)));
                 let board = target

@@ -54,7 +54,8 @@ pub(super) fn describe(page: &Page, id: usize, ids: &BTreeMap<usize, uuid::Uuid>
         if let scene::Action::Navigate { target }
         | scene::Action::OpenOverlay { target, .. }
         | scene::Action::Media { target, .. }
-        | scene::Action::SetProperty { target, .. } = action
+        | scene::Action::SetProperty { target, .. }
+        | scene::Action::ScrollTo { target } = action
         {
             value["target"] = json!(ids.get(&target));
         }
@@ -62,7 +63,8 @@ pub(super) fn describe(page: &Page, id: usize, ids: &BTreeMap<usize, uuid::Uuid>
     };
     json!({"click":{"action":action(interaction.click),"transition":interaction.click_transition},
         "hover":{"action":action(interaction.hover),"transition":interaction.hover_transition,
-        "hover_exit":interaction.hover_exit}})
+        "hover_exit":interaction.hover_exit}, "scroll": interaction.scroll,
+        "fixed": interaction.fixed, "pass_through": interaction.pass_through})
 }
 
 pub(super) fn frame(page: &Page, target: &str, refs: &BTreeMap<String, String>) -> Result<usize> {
@@ -79,6 +81,38 @@ pub(super) fn apply(
     refs: &mut BTreeMap<String, String>,
     sets: &components::variants::Sets,
 ) -> Result<()> {
+    if let p::Operation::SetPrototype {
+        id,
+        scroll,
+        fixed,
+        pass_through,
+    } = operation
+    {
+        let id = model::lookup(page, &id, refs)?;
+        editable(page, id)?;
+        if scroll.is_some_and(|axis| !axis.is_none())
+            && !page.boards.iter().any(|b| b.id == id)
+            && !page.hierarchy.layouts.contains_key(&id)
+        {
+            return Err(Error::invalid(
+                "Scrolling requires a frame or auto-layout container",
+            ));
+        }
+        let settings = page.hierarchy.interactions.entry(id).or_default();
+        if let Some(scroll) = scroll {
+            settings.scroll = scroll;
+        }
+        if let Some(fixed) = fixed {
+            settings.fixed = fixed;
+        }
+        if let Some(pass_through) = pass_through {
+            settings.pass_through = pass_through;
+        }
+        if settings.is_empty() {
+            page.hierarchy.interactions.remove(&id);
+        }
+        return Ok(());
+    }
     let p::Operation::SetInteraction {
         id,
         trigger,
@@ -150,6 +184,9 @@ pub(super) fn apply(
         }
         dto::Action::None => None,
         dto::Action::Back => Some(scene::Action::Back),
+        dto::Action::ScrollTo { target } => Some(scene::Action::ScrollTo {
+            target: model::lookup(page, &target, refs)?,
+        }),
         dto::Action::CloseOverlay => Some(scene::Action::CloseOverlay),
         dto::Action::Navigate { target } => Some(scene::Action::Navigate {
             target: frame(page, &target, refs)?,

@@ -26,6 +26,9 @@ pub(crate) enum Action {
     },
     CloseOverlay,
     Back,
+    ScrollTo {
+        target: usize,
+    },
     ChangeVariant {
         target: uuid::Uuid,
     },
@@ -44,6 +47,7 @@ impl Action {
                 .and_then(|_| map(target))
                 .map(|target| Self::SetProperty { target, property }),
             Self::Navigate { target } => map(target).map(|target| Self::Navigate { target }),
+            Self::ScrollTo { target } => map(target).map(|target| Self::ScrollTo { target }),
             Self::OpenOverlay { target, settings } => {
                 map(target).map(|target| Self::OpenOverlay { target, settings })
             }
@@ -56,6 +60,29 @@ impl Action {
                 .and_then(|_| map(target))
                 .map(|target| Self::Media { target, command }),
         }
+    }
+}
+
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(any(unix, windows), derive(schemars::JsonSchema))]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum ScrollAxis {
+    #[default]
+    None,
+    Vertical,
+    Horizontal,
+    Both,
+}
+
+impl ScrollAxis {
+    pub fn is_none(&self) -> bool {
+        *self == Self::None
+    }
+    pub fn horizontal(self) -> bool {
+        matches!(self, Self::Horizontal | Self::Both)
+    }
+    pub fn vertical(self) -> bool {
+        matches!(self, Self::Vertical | Self::Both)
     }
 }
 
@@ -158,6 +185,12 @@ impl Transition {
 
 #[derive(Clone, Default, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub(crate) struct Interaction {
+    #[serde(default, skip_serializing_if = "ScrollAxis::is_none")]
+    pub scroll: ScrollAxis,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub fixed: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub pass_through: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub click: Option<Action>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -200,7 +233,11 @@ impl Interaction {
         }
     }
     pub fn is_empty(&self) -> bool {
-        self.click.is_none() && self.hover.is_none()
+        self.click.is_none()
+            && self.hover.is_none()
+            && self.scroll.is_none()
+            && !self.fixed
+            && !self.pass_through
     }
     pub fn remap(&self, mut map: impl FnMut(usize) -> Option<usize>) -> Option<Self> {
         let value = Self {

@@ -1830,6 +1830,11 @@ fn presentation_click_back_restart_and_exit_preserve_editor(cx: &mut TestAppCont
                 cx,
             );
             w.next_id += 1;
+            w.hierarchy
+                .interactions
+                .entry(label.id)
+                .or_default()
+                .pass_through = true;
             w.texts.push(label);
             w.set_selection(BTreeSet::from([second]), cx);
             w.view = Viewport {

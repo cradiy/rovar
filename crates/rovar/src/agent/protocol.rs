@@ -495,6 +495,13 @@ pub(crate) enum Operation {
     SetStartFrame {
         target: Option<String>,
     },
+    /// Configure prototype input and scrolling without replacing actions.
+    SetPrototype {
+        id: String,
+        scroll: Option<crate::scene::presentation::ScrollAxis>,
+        fixed: Option<bool>,
+        pass_through: Option<bool>,
+    },
     Create {
         /// Unique batch-local reference, beginning with $. Later operations may use it.
         #[serde(rename = "ref")]

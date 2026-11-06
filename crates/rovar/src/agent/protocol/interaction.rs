@@ -25,6 +25,9 @@ pub(crate) enum Action {
     },
     CloseOverlay,
     Back,
+    ScrollTo {
+        target: String,
+    },
     /// Target is an available variant definition UUID, not a page node UUID.
     ChangeVariant {
         target: String,

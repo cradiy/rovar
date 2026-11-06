@@ -270,6 +270,11 @@ trigger; preserve the other trigger and omit unchanged transition/hover-exit set
 Variant targets are the returned component definition IDs, not arbitrary node IDs.
 Navigation and media targets are existing page nodes or earlier batch references.
 Configure hover exit explicitly when the task calls for restoration or persistence.
+Use `set_prototype` to configure `scroll` (`none`, `vertical`, `horizontal`, or `both`)
+on frames and auto-layout containers, `fixed` positioning, and `pass_through` input.
+Container bounds define the viewport; overflowing children define the scroll range.
+Use a `scroll_to` action with a node target to reveal it through its scroll ancestors.
+Showing a group in Present brings it above sibling controls without changing document order.
 Setting an action configures Present-mode behavior; a static capture does not verify
 that navigation, variant switching, or media playback actually executed.
 

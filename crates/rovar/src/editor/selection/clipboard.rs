@@ -579,7 +579,7 @@ impl Workspace {
                 id_map.get(&target).copied().or_else(|| {
                     (same_document
                         && clipboard.source_page.as_deref() == Some(&self.pages.active)
-                        && self.boards.iter().any(|b| b.id == target))
+                        && self.layer_ids().contains(&target))
                     .then_some(target)
                 })
             });

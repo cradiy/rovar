@@ -89,7 +89,19 @@ impl Workspace {
     }
 
     pub(super) fn canvas_layer_order(&self) -> Vec<usize> {
-        let children = self.hierarchy_children();
+        let mut children = self.hierarchy_children();
+        if !self.presentation.raised.is_empty() {
+            let raised: HashMap<_, _> = self
+                .presentation
+                .raised
+                .iter()
+                .enumerate()
+                .map(|(rank, id)| (*id, rank))
+                .collect();
+            for siblings in children.values_mut() {
+                siblings.sort_by_key(|id| raised.get(id).map_or((0, 0), |rank| (1, *rank)));
+            }
+        }
         let states: HashMap<_, _> = self
             .boards
             .iter()

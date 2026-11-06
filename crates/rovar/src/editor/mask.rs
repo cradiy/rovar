@@ -131,11 +131,14 @@ impl Workspace {
         element: gpui::AnyElement,
         outline: Rc<mask::Outline>,
     ) -> gpui::AnyElement {
+        let mut view = self.view;
+        let offset = self.playback_scroll_offset(mask::source(&self.hierarchy, id).unwrap_or(id));
+        view.pan -= offset * view.zoom;
         paint::Masked {
             id,
             child: element,
             outline,
-            view: self.view,
+            view,
         }
         .into_any_element()
     }

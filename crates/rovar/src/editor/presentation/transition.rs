@@ -87,6 +87,7 @@ impl Workspace {
             },
         );
         let elements = self.content_elements_in_frame(window, cx, Some(board));
+        let bars = self.playback_scrollbars(board);
         self.view = view;
         div()
             .size_full()
@@ -102,6 +103,7 @@ impl Workspace {
                     .h(px(rect.height * zoom))
                     .overflow_hidden()
                     .children(elements)
+                    .children(bars)
                     .when_some(overlay, |el, overlay| {
                         let Some(overlay_rect) = self
                             .boards
@@ -129,6 +131,7 @@ impl Workspace {
                         );
                         let elements =
                             self.content_elements_in_frame(window, cx, Some(overlay.target));
+                        let bars = self.playback_scrollbars(overlay.target);
                         self.view = view;
                         el.when(overlay.settings.backdrop, |el| {
                             el.child(div().absolute().inset_0().bg(Color::Overlay.color()))
@@ -142,7 +145,8 @@ impl Workspace {
                                 .w(px(bounds.width))
                                 .h(px(bounds.height))
                                 .overflow_hidden()
-                                .children(elements),
+                                .children(elements)
+                                .children(bars),
                         )
                     }),
             )
@@ -166,6 +170,8 @@ impl Workspace {
             scene.load_page(page, window, cx);
             scene.enable_preview(false);
             scene.media.videos = videos;
+            scene.presentation.scroll = self.presentation.scroll.clone();
+            scene.presentation.raised = self.presentation.raised.clone();
             for text in &scene.texts {
                 text.editor.update(cx, |editor, _| editor.editing = false);
             }

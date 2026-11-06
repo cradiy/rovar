@@ -5,6 +5,7 @@ mod appearance;
 mod colors;
 mod history;
 mod pages;
+mod scrolling;
 mod structure;
 mod typography_layout;
 mod variants;

@@ -12,9 +12,11 @@ mod chrome;
 mod connections;
 mod controls;
 mod hover_exit;
+mod input;
 mod media;
 mod overlay;
 mod properties;
+mod scroll;
 #[cfg(test)]
 mod tests;
 mod transition;
@@ -29,6 +31,8 @@ pub(super) struct State {
     menus: [Entity<DropdownState>; 6],
     media: media::State,
     properties: properties::State,
+    pub(in crate::editor) scroll: scroll::State,
+    pub(in crate::editor) raised: Vec<usize>,
 }
 
 pub(super) struct Playback {
@@ -59,6 +63,8 @@ impl State {
             menus: std::array::from_fn(|_| cx.new(|cx| DropdownState::new(window, cx))),
             media: media::State::new(window, cx),
             properties: properties::State::new(window, cx),
+            scroll: scroll::State::default(),
+            raised: Vec::new(),
         }
     }
 }
@@ -128,6 +134,8 @@ impl Workspace {
                 overlay: None,
                 overlay_transition: Transition::Instant,
             });
+            player.presentation.scroll.active = true;
+            player.refresh_playback_scroll();
             player
         });
         player.read(cx).focus.clone().focus(window, cx);
@@ -223,68 +231,17 @@ impl Workspace {
     }
 
     fn playback_hit(&self, world: Point<f32>, trigger: Trigger) -> Option<(usize, Action)> {
-        let playback = self.presentation.playback.as_ref()?;
-        let current = playback.overlay.map_or(playback.current, |o| o.target);
-        let rect = self.boards.iter().find(|b| b.id == current)?.rect;
-        if world.x < rect.x
-            || world.y < rect.y
-            || world.x > rect.x + rect.width
-            || world.y > rect.y + rect.height
-        {
-            return None;
-        }
-        let order = self.canvas_layer_order();
-        let included = order.iter().copied().collect();
-        // Hit regions follow stacking. Labels without actions can sit above a button.
-        // Editing locks do not disable click actions.
-        let hit = order.into_iter().rev().find(|id| {
-            self.hierarchy
-                .interactions
-                .get(id)
-                .and_then(|i| i.get(trigger))
-                .is_some()
-                && (*id == current || self.ancestors(*id).contains(&current))
-                && !self
-                    .shapes
-                    .iter()
-                    .any(|s| s.id == *id && s.kind == ShapeKind::Audio)
-                && !crate::scene::boolean::consumed(&self.hierarchy, *id, &included)
-                && !crate::scene::mask::is_source(&self.hierarchy, *id, &included)
-                && self.mask_hit(*id, world)
-                && if crate::scene::boolean::is_boolean(&self.hierarchy, *id)
-                    || self
-                        .shapes
-                        .iter()
-                        .any(|s| s.id == *id && crate::scene::boolean::supported(s))
-                {
-                    crate::scene::mask::outline(
-                        &self.hierarchy,
-                        &self.shapes,
-                        &self.boards,
-                        &mut self.boolean_cache.borrow_mut(),
-                        *id,
-                    )
-                    .contains(world)
-                } else {
-                    true
-                }
-                && self.world_rect(*id).is_some_and(|rect| {
-                    let p = crate::scene::rotation::around(
-                        world,
-                        crate::scene::rotation::center(rect),
-                        -self.object_rotation(*id),
-                    );
-                    p.x >= rect.x
-                        && p.y >= rect.y
-                        && p.x <= rect.x + rect.width
-                        && p.y <= rect.y + rect.height
-                })
-        })?;
-        self.hierarchy
-            .interactions
-            .get(&hit)?
-            .get(trigger)
-            .map(|action| (hit, action))
+        let hit = self.playback_target(world)?;
+        std::iter::once(hit)
+            .chain(self.ancestors(hit))
+            .find_map(|id| {
+                self.hierarchy
+                    .interactions
+                    .get(&id)
+                    .filter(|i| !i.pass_through)
+                    .and_then(|i| i.get(trigger))
+                    .map(|action| (id, action))
+            })
     }
 
     pub(super) fn playback_view(
@@ -292,6 +249,7 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement + use<> {
+        self.refresh_playback_scroll();
         if self.presentation.playback.as_ref().unwrap().window_size != window.viewport_size() {
             self.leave_playback_hover(window, cx);
             self.playback_hover(false, cx);
@@ -358,6 +316,12 @@ impl Workspace {
                         return;
                     }
                     let _ = moving.update(cx, |this, cx| {
+                        if event.pressed_button != Some(gpui::MouseButton::Left) {
+                            this.presentation.scroll.press = None;
+                        } else if this.playback_drag(event.position, window, cx) {
+                            cx.stop_propagation();
+                            return;
+                        }
                         if this
                             .presentation
                             .playback
@@ -369,6 +333,18 @@ impl Workspace {
                         }
                     });
                 });
+                let releasing = pointer.clone();
+                window.on_mouse_event(move |event: &gpui::MouseUpEvent, phase, window, cx| {
+                    if phase == gpui::DispatchPhase::Capture
+                        && event.button == gpui::MouseButton::Left
+                    {
+                        let _ = releasing.update(cx, |this, cx| {
+                            if this.presentation.scroll.press.is_some() {
+                                this.playback_release(event.position, window, cx);
+                            }
+                        });
+                    }
+                });
                 let leaving = pointer.clone();
                 window.on_mouse_event(move |_: &gpui::MouseExitEvent, phase, window, cx| {
                     if phase != gpui::DispatchPhase::Capture {
@@ -376,6 +352,7 @@ impl Workspace {
                     }
                     let _ = leaving.update(cx, |this, cx| {
                         this.playback_hover(false, cx);
+                        this.presentation.scroll.press = None;
                         this.leave_playback_hover(window, cx);
                     });
                 });
@@ -410,6 +387,11 @@ impl Workspace {
                         this.overlay_outside_click(event.position(), cx);
                         cx.stop_propagation();
                     }))
+                    .on_scroll_wheel(
+                        cx.listener(|this, event, window, cx| {
+                            this.playback_wheel(event, window, cx)
+                        }),
+                    )
                     .child(div().absolute().inset_0().child(frames))
                     .child(
                         div()
@@ -429,27 +411,23 @@ impl Workspace {
                                     .inset_0()
                                     .occlude()
                                     .cursor(cursor)
-                                    .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
+                                    .on_scroll_wheel(cx.listener(|this, event, window, cx| {
+                                        this.playback_wheel(event, window, cx)
+                                    }))
+                                    .on_any_mouse_down(cx.listener(
+                                        |this, event: &gpui::MouseDownEvent, _, cx| {
+                                            if event.button == gpui::MouseButton::Left {
+                                                this.playback_press(event.position, cx);
+                                            }
+                                            cx.stop_propagation();
+                                        },
+                                    ))
                                     .on_mouse_move(cx.listener(
                                         |this, event: &gpui::MouseMoveEvent, window, cx| {
                                             this.playback_pointer(event.position, window, cx);
                                         },
                                     ))
-                                    .on_click(cx.listener(
-                                        |this, event: &gpui::ClickEvent, window, cx| {
-                                            if this.overlay_outside_click(event.position(), cx) {
-                                                cx.stop_propagation();
-                                                return;
-                                            }
-                                            let world = this.playback_world(event.position());
-                                            if let Some((source, action)) =
-                                                this.playback_hit(world, Trigger::Click)
-                                            {
-                                                this.playback_click(source, action, window, cx);
-                                            }
-                                            cx.stop_propagation();
-                                        },
-                                    )),
+                                    .on_click(|_, _, cx| cx.stop_propagation()),
                             ),
                     ),
             )

@@ -470,6 +470,14 @@ impl Workspace {
                 );
             }
         } else {
+            if group.is_some()
+                && let Some(interaction) = self.hierarchy.interactions.get_mut(&id)
+            {
+                interaction.scroll = crate::scene::presentation::ScrollAxis::None;
+                if interaction.is_empty() {
+                    self.hierarchy.interactions.remove(&id);
+                }
+            }
             if let Some(sizing) = self.hierarchy.sizing.get_mut(&id) {
                 sizing.width = Mode::Fixed;
                 sizing.height = Mode::Fixed;
