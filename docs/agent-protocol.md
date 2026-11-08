@@ -369,6 +369,11 @@ Use `set_interaction` within `document.apply` to replace one trigger's action:
   Properties affect the isolated playback scene, restore on hover exit when configured,
   and reset on restart. They never edit the source document or component definition.
 - Omitted/null `transition` and `hover_exit` preserve their current values.
+  To combine changes on one trigger, use `action: {"type":"multiple","actions":[...]}`.
+  The nonempty list contains ordinary actions, without nested `multiple` or `none`.
+  Existing single-action values remain valid. Property and variant changes are applied
+  together before navigation, scrolling, and media commands run in list order.
+  The trigger shares one transition and hover-exit behavior across the action list.
   Transitions are `instant`, `dissolve`, `blur`, or `wipe`. Animated transitions
   require `duration_ms` (50–2000); `wipe` also requires `direction` (`left`, `right`,
   `up`, or `down`). Hover exit is `restore`, `keep`, or `change_variant` with an

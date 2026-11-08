@@ -155,7 +155,7 @@ fn dispatch(
                 "text_offset_unit":"unicode_scalar","layout_directions":["horizontal","vertical","grid"],
                 "sizing_modes":["fixed","hug","fill"],"max_grid_tracks":crate::scene::auto_layout::MAX_GRID_TRACKS,
                 "interaction_triggers":["click","hover"],
-                "interaction_actions":["none","navigate","back","open_overlay","close_overlay","change_variant","media","set_property","scroll_to"],
+                "interaction_actions":["none","navigate","back","open_overlay","close_overlay","change_variant","media","set_property","scroll_to","multiple"],
                 "prototype_scroll_axes":["none","vertical","horizontal","both"],
                 "coordinates":"page","atomic_apply":true,"undo":"one apply per undo entry",
                 "max_operations":protocol::MAX_OPERATIONS,"max_read_nodes":protocol::MAX_NODES,

@@ -215,10 +215,12 @@ pub(super) fn resolve_action_refs(op: &mut p::Operation, refs: &BTreeMap<String,
         action, hover_exit, ..
     } = op
     {
-        if let p::interaction::Action::ChangeVariant { target } = action
-            && let Some(id) = refs.get(target)
-        {
-            *target = id.clone();
+        for action in action.steps_mut() {
+            if let p::interaction::Action::ChangeVariant { target } = action
+                && let Some(id) = refs.get(target)
+            {
+                *target = id.clone();
+            }
         }
         if let Some(p::interaction::HoverExit::ChangeVariant { target }) = hover_exit
             && let Some(id) = refs.get(target)

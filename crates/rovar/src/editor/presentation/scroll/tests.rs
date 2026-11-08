@@ -144,6 +144,11 @@ fn nested_scroll_consumes_remainders_clips_hits_and_keeps_fixed_branches(cx: &mu
             w.set_click(item, Some(Action::Back), window, cx);
             w.start_presentation(window, cx);
             w.presentation.player.clone().unwrap().update(cx, |p, cx| {
+                p.hierarchy.layouts.get_mut(&inner).unwrap().frame.height = 75.;
+                p.refresh_playback_scroll();
+                assert_eq!(p.presentation.scroll.nodes[&inner].rect.height, 75.);
+                p.hierarchy.layouts.get_mut(&inner).unwrap().frame.height = 60.;
+                p.refresh_playback_scroll();
                 assert!(p.scroll_by(&[inner, root], point(0., 260.)));
                 assert_eq!(p.presentation.scroll.offsets[&inner], point(0., 180.));
                 assert_eq!(p.presentation.scroll.offsets[&root], point(0., 80.));

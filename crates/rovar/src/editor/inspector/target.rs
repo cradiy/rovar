@@ -10,16 +10,21 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let key = self
-            .inspector_action()
-            .map(|(id, trigger, property)| (id, trigger, property.clone()));
+        let key = self.inspector_action().map(|(id, trigger, property)| {
+            (
+                id,
+                trigger,
+                self.prototype_action_index(id, trigger),
+                property.clone(),
+            )
+        });
         let target = self.action_property_target();
         if self.inspector.action_key == key && self.inspector.action_target == target {
             return;
         }
-        let identity = |key: &Option<(usize, Trigger, ActionProperty)>| {
+        let identity = |key: &Option<(usize, Trigger, usize, ActionProperty)>| {
             key.as_ref()
-                .map(|(id, trigger, p)| (*id, *trigger, p.key()))
+                .map(|(id, trigger, index, p)| (*id, *trigger, *index, p.key()))
         };
         if identity(&self.inspector.action_key) != identity(&key)
             || self.inspector.action_target != target
@@ -45,6 +50,7 @@ impl Workspace {
             return;
         };
         let property = property.clone();
+        let action_index = self.prototype_action_index(id, trigger);
         let target = self.action_property_target();
         let generation = self.pages.generation;
         let dialog = crate::platform::prompt_for_files(
@@ -75,6 +81,7 @@ impl Workspace {
                 });
             let _ = this.update(cx, |this, cx| {
                 if this.pages.generation != generation
+                    || this.prototype_action_index(id, trigger) != action_index
                     || this.action_property_target() != target
                     || this.inspector_action() != Some((id, trigger, &property))
                 {
@@ -110,7 +117,11 @@ impl Workspace {
             Trigger::Click => &interaction.click,
             Trigger::Hover => &interaction.hover,
         };
-        match action.as_ref()? {
+        match action
+            .as_ref()?
+            .steps()
+            .get(self.prototype_action_index(id, trigger))?
+        {
             Action::SetProperty { property, .. } => Some((id, trigger, property)),
             _ => None,
         }
@@ -125,7 +136,7 @@ impl Workspace {
 
     pub(in crate::editor) fn action_property_target(&self) -> Option<usize> {
         let (id, trigger, _) = self.inspector_action()?;
-        match self.hierarchy.interactions[&id].get(trigger)? {
+        match self.prototype_action(id, trigger)? {
             Action::SetProperty { target, .. } => Some(target),
             _ => None,
         }
@@ -135,7 +146,7 @@ impl Workspace {
         let Some((id, trigger, _)) = self.inspector_action() else {
             return false;
         };
-        matches!(self.hierarchy.interactions[&id].get(trigger), Some(Action::SetProperty { target, .. }) if self.texts.iter().any(|t| t.id == target))
+        matches!(self.prototype_action(id, trigger), Some(Action::SetProperty { target, .. }) if self.texts.iter().any(|t| t.id == target))
     }
 
     pub(in crate::editor) fn action_paint_image_allowed(&self) -> bool {
@@ -166,20 +177,20 @@ impl Workspace {
         if current == &property {
             return true;
         }
-        let Some(Action::SetProperty { target, .. }) =
-            self.hierarchy.interactions[&id].get(trigger)
-        else {
+        let Some(Action::SetProperty { target, .. }) = self.prototype_action(id, trigger) else {
             return false;
         };
         if !property.supports(&self.snapshot_page(cx).0, target) {
             return false;
         }
         let before = self.snapshot_hierarchy();
-        self.hierarchy
-            .interactions
-            .get_mut(&id)
-            .unwrap()
-            .set(trigger, Some(Action::SetProperty { target, property }));
+        let index = self.prototype_action_index(id, trigger);
+        let interaction = self.hierarchy.interactions.get_mut(&id).unwrap();
+        let action = match trigger {
+            Trigger::Click => &mut interaction.click,
+            Trigger::Hover => &mut interaction.hover,
+        };
+        action.as_mut().unwrap().steps_mut()[index] = Action::SetProperty { target, property };
         self.history.borrow_mut().record(
             vec![before],
             group.then_some(Group::PrototypeColor(id, trigger)),

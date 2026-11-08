@@ -211,6 +211,7 @@ impl Workspace {
     }
 
     pub(in crate::editor) fn sync_fields(&mut self, cx: &mut Context<Self>) {
+        self.reveal_selected_layer();
         self.sync_text_background(cx);
         if let Some((mode, gradient)) = self.fill_state(cx) {
             if matches!(mode, FillMode::Points(_)) {

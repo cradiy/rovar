@@ -14,9 +14,9 @@ pub(in crate::editor) struct State {
     pub offsets: HashMap<usize, Point<f32>>,
     pub nodes: HashMap<usize, Node>,
     pub(in crate::editor::presentation) press: Option<input::Press>,
-    index: Option<Rc<super::super::scene_index::Index>>,
+    pub(in crate::editor::presentation) index: Option<Rc<super::super::scene_index::Index>>,
     settings: std::collections::BTreeMap<usize, (ScrollAxis, bool)>,
-    dirty: bool,
+    pub(in crate::editor::presentation) dirty: bool,
 }
 
 #[derive(Clone)]
@@ -25,8 +25,8 @@ pub(in crate::editor) struct Node {
     pub offset: Point<f32>,
     pub clip: Option<Bounds<f32>>,
     pub range: Option<Range>,
-    rotation: f32,
-    ancestors: Vec<usize>,
+    pub(in crate::editor::presentation) rotation: f32,
+    pub(in crate::editor::presentation) ancestors: Vec<usize>,
 }
 
 #[derive(Clone, Copy)]
@@ -73,13 +73,6 @@ impl Workspace {
         }
         self.presentation.scroll.dirty = false;
         self.presentation.scroll.scrolling = settings.values().any(|(axis, _)| !axis.is_none());
-        if !self.presentation.scroll.scrolling {
-            self.presentation.scroll.nodes.clear();
-            self.presentation.scroll.offsets.clear();
-            self.presentation.scroll.index = Some(index);
-            self.presentation.scroll.settings = settings;
-            return;
-        }
         let order = index.order.clone();
         let mut nodes: HashMap<_, _> = if geometry_changed {
             order
@@ -88,7 +81,15 @@ impl Workspace {
                     Some((
                         *id,
                         Node {
-                            rect: self.world_rect(*id)?,
+                            rect: if self.hierarchy.groups.get(id).is_some_and(|group| {
+                                group.mask.is_none()
+                                    && group.boolean.is_none()
+                                    && !self.hierarchy.layouts.contains_key(id)
+                            }) {
+                                index.groups.get(id).copied()?
+                            } else {
+                                self.world_rect(*id)?
+                            },
                             offset: point(0., 0.),
                             clip: None,
                             rotation: self.object_rotation(*id),
@@ -308,10 +309,9 @@ impl Workspace {
     pub(super) fn playback_scroll_to(
         &mut self,
         target: usize,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.leave_playback_hover(window, cx);
         for container in self.ancestors(target) {
             let Some(range) = self
                 .presentation

@@ -12,6 +12,9 @@ pub(crate) enum Trigger {
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub(crate) enum Action {
+    Multiple {
+        actions: Vec<Action>,
+    },
     SetProperty {
         target: usize,
         property: property::Property,
@@ -39,8 +42,47 @@ pub(crate) enum Action {
 }
 
 impl Action {
+    pub fn steps(&self) -> &[Self] {
+        match self {
+            Self::Multiple { actions } => actions,
+            _ => std::slice::from_ref(self),
+        }
+    }
+
+    pub fn steps_mut(&mut self) -> &mut [Self] {
+        match self {
+            Self::Multiple { actions } => actions,
+            _ => std::slice::from_mut(self),
+        }
+    }
+
+    pub fn into_steps(self) -> Vec<Self> {
+        match self {
+            Self::Multiple { actions } => actions,
+            action => vec![action],
+        }
+    }
+
+    pub fn from_steps(mut actions: Vec<Self>) -> Option<Self> {
+        match actions.len() {
+            0 => None,
+            1 => actions.pop(),
+            _ => Some(Self::Multiple { actions }),
+        }
+    }
+
     pub fn remap(&self, mut map: impl FnMut(usize) -> Option<usize>) -> Option<Self> {
+        self.remap_inner(&mut map)
+    }
+
+    fn remap_inner(&self, map: &mut dyn FnMut(usize) -> Option<usize>) -> Option<Self> {
         match self.clone() {
+            Self::Multiple { actions } => Self::from_steps(
+                actions
+                    .iter()
+                    .filter_map(|action| action.remap_inner(map))
+                    .collect(),
+            ),
             Self::SetProperty { target, property } => property
                 .valid()
                 .then_some(())

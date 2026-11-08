@@ -7,6 +7,7 @@ pub(in crate::editor) struct State {
     pub action_key: Option<(
         usize,
         crate::scene::presentation::Trigger,
+        usize,
         crate::scene::presentation::property::Property,
     )>,
     pub theme_dark: bool,

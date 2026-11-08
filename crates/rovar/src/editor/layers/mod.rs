@@ -5,7 +5,7 @@ use crate::ui::theme::Color;
 use gpui::{AnyElement, uniform_list};
 #[cfg(not(target_family = "wasm"))]
 use gpui_effects::{FrostedGlass, FrostedGlassAppearance, LiquidGlass, LiquidGlassAppearance};
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 mod state;
 
 #[derive(Clone, Default)]
@@ -15,6 +15,9 @@ pub(super) struct Sidebar {
     pub renaming: Option<usize>,
     pub(in crate::editor) folded: HashSet<usize>,
     rows: std::cell::RefCell<Option<RowsCache>>,
+    scroll: gpui::UniformListScrollHandle,
+    selection: Option<(usize, BTreeSet<usize>)>,
+    reveal: std::cell::Cell<Option<usize>>,
 }
 
 #[derive(Clone)]
@@ -92,6 +95,22 @@ struct Layer {
 }
 
 impl Workspace {
+    pub(super) fn reveal_selected_layer(&mut self) {
+        let selection = (self.pages.generation, self.selection_ids());
+        if self.sidebar.selection.as_ref() == Some(&selection) {
+            return;
+        }
+        self.sidebar.reveal.set(selection.1.first().copied());
+        if !selection.1.is_empty() {
+            for id in &selection.1 {
+                for parent in self.ancestors(*id) {
+                    self.sidebar.folded.remove(&parent);
+                }
+            }
+        }
+        self.sidebar.selection = Some(selection);
+    }
+
     fn layer_summary(&self, cx: &mut Context<Self>) -> Div {
         div()
             .h(px(38.))
@@ -509,6 +528,13 @@ impl Workspace {
                     .child(self.organization_actions(cx))
                     .child(self.layer_summary(cx));
                 let rows = self.layer_rows(index);
+                if let Some(id) = self.sidebar.reveal.take()
+                    && let Some(position) = rows.iter().position(|row| row.id == id)
+                {
+                    self.sidebar
+                        .scroll
+                        .scroll_to_item(position, gpui::ScrollStrategy::Nearest);
+                }
                 if rows.is_empty() {
                     el.child(panels::empty_state(
                         GpuiIcons::LucideLayers,
@@ -525,6 +551,7 @@ impl Workspace {
                                     .collect::<Vec<_>>()
                             }),
                         )
+                        .track_scroll(&self.sidebar.scroll)
                         .flex_1()
                         .min_h_0()
                         .m(px(8.)),

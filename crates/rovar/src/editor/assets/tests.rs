@@ -68,9 +68,17 @@ fn library_saves_preserve_action_and_paint_layer_only_images(cx: &mut TestAppCon
             editor.hierarchy.interactions.insert(
                 2,
                 Interaction {
-                    click: Some(Action::SetProperty {
-                        target: 2,
-                        property: Property::Fill(paint.clone()),
+                    click: Some(Action::Multiple {
+                        actions: vec![
+                            Action::SetProperty {
+                                target: 2,
+                                property: Property::Fill(paint.clone()),
+                            },
+                            Action::SetProperty {
+                                target: 2,
+                                property: Property::Opacity(0.5),
+                            },
+                        ],
                     }),
                     hover: Some(Action::SetProperty {
                         target: 2,

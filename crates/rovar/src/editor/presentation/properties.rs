@@ -6,7 +6,7 @@ use uic::components::{
     input::{Input, InputAppearance},
 };
 
-type Target = (usize, usize, Trigger, Action);
+type Target = (usize, usize, Trigger, usize, Action);
 
 pub(super) struct State {
     input: Entity<TextInput>,
@@ -35,7 +35,7 @@ impl State {
     }
 }
 
-fn label(property: &Property) -> &'static str {
+pub(super) fn label(property: &Property) -> &'static str {
     use Property::*;
     t(match property {
         Visible(_) => "prototype-property-visible",
@@ -107,13 +107,25 @@ fn choices(property: &Property) -> Vec<(Property, &'static str)> {
 }
 
 impl Workspace {
+    pub(super) fn commit_action_input(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self
+            .presentation
+            .properties
+            .input
+            .focus_handle(cx)
+            .is_focused(window)
+        {
+            self.apply_property_value(window, cx);
+        }
+    }
+
     #[cfg(test)]
     pub(in crate::editor) fn prototype_property_number(
         &self,
         id: usize,
         trigger: Trigger,
     ) -> Option<f32> {
-        match self.hierarchy.interactions.get(&id)?.get(trigger)? {
+        match self.prototype_action(id, trigger)? {
             Action::SetProperty { property, .. } => serde_json::to_value(&property)
                 .ok()?
                 .get("value")?
@@ -145,8 +157,8 @@ impl Workspace {
             .collect()
     }
 
-    fn apply_property_value(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some((generation, id, trigger, action)) =
+    pub(super) fn apply_property_value(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some((generation, id, trigger, index, action)) =
             self.presentation.properties.target.borrow().clone()
         else {
             return;
@@ -154,13 +166,8 @@ impl Workspace {
         if generation != self.pages.generation
             || self.selection_ids() != BTreeSet::from([id])
             || self.presentation.trigger != trigger
-            || self
-                .hierarchy
-                .interactions
-                .get(&id)
-                .and_then(|i| i.get(trigger))
-                .as_ref()
-                != Some(&action)
+            || self.prototype_action_index(id, trigger) != index
+            || self.prototype_action(id, trigger).as_ref() != Some(&action)
         {
             return;
         }
@@ -226,7 +233,13 @@ impl Workspace {
             self.presentation.properties.target.replace(None);
             return None;
         };
-        let key = Some((self.pages.generation, id, trigger, action.clone()));
+        let key = Some((
+            self.pages.generation,
+            id,
+            trigger,
+            self.prototype_action_index(id, trigger),
+            action.clone(),
+        ));
         if *self.presentation.properties.target.borrow() != key {
             self.presentation.properties.target.replace(key);
             self.presentation

@@ -352,35 +352,44 @@ impl Workspace {
                 | p::Operation::Update { properties, .. } => Some(properties),
                 _ => None,
             };
-            let family = match &op {
-                p::Operation::EditText { style, .. } => {
-                    style.as_ref().and_then(|s| s.font_family.as_ref())
-                }
-                p::Operation::SetInteraction {
-                    action:
+            let families = match &op {
+                p::Operation::EditText { style, .. } => style
+                    .as_ref()
+                    .and_then(|s| s.font_family.as_ref())
+                    .into_iter()
+                    .collect::<Vec<_>>(),
+                p::Operation::SetInteraction { action, .. } => action
+                    .steps()
+                    .iter()
+                    .filter_map(|a| match a {
                         p::interaction::Action::SetProperty {
                             property:
                                 crate::scene::presentation::property::Property::FontFamily(family),
                             ..
-                        },
-                    ..
-                } => Some(family),
-                _ => props.and_then(|p| p.font_family.as_ref()),
+                        } => Some(family),
+                        _ => None,
+                    })
+                    .collect(),
+                _ => props
+                    .and_then(|p| p.font_family.as_ref())
+                    .into_iter()
+                    .collect(),
             };
-            if let Some(family) = family
-                && family != crate::ui::font::SYSTEM
-                && !cx
-                    .text_system()
-                    .all_font_names()
-                    .iter()
-                    .any(|f| f == family)
-            {
-                let mut error = Error::new(
-                    "FONT_NOT_FOUND",
-                    format!("Font family is unavailable: {family}"),
-                );
-                error.operation = Some(index);
-                return Err(error);
+            for family in families {
+                if family != crate::ui::font::SYSTEM
+                    && !cx
+                        .text_system()
+                        .all_font_names()
+                        .iter()
+                        .any(|f| f == family)
+                {
+                    let mut error = Error::new(
+                        "FONT_NOT_FOUND",
+                        format!("Font family is unavailable: {family}"),
+                    );
+                    error.operation = Some(index);
+                    return Err(error);
+                }
             }
             let result = if matches!(
                 op,

@@ -156,6 +156,9 @@ pub struct TextEditor {
 }
 
 impl TextEditor {
+    pub(crate) fn matches_document(&self, text: &crate::document::Text) -> bool {
+        self.content == text.content && self.styles == text.styles
+    }
     pub(crate) fn document_text(
         &self,
         id: usize,
@@ -667,7 +670,24 @@ pub fn element(
     exit_focus: FocusHandle,
     effects: Vec<crate::scene::effects::Effect>,
     cx: &App,
-) -> impl IntoElement + use<> {
+) -> AnyElement {
+    if !editor.read(cx).editing {
+        let prepaint = editor.clone();
+        return canvas(
+            move |bounds, window, cx| {
+                prepaint.update(cx, |text, _| text.layout_for_bounds(zoom, bounds, window))
+            },
+            move |bounds, layout, window, cx| {
+                crate::scene::effects::paint_effects(bounds, &effects, zoom, window, |window| {
+                    window.with_content_mask(Some(ContentMask { bounds }), |window| {
+                        layout.paint_artwork(window, cx)
+                    });
+                });
+            },
+        )
+        .size_full()
+        .into_any_element();
+    }
     let focus = editor.read(cx).focus.clone();
     let key = editor.clone();
     let down = editor.clone();
@@ -778,4 +798,5 @@ pub fn element(
             )
             .size_full(),
         )
+        .into_any_element()
 }

@@ -230,6 +230,7 @@ pub(super) struct Cache {
     nodes: Vec<Node>,
     order: Vec<usize>,
     parents: std::collections::BTreeMap<usize, usize>,
+    raised: Vec<usize>,
     index: Option<Rc<Index>>,
 }
 
@@ -303,6 +304,7 @@ impl Workspace {
         if let Some(index) = &cache.index
             && cache.order == self.hierarchy.order
             && cache.parents == self.hierarchy.parents
+            && cache.raised == self.presentation.raised
             && self.geometry_nodes().eq(cache.nodes.iter().cloned())
         {
             return index.clone();
@@ -310,6 +312,7 @@ impl Workspace {
         cache.nodes = self.geometry_nodes().collect();
         cache.order.clone_from(&self.hierarchy.order);
         cache.parents.clone_from(&self.hierarchy.parents);
+        cache.raised.clone_from(&self.presentation.raised);
         let order = self.canvas_layer_order();
         let mut index = Index {
             boards: self
@@ -393,12 +396,16 @@ impl Workspace {
                     .iter()
                     .map(|t| (2, t.id, t.board, Some(t.rect), t.layer, 0.)),
             )
-            .chain(
-                self.hierarchy
-                    .groups
-                    .iter()
-                    .map(|(id, g)| (3, *id, g.board, None, g.layer, 0.)),
-            )
+            .chain(self.hierarchy.groups.iter().map(|(id, g)| {
+                (
+                    3,
+                    *id,
+                    g.board,
+                    self.hierarchy.layouts.get(id).map(|layout| layout.frame),
+                    g.layer,
+                    0.,
+                )
+            }))
             .map(|(kind, id, board, rect, layer, outset)| Node {
                 kind,
                 id,

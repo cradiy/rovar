@@ -94,6 +94,16 @@ fn revealed_containers_cover_sibling_hotspots_without_reordering_the_document(
                     p.playback_hit(point(60., 85.), Trigger::Click),
                     Some((option, Action::Back))
                 );
+                p.presentation.raised.clear();
+                assert_eq!(
+                    p.playback_hit(point(60., 85.), Trigger::Click),
+                    Some((trigger, toggle.clone()))
+                );
+                p.presentation.raised.push(popup);
+                assert_eq!(
+                    p.playback_hit(point(60., 85.), Trigger::Click),
+                    Some((option, Action::Back))
+                );
                 let order = p.canvas_layer_order();
                 assert!(
                     order.iter().position(|id| *id == option)

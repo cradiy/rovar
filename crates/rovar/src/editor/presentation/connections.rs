@@ -88,16 +88,10 @@ impl Workspace {
         };
         let source = connection.source;
         let scroll_to = self
-            .hierarchy
-            .interactions
-            .get(&source)
-            .and_then(|i| i.get(connection.trigger))
+            .prototype_action(source, connection.trigger)
             .is_some_and(|a| matches!(a, Action::ScrollTo { .. }));
         let property = self
-            .hierarchy
-            .interactions
-            .get(&source)
-            .and_then(|i| i.get(connection.trigger))
+            .prototype_action(source, connection.trigger)
             .and_then(|action| match action {
                 Action::SetProperty { property, .. } => Some(property),
                 _ => None,
@@ -131,10 +125,7 @@ impl Workspace {
         {
             let action = match (
                 action,
-                self.hierarchy
-                    .interactions
-                    .get(&connection.source)
-                    .and_then(|i| i.get(connection.trigger)),
+                self.prototype_action(connection.source, connection.trigger),
             ) {
                 (Action::Navigate { target }, Some(Action::OpenOverlay { settings, .. })) => {
                     Action::OpenOverlay { target, settings }
@@ -208,7 +199,7 @@ impl Workspace {
                 .iter()
                 .find(|(_, b)| b.master && b.component == target.to_string())
                 .and_then(|(id, _)| self.world_bounds(*id)),
-            Action::Back | Action::CloseOverlay => None,
+            Action::Back | Action::CloseOverlay | Action::Multiple { .. } => None,
         }
     }
 
@@ -245,24 +236,26 @@ impl Workspace {
                 let Some(action) = interaction.get(trigger) else {
                     continue;
                 };
-                if self
-                    .presentation
-                    .connection
-                    .as_ref()
-                    .is_some_and(|c| c.source == *source && c.trigger == trigger)
-                {
-                    continue;
+                for action in action.into_steps() {
+                    if self
+                        .presentation
+                        .connection
+                        .as_ref()
+                        .is_some_and(|c| c.source == *source && c.trigger == trigger)
+                    {
+                        continue;
+                    }
+                    let (to, direction) = self
+                        .connection_end(action)
+                        .map_or((from + point(64., -32.), -1.), |r| end_point(from, r));
+                    let active = selected.contains(source) && self.presentation.trigger == trigger;
+                    let offset = if paired {
+                        if trigger == Trigger::Click { -24. } else { 24. }
+                    } else {
+                        0.
+                    };
+                    wires.push((from, to, direction, trigger, active, offset));
                 }
-                let (to, direction) = self
-                    .connection_end(action)
-                    .map_or((from + point(64., -32.), -1.), |r| end_point(from, r));
-                let active = selected.contains(source) && self.presentation.trigger == trigger;
-                let offset = if paired {
-                    if trigger == Trigger::Click { -24. } else { 24. }
-                } else {
-                    0.
-                };
-                wires.push((from, to, direction, trigger, active, offset));
             }
         }
         if let Some(c) = &self.presentation.connection

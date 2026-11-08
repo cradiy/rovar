@@ -165,6 +165,7 @@ impl Document {
                         [i.click.as_ref(), i.hover.as_ref()]
                             .into_iter()
                             .flatten()
+                            .flat_map(|action| action.steps())
                             .filter_map(|action| {
                                 if let crate::scene::presentation::Action::SetProperty {
                                     property,
@@ -239,6 +240,7 @@ impl Loaded {
                 for action in [&mut interaction.click, &mut interaction.hover]
                     .into_iter()
                     .flatten()
+                    .flat_map(|action| action.steps_mut())
                 {
                     if let crate::scene::presentation::Action::SetProperty { property, .. } = action
                         && let Some(paint) = property.paint_mut()
@@ -295,6 +297,7 @@ impl Page {
             .interactions
             .values()
             .flat_map(|i| [i.click.as_ref(), i.hover.as_ref()].into_iter().flatten())
+            .flat_map(|action| action.steps())
             .filter_map(|action| {
                 if let crate::scene::presentation::Action::SetProperty { property, .. } = action {
                     property.paint()?.image.asset.as_ref()
@@ -448,28 +451,38 @@ impl Page {
                 .flatten()
             {
                 ensure!(
-                    action
-                        .remap(|target| {
-                            let valid = match action {
-                                crate::scene::presentation::Action::SetProperty {
-                                    property,
-                                    ..
-                                } => property.valid_target(self, target),
-                                crate::scene::presentation::Action::Media { command, .. } => {
-                                    self.shapes.iter().any(|shape| {
-                                        shape.id == target && command.supports(shape.kind)
-                                    })
-                                }
-                                crate::scene::presentation::Action::ScrollTo { .. } => {
-                                    ids.contains(&target)
-                                }
-                                _ => boards.contains(&target),
-                            };
-                            valid.then_some(target)
-                        })
-                        .is_some(),
-                    "Invalid interaction target"
+                    !action.steps().is_empty()
+                        && action.steps().iter().all(|step| !matches!(
+                            step,
+                            crate::scene::presentation::Action::Multiple { .. }
+                        )),
+                    "Action lists must be nonempty and flat"
                 );
+                for action in action.steps() {
+                    ensure!(
+                        action
+                            .remap(|target| {
+                                let valid = match action {
+                                    crate::scene::presentation::Action::SetProperty {
+                                        property,
+                                        ..
+                                    } => property.valid_target(self, target),
+                                    crate::scene::presentation::Action::Media {
+                                        command, ..
+                                    } => self.shapes.iter().any(|shape| {
+                                        shape.id == target && command.supports(shape.kind)
+                                    }),
+                                    crate::scene::presentation::Action::ScrollTo { .. } => {
+                                        ids.contains(&target)
+                                    }
+                                    _ => boards.contains(&target),
+                                };
+                                valid.then_some(target)
+                            })
+                            .is_some(),
+                        "Invalid interaction target"
+                    );
+                }
             }
         }
         for board in self

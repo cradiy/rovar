@@ -11,6 +11,10 @@ pub(crate) enum Trigger {
 #[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub(crate) enum Action {
+    /// A flat list of actions executed by one trigger.
+    Multiple {
+        actions: Vec<Action>,
+    },
     SetProperty {
         target: String,
         property: crate::scene::presentation::property::Property,
@@ -36,6 +40,22 @@ pub(crate) enum Action {
         target: String,
         command: MediaCommand,
     },
+}
+
+impl Action {
+    pub fn steps(&self) -> &[Self] {
+        match self {
+            Self::Multiple { actions } => actions,
+            _ => std::slice::from_ref(self),
+        }
+    }
+
+    pub fn steps_mut(&mut self) -> &mut [Self] {
+        match self {
+            Self::Multiple { actions } => actions,
+            _ => std::slice::from_mut(self),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, JsonSchema)]

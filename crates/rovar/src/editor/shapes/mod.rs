@@ -78,7 +78,7 @@ impl Workspace {
             .duplicate
             .take()
             .filter(|d| d.ids == std::collections::BTreeSet::from([id]));
-        self.select(board, cx);
+        self.reset_selection(board, cx);
         self.selected_shape = Some(id);
         self.duplicate = duplicate;
         if changed {

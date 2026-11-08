@@ -196,23 +196,31 @@ impl Workspace {
         self.shapes = page.shapes;
         self.hierarchy = page.hierarchy;
         self.next_id = page.next_id;
-        self.texts
-            .retain(|t| page.texts.iter().any(|x| x.id == t.id));
+        let incoming: BTreeSet<_> = page.texts.iter().map(|text| text.id).collect();
+        self.texts.retain(|text| incoming.contains(&text.id));
+        let mut positions: std::collections::HashMap<_, _> = self
+            .texts
+            .iter()
+            .enumerate()
+            .map(|(i, text)| (text.id, i))
+            .collect();
         for text in page.texts {
-            if !self.texts.iter().any(|t| t.id == text.id) {
+            let position = if let Some(&position) = positions.get(&text.id) {
+                position
+            } else {
                 let item = self.make_text(text.id, text.board, text.rect, window, cx);
+                let position = self.texts.len();
                 self.texts.push(item);
-            }
-            let item = self.texts.iter_mut().find(|t| t.id == text.id).unwrap();
-            let old = item
-                .editor
-                .read(cx)
-                .document_text(item.id, item.uid, item.board, item.rect, item.layer);
+                positions.insert(text.id, position);
+                position
+            };
+            let item = &mut self.texts[position];
+            let changed = !item.editor.read(cx).matches_document(&text);
             item.uid = text.uid;
             item.rect = text.rect;
             item.board = text.board;
             item.layer = text.layer;
-            if old.content != text.content || old.styles != text.styles {
+            if changed {
                 item.editor.update(cx, |editor, cx| {
                     editor.restore(crate::scene::text::Snapshot::from_document(text));
                     cx.notify();

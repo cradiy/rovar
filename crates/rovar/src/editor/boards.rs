@@ -5,11 +5,19 @@ impl Workspace {
         self.boards.iter().find(|b| Some(b.id) == self.selected)
     }
     pub(super) fn select(&mut self, id: Option<usize>, cx: &mut Context<Self>) {
+        if !self.reset_selection(id, cx) {
+            return;
+        }
+        self.sync_fields(cx);
+        cx.notify();
+    }
+
+    pub(super) fn reset_selection(&mut self, id: Option<usize>, cx: &mut Context<Self>) -> bool {
         self.image_crop = None;
         self.finish_corner_input(false, cx);
         self.corner_editor.clear_hover();
         if id.is_some_and(|id| !self.layer_editable(id)) {
-            return;
+            return false;
         }
         if self.selection_ids() != id.into_iter().collect() {
             self.duplicate = None;
@@ -17,7 +25,9 @@ impl Workspace {
         self.multi_selection.clear();
         self.seal_text_edits(cx);
         for text in &self.texts {
-            text.editor.update(cx, |editor, _| editor.editing = false);
+            if text.editor.read(cx).editing {
+                text.editor.update(cx, |editor, _| editor.editing = false);
+            }
         }
         self.selected_text = None;
         self.selected_shape = None;
@@ -34,8 +44,7 @@ impl Workspace {
         }
         self.selected = id;
         self.inspector.invalid.fill(false);
-        self.sync_fields(cx);
-        cx.notify();
+        true
     }
     pub(super) fn add_artboard(&mut self, rect: Rect, cx: &mut Context<Self>) {
         self.finish_bezier(cx);

@@ -107,11 +107,7 @@ impl Workspace {
         trigger: Trigger,
         cx: &mut Context<Self>,
     ) -> impl IntoElement + use<> {
-        let Some(Action::OpenOverlay { target, settings }) = self
-            .hierarchy
-            .interactions
-            .get(&id)
-            .and_then(|i| i.get(trigger))
+        let Some(Action::OpenOverlay { target, settings }) = self.prototype_action(id, trigger)
         else {
             return div();
         };

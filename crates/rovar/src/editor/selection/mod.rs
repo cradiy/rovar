@@ -48,7 +48,6 @@ impl Workspace {
         if ids == self.selection_ids() {
             return;
         }
-        self.select(None, cx);
         if ids.len() == 1 && !self.hierarchy.groups.contains_key(ids.first().unwrap()) {
             let id = *ids.first().unwrap();
             if self.texts.iter().any(|t| t.id == id) {
@@ -59,6 +58,7 @@ impl Workspace {
                 self.select(Some(id), cx);
             }
         } else {
+            self.reset_selection(None, cx);
             self.multi_selection = ids;
             self.sync_fields(cx);
             cx.notify();

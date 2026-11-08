@@ -16,7 +16,9 @@ pub(super) struct Hover {
 
 struct HoverSnapshot {
     raised: Vec<usize>,
-    media: Option<(usize, super::super::media::MediaSnapshot)>,
+    media: Vec<(usize, super::super::media::MediaSnapshot)>,
+    media_only: bool,
+    scroll_offsets: std::collections::HashMap<usize, Point<f32>>,
     page: crate::document::Page,
     current: usize,
     history: Vec<usize>,
@@ -68,13 +70,17 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if let Action::Multiple { actions } = action {
+            self.activate_multiple(source, actions, window, cx);
+            return;
+        }
         if let Action::ScrollTo { target } = action {
             self.playback_scroll_to(target, window, cx);
             return;
         }
         if let Action::SetProperty { target, property } = &action {
             if self.presentation.playback.is_some() {
-                let (mut page, _) = self.snapshot_page(cx);
+                let mut page = self.snapshot_page_state(cx);
                 if property.apply(&mut page, *target).is_ok() {
                     self.freeze_playback_visual(window, cx);
                     let visibility = matches!(
@@ -127,7 +133,7 @@ impl Workspace {
             return;
         }
         let root = self.prototype_component(source).unwrap();
-        let (mut page, _) = self.snapshot_page(cx);
+        let mut page = self.snapshot_page_state(cx);
         if let Err(error) = crate::scene::components::variants::switch(
             &mut page,
             root,
@@ -181,7 +187,7 @@ impl Workspace {
         if playback.entered != entered {
             playback.entered = entered;
             if let Some((source, action)) = hover {
-                if !matches!(action, Action::ChangeVariant { target } if !self.prototype_variants(source).iter().any(|(id, _)| *id == target))
+                if action.steps().iter().all(|action| !matches!(action, Action::ChangeVariant { target } if !self.prototype_variants(source).iter().any(|(id, _)| id == target)))
                 {
                     let rect = self.world_rect(source).unwrap();
                     let mut region = mask::outline(
@@ -255,16 +261,14 @@ impl Workspace {
                                 }),
                         )
                         .collect();
-                    let page = self.snapshot_page(cx).0;
+                    let page = self.snapshot_page_state(cx);
                     let p = self.presentation.playback.as_ref().unwrap();
                     let restore = Some(HoverSnapshot {
                         raised: self.presentation.raised.clone(),
-                        media: match action {
-                            Action::Media { target, .. } => {
-                                Some((target, self.media_snapshot(target, cx)))
-                            }
-                            _ => None,
-                        },
+                        media: action.steps().iter().filter_map(|a| match a { Action::Media { target, .. } => Some(*target), _ => None })
+                            .collect::<BTreeSet<_>>().into_iter().map(|target| (target, self.media_snapshot(target, cx))).collect(),
+                        media_only: action.steps().iter().all(|a| matches!(a, Action::Media { .. })),
+                        scroll_offsets: self.presentation.scroll.offsets.clone(),
                         page,
                         current: p.current,
                         history: p.history.clone(),
@@ -311,8 +315,10 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if let Some((target, state)) = snapshot.media {
-            self.restore_media(target, state, window, cx);
+        if snapshot.media_only {
+            for (target, state) in snapshot.media {
+                self.restore_media(target, state, window, cx);
+            }
             return;
         }
         self.pause_media(cx);
@@ -320,6 +326,12 @@ impl Workspace {
             self.freeze_playback_visual(window, cx);
         }
         self.apply_component_page(snapshot.page, window, cx);
+        self.presentation.scroll.offsets = snapshot.scroll_offsets;
+        self.presentation.scroll.dirty = true;
+        self.refresh_playback_scroll();
+        for (target, state) in snapshot.media {
+            self.restore_media(target, state, window, cx);
+        }
         self.presentation.raised = snapshot.raised;
         self.restore_playback_visual(snapshot.visual);
         let p = self.presentation.playback.as_mut().unwrap();
@@ -392,7 +404,11 @@ impl Workspace {
         self.restore_playback_hover(window, cx);
         // An explicit click commits its own action after removing the temporary
         // hover state. The entry latch remains until the pointer leaves.
-        let source = if matches!(action, Action::ChangeVariant { .. }) {
+        let source = if action
+            .steps()
+            .iter()
+            .any(|a| matches!(a, Action::ChangeVariant { .. }))
+        {
             root.unwrap_or(source)
         } else {
             source

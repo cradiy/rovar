@@ -301,7 +301,7 @@ impl Workspace {
         document.id
     }
 
-    pub(super) fn snapshot_page(&self, cx: &gpui::App) -> (Page, Vec<AssetSource>) {
+    pub(super) fn snapshot_page_state(&self, cx: &gpui::App) -> Page {
         let mut assets = Vec::new();
         let mut add = |object, fill, asset: &Option<std::sync::Arc<crate::asset::FileAsset>>| {
             if let Some(asset) = asset {
@@ -319,7 +319,7 @@ impl Workspace {
             add(shape.id, false, &shape.asset);
             add(shape.id, true, &shape.image_fill.asset);
         }
-        let mut page = Page {
+        Page {
             id: self.pages.active.clone(),
             name: self.pages.current().page.name.clone(),
             boards: self.boards.clone(),
@@ -336,7 +336,11 @@ impl Workspace {
             hierarchy: self.hierarchy.clone(),
             next_id: self.next_id,
             assets,
-        };
+        }
+    }
+
+    pub(super) fn snapshot_page(&self, cx: &gpui::App) -> (Page, Vec<AssetSource>) {
+        let mut page = self.snapshot_page_state(cx);
         let text_system = gpui::WindowTextSystem::new(cx.text_system().clone());
         match crate::scene::auto_layout::resolve(&mut page, &text_system) {
             Ok(tracks) => *self.auto_layout.grid.tracks.borrow_mut() = tracks,

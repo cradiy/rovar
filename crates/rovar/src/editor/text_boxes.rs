@@ -127,23 +127,18 @@ impl Workspace {
         if !self.layer_editable(id) {
             return;
         }
-        if self.selection_ids() != std::collections::BTreeSet::from([id]) {
-            self.duplicate = None;
-        }
-        self.multi_selection.clear();
-        self.seal_text_edits(cx);
-        self.selected_shape = None;
-        self.selected_node = None;
-        self.vector_edit = None;
-        for text in &self.texts {
-            text.editor.update(cx, |editor, _| editor.editing = false);
-        }
-        if let Some(text) = self.texts.iter().find(|t| t.id == id) {
-            self.selected = text.board;
-            self.selected_text = Some(id);
-            self.sync_fields(cx);
-            cx.notify();
-        }
+        let Some(board) = self.texts.iter().find(|t| t.id == id).map(|t| t.board) else {
+            return;
+        };
+        let duplicate = self
+            .duplicate
+            .take()
+            .filter(|d| d.ids == std::collections::BTreeSet::from([id]));
+        self.reset_selection(board, cx);
+        self.selected_text = Some(id);
+        self.duplicate = duplicate;
+        self.sync_fields(cx);
+        cx.notify();
     }
     pub(super) fn add_text(
         &mut self,

@@ -178,7 +178,7 @@ impl Workspace {
             return;
         }
         let visual = p.visual.clone();
-        let page = self.snapshot_page(cx).0;
+        let page = self.snapshot_page_state(cx);
         let videos = self.media.videos.clone();
         let scene = cx.new(|cx| {
             let mut scene = Workspace::new(window, cx);

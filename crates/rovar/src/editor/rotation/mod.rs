@@ -23,6 +23,26 @@ impl Workspace {
         self.world_rect(id)
             .map(|r| geometry::bounds(r, self.object_rotation(id)))
     }
+
+    pub(super) fn indexed_world_bounds(
+        &self,
+        id: usize,
+        index: &scene_index::Index,
+    ) -> Option<Rect> {
+        self.indexed_world_rect(id, index)
+            .map(|r| geometry::bounds(r, self.object_rotation(id)))
+    }
+
+    pub(super) fn indexed_world_rect(&self, id: usize, index: &scene_index::Index) -> Option<Rect> {
+        if self.hierarchy.groups.contains_key(&id)
+            && !self.hierarchy.layouts.contains_key(&id)
+            && crate::scene::mask::source(&self.hierarchy, id).is_none()
+            && !crate::scene::boolean::is_boolean(&self.hierarchy, id)
+        {
+            return index.groups.get(&id).copied();
+        }
+        self.world_rect(id)
+    }
     pub(super) fn move_rotation(
         &mut self,
         id: usize,

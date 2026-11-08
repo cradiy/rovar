@@ -50,21 +50,28 @@ pub(super) fn describe(page: &Page, id: usize, ids: &BTreeMap<usize, uuid::Uuid>
         let Some(action) = action else {
             return json!({"type":"none"});
         };
-        let mut value = serde_json::to_value(&action).expect("Action serialization is infallible");
-        if let scene::Action::Navigate { target }
-        | scene::Action::OpenOverlay { target, .. }
-        | scene::Action::Media { target, .. }
-        | scene::Action::SetProperty { target, .. }
-        | scene::Action::ScrollTo { target } = action
-        {
-            value["target"] = json!(ids.get(&target));
-        }
-        value
+        describe_action(&action, ids)
     };
     json!({"click":{"action":action(interaction.click),"transition":interaction.click_transition},
         "hover":{"action":action(interaction.hover),"transition":interaction.hover_transition,
         "hover_exit":interaction.hover_exit}, "scroll": interaction.scroll,
         "fixed": interaction.fixed, "pass_through": interaction.pass_through})
+}
+
+fn describe_action(action: &scene::Action, ids: &BTreeMap<usize, uuid::Uuid>) -> Value {
+    if let scene::Action::Multiple { actions } = action {
+        return json!({"type":"multiple","actions":actions.iter().map(|a| describe_action(a, ids)).collect::<Vec<_>>()});
+    }
+    let mut value = serde_json::to_value(action).expect("Action serialization is infallible");
+    if let scene::Action::Navigate { target }
+    | scene::Action::OpenOverlay { target, .. }
+    | scene::Action::Media { target, .. }
+    | scene::Action::SetProperty { target, .. }
+    | scene::Action::ScrollTo { target } = action
+    {
+        value["target"] = json!(ids.get(target));
+    }
+    value
 }
 
 pub(super) fn frame(page: &Page, target: &str, refs: &BTreeMap<String, String>) -> Result<usize> {
@@ -145,7 +152,101 @@ pub(super) fn apply(
         }
         Ok(uid)
     };
-    let action = match action {
+    let action = resolve_action(page, id, action, refs, sets)?;
+    if hover_exit.is_some() && (!matches!(trigger, dto::Trigger::Hover) || action.is_none()) {
+        return Err(Error::invalid(
+            "hover_exit requires a nonempty hover action",
+        ));
+    }
+    let exit = hover_exit
+        .map(|exit| {
+            Ok(match exit {
+                dto::HoverExit::Restore => scene::HoverExit::Restore,
+                dto::HoverExit::Keep => scene::HoverExit::Keep,
+                dto::HoverExit::ChangeVariant { target } => scene::HoverExit::ChangeVariant {
+                    target: variant(&target)?,
+                },
+            })
+        })
+        .transpose()?;
+    let transition = transition.map(|transition| match transition {
+        dto::Transition::Instant => scene::Transition::Instant,
+        dto::Transition::Dissolve { duration_ms } => scene::Transition::Dissolve { duration_ms },
+        dto::Transition::Blur { duration_ms } => scene::Transition::Blur { duration_ms },
+        dto::Transition::Wipe {
+            direction,
+            duration_ms,
+        } => scene::Transition::Wipe {
+            direction,
+            duration_ms,
+        },
+    });
+    if transition.is_some_and(|transition| !transition.valid()) {
+        return Err(Error::invalid(
+            "Transition duration must be 50 to 2000 milliseconds",
+        ));
+    }
+    if action.is_none() && transition.is_some() {
+        return Err(Error::invalid("A transition requires a nonempty action"));
+    }
+    let trigger = match trigger {
+        dto::Trigger::Click => scene::Trigger::Click,
+        dto::Trigger::Hover => scene::Trigger::Hover,
+    };
+    let interaction = page.hierarchy.interactions.entry(id).or_default();
+    interaction.set(trigger, action.clone());
+    if let Some(transition) = transition {
+        interaction.set_transition(trigger, transition);
+    }
+    if let Some(exit) = exit {
+        interaction.hover_exit = exit;
+    }
+    if trigger == scene::Trigger::Hover && action.is_none() {
+        interaction.hover_exit = scene::HoverExit::Restore;
+    }
+    if interaction.is_empty() {
+        page.hierarchy.interactions.remove(&id);
+    }
+    Ok(())
+}
+
+fn resolve_action(
+    page: &Page,
+    id: usize,
+    action: dto::Action,
+    refs: &BTreeMap<String, String>,
+    sets: &components::variants::Sets,
+) -> Result<Option<scene::Action>> {
+    let variant = |target: &str| -> Result<uuid::Uuid> {
+        let uid =
+            uuid::Uuid::parse_str(target).map_err(|_| Error::invalid("Invalid variant UUID"))?;
+        if !variants(page, id, sets)
+            .iter()
+            .any(|(id, _)| **id == uid.to_string())
+        {
+            return Err(Error::invalid(
+                "Target must be an available variant of the source component",
+            ));
+        }
+        Ok(uid)
+    };
+    Ok(match action {
+        dto::Action::Multiple { actions } => {
+            if actions.is_empty()
+                || actions
+                    .iter()
+                    .any(|a| matches!(a, dto::Action::Multiple { .. } | dto::Action::None))
+            {
+                return Err(Error::invalid(
+                    "Multiple actions require a nonempty flat list of actions",
+                ));
+            }
+            let steps = actions
+                .into_iter()
+                .map(|a| resolve_action(page, id, a, refs, sets))
+                .collect::<Result<Vec<_>>>()?;
+            scene::Action::from_steps(steps.into_iter().flatten().collect())
+        }
         dto::Action::SetProperty {
             target,
             mut property,
@@ -220,62 +321,7 @@ pub(super) fn apply(
             }
             Some(scene::Action::Media { target, command })
         }
-    };
-    if hover_exit.is_some() && (!matches!(trigger, dto::Trigger::Hover) || action.is_none()) {
-        return Err(Error::invalid(
-            "hover_exit requires a nonempty hover action",
-        ));
-    }
-    let exit = hover_exit
-        .map(|exit| {
-            Ok(match exit {
-                dto::HoverExit::Restore => scene::HoverExit::Restore,
-                dto::HoverExit::Keep => scene::HoverExit::Keep,
-                dto::HoverExit::ChangeVariant { target } => scene::HoverExit::ChangeVariant {
-                    target: variant(&target)?,
-                },
-            })
-        })
-        .transpose()?;
-    let transition = transition.map(|transition| match transition {
-        dto::Transition::Instant => scene::Transition::Instant,
-        dto::Transition::Dissolve { duration_ms } => scene::Transition::Dissolve { duration_ms },
-        dto::Transition::Blur { duration_ms } => scene::Transition::Blur { duration_ms },
-        dto::Transition::Wipe {
-            direction,
-            duration_ms,
-        } => scene::Transition::Wipe {
-            direction,
-            duration_ms,
-        },
-    });
-    if transition.is_some_and(|transition| !transition.valid()) {
-        return Err(Error::invalid(
-            "Transition duration must be 50 to 2000 milliseconds",
-        ));
-    }
-    if action.is_none() && transition.is_some() {
-        return Err(Error::invalid("A transition requires a nonempty action"));
-    }
-    let trigger = match trigger {
-        dto::Trigger::Click => scene::Trigger::Click,
-        dto::Trigger::Hover => scene::Trigger::Hover,
-    };
-    let interaction = page.hierarchy.interactions.entry(id).or_default();
-    interaction.set(trigger, action.clone());
-    if let Some(transition) = transition {
-        interaction.set_transition(trigger, transition);
-    }
-    if let Some(exit) = exit {
-        interaction.hover_exit = exit;
-    }
-    if trigger == scene::Trigger::Hover && action.is_none() {
-        interaction.hover_exit = scene::HoverExit::Restore;
-    }
-    if interaction.is_empty() {
-        page.hierarchy.interactions.remove(&id);
-    }
-    Ok(())
+    })
 }
 
 fn media_command(command: dto::MediaCommand) -> scene::MediaCommand {

@@ -8,6 +8,7 @@ use crate::{
 };
 use std::collections::BTreeSet;
 use uic::components::dropdown::DropdownState;
+mod actions;
 mod chrome;
 mod connections;
 mod controls;
@@ -25,6 +26,7 @@ mod variants;
 pub(super) struct State {
     pub tab: bool,
     pub(in crate::editor) trigger: Trigger,
+    action: Option<(usize, usize, Trigger, usize)>,
     connection: Option<connections::Connection>,
     pub player: Option<Entity<Workspace>>,
     pub playback: Option<Playback>,
@@ -57,6 +59,7 @@ impl State {
         Self {
             tab: false,
             trigger: Trigger::Click,
+            action: None,
             connection: None,
             player: None,
             playback: None,

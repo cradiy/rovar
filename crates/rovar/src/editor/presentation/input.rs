@@ -16,28 +16,45 @@ impl Workspace {
     pub(super) fn playback_target(&self, world: Point<f32>) -> Option<usize> {
         let playback = self.presentation.playback.as_ref()?;
         let root = playback.overlay.map_or(playback.current, |o| o.target);
+        let index = self.scene_index();
+        let cached = self
+            .presentation
+            .scroll
+            .index
+            .as_ref()
+            .is_some_and(|old| Rc::ptr_eq(old, &index));
         if !scroll::bounds(self.world_rect(root)?).contains(&world) {
             return None;
         }
-        let order = self.canvas_layer_order();
-        let included = order
+        let order: Vec<_> = index
+            .order
             .iter()
             .copied()
-            .filter(|id| *id == root || self.ancestors(*id).contains(&root))
+            .filter(|id| {
+                *id == root
+                    || cached
+                        .then(|| self.presentation.scroll.nodes.get(id))
+                        .flatten()
+                        .map_or_else(
+                            || self.ancestors(*id).contains(&root),
+                            |node| node.ancestors.contains(&root),
+                        )
+            })
             .collect();
+        let included = order.iter().copied().collect();
         order.into_iter().rev().find(|id| {
-            if *id != root && !self.ancestors(*id).contains(&root) {
-                return false;
-            }
+            let node = cached
+                .then(|| self.presentation.scroll.nodes.get(id))
+                .flatten();
             if self
                 .hierarchy
                 .interactions
                 .get(id)
                 .is_some_and(|i| i.pass_through)
-                || self
+                || index
                     .shapes
-                    .iter()
-                    .any(|s| s.id == *id && s.kind == ShapeKind::Audio)
+                    .get(id)
+                    .is_some_and(|i| self.shapes[*i].kind == ShapeKind::Audio)
                 || crate::scene::boolean::consumed(&self.hierarchy, *id, &included)
                 || crate::scene::mask::is_source(&self.hierarchy, *id, &included)
             {
@@ -64,14 +81,24 @@ impl Workspace {
             {
                 return false;
             }
-            let Some(rect) = self.world_rect(*id) else {
+            let Some(rect) = node
+                .filter(|_| {
+                    self.hierarchy.groups.get(id).is_none_or(|group| {
+                        group.mask.is_none()
+                            && group.boolean.is_none()
+                            && !self.hierarchy.layouts.contains_key(id)
+                    })
+                })
+                .map(|n| n.rect)
+                .or_else(|| self.world_rect(*id))
+            else {
                 return false;
             };
             let local = world + self.playback_scroll_offset(*id);
             let p = crate::scene::rotation::around(
                 local,
                 crate::scene::rotation::center(rect),
-                -self.object_rotation(*id),
+                -node.map_or_else(|| self.object_rotation(*id), |n| n.rotation),
             );
             if !scroll::bounds(rect).contains(&p) {
                 return false;
@@ -88,10 +115,10 @@ impl Workspace {
                 return false;
             }
             if crate::scene::boolean::is_boolean(&self.hierarchy, *id)
-                || self
+                || index
                     .shapes
-                    .iter()
-                    .any(|s| s.id == *id && crate::scene::boolean::supported(s))
+                    .get(id)
+                    .is_some_and(|i| crate::scene::boolean::supported(&self.shapes[*i]))
             {
                 crate::scene::mask::outline(
                     &self.hierarchy,

@@ -9,7 +9,7 @@ pub(super) enum Menu {
     MediaControl,
 }
 
-fn action_label(action: &Option<Action>) -> &'static str {
+pub(super) fn action_label(action: &Option<Action>) -> &'static str {
     match action {
         None => "prototype-none",
         Some(Action::Navigate { .. }) => "prototype-navigate",
@@ -20,6 +20,7 @@ fn action_label(action: &Option<Action>) -> &'static str {
         Some(Action::Media { .. }) => "prototype-media-control",
         Some(Action::SetProperty { .. }) => "prototype-set-property",
         Some(Action::ScrollTo { .. }) => "prototype-scroll-to",
+        Some(Action::Multiple { .. }) => "prototype-actions",
     }
 }
 
@@ -63,12 +64,7 @@ impl Workspace {
     ) {
         if self.preview_read_only()
             || !self.layer_editable(id)
-            || self
-                .hierarchy
-                .interactions
-                .get(&id)
-                .and_then(|i| i.get(trigger))
-                == action
+            || self.prototype_action(id, trigger) == action
             || action.as_ref().is_some_and(|a| {
                 a.remap(|target| {
                     match a {
@@ -90,15 +86,23 @@ impl Workspace {
         {
             return;
         }
-        self.suspend(window, cx);
-        let before = self.snapshot_hierarchy();
-        let interaction = self.hierarchy.interactions.entry(id).or_default();
-        interaction.set(trigger, action);
-        if interaction.is_empty() {
-            self.hierarchy.interactions.remove(&id);
+        let mut actions = self
+            .hierarchy
+            .interactions
+            .get(&id)
+            .and_then(|i| i.get(trigger))
+            .map_or_else(Vec::new, Action::into_steps);
+        let index = self.prototype_action_index(id, trigger).min(actions.len());
+        if let Some(action) = action {
+            if index == actions.len() {
+                actions.push(action);
+            } else {
+                actions[index] = action;
+            }
+        } else if index < actions.len() {
+            actions.remove(index);
         }
-        self.history.borrow_mut().record(vec![before], None);
-        cx.notify();
+        self.write_prototype_actions(id, trigger, actions, window, cx);
     }
 
     pub(in crate::editor) fn presentation_controls(
@@ -121,15 +125,14 @@ impl Workspace {
                         .child(self.presentation_menu(None, Menu::Action, cx)),
                 );
         if let Some(id) = selected {
-            section = section.child(self.prototype_scroll_controls(id, cx));
             let trigger = self.presentation.trigger;
             let action = self
                 .hierarchy
                 .interactions
                 .get(&id)
                 .and_then(|i| i.get(trigger));
-            section =
-                section.child(
+            section = section
+                .child(
                     inspector::inspector_section(t("prototype-interaction"))
                         .child(
                             div()
@@ -185,73 +188,7 @@ impl Workspace {
                                     }))
                             }),
                         ))
-                        .child(
-                            div()
-                                .text_size(px(12.))
-                                .text_color(MUTED.color())
-                                .child(t("prototype-action")),
-                        )
-                        .child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap(px(4.))
-                                .child(div().flex_1().min_w_0().child(self.presentation_menu(
-                                    Some(id),
-                                    Menu::Action,
-                                    cx,
-                                )))
-                                .when(action.is_some(), |row| {
-                                    row.child(
-                                        inspector::icon_button(
-                                            "prototype-disconnect",
-                                            t("prototype-disconnect"),
-                                            GpuiIcons::LucideUnlink,
-                                            false,
-                                        )
-                                        .on_click(
-                                            cx.listener(move |this, _, window, cx| {
-                                                this.set_prototype_action(
-                                                    id, trigger, None, window, cx,
-                                                );
-                                            }),
-                                        ),
-                                    )
-                                }),
-                        )
-                        .when(
-                            matches!(
-                                action,
-                                Some(
-                                    Action::Navigate { .. }
-                                        | Action::OpenOverlay { .. }
-                                        | Action::ChangeVariant { .. }
-                                        | Action::Media { .. }
-                                        | Action::SetProperty { .. }
-                                        | Action::ScrollTo { .. }
-                                )
-                            ),
-                            |el| {
-                                el.child(div().text_size(px(12.)).text_color(MUTED.color()).child(
-                                    t(if matches!(action, Some(Action::ChangeVariant { .. })) {
-                                        "prototype-variant-target"
-                                    } else if matches!(action, Some(Action::Media { .. })) {
-                                        "prototype-video-target"
-                                    } else if matches!(
-                                        action,
-                                        Some(Action::SetProperty { .. } | Action::ScrollTo { .. })
-                                    ) {
-                                        "prototype-element-target"
-                                    } else {
-                                        "prototype-frame-target"
-                                    }),
-                                ))
-                                .child(self.presentation_menu(Some(id), Menu::Target, cx))
-                            },
-                        )
-                        .child(self.overlay_controls(id, trigger, cx))
-                        .children(self.media_action_controls(id, trigger, action.clone(), cx))
-                        .children(self.property_action_controls(id, trigger, &action, cx))
+                        .child(self.action_cards(id, trigger, cx))
                         .when(
                             action.is_some()
                                 && !matches!(
@@ -263,7 +200,8 @@ impl Workspace {
                         .when(trigger == Trigger::Hover && action.is_some(), |el| {
                             el.child(self.hover_exit_controls(id, cx))
                         }),
-                );
+                )
+                .child(self.prototype_scroll_controls(id, cx));
         } else {
             section = section.child(
                 div()
@@ -274,6 +212,57 @@ impl Workspace {
             );
         }
         section
+    }
+
+    pub(super) fn action_editor(
+        &self,
+        id: usize,
+        trigger: Trigger,
+        action: Option<Action>,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(8.))
+            .child(self.presentation_menu(Some(id), Menu::Action, cx))
+            .when(
+                matches!(
+                    action,
+                    Some(
+                        Action::Navigate { .. }
+                            | Action::OpenOverlay { .. }
+                            | Action::ChangeVariant { .. }
+                            | Action::Media { .. }
+                            | Action::SetProperty { .. }
+                            | Action::ScrollTo { .. }
+                    )
+                ),
+                |el| {
+                    el.child(div().text_size(px(11.)).text_color(MUTED.color()).child(t(
+                        if matches!(action, Some(Action::ChangeVariant { .. })) {
+                            "prototype-variant-target"
+                        } else if matches!(action, Some(Action::Media { .. })) {
+                            "prototype-video-target"
+                        } else if matches!(
+                            action,
+                            Some(Action::SetProperty { .. } | Action::ScrollTo { .. })
+                        ) {
+                            "prototype-element-target"
+                        } else {
+                            "prototype-frame-target"
+                        },
+                    )))
+                    .child(self.presentation_menu(
+                        Some(id),
+                        Menu::Target,
+                        cx,
+                    ))
+                },
+            )
+            .child(self.overlay_controls(id, trigger, cx))
+            .children(self.media_action_controls(id, trigger, action.clone(), cx))
+            .children(self.property_action_controls(id, trigger, &action, cx))
     }
 
     pub(super) fn presentation_menu(
@@ -292,12 +281,7 @@ impl Workspace {
             usize::from(source.is_some())
         };
         let trigger = self.presentation.trigger;
-        let action = source.and_then(|id| {
-            self.hierarchy
-                .interactions
-                .get(&id)
-                .and_then(|i| i.get(trigger))
-        });
+        let action = source.and_then(|id| self.prototype_action(id, trigger));
         let target = if source.is_none() {
             self.hierarchy.start
         } else if let Some(

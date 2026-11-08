@@ -8,12 +8,14 @@ mod tests;
 impl Workspace {
     pub(in crate::editor) fn layers_at(&self, position: Point<Pixels>) -> Vec<usize> {
         let world = self.board_point(None, position);
-        self.canvas_layer_order()
-            .into_iter()
+        let index = self.scene_index();
+        index
+            .order
+            .iter()
+            .copied()
             .rev()
-            .filter(|id| self.mask_hit(*id, world))
             .filter(|id| {
-                self.world_rect(*id).is_some_and(|rect| {
+                self.indexed_world_rect(*id, &index).is_some_and(|rect| {
                     let p = crate::scene::rotation::around(
                         world,
                         crate::scene::rotation::center(rect),
@@ -29,6 +31,7 @@ impl Workspace {
                         && p.y <= rect.y + rect.height + slop_y
                 })
             })
+            .filter(|id| self.mask_hit(*id, world))
             .collect()
     }
 

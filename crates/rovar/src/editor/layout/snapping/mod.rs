@@ -89,9 +89,10 @@ impl Workspace {
             }
             _ => return,
         };
+        let index = self.scene_index();
         self.snapping.original = ids
             .iter()
-            .filter_map(|id| self.world_bounds(*id))
+            .filter_map(|id| self.indexed_world_bounds(*id, &index))
             .reduce(union);
         let moving = self.descendants(&ids);
         let parent = ids.first().map(|id| self.layer_parent(*id));
@@ -109,16 +110,13 @@ impl Workspace {
             .flat_map(|id| self.ancestors(*id))
             .filter(|id| self.hierarchy.groups.contains_key(id))
             .collect();
-        let mut references = self.paint_order();
-        references.extend(self.hierarchy.groups.keys().copied().filter(|id| {
-            self.layer_info(*id)
-                .is_some_and(|(own, parent)| !self.effective_layer(own, parent).hidden)
-        }));
-        for id in references
-            .into_iter()
+        for id in index
+            .order
+            .iter()
+            .copied()
             .filter(|id| !moving.contains(id) && !ancestors.contains(id))
         {
-            let Some(r) = self.world_bounds(id) else {
+            let Some(r) = self.indexed_world_bounds(id, &index) else {
                 continue;
             };
             if measure_spacing && Some(self.layer_parent(id)) == parent {

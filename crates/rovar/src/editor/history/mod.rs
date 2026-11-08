@@ -5,8 +5,10 @@ use gpui::EntityInputHandler;
 impl Workspace {
     pub(super) fn seal_text_edits(&mut self, cx: &mut Context<Self>) {
         for text in &self.texts {
-            text.editor
-                .update(cx, |editor, _| editor.finish_composition());
+            if text.editor.read(cx).is_composing() {
+                text.editor
+                    .update(cx, |editor, _| editor.finish_composition());
+            }
         }
         self.history.borrow_mut().break_group();
     }

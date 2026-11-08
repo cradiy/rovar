@@ -134,6 +134,46 @@ fn profile_canvas_document(cx: &mut TestAppContext) {
         frames[60], frames[114], frames[119]
     );
     handle
+        .update(&mut visual.cx, |w, _, cx| {
+            w.snapping.enabled = true;
+            let ids = w
+                .shapes
+                .first()
+                .map(|s| ("shape", s.id))
+                .into_iter()
+                .chain(w.texts.first().map(|t| ("text", t.id)))
+                .chain(w.hierarchy.groups.keys().min().map(|id| ("group", *id)))
+                .collect::<Vec<_>>();
+            for (kind, id) in ids {
+                let mut select = std::time::Duration::ZERO;
+                let mut snapping = std::time::Duration::ZERO;
+                for _ in 0..5 {
+                    w.select(None, cx);
+                    let started = std::time::Instant::now();
+                    w.set_selection([id].into(), cx);
+                    select += started.elapsed();
+                    let started = std::time::Instant::now();
+                    w.begin_snapping(GestureKind::SelectionMove);
+                    snapping += started.elapsed();
+                }
+                eprintln!(
+                    "select {kind}: sync={:?} snapping={:?}",
+                    select / 5,
+                    snapping / 5
+                );
+                if let Some(rect) = w.world_rect(id) {
+                    let position = w.bounds.get().origin
+                        + w.view.screen(crate::scene::rotation::center(rect)).map(px);
+                    let started = std::time::Instant::now();
+                    let hits = w.layers_at(position);
+                    eprintln!("pick {kind}: hits={} {:?}", hits.len(), started.elapsed());
+                }
+            }
+            w.snapping.clear();
+            w.select(None, cx);
+        })
+        .unwrap();
+    handle
         .update(&mut visual.cx, |w, window, cx| {
             w.suspend(window, cx);
             window.remove_window();

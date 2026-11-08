@@ -60,6 +60,48 @@ fn layers_select_children_fold_without_changing_selection_and_delete_with_undo(
             assert_eq!(this.selected_shape, None);
         })
         .unwrap();
+    window
+        .update(&mut visual.cx, |this, _, cx| {
+            for id in 4..64 {
+                this.shapes.push(Shape::new(
+                    id,
+                    Some(1),
+                    ShapeKind::Rectangle,
+                    this.shapes[0].rect,
+                ));
+            }
+            for id in [100, 101] {
+                this.hierarchy.groups.insert(
+                    id,
+                    crate::scene::layer::LayerGroup {
+                        uid: uuid::Uuid::new_v4(),
+                        name: "Group".into(),
+                        board: Some(1),
+                        layer: Default::default(),
+                        mask: None,
+                        boolean: None,
+                    },
+                );
+            }
+            this.hierarchy.parents.extend([(2, 101), (101, 100)]);
+            this.hierarchy.order = vec![2, 101, 100];
+            this.sidebar.folded.extend([1, 100, 101]);
+            this.set_selection([2].into(), cx);
+            assert!(this.sidebar.folded.is_empty());
+        })
+        .unwrap();
+    draw(&mut visual);
+    let text = visual.debug_bounds("layer-2").unwrap();
+    let panel = visual.debug_bounds("layers-panel").unwrap();
+    assert!(text.top() > panel.top() && text.bottom() < panel.bottom());
+    window
+        .update(&mut visual.cx, |this, _, cx| {
+            // Property updates do not undo a manual fold of the current selection.
+            this.sidebar.folded.insert(100);
+            this.sync_fields(cx);
+            assert!(this.sidebar.folded.contains(&100));
+        })
+        .unwrap();
 }
 
 #[gpui::test]

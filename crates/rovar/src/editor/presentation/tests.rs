@@ -4,6 +4,301 @@ use crate::scene::presentation::{OverlayPosition, OverlaySettings};
 use gpui::{TestAppContext, VisualTestContext};
 
 #[gpui::test]
+#[ignore = "manual playback profiling; set ROVAR_PROFILE_DOCUMENT"]
+fn profile_playback_document(cx: &mut TestAppContext) {
+    let path = std::env::var_os("ROVAR_PROFILE_DOCUMENT").expect("ROVAR_PROFILE_DOCUMENT");
+    let document = crate::document::load(std::path::Path::new(&path))
+        .unwrap()
+        .into_document()
+        .unwrap();
+    let handle = open(cx);
+    handle
+        .update(cx, |w, window, cx| {
+            window.set_frame_diagnostics_enabled(true);
+            w.load_prepared_document(document, window, cx);
+            let started = std::time::Instant::now();
+            w.start_presentation(window, cx);
+            eprintln!("playback start={:?}", started.elapsed());
+        })
+        .unwrap();
+    let mut visual = VisualTestContext::from_window(handle.into(), cx);
+    draw(&mut visual);
+    draw(&mut visual);
+    let click_at = |visual: &mut VisualTestContext, x: f32, y: f32| {
+        let surface = visual.debug_bounds("playback-surface").unwrap();
+        let scale = f32::from(surface.size.width) / 736.;
+        let started = std::time::Instant::now();
+        visual.simulate_click(
+            surface.origin + point(px(x * scale), px(y * scale)),
+            Default::default(),
+        );
+        let dispatch = started.elapsed();
+        draw(visual);
+        (
+            dispatch,
+            started.elapsed(),
+            visual.update(|window, _| window.frame_diagnostics().unwrap().build_time),
+        )
+    };
+    for (name, points) in [
+        ("navigate", [(684., 356.), (180., 433.)]),
+        ("toggle", [(681., 772.), (681., 772.)]),
+        ("menu", [(615., 720.), (585., 795.)]),
+    ] {
+        let mut dispatch = Vec::new();
+        let mut total = Vec::new();
+        let mut frames = Vec::new();
+        for i in 0..12 {
+            let (a, b, c) = click_at(&mut visual, points[i % 2].0, points[i % 2].1);
+            if i >= 2 {
+                dispatch.push(a);
+                total.push(b);
+                frames.push(c);
+            }
+        }
+        dispatch.sort_unstable();
+        total.sort_unstable();
+        frames.sort_unstable();
+        eprintln!(
+            "{name}: dispatch p50={:?} p90={:?}; total p50={:?} p90={:?}; frame p50={:?}",
+            dispatch[5], dispatch[9], total[5], total[9], frames[5]
+        );
+    }
+    handle
+        .update(&mut visual.cx, |w, window, cx| {
+            let player = w.presentation.player.clone().unwrap();
+            player.update(cx, |p, cx| {
+                let started = std::time::Instant::now();
+                for _ in 0..10 {
+                    p.scene_index();
+                }
+                eprintln!("index validation average={:?}", started.elapsed() / 10);
+                let started = std::time::Instant::now();
+                let page = p.snapshot_page(cx).0;
+                eprintln!("snapshot={:?}", started.elapsed());
+                let started = std::time::Instant::now();
+                p.apply_component_page(page, window, cx);
+                eprintln!("apply page={:?}", started.elapsed());
+                let started = std::time::Instant::now();
+                p.refresh_playback_scroll();
+                eprintln!("refresh scroll={:?}", started.elapsed());
+                let started = std::time::Instant::now();
+                for _ in 0..20 {
+                    p.playback_hit(point(684., 356.), Trigger::Click);
+                }
+                eprintln!("hit average={:?}", started.elapsed() / 20);
+            });
+            w.stop_presentation(window, cx);
+            w.suspend(window, cx);
+            window.remove_window();
+        })
+        .unwrap();
+    visual.cx.run_until_parked();
+}
+
+#[gpui::test]
+fn action_cards_add_reorder_and_preserve_single_action_data_and_playback(cx: &mut TestAppContext) {
+    use crate::scene::presentation::{
+        Interaction,
+        property::{Boolean, Property},
+    };
+    let handle = open(cx);
+    let (frame, button, target) = handle.update(cx, |w, window, cx| {
+        let (frame, _, button) = setup(w, window, cx);
+        let target = w.next_id;
+        w.next_id += 1;
+        w.shapes.push(Shape::new(target, Some(frame), ShapeKind::Rectangle, Rect { x: 180., y: 120., width: 40., height: 40. }));
+        let legacy = serde_json::json!({"click":{"type":"set_property","target":button,"property":{"property":"opacity","value":0.5}}});
+        let interaction: Interaction = serde_json::from_value(legacy.clone()).unwrap();
+        assert_eq!(serde_json::to_value(&interaction).unwrap()["click"], legacy["click"]);
+        w.hierarchy.interactions.insert(button, interaction);
+        w.set_selection(BTreeSet::from([button]), cx);
+        w.set_presentation_tab(true, window, cx);
+        (frame, button, target)
+    }).unwrap();
+    let mut visual = VisualTestContext::from_window(handle.into(), cx);
+    draw(&mut visual);
+    click(&mut visual, "prototype-add-action");
+    click(&mut visual, "prototype-click-menu");
+    click(&mut visual, "prototype-option-1-7");
+    handle
+        .update(&mut visual.cx, |w, window, cx| {
+            w.set_prototype_action(
+                button,
+                Trigger::Click,
+                Some(Action::SetProperty {
+                    target,
+                    property: Property::Visible(Boolean::Toggle),
+                }),
+                window,
+                cx,
+            );
+            assert_eq!(
+                w.hierarchy.interactions[&button]
+                    .click
+                    .as_ref()
+                    .unwrap()
+                    .steps()
+                    .len(),
+                2
+            );
+        })
+        .unwrap();
+    draw(&mut visual);
+    click(&mut visual, "prototype-action-up-1");
+    click(&mut visual, "prototype-action-remove-0");
+    handle
+        .update(&mut visual.cx, |w, window, cx| {
+            assert!(
+                matches!(
+                    w.hierarchy.interactions[&button].click,
+                    Some(Action::SetProperty {
+                        property: Property::Opacity(0.5),
+                        ..
+                    })
+                ),
+                "Remaining action: {:?}",
+                w.hierarchy.interactions[&button].click
+            );
+            w.undo_redo(false, window, cx);
+            assert_eq!(
+                w.hierarchy.interactions[&button]
+                    .click
+                    .as_ref()
+                    .unwrap()
+                    .steps()
+                    .len(),
+                2
+            );
+            w.write_prototype_actions(
+                button,
+                Trigger::Hover,
+                vec![
+                    Action::SetProperty {
+                        target: button,
+                        property: Property::Opacity(0.8),
+                    },
+                    Action::SetProperty {
+                        target,
+                        property: Property::Width(90.),
+                    },
+                ],
+                window,
+                cx,
+            );
+            let page = w.snapshot_page(cx).0;
+            let decoded =
+                crate::document::Page::decode(&serde_json::to_vec(&page).unwrap()).unwrap();
+            assert_eq!(decoded.hierarchy.interactions, page.hierarchy.interactions);
+            w.start_presentation(window, cx);
+        })
+        .unwrap();
+    draw(&mut visual);
+    draw(&mut visual);
+    let surface = visual.debug_bounds("playback-surface").unwrap();
+    let zoom = f32::from(surface.size.width) / 320.;
+    let hotspot = surface.origin + point(px(50. * zoom), px(40. * zoom));
+    let outside = surface.origin + point(px(300. * zoom), px(400. * zoom));
+    visual.simulate_mouse_move(hotspot, None, Default::default());
+    draw(&mut visual);
+    handle
+        .update(&mut visual.cx, |w, _, cx| {
+            let player = w.presentation.player.as_ref().unwrap().read(cx);
+            assert_eq!(
+                player
+                    .shapes
+                    .iter()
+                    .find(|s| s.id == button)
+                    .unwrap()
+                    .layer
+                    .opacity,
+                0.8
+            );
+            assert_eq!(
+                player
+                    .shapes
+                    .iter()
+                    .find(|s| s.id == target)
+                    .unwrap()
+                    .rect
+                    .width,
+                90.
+            );
+        })
+        .unwrap();
+    visual.simulate_mouse_move(outside, None, Default::default());
+    draw(&mut visual);
+    visual.simulate_mouse_move(hotspot, None, Default::default());
+    draw(&mut visual);
+    visual.simulate_click(hotspot, Default::default());
+    draw(&mut visual);
+    handle
+        .update(&mut visual.cx, |w, _, cx| {
+            let player = w.presentation.player.as_ref().unwrap().read(cx);
+            assert_eq!(
+                player
+                    .shapes
+                    .iter()
+                    .find(|s| s.id == button)
+                    .unwrap()
+                    .layer
+                    .opacity,
+                0.5
+            );
+            let shape = player.shapes.iter().find(|s| s.id == target).unwrap();
+            assert!(shape.layer.hidden);
+            assert_eq!(shape.rect.width, 40.);
+            assert_eq!(
+                w.shapes
+                    .iter()
+                    .find(|s| s.id == button)
+                    .unwrap()
+                    .layer
+                    .opacity,
+                1.
+            );
+            assert!(
+                !w.shapes
+                    .iter()
+                    .find(|s| s.id == target)
+                    .unwrap()
+                    .layer
+                    .hidden
+            );
+            assert_eq!(
+                player.presentation.playback.as_ref().unwrap().current,
+                frame
+            );
+        })
+        .unwrap();
+    click(&mut visual, "playback-restart");
+    handle
+        .update(&mut visual.cx, |w, _, cx| {
+            let player = w.presentation.player.as_ref().unwrap().read(cx);
+            assert!(
+                !player
+                    .shapes
+                    .iter()
+                    .find(|s| s.id == target)
+                    .unwrap()
+                    .layer
+                    .hidden
+            );
+            assert_eq!(
+                player
+                    .shapes
+                    .iter()
+                    .find(|s| s.id == button)
+                    .unwrap()
+                    .layer
+                    .opacity,
+                1.
+            );
+        })
+        .unwrap();
+}
+
+#[gpui::test]
 fn property_paint_reuses_inspector_and_preserves_canvas_color(cx: &mut TestAppContext) {
     use crate::scene::presentation::property::Property;
     let handle = open(cx);
@@ -1587,7 +1882,7 @@ fn prototype_wire_drag_commit_cancel_and_undo(cx: &mut TestAppContext) {
     let mut visual = VisualTestContext::from_window(handle.into(), cx);
     visual.simulate_resize(size(px(1280.), px(1000.)));
     draw(&mut visual);
-    assert!(visual.debug_bounds("prototype-disconnect").is_none());
+    assert!(visual.debug_bounds("prototype-action-remove-0").is_none());
     let target = handle
         .update(&mut visual.cx, |w, _, _| {
             w.bounds.get().origin + w.view.screen(point(550., 100.)).map(px)
@@ -1617,12 +1912,12 @@ fn prototype_wire_drag_commit_cancel_and_undo(cx: &mut TestAppContext) {
     let hover_label: &'static str = format!("prototype-wire-{button}-prototype-hover").leak();
     assert!(visual.debug_bounds(click_label).is_none());
     assert!(visual.debug_bounds(hover_label).is_none());
-    let disconnect = visual.debug_bounds("prototype-disconnect").unwrap();
+    let disconnect = visual.debug_bounds("prototype-action-remove-0").unwrap();
     let menu = visual.debug_bounds("prototype-click-menu").unwrap();
     let panel = visual.debug_bounds("properties-panel").unwrap();
-    assert!(menu.right() <= disconnect.left());
+    assert!(menu.right() <= panel.right());
     assert!(disconnect.right() <= panel.right());
-    click(&mut visual, "prototype-disconnect");
+    click(&mut visual, "prototype-action-remove-0");
     handle
         .update(&mut visual.cx, |w, window, cx| {
             assert_eq!(w.hierarchy.interactions[&button].hover, None);
