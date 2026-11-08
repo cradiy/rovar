@@ -9,6 +9,26 @@ pub(super) struct Connection {
 }
 
 impl Workspace {
+    fn connection_frame(&self, id: usize, index: &scene_index::Index) -> usize {
+        if index.boards.contains_key(&id) {
+            return id;
+        }
+        let board = self
+            .hierarchy
+            .groups
+            .get(&id)
+            .and_then(|group| group.board)
+            .or_else(|| self.object_info(id).and_then(|(board, _, _)| board));
+        if let Some(board) = board.filter(|board| index.boards.contains_key(board)) {
+            return board;
+        }
+        self.ancestors(id)
+            .into_iter()
+            .rev()
+            .find(|id| index.boards.contains_key(id))
+            .unwrap_or(id)
+    }
+
     fn connection_target(
         &self,
         source: usize,
@@ -20,11 +40,12 @@ impl Workspace {
         )>,
     ) -> Option<(usize, Action)> {
         let variants = self.prototype_variants(source);
-        self.canvas_layer_order().into_iter().rev().find_map(|id| {
+        let index = self.scene_index();
+        index.order.iter().copied().rev().find_map(|id| {
             if id == source {
                 return None;
             }
-            let rect = self.world_bounds(id)?;
+            let rect = self.indexed_world_bounds(id, &index)?;
             if world.x < rect.x
                 || world.y < rect.y
                 || world.x > rect.x + rect.width
@@ -96,7 +117,7 @@ impl Workspace {
                 Action::SetProperty { property, .. } => Some(property),
                 _ => None,
             });
-        let page = property.as_ref().map(|_| self.snapshot_page(cx).0);
+        let page = property.as_ref().map(|_| self.snapshot_page_state(cx));
         let end = self.board_point(None, position);
         let (left, right) = self.canvas_insets();
         let bounds = self.bounds.get();
@@ -186,33 +207,43 @@ impl Workspace {
         );
     }
 
-    fn connection_end(&self, action: Action) -> Option<Rect> {
+    fn connection_target_id(&self, action: &Action) -> Option<usize> {
         match action {
             Action::Navigate { target }
             | Action::OpenOverlay { target, .. }
             | Action::Media { target, .. }
             | Action::ScrollTo { target }
-            | Action::SetProperty { target, .. } => self.world_bounds(target),
-            Action::ChangeVariant { target } => self
-                .hierarchy
-                .components
-                .iter()
-                .find(|(_, b)| b.master && b.component == target.to_string())
-                .and_then(|(id, _)| self.world_bounds(*id)),
+            | Action::SetProperty { target, .. } => Some(*target),
+            Action::ChangeVariant { target } => {
+                let target = target.to_string();
+                self.hierarchy
+                    .components
+                    .iter()
+                    .find(|(_, b)| b.master && b.component == target)
+                    .map(|(id, _)| *id)
+            }
             Action::Back | Action::CloseOverlay | Action::Multiple { .. } => None,
         }
     }
 
     pub(in crate::editor) fn prototype_connections(
         &self,
+        index: &scene_index::Index,
         cx: &mut Context<Self>,
     ) -> Option<gpui::AnyElement> {
         if !self.presentation.tab || self.preview.is_some() || self.preview_read_only() {
             return None;
         }
-        let visible: BTreeSet<_> = self.canvas_layer_order().into_iter().collect();
         let mut wires = Vec::new();
         let selected = self.selection_ids();
+        let focused = !selected.is_empty();
+        let scope = if focused {
+            self.descendants(&selected)
+        } else {
+            BTreeSet::new()
+        };
+        let overview = !focused && self.view.zoom < 0.25;
+        let mut seen = BTreeSet::new();
         let screen = |p| self.view.screen(p);
         let port = |r: Rect| screen(point(r.x + r.width, r.y + r.height / 2.));
         let end_point = |from: Point<f32>, r: Rect| {
@@ -224,19 +255,27 @@ impl Workspace {
             }
         };
         for (source, interaction) in &self.hierarchy.interactions {
-            if !visible.contains(source) {
+            if !index.included.contains(source) {
                 continue;
             }
-            let Some(rect) = self.world_bounds(*source) else {
+            let start = if overview {
+                self.connection_frame(*source, index)
+            } else {
+                *source
+            };
+            let Some(rect) = self.indexed_world_bounds(start, index) else {
                 continue;
             };
             let from = port(rect);
             let paired = interaction.click.is_some() && interaction.hover.is_some();
-            for trigger in [Trigger::Click, Trigger::Hover] {
-                let Some(action) = interaction.get(trigger) else {
+            for (trigger, action) in [
+                (Trigger::Click, &interaction.click),
+                (Trigger::Hover, &interaction.hover),
+            ] {
+                let Some(action) = action else {
                     continue;
                 };
-                for action in action.into_steps() {
+                for action in action.steps() {
                     if self
                         .presentation
                         .connection
@@ -245,10 +284,29 @@ impl Workspace {
                     {
                         continue;
                     }
-                    let (to, direction) = self
-                        .connection_end(action)
+                    let target = self.connection_target_id(action);
+                    if focused
+                        && !scope.contains(source)
+                        && !target.is_some_and(|id| scope.contains(&id))
+                    {
+                        continue;
+                    }
+                    let target = target.map(|id| {
+                        if overview {
+                            self.connection_frame(id, index)
+                        } else {
+                            id
+                        }
+                    });
+                    if (overview && target == Some(start) && index.boards.contains_key(&start))
+                        || !seen.insert((start, target, trigger == Trigger::Hover))
+                    {
+                        continue;
+                    }
+                    let (to, direction) = target
+                        .and_then(|id| self.indexed_world_bounds(id, index))
                         .map_or((from + point(64., -32.), -1.), |r| end_point(from, r));
-                    let active = selected.contains(source) && self.presentation.trigger == trigger;
+                    let active = scope.contains(source) && self.presentation.trigger == trigger;
                     let offset = if paired {
                         if trigger == Trigger::Click { -24. } else { 24. }
                     } else {
@@ -259,13 +317,13 @@ impl Workspace {
             }
         }
         if let Some(c) = &self.presentation.connection
-            && let Some(rect) = self.world_bounds(c.source)
+            && let Some(rect) = self.indexed_world_bounds(c.source, index)
         {
             let from = port(rect);
             let (to, direction) = c
                 .target
                 .as_ref()
-                .and_then(|(id, _)| self.world_bounds(*id))
+                .and_then(|(id, _)| self.indexed_world_bounds(*id, index))
                 .map_or((screen(c.end), -1.), |r| end_point(from, r));
             wires.push((from, to, direction, c.trigger, true, 0.));
         }
@@ -282,16 +340,26 @@ impl Workspace {
                             let from = from.map(px) + bounds.origin;
                             let to = to.map(px) + bounds.origin;
                             let bend = ((to.x - from.x).abs() * 0.5).clamp(px(40.), px(160.));
+                            let first = from + point(bend, px(*offset));
+                            let last = to + point(bend * *direction, px(*offset));
+                            let left = from.x.min(to.x).min(first.x).min(last.x) - px(9.);
+                            let right = from.x.max(to.x).max(first.x).max(last.x) + px(9.);
+                            let top = from.y.min(to.y).min(first.y).min(last.y) - px(9.);
+                            let bottom = from.y.max(to.y).max(first.y).max(last.y) + px(9.);
+                            let clip = window.content_mask().bounds;
+                            if right < clip.left()
+                                || left > clip.right()
+                                || bottom < clip.top()
+                                || top > clip.bottom()
+                            {
+                                continue;
+                            }
                             let mut line = PathBuilder::stroke(px(if *active { 2. } else { 1.5 }));
                             if *trigger == Trigger::Hover {
                                 line = line.dash_array(&[px(5.), px(4.)]);
                             }
                             line.move_to(from);
-                            line.cubic_bezier_to(
-                                to,
-                                from + point(bend, px(*offset)),
-                                to + point(bend * *direction, px(*offset)),
-                            );
+                            line.cubic_bezier_to(to, first, last);
                             line.move_to(to + point(px(7. * *direction), px(-4.)));
                             line.line_to(to);
                             line.line_to(to + point(px(7. * *direction), px(4.)));
@@ -316,8 +384,8 @@ impl Workspace {
             .presentation
             .connection
             .as_ref()
-            .and_then(|c| c.target.clone())
-            .and_then(|(id, _)| self.world_bounds(id))
+            .and_then(|c| c.target.as_ref())
+            .and_then(|(id, _)| self.indexed_world_bounds(*id, index))
         {
             let p = screen(point(rect.x, rect.y));
             overlay = overlay.child(
@@ -338,7 +406,7 @@ impl Workspace {
                 .first()
                 .copied()
                 .filter(|id| self.layer_editable(*id))
-            && let Some(rect) = self.world_bounds(source)
+            && let Some(rect) = self.indexed_world_bounds(source, index)
         {
             let p = port(rect);
             overlay = overlay.child(

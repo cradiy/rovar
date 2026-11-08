@@ -5,6 +5,7 @@ use uic::components::dropdown::{DropdownPlacement, dropdown};
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum Menu {
     Action,
+    AddAction,
     Target,
     MediaControl,
 }
@@ -111,19 +112,26 @@ impl Workspace {
     ) -> impl IntoElement + use<> {
         let ids = self.selection_ids();
         let selected = (ids.len() == 1).then(|| *ids.first().unwrap());
-        let mut section =
-            div()
-                .id("prototype-controls")
-                .debug_selector(|| "prototype-controls".into())
-                .flex_1()
-                .min_h_0()
-                .overflow_y_scroll()
-                .flex()
-                .flex_col()
-                .child(
-                    inspector::inspector_section(t("prototype-start"))
-                        .child(self.presentation_menu(None, Menu::Action, cx)),
-                );
+        let mut section = div()
+            .id("prototype-controls")
+            .debug_selector(|| "prototype-controls".into())
+            .flex_1()
+            .min_h_0()
+            .overflow_y_scroll()
+            .flex()
+            .flex_col()
+            .child(
+                div()
+                    .mx(px(16.))
+                    .pt(px(12.))
+                    .pb(px(18.))
+                    .flex_shrink_0()
+                    .flex()
+                    .flex_col()
+                    .gap(px(6.))
+                    .child(authoring::caption(t("prototype-start")))
+                    .child(self.presentation_menu(None, Menu::Action, cx)),
+            );
         if let Some(id) = selected {
             let trigger = self.presentation.trigger;
             let action = self
@@ -133,61 +141,106 @@ impl Workspace {
                 .and_then(|i| i.get(trigger));
             section = section
                 .child(
-                    inspector::inspector_section(t("prototype-interaction"))
+                    authoring::section()
                         .child(
                             div()
-                                .text_size(px(12.))
-                                .text_color(MUTED.color())
-                                .truncate()
-                                .child(self.layer_name(id, cx)),
-                        )
-                        .child(div().flex().gap(px(4.)).children(
-                            [Trigger::Click, Trigger::Hover].map(|trigger| {
-                                let key = if trigger == Trigger::Click {
-                                    "prototype-click"
-                                } else {
-                                    "prototype-hover"
-                                };
-                                div()
-                                    .id(key)
-                                    .debug_selector(move || key.into())
-                                    .flex_1()
-                                    .h(px(28.))
-                                    .rounded(px(5.))
-                                    .text_size(px(12.))
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .gap(px(6.))
-                                    .cursor_pointer()
-                                    .bg(if self.presentation.trigger == trigger {
-                                        Color::Selected.color()
-                                    } else {
-                                        Color::Input.color()
-                                    })
-                                    .child(t(key))
-                                    .when(
-                                        self.hierarchy
-                                            .interactions
-                                            .get(&id)
-                                            .and_then(|i| i.get(trigger))
-                                            .is_some(),
-                                        |el| {
-                                            el.child(
-                                                div()
-                                                    .size(px(5.))
-                                                    .rounded_full()
-                                                    .bg(ACCENT.color()),
-                                            )
+                                .flex()
+                                .items_center()
+                                .gap(px(8.))
+                                .child(
+                                    icon(
+                                        if self.hierarchy.components.contains_key(&id) {
+                                            GpuiIcons::LucideDiamond
+                                        } else {
+                                            GpuiIcons::LucideMousePointer2
                                         },
+                                        15.,
                                     )
-                                    .on_click(cx.listener(move |this, _, window, cx| {
-                                        this.cancel_gesture(window, cx);
-                                        this.presentation.trigger = trigger;
-                                        cx.notify();
-                                    }))
-                            }),
-                        ))
+                                    .text_color(ACCENT.color()),
+                                )
+                                .child(
+                                    div()
+                                        .min_w_0()
+                                        .flex_1()
+                                        .flex()
+                                        .flex_col()
+                                        .gap(px(4.))
+                                        .child(
+                                            div()
+                                                .text_size(px(12.))
+                                                .font_weight(FontWeight::SEMIBOLD)
+                                                .truncate()
+                                                .child(self.layer_name(id, cx)),
+                                        )
+                                        .when_some(
+                                            self.hierarchy.components.get(&id),
+                                            |el, binding| {
+                                                el.child(authoring::caption(t(if binding.master {
+                                                    "prototype-main-component"
+                                                } else {
+                                                    "prototype-instance"
+                                                })))
+                                            },
+                                        ),
+                                ),
+                        )
+                        .child(
+                            div()
+                                .p(px(2.))
+                                .rounded(px(7.))
+                                .bg(Color::Workspace.color())
+                                .flex()
+                                .gap(px(2.))
+                                .children([Trigger::Click, Trigger::Hover].map(|trigger| {
+                                    let key = if trigger == Trigger::Click {
+                                        "prototype-click"
+                                    } else {
+                                        "prototype-hover"
+                                    };
+                                    div()
+                                        .id(key)
+                                        .debug_selector(move || key.into())
+                                        .flex_1()
+                                        .h(px(26.))
+                                        .rounded(px(5.))
+                                        .text_size(px(12.))
+                                        .flex()
+                                        .items_center()
+                                        .justify_center()
+                                        .gap(px(6.))
+                                        .cursor_pointer()
+                                        .bg(if self.presentation.trigger == trigger {
+                                            Color::Selected.color()
+                                        } else {
+                                            Color::Transparent.color()
+                                        })
+                                        .child(t(key))
+                                        .when(
+                                            self.hierarchy
+                                                .interactions
+                                                .get(&id)
+                                                .and_then(|i| i.get(trigger))
+                                                .is_some(),
+                                            |el| {
+                                                el.child(
+                                                    div()
+                                                        .size(px(5.))
+                                                        .rounded_full()
+                                                        .bg(ACCENT.color()),
+                                                )
+                                            },
+                                        )
+                                        .on_click(cx.listener(move |this, _, window, cx| {
+                                            this.close_action_editor(window, cx);
+                                            this.presentation
+                                                .transition_editor
+                                                .update(cx, |state, cx| state.close(window, cx));
+                                            this.cancel_gesture(window, cx);
+                                            this.presentation.trigger = trigger;
+                                            cx.notify();
+                                        }))
+                                })),
+                        )
                         .child(self.action_cards(id, trigger, cx))
                         .when(
                             action.is_some()
@@ -195,7 +248,7 @@ impl Workspace {
                                     action,
                                     Some(Action::Media { .. } | Action::ScrollTo { .. })
                                 ),
-                            |el| el.child(self.transition_controls(id, trigger, cx)),
+                            |el| el.child(self.transition_summary(id, trigger, cx)),
                         )
                         .when(trigger == Trigger::Hover && action.is_some(), |el| {
                             el.child(self.hover_exit_controls(id, cx))
@@ -225,7 +278,6 @@ impl Workspace {
             .flex()
             .flex_col()
             .gap(px(8.))
-            .child(self.presentation_menu(Some(id), Menu::Action, cx))
             .when(
                 matches!(
                     action,
@@ -273,7 +325,10 @@ impl Workspace {
     ) -> impl IntoElement + use<> {
         let target_menu = menu == Menu::Target;
         let control_menu = menu == Menu::MediaControl;
-        let index = if control_menu {
+        let add = menu == Menu::AddAction;
+        let index = if add {
+            7
+        } else if control_menu {
             5
         } else if target_menu {
             4
@@ -452,7 +507,9 @@ impl Workspace {
                         Some(Action::ScrollTo { target: *target }),
                     ));
                 }
-                options.push((0, t("prototype-none").to_owned(), None));
+                if !add {
+                    options.push((0, t("prototype-none").to_owned(), None));
+                }
                 options.push((1, t("prototype-back").to_owned(), Some(Action::Back)));
                 let board = target
                     .filter(|id| self.boards.iter().any(|b| b.id == *id && !b.layer.hidden))
@@ -521,6 +578,82 @@ impl Workspace {
                 }
             }
         }
+        let default_trigger = div()
+            .id(if control_menu {
+                "prototype-media-menu"
+            } else if target_menu {
+                "prototype-target-menu"
+            } else if source.is_some() {
+                "prototype-click-menu"
+            } else {
+                "prototype-start-menu"
+            })
+            .debug_selector(move || {
+                if control_menu {
+                    "prototype-media-menu".into()
+                } else if target_menu {
+                    "prototype-target-menu".into()
+                } else if source.is_some() {
+                    "prototype-click-menu".into()
+                } else {
+                    "prototype-start-menu".into()
+                }
+            })
+            .h(px(34.))
+            .w_full()
+            .min_w_0()
+            .px(px(10.))
+            .rounded(px(6.))
+            .bg(if menu == Menu::Action && source.is_some() {
+                Color::Transparent.color()
+            } else {
+                Color::Input.color()
+            })
+            .flex()
+            .items_center()
+            .gap(px(8.))
+            .cursor_pointer()
+            .text_size(px(12.))
+            .text_color(TEXT.color())
+            .hover(|s| s.bg(Color::Hover.color()))
+            .child(div().flex_1().min_w_0().truncate().child(label))
+            .child(icon(GpuiIcons::LucideChevronDown, 12.));
+        let trigger_element = if add {
+            let empty = source.is_some_and(|id| self.prototype_actions(id, trigger).is_empty());
+            inspector::icon_button(
+                "prototype-add-action",
+                t("prototype-add-action"),
+                GpuiIcons::LucidePlus,
+                false,
+            )
+            .size(px(26.))
+            .when(empty, |el| {
+                el.w_full()
+                    .h(px(34.))
+                    .px(px(10.))
+                    .gap(px(8.))
+                    .bg(Color::Input.color())
+                    .text_size(px(12.))
+                    .text_color(ACCENT.color())
+                    .child(t("prototype-add-action"))
+            })
+            .into_any_element()
+        } else {
+            default_trigger.into_any_element()
+        };
+        if add {
+            options.sort_by_key(|(key, _, _)| match key {
+                7 => 0,
+                5 => 1,
+                2 => 2,
+                1 => 3,
+                3 => 4,
+                4 => 5,
+                8 => 6,
+                _ => 7,
+            });
+        }
+        let mut category = None;
         dropdown(&self.presentation.menus[index])
             .placement(DropdownPlacement::BottomStart)
             .w(px(230.))
@@ -532,46 +665,7 @@ impl Workspace {
             .shadow_lg()
             .text_size(px(12.))
             .text_color(TEXT.color())
-            .trigger(
-                div()
-                    .id(if control_menu {
-                        "prototype-media-menu"
-                    } else if target_menu {
-                        "prototype-target-menu"
-                    } else if source.is_some() {
-                        "prototype-click-menu"
-                    } else {
-                        "prototype-start-menu"
-                    })
-                    .debug_selector(move || {
-                        if control_menu {
-                            "prototype-media-menu".into()
-                        } else if target_menu {
-                            "prototype-target-menu".into()
-                        } else if source.is_some() {
-                            "prototype-click-menu".into()
-                        } else {
-                            "prototype-start-menu".into()
-                        }
-                    })
-                    .h(px(32.))
-                    .w_full()
-                    .min_w_0()
-                    .px(px(8.))
-                    .rounded(px(6.))
-                    .border_1()
-                    .border_color(BORDER.color())
-                    .bg(Color::Input.color())
-                    .flex()
-                    .items_center()
-                    .gap(px(6.))
-                    .cursor_pointer()
-                    .text_size(px(12.))
-                    .text_color(TEXT.color())
-                    .hover(|s| s.bg(Color::Hover.color()))
-                    .child(div().flex_1().min_w_0().truncate().child(label))
-                    .child(icon(GpuiIcons::LucideChevronDown, 12.)),
-            )
+            .trigger(trigger_element)
             .menu(
                 div()
                     .id(("prototype-options", index))
@@ -581,7 +675,9 @@ impl Workspace {
                     .flex_col()
                     .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
                     .children(options.into_iter().map(|(key, label, option)| {
-                        let current = if control_menu {
+                        let current = if add {
+                            false
+                        } else if control_menu {
                             option == action
                         } else if source.is_some() && !target_menu {
                             action_label(&option) == action_label(&action)
@@ -590,7 +686,14 @@ impl Workspace {
                         } else {
                             option == target.map(|target| Action::Navigate { target })
                         };
-                        div()
+                        let group = match key {
+                            7 | 5 => "prototype-add-change",
+                            6 => "prototype-add-media",
+                            _ => "prototype-add-navigation",
+                        };
+                        let heading = add && category != Some(group);
+                        category = Some(group);
+                        let row = div()
                             .id(("prototype-option", key))
                             .debug_selector(move || format!("prototype-option-{index}-{key}"))
                             .h(px(28.))
@@ -605,16 +708,30 @@ impl Workspace {
                                 el.bg(Color::Selected.color()).text_color(ACCENT.color())
                             })
                             .hover(|s| s.bg(Color::Hover.color()))
-                            .child(
-                                div()
-                                    .w(px(14.))
-                                    .children(current.then(|| icon(GpuiIcons::LucideCheck, 14.))),
-                            )
+                            .child(div().w(px(16.)).children(if add {
+                                Some(icon(authoring::glyph(option.as_ref()), 14.))
+                            } else {
+                                current.then(|| icon(GpuiIcons::LucideCheck, 14.))
+                            }))
                             .child(div().flex_1().min_w_0().truncate().child(label))
                             .on_click(cx.listener(move |this, _, window, cx| {
                                 this.presentation.menus[index]
                                     .update(cx, |menu, cx| menu.close(window, cx));
                                 if let Some(id) = source {
+                                    if option.is_none() {
+                                        this.remove_prototype_action(
+                                            id,
+                                            trigger,
+                                            this.prototype_action_index(id, trigger),
+                                            window,
+                                            cx,
+                                        );
+                                        return;
+                                    }
+                                    if add {
+                                        let count = this.prototype_actions(id, trigger).len();
+                                        this.select_action(id, trigger, count, window, cx);
+                                    }
                                     if trigger == Trigger::Click {
                                         this.set_click(id, option.clone(), window, cx);
                                     } else {
@@ -639,7 +756,21 @@ impl Workspace {
                                         cx,
                                     );
                                 }
-                            }))
+                            }));
+                        div()
+                            .flex_shrink_0()
+                            .when(heading, |el| {
+                                el.child(
+                                    div()
+                                        .px(px(8.))
+                                        .pt(px(9.))
+                                        .pb(px(5.))
+                                        .text_size(px(10.))
+                                        .text_color(MUTED.color())
+                                        .child(t(group)),
+                                )
+                            })
+                            .child(row)
                     })),
             )
     }

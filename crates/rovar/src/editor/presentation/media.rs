@@ -42,9 +42,11 @@ fn parameter(command: MediaCommand) -> Option<(&'static str, f64)> {
     })
 }
 
+type Target = (usize, usize, Trigger, usize, Action);
+
 pub(super) struct State {
     input: Entity<TextInput>,
-    target: RefCell<Option<(usize, usize, Trigger, Action)>>,
+    target: RefCell<Option<Target>>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -76,8 +78,20 @@ impl Workspace {
             .collect()
     }
 
+    pub(super) fn commit_media_input(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self
+            .presentation
+            .media
+            .input
+            .focus_handle(cx)
+            .is_focused(window)
+        {
+            self.apply_media_parameter(window, cx);
+        }
+    }
+
     fn apply_media_parameter(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some((generation, id, trigger, action @ Action::Media { target, command })) =
+        let Some((generation, id, trigger, index, action @ Action::Media { target, command })) =
             self.presentation.media.target.borrow().clone()
         else {
             return;
@@ -85,12 +99,8 @@ impl Workspace {
         if generation != self.pages.generation
             || self.selection_ids() != BTreeSet::from([id])
             || self.presentation.trigger != trigger
-            || self
-                .hierarchy
-                .interactions
-                .get(&id)
-                .and_then(|i| i.get(trigger))
-                != Some(action)
+            || self.prototype_action_index(id, trigger) != index
+            || self.prototype_action(id, trigger) != Some(action)
         {
             return;
         }
@@ -172,7 +182,13 @@ impl Workspace {
             self.presentation.media.target.replace(None);
             return Some(el);
         };
-        let key = Some((self.pages.generation, id, trigger, action));
+        let key = Some((
+            self.pages.generation,
+            id,
+            trigger,
+            self.prototype_action_index(id, trigger),
+            action,
+        ));
         if self.presentation.media.target.replace(key.clone()) != key {
             self.presentation
                 .media

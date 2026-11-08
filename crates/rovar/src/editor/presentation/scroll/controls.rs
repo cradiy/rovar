@@ -1,4 +1,5 @@
 use super::*;
+use uic::components::dropdown::{DropdownPlacement, dropdown};
 
 impl Workspace {
     pub(in crate::editor::presentation) fn set_prototype_behavior(
@@ -72,49 +73,107 @@ impl Workspace {
         let scroll = settings.scroll;
         let fixed = settings.fixed;
         let pass_through = settings.pass_through;
-        inspector::inspector_section(t("prototype-scrolling"))
+        let axes = [
+            ("prototype-scroll-none", ScrollAxis::None),
+            ("prototype-scroll-vertical", ScrollAxis::Vertical),
+            ("prototype-scroll-horizontal", ScrollAxis::Horizontal),
+            ("prototype-scroll-both", ScrollAxis::Both),
+        ];
+        super::super::authoring::section()
+            .child(
+                div()
+                    .text_size(px(12.))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .child(t("prototype-behavior")),
+            )
             .when(
                 self.boards.iter().any(|b| b.id == id) || self.hierarchy.layouts.contains_key(&id),
                 |el| {
                     el.child(
-                        div().flex().gap(px(3.)).children(
-                            [
-                                ("prototype-scroll-none", ScrollAxis::None),
-                                ("prototype-scroll-vertical", ScrollAxis::Vertical),
-                                ("prototype-scroll-horizontal", ScrollAxis::Horizontal),
-                                ("prototype-scroll-both", ScrollAxis::Both),
-                            ]
-                            .map(|(key, axis)| {
-                                div()
-                                    .id(key)
-                                    .debug_selector(move || key.into())
-                                    .flex_1()
-                                    .min_w_0()
-                                    .h(px(28.))
-                                    .rounded(px(5.))
-                                    .text_size(px(11.))
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .cursor_pointer()
-                                    .bg(if scroll == axis {
-                                        Color::Selected.color()
-                                    } else {
-                                        Color::Input.color()
-                                    })
-                                    .child(t(key))
-                                    .on_click(cx.listener(move |this, _, window, cx| {
-                                        this.set_prototype_behavior(
-                                            id,
-                                            axis,
-                                            fixed,
-                                            pass_through,
-                                            window,
-                                            cx,
-                                        );
-                                    }))
-                            }),
-                        ),
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(12.))
+                            .child(
+                                super::super::authoring::caption(t("prototype-scroll")).w(px(76.)),
+                            )
+                            .child(
+                                div().flex_1().min_w_0().child(
+                                    dropdown(&self.presentation.menus[6])
+                                        .placement(DropdownPlacement::BottomEnd)
+                                        .w(px(176.))
+                                        .p(px(5.))
+                                        .bg(Color::Input.color())
+                                        .text_color(TEXT.color())
+                                        .border_color(BORDER.color())
+                                        .rounded(px(8.))
+                                        .trigger(
+                                            div()
+                                                .id("prototype-scroll-menu")
+                                                .debug_selector(|| "prototype-scroll-menu".into())
+                                                .h(px(34.))
+                                                .px(px(10.))
+                                                .rounded(px(6.))
+                                                .bg(Color::Input.color())
+                                                .flex()
+                                                .items_center()
+                                                .gap(px(8.))
+                                                .text_size(px(12.))
+                                                .child(
+                                                    div().flex_1().child(t(axes
+                                                        .iter()
+                                                        .find(|(_, axis)| *axis == scroll)
+                                                        .unwrap()
+                                                        .0)),
+                                                )
+                                                .child(icon(GpuiIcons::LucideChevronDown, 12.)),
+                                        )
+                                        .menu(div().flex().flex_col().children(axes.map(
+                                            |(key, axis)| {
+                                                div()
+                                                    .id(key)
+                                                    .debug_selector(move || key.into())
+                                                    .flex_shrink_0()
+                                                    .min_w_0()
+                                                    .h(px(28.))
+                                                    .rounded(px(5.))
+                                                    .text_size(px(11.))
+                                                    .flex()
+                                                    .items_center()
+                                                    .px(px(8.))
+                                                    .gap(px(8.))
+                                                    .cursor_pointer()
+                                                    .bg(if scroll == axis {
+                                                        Color::Selected.color()
+                                                    } else {
+                                                        Color::Transparent.color()
+                                                    })
+                                                    .child(
+                                                        icon(GpuiIcons::LucideCheck, 12.).opacity(
+                                                            if scroll == axis { 1. } else { 0. },
+                                                        ),
+                                                    )
+                                                    .child(t(key))
+                                                    .on_click(cx.listener(
+                                                        move |this, _, window, cx| {
+                                                            this.presentation.menus[6]
+                                                                .update(cx, |state, cx| {
+                                                                    state.close(window, cx)
+                                                                });
+                                                            this.set_prototype_behavior(
+                                                                id,
+                                                                axis,
+                                                                fixed,
+                                                                pass_through,
+                                                                window,
+                                                                cx,
+                                                            );
+                                                        },
+                                                    ))
+                                            },
+                                        ))),
+                                ),
+                            ),
                     )
                 },
             )
@@ -124,30 +183,8 @@ impl Workspace {
                     ("prototype-pass-through", pass_through),
                 ]
                 .map(|(key, enabled)| {
-                    div()
-                        .id(key)
-                        .debug_selector(move || key.into())
-                        .h(px(30.))
-                        .flex()
-                        .items_center()
-                        .gap(px(8.))
-                        .cursor_pointer()
-                        .text_size(px(12.))
-                        .child(
-                            div()
-                                .size(px(16.))
-                                .rounded(px(4.))
-                                .border_1()
-                                .border_color(BORDER.color())
-                                .bg(if enabled {
-                                    ACCENT.color()
-                                } else {
-                                    Color::Input.color()
-                                })
-                                .children(enabled.then(|| icon(GpuiIcons::LucideCheck, 14.))),
-                        )
-                        .child(t(key))
-                        .on_click(cx.listener(move |this, _, window, cx| {
+                    super::super::authoring::toggle(key, t(key), enabled).on_click(cx.listener(
+                        move |this, _, window, cx| {
                             this.set_prototype_behavior(
                                 id,
                                 scroll,
@@ -164,7 +201,8 @@ impl Workspace {
                                 window,
                                 cx,
                             );
-                        }))
+                        },
+                    ))
                 }),
             )
     }

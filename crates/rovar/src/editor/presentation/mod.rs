@@ -8,7 +8,9 @@ use crate::{
 };
 use std::collections::BTreeSet;
 use uic::components::dropdown::DropdownState;
+use uic::components::popover::PopoverState;
 mod actions;
+mod authoring;
 mod chrome;
 mod connections;
 mod controls;
@@ -30,7 +32,9 @@ pub(super) struct State {
     connection: Option<connections::Connection>,
     pub player: Option<Entity<Workspace>>,
     pub playback: Option<Playback>,
-    menus: [Entity<DropdownState>; 6],
+    menus: [Entity<DropdownState>; 8],
+    editor: Entity<PopoverState>,
+    transition_editor: Entity<PopoverState>,
     media: media::State,
     properties: properties::State,
     pub(in crate::editor) scroll: scroll::State,
@@ -64,6 +68,8 @@ impl State {
             player: None,
             playback: None,
             menus: std::array::from_fn(|_| cx.new(|cx| DropdownState::new(window, cx))),
+            editor: cx.new(|cx| PopoverState::new(window, cx)),
+            transition_editor: cx.new(|cx| PopoverState::new(window, cx)),
             media: media::State::new(window, cx),
             properties: properties::State::new(window, cx),
             scroll: scroll::State::default(),

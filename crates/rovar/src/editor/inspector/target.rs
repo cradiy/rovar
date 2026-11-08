@@ -10,6 +10,7 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.sync_prototype_authoring(window, cx);
         let key = self.inspector_action().map(|(id, trigger, property)| {
             (
                 id,

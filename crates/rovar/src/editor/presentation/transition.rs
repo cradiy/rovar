@@ -282,7 +282,7 @@ impl Workspace {
                             .id(key)
                             .debug_selector(move || key.into())
                             .flex_1()
-                            .min_w(px(100.))
+                            .min_w(px(48.))
                             .h(px(28.))
                             .rounded(px(5.))
                             .text_size(px(12.))

@@ -41,6 +41,7 @@ fn prototype_wire_to_main_variant_creates_state_change(cx: &mut TestAppContext) 
     visual.simulate_mouse_move(end, Some(MouseButton::Left), Default::default());
     visual.simulate_mouse_up(end, MouseButton::Left, Default::default());
     draw(&mut visual);
+    click(&mut visual, "prototype-transition-menu");
     click(&mut visual, "prototype-dissolve");
     handle
         .update(&mut visual.cx, |w, window, cx| {

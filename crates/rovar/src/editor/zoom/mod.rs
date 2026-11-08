@@ -105,6 +105,13 @@ impl Workspace {
         let row = div()
             .h(px(60.))
             .px(px(12.))
+            .when(self.presentation.tab, |el| {
+                el.h(px(52.))
+                    .mx(px(16.))
+                    .px_0()
+                    .border_b_1()
+                    .border_color(BORDER.color())
+            })
             .flex_shrink_0()
             .flex()
             .items_center()
@@ -112,8 +119,17 @@ impl Workspace {
             .child(
                 panels::mode_tabs()
                     .id("inspector-modes")
+                    .when(self.presentation.tab, |el| {
+                        el.p_0().rounded_none().bg(Color::Transparent.color())
+                    })
                     .child(
                         panels::mode_tab("inspector-design-tab", !self.presentation.tab)
+                            .when(self.presentation.tab, |el| {
+                                el.h(px(38.))
+                                    .rounded_none()
+                                    .border_0()
+                                    .bg(Color::Transparent.color())
+                            })
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.set_presentation_tab(false, window, cx)
                             }))
@@ -121,6 +137,14 @@ impl Workspace {
                     )
                     .child(
                         panels::mode_tab("inspector-prototype-tab", self.presentation.tab)
+                            .when(self.presentation.tab, |el| {
+                                el.h(px(38.))
+                                    .rounded_none()
+                                    .border_0()
+                                    .border_b_2()
+                                    .border_color(ACCENT.color())
+                                    .bg(Color::Transparent.color())
+                            })
                             .child(div().min_w_0().truncate().child(t("prototype")))
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.set_presentation_tab(true, window, cx)
@@ -132,6 +156,7 @@ impl Workspace {
             div()
                 .px(px(16.))
                 .pb(px(6.))
+                .when(self.presentation.tab, |el| el.pt(px(12.)).pb_0())
                 .flex()
                 .items_center()
                 .justify_between()

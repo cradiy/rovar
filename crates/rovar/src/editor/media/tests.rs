@@ -123,6 +123,7 @@ fn audio_import_preserves_source_and_stays_out_of_presented_artwork(cx: &mut Tes
             audio
         })
         .unwrap();
+    click(&mut visual, "prototype-action-select-0");
     click(&mut visual, "prototype-click-menu");
     assert!(visual.debug_bounds("prototype-option-1-6").is_some());
     visual.simulate_keystrokes("escape");

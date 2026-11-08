@@ -54,92 +54,95 @@ impl Workspace {
             .unwrap_or_else(|| t("prototype-missing-variant").into());
         div()
             .flex()
-            .flex_col()
-            .gap(px(6.))
-            .pt(px(6.))
+            .items_center()
+            .gap(px(12.))
             .child(
                 div()
                     .text_size(px(12.))
+                    .w(px(76.))
                     .text_color(MUTED.color())
                     .child(t("prototype-hover-exit")),
             )
             .child(
-                dropdown(&self.presentation.menus[2])
-                    .placement(DropdownPlacement::BottomStart)
-                    .w(px(230.))
-                    .p(px(5.))
-                    .rounded(px(10.))
-                    .bg(Color::Input.color())
-                    .border_1()
-                    .border_color(BORDER.color())
-                    .shadow_lg()
-                    .text_size(px(12.))
-                    .text_color(TEXT.color())
-                    .trigger(
-                        div()
-                            .id("prototype-hover-exit-menu")
-                            .debug_selector(|| "prototype-hover-exit-menu".into())
-                            .h(px(32.))
-                            .w_full()
-                            .min_w_0()
-                            .px(px(8.))
-                            .rounded(px(6.))
-                            .border_1()
-                            .border_color(BORDER.color())
-                            .bg(Color::Input.color())
-                            .flex()
-                            .items_center()
-                            .gap(px(6.))
-                            .cursor_pointer()
-                            .text_size(px(12.))
-                            .text_color(TEXT.color())
-                            .hover(|s| s.bg(Color::Hover.color()))
-                            .child(div().flex_1().min_w_0().truncate().child(label))
-                            .child(icon(GpuiIcons::LucideChevronDown, 12.)),
-                    )
-                    .menu(
-                        div()
-                            .id("prototype-hover-exit-options")
-                            .max_h(px(300.))
-                            .overflow_y_scroll()
-                            .flex()
-                            .flex_col()
-                            .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
-                            .children(options.into_iter().enumerate().map(
-                                |(key, (value, label))| {
-                                    div()
-                                        .id(("prototype-exit-option", key))
-                                        .debug_selector(move || {
-                                            format!("prototype-exit-option-{key}")
-                                        })
-                                        .h(px(28.))
-                                        .flex_shrink_0()
-                                        .px(px(8.))
-                                        .rounded(px(5.))
-                                        .flex()
-                                        .items_center()
-                                        .gap(px(8.))
-                                        .cursor_pointer()
-                                        .when(current == value, |el| {
-                                            el.bg(Color::Selected.color())
-                                                .text_color(ACCENT.color())
-                                        })
-                                        .hover(|s| s.bg(Color::Hover.color()))
-                                        .child(
-                                            div().w(px(14.)).children(
-                                                (current == value)
-                                                    .then(|| icon(GpuiIcons::LucideCheck, 14.)),
-                                            ),
-                                        )
-                                        .child(div().flex_1().min_w_0().truncate().child(label))
-                                        .on_click(cx.listener(move |this, _, window, cx| {
-                                            this.presentation.menus[2]
-                                                .update(cx, |menu, cx| menu.close(window, cx));
-                                            this.set_hover_exit(id, value, window, cx);
-                                        }))
-                                },
-                            )),
-                    ),
+                div().flex_1().min_w_0().child(
+                    dropdown(&self.presentation.menus[2])
+                        .placement(DropdownPlacement::BottomStart)
+                        .w(px(230.))
+                        .p(px(5.))
+                        .rounded(px(10.))
+                        .bg(Color::Input.color())
+                        .border_1()
+                        .border_color(BORDER.color())
+                        .shadow_lg()
+                        .text_size(px(12.))
+                        .text_color(TEXT.color())
+                        .trigger(
+                            div()
+                                .id("prototype-hover-exit-menu")
+                                .debug_selector(|| "prototype-hover-exit-menu".into())
+                                .h(px(32.))
+                                .w_full()
+                                .min_w_0()
+                                .px(px(8.))
+                                .rounded(px(6.))
+                                .border_1()
+                                .border_color(BORDER.color())
+                                .bg(Color::Input.color())
+                                .flex()
+                                .items_center()
+                                .gap(px(6.))
+                                .cursor_pointer()
+                                .text_size(px(12.))
+                                .text_color(TEXT.color())
+                                .hover(|s| s.bg(Color::Hover.color()))
+                                .child(div().flex_1().min_w_0().truncate().child(label))
+                                .child(icon(GpuiIcons::LucideChevronDown, 12.)),
+                        )
+                        .menu(
+                            div()
+                                .id("prototype-hover-exit-options")
+                                .max_h(px(300.))
+                                .overflow_y_scroll()
+                                .flex()
+                                .flex_col()
+                                .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
+                                .children(options.into_iter().enumerate().map(
+                                    |(key, (value, label))| {
+                                        div()
+                                            .id(("prototype-exit-option", key))
+                                            .debug_selector(move || {
+                                                format!("prototype-exit-option-{key}")
+                                            })
+                                            .h(px(28.))
+                                            .flex_shrink_0()
+                                            .px(px(8.))
+                                            .rounded(px(5.))
+                                            .flex()
+                                            .items_center()
+                                            .gap(px(8.))
+                                            .cursor_pointer()
+                                            .when(current == value, |el| {
+                                                el.bg(Color::Selected.color())
+                                                    .text_color(ACCENT.color())
+                                            })
+                                            .hover(|s| s.bg(Color::Hover.color()))
+                                            .child(
+                                                div()
+                                                    .w(px(14.))
+                                                    .children((current == value).then(|| {
+                                                        icon(GpuiIcons::LucideCheck, 14.)
+                                                    })),
+                                            )
+                                            .child(div().flex_1().min_w_0().truncate().child(label))
+                                            .on_click(cx.listener(move |this, _, window, cx| {
+                                                this.presentation.menus[2]
+                                                    .update(cx, |menu, cx| menu.close(window, cx));
+                                                this.set_hover_exit(id, value, window, cx);
+                                            }))
+                                    },
+                                )),
+                        ),
+                ),
             )
     }
 }

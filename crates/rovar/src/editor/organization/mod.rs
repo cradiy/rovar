@@ -306,20 +306,7 @@ impl Workspace {
             rect.y += origin.y;
             return Some(rect);
         }
-        self.descendants(&BTreeSet::from([id]))
-            .into_iter()
-            .filter(|child| *child != id && !self.hierarchy.groups.contains_key(child))
-            .filter_map(|id| self.world_bounds(id))
-            .reduce(|a, b| {
-                let x = a.x.min(b.x);
-                let y = a.y.min(b.y);
-                Rect {
-                    x,
-                    y,
-                    width: (a.x + a.width).max(b.x + b.width) - x,
-                    height: (a.y + a.height).max(b.y + b.height) - y,
-                }
-            })
+        self.scene_index().groups.get(&id).copied()
     }
 
     pub(super) fn group_target(&self, id: usize) -> usize {

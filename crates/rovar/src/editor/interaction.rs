@@ -229,7 +229,12 @@ impl Workspace {
                 state.is_open().then(|| state.focus_handle(cx))
             })
         })
-        .flatten();
+        .flatten()
+        .or_else(|| {
+            matches!(kind, GestureKind::Property { .. })
+                .then(|| self.prototype_editor_focus(cx))
+                .flatten()
+        });
         if matches!(
             kind,
             GestureKind::ColorStyleProperty { .. }

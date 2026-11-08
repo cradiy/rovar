@@ -106,8 +106,20 @@ fn choices(property: &Property) -> Vec<(Property, &'static str)> {
     }
 }
 
+fn category(property: &Property) -> (u8, &'static str) {
+    use Property::*;
+    match property {
+        X(_) | Y(_) | Width(_) | Height(_) | Rotation(_) => (1, "prototype-geometry"),
+        Content(_) | FontFamily(_) | FontSize(_) | FontWeight(_) | LineHeight(_)
+        | LetterSpacing(_) | TextAlign(_) => (2, "typography"),
+        Gap(_) | LineGap(_) | Padding(_) | LayoutDirection(_) | LayoutWrap(_) => (3, "layout"),
+        _ => (0, "appearance"),
+    }
+}
+
 impl Workspace {
     pub(super) fn commit_action_input(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.commit_media_input(window, cx);
         if self
             .presentation
             .properties
@@ -346,7 +358,52 @@ impl Workspace {
                     ),
             );
         } else {
-            el = el.child(self.property_menu((id, *target), trigger, property, 1, options, cx));
+            let target = *target;
+            el = el.child(
+                div()
+                    .p(px(2.))
+                    .rounded(px(6.))
+                    .bg(Color::Workspace.color())
+                    .flex()
+                    .gap(px(2.))
+                    .children(options.into_iter().enumerate().map(|(i, (option, label))| {
+                        div()
+                            .id(("prototype-property-choice", i))
+                            .debug_selector(move || format!("prototype-property-option-1-{i}"))
+                            .flex_1()
+                            .min_w_0()
+                            .h(px(28.))
+                            .rounded(px(4.))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .text_size(px(11.))
+                            .cursor_pointer()
+                            .bg(if &option == property {
+                                Color::Selected.color()
+                            } else {
+                                Color::Transparent.color()
+                            })
+                            .text_color(if &option == property {
+                                ACCENT.color()
+                            } else {
+                                MUTED.color()
+                            })
+                            .child(label)
+                            .on_click(cx.listener(move |this, _, window, cx| {
+                                this.set_prototype_action(
+                                    id,
+                                    trigger,
+                                    Some(Action::SetProperty {
+                                        target,
+                                        property: option.clone(),
+                                    }),
+                                    window,
+                                    cx,
+                                )
+                            }))
+                    })),
+            );
         }
         Some(el)
     }
@@ -357,7 +414,7 @@ impl Workspace {
         trigger: Trigger,
         current: &Property,
         index: usize,
-        options: Vec<(Property, &'static str)>,
+        mut options: Vec<(Property, &'static str)>,
         cx: &mut Context<Self>,
     ) -> impl IntoElement + use<> {
         let title = if index == 0 {
@@ -369,6 +426,10 @@ impl Workspace {
                 .map_or("", |(_, label)| *label)
         };
         let current = current.clone();
+        if index == 0 {
+            options.sort_by_key(|(property, _)| category(property).0);
+        }
+        let mut previous_category = None;
         dropdown(&self.presentation.properties.menus[index])
             .placement(DropdownPlacement::BottomStart)
             .w(px(230.))
@@ -416,7 +477,10 @@ impl Workspace {
                             .enumerate()
                             .map(|(i, (property, label))| {
                                 let selected = property == current;
-                                div()
+                                let (_, group) = category(&property);
+                                let heading = index == 0 && previous_category != Some(group);
+                                previous_category = Some(group);
+                                let row = div()
                                     .id(("prototype-property-option", i))
                                     .debug_selector(move || {
                                         format!("prototype-property-option-{index}-{i}")
@@ -450,7 +514,21 @@ impl Workspace {
                                             window,
                                             cx,
                                         );
-                                    }))
+                                    }));
+                                div()
+                                    .flex_shrink_0()
+                                    .when(heading, |el| {
+                                        el.child(
+                                            div()
+                                                .px(px(8.))
+                                                .pt(px(10.))
+                                                .pb(px(5.))
+                                                .text_size(px(10.))
+                                                .text_color(MUTED.color())
+                                                .child(t(group)),
+                                        )
+                                    })
+                                    .child(row)
                             }),
                     ),
             )

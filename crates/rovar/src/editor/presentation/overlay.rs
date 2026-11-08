@@ -171,30 +171,8 @@ impl Workspace {
                     ("prototype-overlay-outside", settings.dismiss_outside),
                 ]
                 .map(|(key, checked)| {
-                    div()
-                        .id(key)
-                        .debug_selector(move || key.into())
-                        .h(px(28.))
-                        .flex()
-                        .items_center()
-                        .gap(px(8.))
-                        .text_size(px(12.))
-                        .cursor_pointer()
-                        .child(
-                            div()
-                                .size(px(16.))
-                                .border_1()
-                                .border_color(BORDER.color())
-                                .rounded(px(3.))
-                                .when(checked, |el| {
-                                    el.bg(Color::Selected.color()).child(
-                                        icon(GpuiIcons::LucideCheck, 14.)
-                                            .text_color(ACCENT.color()),
-                                    )
-                                }),
-                        )
-                        .child(t(key))
-                        .on_click(cx.listener(move |this, _, window, cx| {
+                    authoring::toggle(key, t(key), checked).on_click(cx.listener(
+                        move |this, _, window, cx| {
                             let mut settings = settings;
                             if key == "prototype-overlay-backdrop" {
                                 settings.backdrop = !checked;
@@ -208,7 +186,8 @@ impl Workspace {
                                 window,
                                 cx,
                             );
-                        }))
+                        },
+                    ))
                 }),
             )
     }

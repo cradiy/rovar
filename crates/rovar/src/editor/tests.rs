@@ -60,6 +60,83 @@ fn profile_canvas_document(cx: &mut TestAppContext) {
         })
         .unwrap();
     let mut visual = VisualTestContext::from_window(handle.into(), cx);
+    if std::env::var_os("ROVAR_PROFILE_PROTOTYPE").is_some() {
+        handle
+            .update(&mut visual.cx, |w, window, cx| {
+                w.set_presentation_tab(true, window, cx);
+                w.view.zoom = 0.1;
+                w.view.pan = point(200., 200.);
+                w.set_selection(Default::default(), cx);
+                eprintln!(
+                    "prototype sources={} actions={}",
+                    w.hierarchy.interactions.len(),
+                    w.hierarchy
+                        .interactions
+                        .values()
+                        .flat_map(|i| [&i.click, &i.hover])
+                        .flatten()
+                        .map(|a| a.steps().len())
+                        .sum::<usize>()
+                );
+            })
+            .unwrap();
+        for focused in [false, true] {
+            handle
+                .update(&mut visual.cx, |w, _, cx| {
+                    let selected = focused
+                        .then(|| {
+                            w.hierarchy
+                                .groups
+                                .iter()
+                                .filter(|(_, group)| group.name == "Action editor")
+                                .map(|(id, _)| *id)
+                                .min()
+                                .or_else(|| w.shapes.first().map(|shape| shape.id))
+                        })
+                        .flatten();
+                    w.set_selection(selected.into_iter().collect(), cx);
+                    w.view.zoom = 0.1;
+                    w.view.pan = point(200., 200.);
+                    cx.notify();
+                })
+                .unwrap();
+            for zooming in [false, true] {
+                let mut frames = Vec::new();
+                for i in 0..16 {
+                    handle
+                        .update(&mut visual.cx, |w, _, cx| {
+                            if zooming {
+                                w.view.zoom_at(point(640., 400.), 0.08 + i as f32 * 0.005);
+                            } else {
+                                w.view.pan.x += 2.;
+                            }
+                            cx.notify();
+                        })
+                        .unwrap();
+                    let elapsed =
+                        visual.update(|window, _| window.frame_diagnostics().unwrap().build_time);
+                    if i > 1 {
+                        frames.push(elapsed);
+                    }
+                }
+                frames.sort_unstable();
+                eprintln!(
+                    "prototype focused={focused} {}: p50={:?} p95={:?}",
+                    if zooming { "zoom" } else { "pan" },
+                    frames[frames.len() / 2],
+                    frames[frames.len() - 1]
+                );
+            }
+        }
+        handle
+            .update(&mut visual.cx, |w, window, cx| {
+                w.suspend(window, cx);
+                window.remove_window();
+            })
+            .unwrap();
+        visual.cx.run_until_parked();
+        return;
+    }
     for zoom in [0.25, 0.5, 1.] {
         handle
             .update(&mut visual.cx, |w, _, cx| {

@@ -657,7 +657,7 @@ impl Workspace {
             } else {
                 self.focus.focus(window, cx);
             }
-        } else if removed
+        } else if (removed
             || restored_paint.is_some()
             || self.paint_row_focus_removed(window, cx)
             || (self.selected.is_none() && text_id.is_none() && shape_id.is_none())
@@ -671,7 +671,9 @@ impl Workspace {
                     .any(|(index, field)| {
                         field.focus_handle(cx).is_focused(window)
                             && !self.shape_field_visible(index % PROPERTY_COUNT)
-                    }))
+                    })))
+            && !(self.prototype_editor_focus(cx).is_some()
+                && restored_selection.as_ref() == Some(&previous_selection))
         {
             self.focus.focus(window, cx);
         }

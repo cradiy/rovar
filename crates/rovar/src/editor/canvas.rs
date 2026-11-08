@@ -616,7 +616,7 @@ impl Workspace {
             .child(self.corner_controls(cx))
             .children(self.point_gradient_handles(cx))
             .children(self.vector_hover_preview(cx))
-            .children(self.prototype_connections(cx))
+            .children(self.prototype_connections(&index, cx))
             .when(
                 self.boards.is_empty()
                     && self.shapes.is_empty()

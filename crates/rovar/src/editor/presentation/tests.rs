@@ -119,8 +119,7 @@ fn action_cards_add_reorder_and_preserve_single_action_data_and_playback(cx: &mu
     let mut visual = VisualTestContext::from_window(handle.into(), cx);
     draw(&mut visual);
     click(&mut visual, "prototype-add-action");
-    click(&mut visual, "prototype-click-menu");
-    click(&mut visual, "prototype-option-1-7");
+    click(&mut visual, "prototype-option-7-7");
     handle
         .update(&mut visual.cx, |w, window, cx| {
             w.set_prototype_action(
@@ -146,7 +145,9 @@ fn action_cards_add_reorder_and_preserve_single_action_data_and_playback(cx: &mu
         .unwrap();
     draw(&mut visual);
     click(&mut visual, "prototype-action-up-1");
-    click(&mut visual, "prototype-action-remove-0");
+    click(&mut visual, "prototype-action-down-0");
+    click(&mut visual, "prototype-action-up-1");
+    click(&mut visual, "prototype-remove-action");
     handle
         .update(&mut visual.cx, |w, window, cx| {
             assert!(
@@ -325,6 +326,7 @@ fn property_paint_reuses_inspector_and_preserves_canvas_color(cx: &mut TestAppCo
         .unwrap();
     let mut visual = VisualTestContext::from_window(handle.into(), cx);
     draw(&mut visual);
+    click(&mut visual, "prototype-action-select-0");
     click(&mut visual, "property-drag-5");
     draw(&mut visual);
     assert!(visual.debug_bounds("color-panel").is_some());
@@ -370,6 +372,9 @@ fn property_paint_reuses_inspector_and_preserves_canvas_color(cx: &mut TestAppCo
             );
         })
         .unwrap();
+    if visual.debug_bounds("prototype-action-editor").is_none() {
+        click(&mut visual, "prototype-action-select-0");
+    }
     click(&mut visual, "property-drag-5");
     click(&mut visual, "fill-linear");
     click(&mut visual, "gradient-add");
@@ -560,6 +565,7 @@ fn design_and_action_numeric_inputs_keep_extended_values_when_scrubbing(cx: &mut
                     })
                     .unwrap();
                 draw(&mut visual);
+                click(&mut visual, "prototype-action-select-0");
                 click(&mut visual, "property-18");
                 visual.simulate_keystrokes(keys);
                 draw(&mut visual);
@@ -626,6 +632,7 @@ fn property_action_drag_previews_commits_once_and_cancels_without_losing_redo(
         .unwrap();
     let mut visual = VisualTestContext::from_window(handle.into(), cx);
     draw(&mut visual);
+    click(&mut visual, "prototype-action-select-0");
     let point = visual.debug_bounds("property-drag-18").unwrap().center();
     let drag = |visual: &mut VisualTestContext, delta: f32, shift: bool| {
         visual.simulate_mouse_move(
@@ -754,6 +761,7 @@ fn property_actions_author_hidden_targets_and_remap_on_duplicate(cx: &mut TestAp
         })
         .unwrap();
     let mut visual = VisualTestContext::from_window(handle.into(), cx);
+    click(&mut visual, "prototype-action-select-0");
     click(&mut visual, "prototype-click-menu");
     click(&mut visual, "prototype-option-1-7");
     assert!(visual.debug_bounds("prototype-property-menu-0").is_some());
@@ -768,7 +776,6 @@ fn property_actions_author_hidden_targets_and_remap_on_duplicate(cx: &mut TestAp
     click(&mut visual, "prototype-target-menu");
     let target_selector: &'static str = format!("prototype-option-4-{target_index}").leak();
     click(&mut visual, target_selector);
-    click(&mut visual, "prototype-property-menu-1");
     click(&mut visual, "prototype-property-option-1-2");
     handle
         .update(&mut visual.cx, |w, window, cx| {
@@ -1096,6 +1103,7 @@ fn video_actions_author_roundtrip_and_remap_with_their_targets(cx: &mut TestAppC
         })
         .unwrap();
     let mut visual = VisualTestContext::from_window(handle.into(), cx);
+    click(&mut visual, "prototype-action-select-0");
     click(&mut visual, "prototype-click-menu");
     click(&mut visual, "prototype-option-1-6");
     assert!(visual.debug_bounds("prototype-target-menu").is_some());
@@ -1179,6 +1187,7 @@ fn overlay_authoring_roundtrips_and_duplicate_targets_remain_internal(cx: &mut T
         })
         .unwrap();
     let mut visual = VisualTestContext::from_window(handle.into(), cx);
+    click(&mut visual, "prototype-action-select-0");
     click(&mut visual, "prototype-click-menu");
     click(&mut visual, "prototype-option-1-3");
     click(&mut visual, "prototype-overlay-bottom");
@@ -1496,6 +1505,7 @@ fn transition_controls_persist_per_trigger_with_undo_and_validation(cx: &mut Tes
         .unwrap();
     let mut visual = VisualTestContext::from_window(handle.into(), cx);
     draw(&mut visual);
+    click(&mut visual, "prototype-transition-menu");
     click(&mut visual, "prototype-dissolve");
     click(&mut visual, "prototype-duration");
     click(&mut visual, "prototype-duration-500");
@@ -1505,6 +1515,7 @@ fn transition_controls_persist_per_trigger_with_undo_and_validation(cx: &mut Tes
     click(&mut visual, "prototype-duration-1000");
     click(&mut visual, "prototype-hover");
     assert!(visual.debug_bounds("prototype-duration").is_none());
+    click(&mut visual, "prototype-transition-menu");
     click(&mut visual, "prototype-blur");
     handle
         .update(&mut visual.cx, |w, window, cx| {
@@ -1882,7 +1893,7 @@ fn prototype_wire_drag_commit_cancel_and_undo(cx: &mut TestAppContext) {
     let mut visual = VisualTestContext::from_window(handle.into(), cx);
     visual.simulate_resize(size(px(1280.), px(1000.)));
     draw(&mut visual);
-    assert!(visual.debug_bounds("prototype-action-remove-0").is_none());
+    assert!(visual.debug_bounds("prototype-action-select-0").is_none());
     let target = handle
         .update(&mut visual.cx, |w, _, _| {
             w.bounds.get().origin + w.view.screen(point(550., 100.)).map(px)
@@ -1912,12 +1923,13 @@ fn prototype_wire_drag_commit_cancel_and_undo(cx: &mut TestAppContext) {
     let hover_label: &'static str = format!("prototype-wire-{button}-prototype-hover").leak();
     assert!(visual.debug_bounds(click_label).is_none());
     assert!(visual.debug_bounds(hover_label).is_none());
-    let disconnect = visual.debug_bounds("prototype-action-remove-0").unwrap();
+    click(&mut visual, "prototype-action-select-0");
+    let disconnect = visual.debug_bounds("prototype-remove-action").unwrap();
     let menu = visual.debug_bounds("prototype-click-menu").unwrap();
     let panel = visual.debug_bounds("properties-panel").unwrap();
-    assert!(menu.right() <= panel.right());
-    assert!(disconnect.right() <= panel.right());
-    click(&mut visual, "prototype-action-remove-0");
+    assert!(menu.right() < panel.left());
+    assert!(disconnect.right() < panel.left());
+    click(&mut visual, "prototype-remove-action");
     handle
         .update(&mut visual.cx, |w, window, cx| {
             assert_eq!(w.hierarchy.interactions[&button].hover, None);
@@ -1971,7 +1983,60 @@ fn prototype_wire_drag_commit_cancel_and_undo(cx: &mut TestAppContext) {
                 w.hierarchy.interactions[&button].hover,
                 Some(Action::Navigate { target: second })
             );
-            w.set_presentation_tab(false, window, cx);
+            let sibling = w.next_id;
+            w.next_id += 1;
+            let mut shape = w
+                .shapes
+                .iter()
+                .find(|shape| shape.id == button)
+                .unwrap()
+                .clone();
+            shape.id = sibling;
+            shape.uid = uuid::Uuid::new_v4();
+            w.shapes.push(shape);
+            w.set_click(
+                sibling,
+                Some(Action::Navigate { target: second }),
+                window,
+                cx,
+            );
+            w.set_prototype_action(
+                sibling,
+                Trigger::Hover,
+                Some(Action::SetProperty {
+                    target: sibling,
+                    property: crate::scene::presentation::property::Property::Opacity(0.5),
+                }),
+                window,
+                cx,
+            );
+            w.set_selection(BTreeSet::new(), cx);
+            w.view.zoom = 0.1;
+        })
+        .unwrap();
+    draw(&mut visual);
+    assert!(visual.debug_bounds("prototype-wires-2").is_some());
+    handle
+        .update(&mut visual.cx, |w, _, cx| {
+            w.view.zoom = 0.7;
+            cx.notify();
+        })
+        .unwrap();
+    draw(&mut visual);
+    assert!(visual.debug_bounds("prototype-wires-4").is_some());
+    handle
+        .update(&mut visual.cx, |w, _, cx| {
+            w.set_selection(BTreeSet::from([second]), cx)
+        })
+        .unwrap();
+    draw(&mut visual);
+    assert!(
+        visual.debug_bounds("prototype-wires-3").is_some(),
+        "Keep incoming connections to the selection"
+    );
+    handle
+        .update(&mut visual.cx, |w, window, cx| {
+            w.set_presentation_tab(false, window, cx)
         })
         .unwrap();
     draw(&mut visual);
@@ -2279,6 +2344,7 @@ fn prototype_controls_configure_and_remove_clicks(cx: &mut TestAppContext) {
     assert_eq!(play.center().y, zoom.center().y);
     assert!(zoom.right() < play.left());
     assert!(zoom.left() > panel.left() && play.right() < panel.right());
+    click(&mut visual, "prototype-action-select-0");
     click(&mut visual, "prototype-click-menu");
     click(&mut visual, "prototype-option-1-1");
     assert!(visual.debug_bounds("prototype-target-menu").is_none());

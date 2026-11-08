@@ -108,7 +108,7 @@ impl Workspace {
         self.prototype_action_ref(id, trigger).cloned()
     }
 
-    fn prototype_actions(&self, id: usize, trigger: Trigger) -> Vec<Action> {
+    pub(super) fn prototype_actions(&self, id: usize, trigger: Trigger) -> Vec<Action> {
         self.hierarchy
             .interactions
             .get(&id)
@@ -116,7 +116,7 @@ impl Workspace {
             .map_or_else(Vec::new, Action::into_steps)
     }
 
-    fn select_action(
+    pub(super) fn select_action(
         &mut self,
         id: usize,
         trigger: Trigger,
@@ -129,6 +129,9 @@ impl Workspace {
         self.history.borrow_mut().break_group();
         self.presentation.action = Some((self.pages.generation, id, trigger, index));
         self.sync_action_inspector(window, cx);
+        self.presentation
+            .editor
+            .update(cx, |state, cx| state.open(window, cx));
         cx.notify();
     }
 
@@ -154,14 +157,61 @@ impl Workspace {
         cx.notify();
     }
 
+    pub(super) fn remove_prototype_action(
+        &mut self,
+        id: usize,
+        trigger: Trigger,
+        index: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.commit_action_input(window, cx);
+        let mut actions = self.prototype_actions(id, trigger);
+        if index >= actions.len() {
+            return;
+        }
+        actions.remove(index);
+        let empty = actions.is_empty();
+        let next = index.min(actions.len().saturating_sub(1));
+        self.write_prototype_actions(id, trigger, actions, window, cx);
+        if empty {
+            self.close_action_editor(window, cx);
+        } else {
+            self.select_action(id, trigger, next, window, cx);
+        }
+    }
+
+    pub(super) fn move_prototype_action(
+        &mut self,
+        id: usize,
+        trigger: Trigger,
+        index: usize,
+        up: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.commit_action_input(window, cx);
+        let mut actions = self.prototype_actions(id, trigger);
+        let next = if up {
+            index.checked_sub(1)
+        } else {
+            index.checked_add(1)
+        };
+        let Some(next) = next.filter(|next| *next < actions.len() && index < actions.len()) else {
+            return;
+        };
+        actions.swap(index, next);
+        self.write_prototype_actions(id, trigger, actions, window, cx);
+        self.select_action(id, trigger, next, window, cx);
+    }
+
     pub(super) fn action_cards(&self, id: usize, trigger: Trigger, cx: &mut Context<Self>) -> Div {
         let actions = self.prototype_actions(id, trigger);
-        let index = self.prototype_action_index(id, trigger).min(actions.len());
-        let count = actions.len().max(index + 1);
+        let index = self.prototype_action_index(id, trigger);
         div()
             .flex()
             .flex_col()
-            .gap(px(8.))
+            .gap(px(4.))
             .child(
                 div()
                     .flex()
@@ -169,162 +219,143 @@ impl Workspace {
                     .justify_between()
                     .child(
                         div()
-                            .text_size(px(12.))
-                            .text_color(MUTED.color())
-                            .child(t("prototype-actions")),
-                    )
-                    .child(
-                        inspector::icon_button(
-                            "prototype-add-action",
-                            t("prototype-add-action"),
-                            GpuiIcons::LucidePlus,
-                            false,
-                        )
-                        .on_click(cx.listener(
-                            move |this, _, window, cx| {
-                                let count = this.prototype_actions(id, trigger).len();
-                                this.select_action(id, trigger, count, window, cx);
-                            },
-                        )),
-                    ),
-            )
-            .children((0..count).map(|row| {
-                let action = actions.get(row);
-                let label = if action.is_none() {
-                    t("prototype-new-action")
-                } else {
-                    t(super::controls::action_label(&action.cloned()))
-                };
-                let detail = match action {
-                    Some(Action::SetProperty { target, property }) => format!(
-                        "{} · {}",
-                        self.layer_name(*target, cx),
-                        super::properties::label(property)
-                    ),
-                    Some(
-                        Action::Navigate { target }
-                        | Action::OpenOverlay { target, .. }
-                        | Action::Media { target, .. }
-                        | Action::ScrollTo { target },
-                    ) => self.layer_name(*target, cx),
-                    _ => String::new(),
-                };
-                let active = row == index;
-                let mut card = div()
-                    .id(("prototype-action-card", row))
-                    .debug_selector(move || format!("prototype-action-card-{row}"))
-                    .rounded(px(9.))
-                    .border_1()
-                    .border_color(if active {
-                        Color::Selected.color()
-                    } else {
-                        BORDER.color()
-                    })
-                    .bg(Color::Input.color())
-                    .child(
-                        div()
-                            .id(("prototype-action-select", row))
-                            .debug_selector(move || format!("prototype-action-select-{row}"))
                             .flex()
                             .items_center()
-                            .gap(px(8.))
-                            .px(px(10.))
-                            .h(px(52.))
-                            .cursor_pointer()
+                            .gap(px(5.))
+                            .text_size(px(12.))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .child(t("prototype-actions"))
+                            .child(
+                                div()
+                                    .text_size(px(10.))
+                                    .text_color(MUTED.color())
+                                    .child(actions.len().to_string()),
+                            ),
+                    )
+                    .when(!actions.is_empty(), |el| {
+                        el.child(self.presentation_menu(Some(id), controls::Menu::AddAction, cx))
+                    }),
+            )
+            .children(actions.iter().enumerate().map(|(row, action)| {
+                let active = row == index && self.presentation.editor.read(cx).is_open();
+                let detail = self.action_summary(action, cx);
+                let content = div()
+                    .id(("prototype-action-select", row))
+                    .debug_selector(move || format!("prototype-action-select-{row}"))
+                    .h(px(56.))
+                    .px(px(8.))
+                    .rounded(px(6.))
+                    .border_l_2()
+                    .border_color(if active {
+                        ACCENT.color()
+                    } else {
+                        Color::Transparent.color()
+                    })
+                    .flex()
+                    .items_center()
+                    .gap(px(10.))
+                    .cursor_pointer()
+                    .text_size(px(12.))
+                    .hover(|s| s.bg(Color::Hover.color()))
+                    .when(active, |el| el.bg(Color::Selected.color()))
+                    .child(
+                        icon(authoring::glyph(Some(action)), 16.).text_color(if active {
+                            ACCENT.color()
+                        } else {
+                            MUTED.color()
+                        }),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .flex()
+                            .flex_col()
+                            .gap(px(3.))
+                            .child(
+                                div()
+                                    .truncate()
+                                    .child(t(controls::action_label(&Some(action.clone())))),
+                            )
                             .child(
                                 div()
                                     .text_size(px(11.))
                                     .text_color(MUTED.color())
-                                    .child(format!("{:02}", row + 1)),
-                            )
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .text_size(px(12.))
-                                    .text_color(TEXT.color())
-                                    .flex()
-                                    .flex_col()
-                                    .gap(px(2.))
-                                    .child(label)
-                                    .when(!detail.is_empty(), |el| {
-                                        el.child(
-                                            div()
-                                                .text_size(px(11.))
-                                                .text_color(MUTED.color())
-                                                .truncate()
-                                                .child(detail),
-                                        )
-                                    }),
-                            )
-                            .when(action.is_some(), |el| {
-                                el.child(
-                                    inspector::icon_button(
-                                        format!("prototype-action-up-{row}"),
-                                        t("prototype-move-up"),
-                                        GpuiIcons::LucideArrowUp,
-                                        false,
-                                    )
-                                    .when(row == 0, |el| el.opacity(0.3))
-                                    .on_click(cx.listener(
-                                        move |this, _, window, cx| {
-                                            cx.stop_propagation();
-                                            if row > 0 {
-                                                this.select_action(id, trigger, row, window, cx);
-                                                let mut actions =
-                                                    this.prototype_actions(id, trigger);
-                                                actions.swap(row, row - 1);
-                                                this.write_prototype_actions(
-                                                    id, trigger, actions, window, cx,
-                                                );
-                                                this.select_action(
-                                                    id,
-                                                    trigger,
-                                                    row - 1,
-                                                    window,
-                                                    cx,
-                                                );
-                                            }
-                                        },
-                                    )),
-                                )
-                                .child(
-                                    inspector::icon_button(
-                                        format!("prototype-action-remove-{row}"),
-                                        t("prototype-remove-action"),
-                                        GpuiIcons::LucideX,
-                                        false,
-                                    )
-                                    .on_click(cx.listener(
-                                        move |this, _, window, cx| {
-                                            cx.stop_propagation();
-                                            this.select_action(id, trigger, row, window, cx);
-                                            let mut actions = this.prototype_actions(id, trigger);
-                                            actions.remove(row);
-                                            let next = row.min(actions.len().saturating_sub(1));
-                                            this.write_prototype_actions(
-                                                id, trigger, actions, window, cx,
-                                            );
-                                            this.select_action(id, trigger, next, window, cx);
-                                        },
-                                    )),
-                                )
-                            })
-                            .on_click(cx.listener(move |this, _, window, cx| {
-                                this.select_action(id, trigger, row, window, cx);
-                            })),
-                    );
-                if active {
-                    card = card.child(
-                        div()
-                            .px(px(10.))
-                            .pb(px(12.))
-                            .flex()
-                            .flex_col()
-                            .gap(px(8.))
-                            .child(self.action_editor(id, trigger, action.cloned(), cx)),
-                    );
-                }
-                card
+                                    .truncate()
+                                    .child(detail),
+                            ),
+                    )
+                    .child(icon(GpuiIcons::LucideEllipsis, 14.).text_color(MUTED.color()));
+                let content = content.on_click(cx.listener(move |this, _, window, cx| {
+                    cx.stop_propagation();
+                    this.select_action(id, trigger, row, window, cx);
+                }));
+                let row_element = if row == index {
+                    self.action_row_popover(content, id, trigger, cx)
+                } else {
+                    content.into_any_element()
+                };
+                div()
+                    .border_b_1()
+                    .border_color(if active {
+                        Color::Transparent.color()
+                    } else {
+                        BORDER.color()
+                    })
+                    .child(row_element)
             }))
+            .when(actions.is_empty(), |el| {
+                el.child(self.presentation_menu(Some(id), controls::Menu::AddAction, cx))
+            })
+    }
+
+    fn action_summary(&self, action: &Action, cx: &gpui::App) -> String {
+        match action {
+            Action::SetProperty { target, property } => {
+                use crate::scene::presentation::property::{Boolean, Property};
+                let value = match property {
+                    Property::Visible(value) => t(match value {
+                        Boolean::Set(true) => "prototype-show",
+                        Boolean::Set(false) => "prototype-hide",
+                        Boolean::Toggle => "prototype-toggle",
+                    })
+                    .to_owned(),
+                    Property::Opacity(value) => format!(
+                        "{} {}%",
+                        properties::label(property),
+                        inspector::number(value * 100.)
+                    ),
+                    _ => properties::label(property).to_owned(),
+                };
+                format!("{} · {value}", self.layer_name(*target, cx))
+            }
+            Action::OpenOverlay { target, settings } => format!(
+                "{} · {}",
+                self.layer_name(*target, cx),
+                t(match settings.position {
+                    crate::scene::presentation::OverlayPosition::Center =>
+                        "prototype-overlay-center",
+                    crate::scene::presentation::OverlayPosition::Bottom =>
+                        "prototype-overlay-bottom",
+                    crate::scene::presentation::OverlayPosition::Right => "prototype-overlay-right",
+                })
+            ),
+            Action::Navigate { target } | Action::ScrollTo { target } => {
+                self.layer_name(*target, cx)
+            }
+            Action::Media { target, command } => format!(
+                "{} · {}",
+                self.layer_name(*target, cx),
+                t(media::label(*command))
+            ),
+            Action::ChangeVariant { target } => self
+                .components
+                .sets
+                .values()
+                .find_map(|set| set.variants.get(&target.to_string()))
+                .cloned()
+                .unwrap_or_else(|| t("prototype-missing-variant").into()),
+            _ => String::new(),
+        }
     }
 }
