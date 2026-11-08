@@ -201,11 +201,14 @@ impl Scene<'_> {
                     .enumerate()
                 {
                     let style = &fragment.style;
+                    let mut paint_bounds = fragment.gradient_bounds.unwrap_or(fragment.bounds);
+                    paint_bounds.x += rect.x;
+                    paint_bounds.y += rect.y;
                     let fill = paint::paint(
                         style.fill_mode,
                         style.color,
                         &style.gradient,
-                        rect,
+                        paint_bounds,
                         &mut defs,
                         &format!("text-{id}-{index}"),
                     )?;

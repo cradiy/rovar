@@ -7,13 +7,16 @@ pub(crate) struct TextFragment {
     pub x: f32,
     pub baseline: f32,
     pub bounds: Rect,
+    pub gradient_bounds: Option<Rect>,
     pub style: TextStyle,
 }
 
 struct Fragment {
+    range: Range<usize>,
     line: ShapedLine,
     style: TextStyle,
     origin: Point<Pixels>,
+    gradient_bounds: Option<Bounds<Pixels>>,
 }
 struct Row {
     range: Range<usize>,
@@ -102,6 +105,59 @@ fn positions_for_indices<'a>(
             glyphs.peek().map_or(line.width(), |glyph| glyph.position.x),
         )
     })
+}
+
+struct GradientRegion<'a> {
+    range: Range<usize>,
+    gradient: &'a LinearGradient,
+    bounds: Option<Bounds<Pixels>>,
+}
+
+fn assign_gradient_bounds(rows: &mut [Row], styles: &StyledText) {
+    let mut regions: Vec<GradientRegion<'_>> = Vec::new();
+    for run in &styles.runs {
+        if run.style.fill_mode != FillMode::Linear {
+            continue;
+        }
+        if let Some(region) = regions.last_mut()
+            && region.range.end == run.range.start
+            && *region.gradient == run.style.gradient
+        {
+            region.range.end = run.range.end;
+        } else {
+            regions.push(GradientRegion {
+                range: run.range.clone(),
+                gradient: &run.style.gradient,
+                bounds: None,
+            });
+        }
+    }
+    if regions.is_empty() {
+        return;
+    }
+    // Typography and wrapping may split a paint range into several shaped fragments.
+    for fragment in rows.iter().flat_map(|row| &row.fragments) {
+        if fragment.style.fill_mode != FillMode::Linear {
+            continue;
+        }
+        let index = regions.partition_point(|region| region.range.end <= fragment.range.start);
+        let bounds = Bounds::new(
+            fragment.origin,
+            size(
+                fragment.line.width(),
+                fragment.line.ascent + fragment.line.descent.abs(),
+            ),
+        );
+        let region = &mut regions[index].bounds;
+        *region = Some(region.map_or(bounds, |old| old.union(&bounds)));
+    }
+    for fragment in rows.iter_mut().flat_map(|row| &mut row.fragments) {
+        if fragment.style.fill_mode != FillMode::Linear {
+            continue;
+        }
+        let index = regions.partition_point(|region| region.range.end <= fragment.range.start);
+        fragment.gradient_bounds = regions[index].bounds;
+    }
 }
 
 impl TextLayout {
@@ -220,9 +276,11 @@ impl TextLayout {
                             px(0.)
                         };
                     fragments.push(Fragment {
+                        range: a..b,
                         line,
                         style: run.style.clone(),
                         origin: point(x, px(0.)),
+                        gradient_bounds: None,
                     });
                     x += advance;
                 }
@@ -271,6 +329,7 @@ impl TextLayout {
             }
             paragraph_start = paragraph_end + 1;
         }
+        assign_gradient_bounds(&mut rows, styles);
         Self {
             rows: Rc::new(rows),
             bounds: viewport,
@@ -402,9 +461,9 @@ impl TextLayout {
                         cx,
                     )
                 };
-                let result = if fragment.style.fill_mode == FillMode::Linear {
+                let result = if let Some(bounds) = fragment.gradient_bounds {
                     window.with_masked_fill(
-                        self.bounds,
+                        Bounds::new(self.bounds.origin + bounds.origin, bounds.size),
                         fragment.style.gradient.background(),
                         paint,
                     )
@@ -483,6 +542,12 @@ pub(crate) fn export_fragments(
                 width: fragment.line.width().into(),
                 height: (fragment.line.ascent + fragment.line.descent.abs()).into(),
             },
+            gradient_bounds: fragment.gradient_bounds.map(|bounds| Rect {
+                x: bounds.origin.x.into(),
+                y: bounds.origin.y.into(),
+                width: bounds.size.width.into(),
+                height: bounds.size.height.into(),
+            }),
             style: fragment.style.clone(),
         })
         .collect()
@@ -523,6 +588,108 @@ mod tests {
     use super::TextLayout;
     use crate::scene::text::{StyleChange, StyledText, VerticalAlign};
     use gpui::{Bounds, Empty, TestAppContext, point, px, size};
+
+    #[gpui::test]
+    fn gradient_spans_use_text_extents_across_typography_splits_and_export(
+        cx: &mut TestAppContext,
+    ) {
+        use crate::scene::artboard::{FillMode, LinearGradient, Rect};
+        let window = cx.open_window(size(px(600.), px(300.)), |_, _| Empty);
+        window
+            .update(cx, |_, window, _| {
+                let content = "Prefix COLORED suffix";
+                let range = 7..14;
+                let mut styles = StyledText::default();
+                styles.replace(0..0, content.len());
+                let mut gradient = LinearGradient::default();
+                gradient.add_stop_at(0.33).unwrap();
+                gradient.add_stop_at(0.66).unwrap();
+                styles.apply(
+                    range.clone(),
+                    &StyleChange::FillMode(FillMode::Linear),
+                    false,
+                );
+                styles.apply(range.clone(), &StyleChange::Gradient(gradient), false);
+                styles.apply(7..10, &StyleChange::Weight(700.), false);
+                for align in [
+                    gpui::TextAlign::Left,
+                    gpui::TextAlign::Center,
+                    gpui::TextAlign::Right,
+                ] {
+                    styles.apply(0..content.len(), &StyleChange::Align(align), true);
+                    for zoom in [0.5, 2.] {
+                        let bounds = Bounds::new(
+                            point(px(40.), px(30.)),
+                            size(px(1000. * zoom), px(200. * zoom)),
+                        );
+                        let layout = TextLayout::new(content, &styles, zoom, bounds, window);
+                        let fragments: Vec<_> = layout
+                            .rows
+                            .iter()
+                            .flat_map(|row| &row.fragments)
+                            .filter(|f| f.style.fill_mode == FillMode::Linear)
+                            .collect();
+                        assert_eq!(fragments.len(), 2);
+                        let paint = fragments[0].gradient_bounds.unwrap();
+                        assert_eq!(fragments[1].gradient_bounds, Some(paint));
+                        let left = layout.caret_bounds(range.start).left() - bounds.left();
+                        let right = layout.caret_bounds(range.end).left() - bounds.left();
+                        assert!((f32::from(paint.left() - left)).abs() < 0.001);
+                        assert!((f32::from(paint.right() - right)).abs() < 0.001);
+                        assert!(paint.size.width < bounds.size.width / 2.);
+                        let exported = super::export_fragments(
+                            content,
+                            &styles,
+                            Rect {
+                                x: 0.,
+                                y: 0.,
+                                width: 1000.,
+                                height: 200.,
+                            },
+                            window.text_system(),
+                        );
+                        let gradient: Vec<_> =
+                            exported.iter().filter_map(|f| f.gradient_bounds).collect();
+                        assert_eq!(gradient.len(), 2);
+                        assert_eq!(gradient[0], gradient[1]);
+                        assert!((gradient[0].x - f32::from(paint.left()) / zoom).abs() < 0.001);
+                        assert!(
+                            (gradient[0].width - f32::from(paint.size.width) / zoom).abs() < 0.001
+                        );
+                    }
+                }
+                styles.apply(
+                    0..content.len(),
+                    &StyleChange::Align(gpui::TextAlign::Left),
+                    true,
+                );
+                let bounds = Bounds::new(point(px(0.), px(0.)), size(px(55.), px(200.)));
+                let wrapped = TextLayout::new(content, &styles, 1., bounds, window);
+                let paints: Vec<_> = wrapped
+                    .rows
+                    .iter()
+                    .flat_map(|row| &row.fragments)
+                    .filter_map(|f| f.gradient_bounds)
+                    .collect();
+                assert!(paints.len() > 2);
+                assert!(paints.iter().all(|paint| *paint == paints[0]));
+                let clipped = TextLayout::new(
+                    content,
+                    &styles,
+                    1.,
+                    Bounds::new(bounds.origin, size(bounds.size.width, px(5.))),
+                    window,
+                );
+                let clipped: Vec<_> = clipped
+                    .rows
+                    .iter()
+                    .flat_map(|row| &row.fragments)
+                    .filter_map(|f| f.gradient_bounds)
+                    .collect();
+                assert_eq!(clipped, paints);
+            })
+            .unwrap();
+    }
 
     #[gpui::test]
     fn caret_stays_inside_selection_edges_without_changing_text_layout(cx: &mut TestAppContext) {

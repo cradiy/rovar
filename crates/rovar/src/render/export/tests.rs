@@ -663,6 +663,7 @@ fn svg_text_is_outlined_and_png_contains_the_glyphs() {
             x: 5.,
             baseline: 30.,
             bounds: rect(5., 6., 65., 28.),
+            gradient_bounds: None,
             style,
         }],
     );
@@ -704,6 +705,24 @@ fn svg_text_is_outlined_and_png_contains_the_glyphs() {
             );
         }
     }
+    let fragment = &mut job.text.get_mut(&1).unwrap()[0];
+    fragment.style = doc.texts[0].styles.default.clone();
+    fragment.style.fill_mode = FillMode::Linear;
+    fragment.style.gradient.angle = 90.;
+    fragment.style.gradient.stop_mut(0).unwrap().color = rgb(0xff0000);
+    fragment.style.gradient.stop_mut(1).unwrap().color = rgb(0x0000ff);
+    fragment.gradient_bounds = Some(fragment.bounds);
+    let pixels = image::load_from_memory(&job.render(Format::Png, 1, &options).unwrap())
+        .unwrap()
+        .into_rgba8();
+    assert!(
+        pixels
+            .pixels()
+            .filter(|p| p.0[3] > 200 && u16::from(p.0[2]) > u16::from(p.0[0]) * 2)
+            .count()
+            > 5,
+        "The gradient endpoint must reach the last glyphs in a wide text box"
+    );
 }
 
 #[test]

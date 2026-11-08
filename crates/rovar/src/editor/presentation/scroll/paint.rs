@@ -6,6 +6,8 @@ pub(in crate::editor::presentation) struct Bar {
     pub container: usize,
     pub vertical: bool,
     pub bounds: Bounds<f32>,
+    track: Bounds<f32>,
+    hit_bounds: Bounds<f32>,
     pub scale: f32,
 }
 
@@ -42,7 +44,8 @@ impl Workspace {
     }
 
     fn playback_bars(&self, root: usize, zoom: f32) -> Vec<Bar> {
-        let padding = 3. / zoom;
+        let padding = 10. / zoom;
+        let thickness = 6. / zoom;
         let mut bars = Vec::new();
         let order = self
             .presentation
@@ -81,23 +84,34 @@ impl Workspace {
                 if max <= min || size <= padding * 4. {
                     continue;
                 }
-                let track = size - padding * 2.;
+                let other_axis = if vertical {
+                    range.max.x > range.min.x
+                } else {
+                    range.max.y > range.min.y
+                };
+                let track = size
+                    - padding * 2.
+                    - if other_axis {
+                        thickness + padding / 2.
+                    } else {
+                        0.
+                    };
                 let length = (track * size / (size + max - min))
-                    .max(24. / zoom)
+                    .max(32. / zoom)
                     .min(track * 0.85);
                 let scale = (max - min) / (track - length);
                 let position = padding + (offset - min) / scale;
                 let rect = if vertical {
                     Bounds::new(
                         viewport.origin
-                            + point(viewport.size.width - padding - 5. / zoom, position),
-                        gpui::size(5. / zoom, length),
+                            + point(viewport.size.width - padding - thickness, position),
+                        gpui::size(thickness, length),
                     )
                 } else {
                     Bounds::new(
                         viewport.origin
-                            + point(position, viewport.size.height - padding - 5. / zoom),
-                        gpui::size(length, 5. / zoom),
+                            + point(position, viewport.size.height - padding - thickness),
+                        gpui::size(length, thickness),
                     )
                 };
                 if node
@@ -108,6 +122,28 @@ impl Workspace {
                         container: id,
                         vertical,
                         bounds: rect,
+                        track: if vertical {
+                            Bounds::new(
+                                point(rect.origin.x, viewport.origin.y + padding),
+                                gpui::size(thickness, track),
+                            )
+                        } else {
+                            Bounds::new(
+                                point(viewport.origin.x + padding, rect.origin.y),
+                                gpui::size(track, thickness),
+                            )
+                        },
+                        hit_bounds: if vertical {
+                            Bounds::new(
+                                rect.origin - point(4. / zoom, 0.),
+                                gpui::size(14. / zoom, length),
+                            )
+                        } else {
+                            Bounds::new(
+                                rect.origin - point(0., 4. / zoom),
+                                gpui::size(length, 14. / zoom),
+                            )
+                        },
                         scale,
                     });
                 }
@@ -127,7 +163,7 @@ impl Workspace {
             .rev()
             .find(|bar| {
                 let clip = self.presentation.scroll.nodes[&bar.container].clip;
-                clip.is_none_or(|clip| clip.contains(&world)) && bar.bounds.contains(&world)
+                clip.is_none_or(|clip| clip.contains(&world)) && bar.hit_bounds.contains(&world)
             })
     }
 
@@ -143,6 +179,15 @@ impl Workspace {
             .map(|bar| {
                 let node = &self.presentation.scroll.nodes[&bar.container];
                 let origin = self.view.screen(bar.bounds.origin);
+                let track_origin = self.view.screen(bar.track.origin);
+                let track = div()
+                    .absolute()
+                    .left(px(track_origin.x))
+                    .top(px(track_origin.y))
+                    .w(px(bar.track.size.width * self.view.zoom))
+                    .h(px(bar.track.size.height * self.view.zoom))
+                    .rounded_full()
+                    .bg(gpui::rgba(0x8c939e1c));
                 let element = div()
                     .debug_selector(move || {
                         format!(
@@ -164,7 +209,12 @@ impl Workspace {
                     .bg(gpui::rgba(0x8c939eaa))
                     .into_any_element();
                 Surface {
-                    child: div().absolute().inset_0().child(element).into_any_element(),
+                    child: div()
+                        .absolute()
+                        .inset_0()
+                        .child(track)
+                        .child(element)
+                        .into_any_element(),
                     offset: point(px(0.), px(0.)),
                     clip: node.clip.map(|clip| {
                         Bounds::new(

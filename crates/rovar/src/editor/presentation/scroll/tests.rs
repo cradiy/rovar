@@ -211,7 +211,8 @@ fn wheel_and_scrollbar_drag_move_rendered_content_without_changing_the_document(
     let bar_start = visual
         .debug_bounds(format!("playback-scrollbar-{root}-vertical").leak())
         .unwrap()
-        .center();
+        .center()
+        - point(px(4.), px(0.));
     let bar = handle
         .update(&mut visual.cx, |w, _, cx| {
             let p = w.presentation.player.as_ref().unwrap().read(cx);

@@ -13,7 +13,7 @@ pub(crate) fn init() -> Option<Logging> {
             return None;
         }
     };
-    let result = Logger::try_with_env_or_str("warn,rovar=info,gpui_wgpu::wgpu_context=info,gpui::glyph_cache=info,gpui_wgpu::glyph_raster=info")
+    let result = Logger::try_with_env_or_str("off,rovar=info,gpui=info")
         .map(|logger| {
             logger
                 .log_to_file(FileSpec::default().directory(&directory).basename("rovar"))
@@ -23,6 +23,7 @@ pub(crate) fn init() -> Option<Logging> {
                     Cleanup::KeepLogFiles(5),
                 )
                 .format(flexi_logger::with_thread)
+                .adaptive_format_for_stderr(flexi_logger::AdaptiveFormat::WithThread)
                 .duplicate_to_stderr(Duplicate::Warn)
                 .write_mode(WriteMode::Async)
         })
@@ -104,6 +105,8 @@ mod tests {
     fn file_logging_rotates_and_retains_thread_panics() {
         if std::env::var_os("ROVAR_LOGGING_TEST_CHILD").is_some() {
             let logging = super::init().expect("logger initialization failed");
+            log::warn!(target: "external_dependency", "Third-party diagnostic excluded from the log");
+            log::warn!(target: "gpui::diagnostics", "GPUI diagnostic captured by the logger");
             let payload = "x".repeat(8192);
             for index in 0..1400 {
                 log::info!("rotation record {index}: {payload}");
@@ -126,7 +129,7 @@ mod tests {
             ])
             .env("ROVAR_LOGGING_TEST_CHILD", "1")
             .env("ROVAR_LOG_DIR", directory.path())
-            .env("RUST_LOG", "warn,rovar=info")
+            .env_remove("RUST_LOG")
             .output()
             .unwrap();
         assert!(output.status.success(), "{output:?}");
@@ -140,6 +143,7 @@ mod tests {
             .map(|path| std::fs::read_to_string(path).unwrap())
             .collect::<String>();
         for expected in [
+            "GPUI diagnostic captured by the logger",
             "logging-panic-probe",
             "background panic captured by the logger",
             "Logging continued after the worker panic",
@@ -147,5 +151,6 @@ mod tests {
         ] {
             assert!(contents.contains(expected), "Missing {expected}");
         }
+        assert!(!contents.contains("Third-party diagnostic excluded from the log"));
     }
 }
