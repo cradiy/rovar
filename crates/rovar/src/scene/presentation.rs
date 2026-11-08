@@ -161,11 +161,29 @@ impl HoverExit {
 }
 
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(any(unix, windows), derive(schemars::JsonSchema))]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum WipeDirection {
+    Left,
+    #[default]
+    Right,
+    Up,
+    Down,
+}
+
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub(crate) enum Transition {
     #[default]
     Instant,
     Dissolve {
+        duration_ms: u16,
+    },
+    Blur {
+        duration_ms: u16,
+    },
+    Wipe {
+        direction: WipeDirection,
         duration_ms: u16,
     },
 }
@@ -176,9 +194,28 @@ impl Transition {
     }
 
     pub fn valid(self) -> bool {
+        self.duration_ms()
+            .is_none_or(|duration| (50..=2000).contains(&duration))
+    }
+
+    pub fn duration_ms(self) -> Option<u16> {
         match self {
-            Self::Instant => true,
-            Self::Dissolve { duration_ms } => (50..=2000).contains(&duration_ms),
+            Self::Instant => None,
+            Self::Dissolve { duration_ms }
+            | Self::Blur { duration_ms }
+            | Self::Wipe { duration_ms, .. } => Some(duration_ms),
+        }
+    }
+
+    pub fn with_duration(self, duration_ms: u16) -> Self {
+        match self {
+            Self::Instant => Self::Instant,
+            Self::Dissolve { .. } => Self::Dissolve { duration_ms },
+            Self::Blur { .. } => Self::Blur { duration_ms },
+            Self::Wipe { direction, .. } => Self::Wipe {
+                direction,
+                duration_ms,
+            },
         }
     }
 }

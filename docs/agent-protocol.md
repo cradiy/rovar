@@ -369,8 +369,9 @@ Use `set_interaction` within `document.apply` to replace one trigger's action:
   Properties affect the isolated playback scene, restore on hover exit when configured,
   and reset on restart. They never edit the source document or component definition.
 - Omitted/null `transition` and `hover_exit` preserve their current values.
-  Transitions are `instant` or `dissolve` (50–2000 ms), using the editor's existing
-  playback behavior. Hover exit is `restore`, `keep`, or `change_variant` with an
+  Transitions are `instant`, `dissolve`, `blur`, or `wipe`. Animated transitions
+  require `duration_ms` (50–2000); `wipe` also requires `direction` (`left`, `right`,
+  `up`, or `down`). Hover exit is `restore`, `keep`, or `change_variant` with an
   available variant UUID. It may only be supplied for a nonempty hover action.
 - `{"type":"none"}` clears that trigger and resets its transition. Clearing hover
   also resets its exit behavior to `restore`. Do not supply transition/exit settings

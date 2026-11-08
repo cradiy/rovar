@@ -240,10 +240,18 @@ pub(super) fn apply(
     let transition = transition.map(|transition| match transition {
         dto::Transition::Instant => scene::Transition::Instant,
         dto::Transition::Dissolve { duration_ms } => scene::Transition::Dissolve { duration_ms },
+        dto::Transition::Blur { duration_ms } => scene::Transition::Blur { duration_ms },
+        dto::Transition::Wipe {
+            direction,
+            duration_ms,
+        } => scene::Transition::Wipe {
+            direction,
+            duration_ms,
+        },
     });
     if transition.is_some_and(|transition| !transition.valid()) {
         return Err(Error::invalid(
-            "Dissolve duration must be 50 to 2000 milliseconds",
+            "Transition duration must be 50 to 2000 milliseconds",
         ));
     }
     if action.is_none() && transition.is_some() {

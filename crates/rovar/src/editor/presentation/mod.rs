@@ -274,12 +274,9 @@ impl Workspace {
             visual: playback.visual.clone(),
             overlay: playback.overlay,
         };
-        let duration = match playback.transition {
-            Transition::Instant => std::time::Duration::ZERO,
-            Transition::Dissolve { duration_ms } => {
-                std::time::Duration::from_millis(duration_ms.into())
-            }
-        };
+        let duration =
+            std::time::Duration::from_millis(playback.transition.duration_ms().unwrap_or(0).into());
+        let kind = transition::kind(playback.transition);
         let available = stage.get().size;
         let zoom = ((f32::from(available.width) - 32.).max(1.) / rect.width.max(1.))
             .min((f32::from(available.height) - 32.).max(1.) / rect.height.max(1.));
@@ -307,7 +304,7 @@ impl Workspace {
         .size_full()
         .duration(duration)
         .enabled(!duration.is_zero() && window.supports_subtree_effects())
-        .kind(gpui_effects::TransitionKind::CrossFade);
+        .kind(kind);
         div()
             .on_paint_before_children(move |_, _, window, _| {
                 let moving = pointer.clone();

@@ -1,7 +1,22 @@
 use super::*;
+use crate::scene::presentation::WipeDirection;
 use gpui::{App, RenderOnce};
 use std::cell::RefCell;
 use uic::components::dropdown::{DropdownPlacement, dropdown};
+
+pub(super) fn kind(transition: Transition) -> gpui_effects::TransitionKind {
+    use gpui_effects::TransitionKind;
+    match transition {
+        Transition::Instant | Transition::Dissolve { .. } => TransitionKind::CrossFade,
+        Transition::Blur { .. } => TransitionKind::BlurFade,
+        Transition::Wipe { direction, .. } => match direction {
+            WipeDirection::Left => TransitionKind::WipeLeft,
+            WipeDirection::Right => TransitionKind::WipeRight,
+            WipeDirection::Up => TransitionKind::WipeUp,
+            WipeDirection::Down => TransitionKind::WipeDown,
+        },
+    }
+}
 
 /// A render revision whose outgoing contents are frozen before a variant changes.
 /// Only the switch's visible revisions and an active hover restore retain it.
@@ -243,20 +258,31 @@ impl Workspace {
                     .child(t("prototype-transition")),
             )
             .child(
-                div().flex().gap(px(4.)).children(
+                div().flex().flex_wrap().gap(px(4.)).children(
                     [
                         ("prototype-instant", Transition::Instant),
                         (
                             "prototype-dissolve",
                             Transition::Dissolve { duration_ms: 200 },
                         ),
+                        ("prototype-blur", Transition::Blur { duration_ms: 200 }),
+                        (
+                            "prototype-wipe",
+                            Transition::Wipe {
+                                direction: WipeDirection::Right,
+                                duration_ms: 200,
+                            },
+                        ),
                     ]
                     .map(|(key, value)| {
-                        let selected = current.is_default() == value.is_default();
+                        let selected =
+                            std::mem::discriminant(&current) == std::mem::discriminant(&value);
+                        let value = value.with_duration(current.duration_ms().unwrap_or(200));
                         div()
                             .id(key)
                             .debug_selector(move || key.into())
                             .flex_1()
+                            .min_w(px(100.))
                             .h(px(28.))
                             .rounded(px(5.))
                             .text_size(px(12.))
@@ -280,96 +306,135 @@ impl Workspace {
             )
             .when_some(
                 match current {
-                    Transition::Dissolve { duration_ms } => Some(duration_ms),
-                    Transition::Instant => None,
+                    Transition::Wipe { direction, .. } => Some(direction),
+                    _ => None,
                 },
-                |el, duration| {
+                |el, direction| {
                     el.child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(px(8.))
-                            .child(
+                        div().flex().gap(px(4.)).children(
+                            [
+                                ("prototype-wipe-left", WipeDirection::Left),
+                                ("prototype-wipe-right", WipeDirection::Right),
+                                ("prototype-wipe-up", WipeDirection::Up),
+                                ("prototype-wipe-down", WipeDirection::Down),
+                            ]
+                            .map(|(key, value)| {
+                                let selected = direction == value;
                                 div()
+                                    .id(key)
+                                    .debug_selector(move || key.into())
+                                    .flex_1()
+                                    .h(px(28.))
+                                    .rounded(px(5.))
                                     .text_size(px(12.))
-                                    .text_color(MUTED.color())
-                                    .child(t("prototype-duration")),
-                            )
-                            .child(
-                                dropdown(&self.presentation.menus[3])
-                                    .placement(DropdownPlacement::BottomStart)
-                                    .w(px(140.))
-                                    .p(px(5.))
-                                    .rounded(px(10.))
-                                    .bg(Color::Input.color())
-                                    .border_1()
-                                    .border_color(BORDER.color())
-                                    .shadow_lg()
-                                    .text_size(px(12.))
-                                    .text_color(TEXT.color())
-                                    .trigger(
-                                        div()
-                                            .id("prototype-duration")
-                                            .debug_selector(|| "prototype-duration".into())
-                                            .h(px(30.))
-                                            .px(px(8.))
-                                            .rounded(px(6.))
-                                            .bg(Color::Input.color())
-                                            .text_size(px(12.))
-                                            .flex()
-                                            .items_center()
-                                            .gap(px(8.))
-                                            .cursor_pointer()
-                                            .child(format!("{duration} ms"))
-                                            .child(icon(GpuiIcons::LucideChevronDown, 12.)),
-                                    )
-                                    .menu(div().flex().flex_col().children(
-                                        [100u16, 200, 300, 500, 1000].map(|ms| {
-                                            div()
-                                                .id(("prototype-duration-option", ms as usize))
-                                                .debug_selector(move || {
-                                                    format!("prototype-duration-{ms}")
-                                                })
-                                                .h(px(28.))
-                                                .px(px(8.))
-                                                .rounded(px(5.))
-                                                .flex()
-                                                .items_center()
-                                                .gap(px(6.))
-                                                .cursor_pointer()
-                                                .hover(|s| s.bg(Color::Hover.color()))
-                                                .when(ms == duration, |el| {
-                                                    el.bg(Color::Selected.color())
-                                                        .text_color(ACCENT.color())
-                                                })
-                                                .child(
-                                                    icon(GpuiIcons::LucideCheck, 12.).opacity(
-                                                        if ms == duration { 1. } else { 0. },
-                                                    ),
-                                                )
-                                                .child(format!("{ms} ms"))
-                                                .on_click(cx.listener(
-                                                    move |this, _, window, cx| {
-                                                        this.presentation.menus[3]
-                                                            .update(cx, |menu, cx| {
-                                                                menu.close(window, cx)
-                                                            });
-                                                        this.set_prototype_transition(
-                                                            id,
-                                                            trigger,
-                                                            Transition::Dissolve {
-                                                                duration_ms: ms,
-                                                            },
-                                                            window,
-                                                            cx,
-                                                        );
-                                                    },
-                                                ))
-                                        }),
-                                    )),
-                            ),
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .cursor_pointer()
+                                    .bg(if selected {
+                                        Color::Selected.color()
+                                    } else {
+                                        Color::Input.color()
+                                    })
+                                    .child(t(key))
+                                    .on_click(cx.listener(move |this, _, window, cx| {
+                                        if !selected {
+                                            this.set_prototype_transition(
+                                                id,
+                                                trigger,
+                                                Transition::Wipe {
+                                                    direction: value,
+                                                    duration_ms: current.duration_ms().unwrap(),
+                                                },
+                                                window,
+                                                cx,
+                                            );
+                                        }
+                                    }))
+                            }),
+                        ),
                     )
                 },
             )
+            .when_some(current.duration_ms(), |el, duration| {
+                el.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(8.))
+                        .child(
+                            div()
+                                .text_size(px(12.))
+                                .text_color(MUTED.color())
+                                .child(t("prototype-duration")),
+                        )
+                        .child(
+                            dropdown(&self.presentation.menus[3])
+                                .placement(DropdownPlacement::BottomStart)
+                                .w(px(140.))
+                                .p(px(5.))
+                                .rounded(px(10.))
+                                .bg(Color::Input.color())
+                                .border_1()
+                                .border_color(BORDER.color())
+                                .shadow_lg()
+                                .text_size(px(12.))
+                                .text_color(TEXT.color())
+                                .trigger(
+                                    div()
+                                        .id("prototype-duration")
+                                        .debug_selector(|| "prototype-duration".into())
+                                        .h(px(30.))
+                                        .px(px(8.))
+                                        .rounded(px(6.))
+                                        .bg(Color::Input.color())
+                                        .text_size(px(12.))
+                                        .flex()
+                                        .items_center()
+                                        .gap(px(8.))
+                                        .cursor_pointer()
+                                        .child(format!("{duration} ms"))
+                                        .child(icon(GpuiIcons::LucideChevronDown, 12.)),
+                                )
+                                .menu(div().flex().flex_col().children(
+                                    [100u16, 200, 300, 500, 1000].map(|ms| {
+                                        div()
+                                            .id(("prototype-duration-option", ms as usize))
+                                            .debug_selector(move || {
+                                                format!("prototype-duration-{ms}")
+                                            })
+                                            .h(px(28.))
+                                            .px(px(8.))
+                                            .rounded(px(5.))
+                                            .flex()
+                                            .items_center()
+                                            .gap(px(6.))
+                                            .cursor_pointer()
+                                            .hover(|s| s.bg(Color::Hover.color()))
+                                            .when(ms == duration, |el| {
+                                                el.bg(Color::Selected.color())
+                                                    .text_color(ACCENT.color())
+                                            })
+                                            .child(
+                                                icon(GpuiIcons::LucideCheck, 12.)
+                                                    .opacity(if ms == duration { 1. } else { 0. }),
+                                            )
+                                            .child(format!("{ms} ms"))
+                                            .on_click(cx.listener(move |this, _, window, cx| {
+                                                this.presentation.menus[3]
+                                                    .update(cx, |menu, cx| menu.close(window, cx));
+                                                this.set_prototype_transition(
+                                                    id,
+                                                    trigger,
+                                                    current.with_duration(ms),
+                                                    window,
+                                                    cx,
+                                                );
+                                            }))
+                                    }),
+                                )),
+                        ),
+                )
+            })
     }
 }

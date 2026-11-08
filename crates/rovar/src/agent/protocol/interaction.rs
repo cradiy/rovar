@@ -95,4 +95,11 @@ pub(crate) enum Transition {
     Dissolve {
         duration_ms: u16,
     },
+    Blur {
+        duration_ms: u16,
+    },
+    Wipe {
+        direction: crate::scene::presentation::WipeDirection,
+        duration_ms: u16,
+    },
 }

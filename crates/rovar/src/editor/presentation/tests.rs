@@ -1204,19 +1204,26 @@ fn transition_controls_persist_per_trigger_with_undo_and_validation(cx: &mut Tes
     click(&mut visual, "prototype-dissolve");
     click(&mut visual, "prototype-duration");
     click(&mut visual, "prototype-duration-500");
+    click(&mut visual, "prototype-wipe");
+    click(&mut visual, "prototype-wipe-down");
+    click(&mut visual, "prototype-duration");
+    click(&mut visual, "prototype-duration-1000");
     click(&mut visual, "prototype-hover");
     assert!(visual.debug_bounds("prototype-duration").is_none());
-    click(&mut visual, "prototype-dissolve");
+    click(&mut visual, "prototype-blur");
     handle
         .update(&mut visual.cx, |w, window, cx| {
             let settings = w.hierarchy.interactions[&button].clone();
             assert_eq!(
                 settings.click_transition,
-                Transition::Dissolve { duration_ms: 500 }
+                Transition::Wipe {
+                    direction: crate::scene::presentation::WipeDirection::Down,
+                    duration_ms: 1000,
+                }
             );
             assert_eq!(
                 settings.hover_transition,
-                Transition::Dissolve { duration_ms: 200 }
+                Transition::Blur { duration_ms: 200 }
             );
             w.undo_redo(false, window, cx);
             assert_eq!(
@@ -1237,7 +1244,10 @@ fn transition_controls_persist_per_trigger_with_undo_and_validation(cx: &mut Tes
                 .interactions
                 .get_mut(&button)
                 .unwrap()
-                .click_transition = Transition::Dissolve { duration_ms: 0 };
+                .click_transition = Transition::Wipe {
+                direction: crate::scene::presentation::WipeDirection::Down,
+                duration_ms: 0,
+            };
             assert!(decoded.validate().is_err());
             w.set_prototype_action(button, Trigger::Click, None, window, cx);
             assert_eq!(
@@ -1253,7 +1263,7 @@ fn transition_controls_persist_per_trigger_with_undo_and_validation(cx: &mut Tes
 }
 
 #[gpui::test]
-fn dissolve_reverses_hover_and_restart_clears_outgoing_frames(cx: &mut TestAppContext) {
+fn wipe_reverses_hover_and_restart_clears_outgoing_frames(cx: &mut TestAppContext) {
     let handle = open(cx);
     let (first, second, saved) = handle
         .update(cx, |w, window, cx| {
@@ -1270,7 +1280,10 @@ fn dissolve_reverses_hover_and_restart_clears_outgoing_frames(cx: &mut TestAppCo
             w.set_prototype_transition(
                 button,
                 Trigger::Hover,
-                Transition::Dissolve { duration_ms: 500 },
+                Transition::Wipe {
+                    direction: crate::scene::presentation::WipeDirection::Left,
+                    duration_ms: 500,
+                },
                 window,
                 cx,
             );
@@ -1331,7 +1344,9 @@ fn dissolve_reverses_hover_and_restart_clears_outgoing_frames(cx: &mut TestAppCo
 }
 
 #[gpui::test]
-fn rapid_dissolve_clicks_finish_at_latest_target_without_changing_history(cx: &mut TestAppContext) {
+fn rapid_transition_clicks_finish_at_latest_target_without_changing_history(
+    cx: &mut TestAppContext,
+) {
     let handle = open(cx);
     let (first, second, third) = handle
         .update(cx, |w, window, cx| {
@@ -1347,14 +1362,11 @@ fn rapid_dissolve_clicks_finish_at_latest_target_without_changing_history(cx: &m
             );
             let third = w.boards.last().unwrap().id;
             w.set_click(second, Some(Action::Navigate { target: third }), window, cx);
-            for source in [button, second] {
-                w.set_prototype_transition(
-                    source,
-                    Trigger::Click,
-                    Transition::Dissolve { duration_ms: 500 },
-                    window,
-                    cx,
-                );
+            for (source, transition) in [
+                (button, Transition::Blur { duration_ms: 500 }),
+                (second, Transition::Dissolve { duration_ms: 500 }),
+            ] {
+                w.set_prototype_transition(source, Trigger::Click, transition, window, cx);
             }
             w.start_presentation(window, cx);
             (first, second, third)

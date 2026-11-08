@@ -191,8 +191,9 @@ fn interactions_resolve_targets_preserve_other_triggers_and_undo_atomically(
             {"op":"create","ref":"$button","type":"rectangle","parent":"$frame","properties":{"rect":{"x":10,"y":10,"width":40,"height":40}}},
             {"op":"set_start_frame","target":"$frame"},
             {"op":"set_interaction","id":"$button","trigger":"hover","action":{"type":"navigate","target":"$frame"},
-                "hover_exit":{"type":"restore"},"transition":{"type":"dissolve","duration_ms":200}},
-            {"op":"set_interaction","id":"$button","trigger":"click","action":{"type":"back"}}
+                "hover_exit":{"type":"restore"},"transition":{"type":"wipe","direction":"left","duration_ms":200}},
+            {"op":"set_interaction","id":"$button","trigger":"click","action":{"type":"back"},
+                "transition":{"type":"blur","duration_ms":300}}
         ]));
         let result = execute(this, &setup, window, cx).unwrap();
         let frame = this.boards[0].id;
@@ -201,6 +202,8 @@ fn interactions_resolve_targets_preserve_other_triggers_and_undo_atomically(
         assert_eq!(result["start_frame_id"], result["created"]["$frame"]);
         let node = result["nodes"].as_array().unwrap().iter().find(|n| n["id"] == uid).unwrap();
         assert_eq!(node["interactions"]["hover"]["action"]["target"], result["created"]["$frame"]);
+        assert_eq!(node["interactions"]["hover"]["transition"], json!({"type":"wipe","direction":"left","duration_ms":200}));
+        assert_eq!(node["interactions"]["click"]["transition"], json!({"type":"blur","duration_ms":300}));
         let original = this.snapshot_page(cx).0;
         let revision = this.document_revision();
         let undo_len = this.history.borrow().undo_len();
@@ -218,7 +221,10 @@ fn interactions_resolve_targets_preserve_other_triggers_and_undo_atomically(
         assert_eq!(interaction.click, None);
         assert_eq!(interaction.hover, Some(Action::Navigate { target: frame }));
         assert_eq!(interaction.hover_exit, HoverExit::Restore);
-        assert_eq!(interaction.hover_transition, Transition::Dissolve { duration_ms: 200 });
+        assert_eq!(interaction.hover_transition, Transition::Wipe {
+            direction: crate::scene::presentation::WipeDirection::Left,
+            duration_ms: 200,
+        });
         this.undo_redo(false, window, cx);
         assert!(this.snapshot_page(cx).0 == original);
 
