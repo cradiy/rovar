@@ -70,6 +70,9 @@ impl FontPicker {
                 window,
                 |this, _, event: &PopoverEvent, window, cx| {
                     if *event == PopoverEvent::Opened {
+                        if !cfg!(test) && this.fonts.is_empty() && !this.loading {
+                            this.scan(cx);
+                        }
                         this.search.update(cx, |input, cx| input.clear(cx));
                         // Focus after the popover has attached the search field to its focus tree.
                         let search = this.search.clone();
@@ -84,7 +87,7 @@ impl FontPicker {
                 },
             ),
         ];
-        let mut picker = Self {
+        Self {
             fonts: Vec::new(),
             filtered: Vec::new(),
             selected: "".into(),
@@ -96,12 +99,7 @@ impl FontPicker {
             scroll: UniformListScrollHandle::new(),
             _scan: Task::ready(()),
             _subscriptions: subscriptions,
-        };
-        // UI tests provide their own catalog and never inspect the host's fonts.
-        if !cfg!(test) {
-            picker.scan(cx);
         }
-        picker
     }
 
     fn scan(&mut self, cx: &mut Context<Self>) {

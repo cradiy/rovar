@@ -142,6 +142,11 @@ fn nested_scroll_consumes_remainders_clips_hits_and_keeps_fixed_branches(cx: &mu
                 w.set_prototype_behavior(id, ScrollAxis::None, true, false, window, cx);
             }
             w.set_click(item, Some(Action::Back), window, cx);
+            w.add_artboard(rect(500., 0., 200., 200.), cx);
+            let other = w.boards.last().unwrap().id;
+            let other_item = shape(w, other, rect(20., 500., 20., 20.));
+            w.set_prototype_behavior(other, ScrollAxis::Vertical, false, false, window, cx);
+            w.hierarchy.start = Some(root);
             w.start_presentation(window, cx);
             w.presentation.player.clone().unwrap().update(cx, |p, cx| {
                 p.hierarchy.layouts.get_mut(&inner).unwrap().frame.height = 75.;
@@ -163,6 +168,32 @@ fn nested_scroll_consumes_remainders_clips_hits_and_keeps_fixed_branches(cx: &mu
                 assert!(!p.scroll_by(&[inner, root], point(100., 0.)));
                 p.playback_scroll_to(item, window, cx);
                 assert_eq!(p.presentation.scroll.offsets[&root].y, 120.);
+                let offsets = p.presentation.scroll.offsets.clone();
+                assert!(!p.presentation.scroll.nodes.contains_key(&other_item));
+                p.playback_action(Action::Navigate { target: other }, cx);
+                p.refresh_playback_scroll();
+                assert!(!p.presentation.scroll.nodes.contains_key(&inner));
+                assert!(p.presentation.scroll.nodes.contains_key(&other_item));
+                assert!(p.scroll_by(&[other], point(0., 90.)));
+                p.playback_action(Action::Back, cx);
+                p.refresh_playback_scroll();
+                assert_eq!(p.presentation.scroll.offsets[&root], offsets[&root]);
+                assert_eq!(p.presentation.scroll.offsets[&inner], offsets[&inner]);
+                p.playback_action(
+                    Action::OpenOverlay {
+                        target: other,
+                        settings: Default::default(),
+                    },
+                    cx,
+                );
+                p.refresh_playback_scroll();
+                assert!(p.presentation.scroll.nodes.contains_key(&inner));
+                assert!(p.presentation.scroll.nodes.contains_key(&other_item));
+                assert_eq!(p.presentation.scroll.offsets[&other], point(0., 90.));
+                p.playback_action(Action::CloseOverlay, cx);
+                p.refresh_playback_scroll();
+                assert!(!p.presentation.scroll.nodes.contains_key(&other_item));
+                assert_eq!(p.presentation.scroll.offsets[&other], point(0., 90.));
                 let before = p.presentation.scroll.offsets.clone();
                 p.playback_scroll_to(fixed, window, cx);
                 assert_eq!(p.presentation.scroll.offsets, before);

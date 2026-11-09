@@ -15,6 +15,7 @@ pub(in crate::editor) struct State {
     pub nodes: HashMap<usize, Node>,
     pub(in crate::editor::presentation) press: Option<input::Press>,
     pub(in crate::editor::presentation) index: Option<Rc<super::super::scene_index::Index>>,
+    roots: Option<[usize; 2]>,
     settings: std::collections::BTreeMap<usize, (ScrollAxis, bool)>,
     pub(in crate::editor::presentation) dirty: bool,
 }
@@ -54,6 +55,14 @@ impl Workspace {
             return;
         }
         let index = self.scene_index();
+        let roots = self.presentation.playback.as_ref().map(|playback| {
+            [
+                playback.current,
+                playback
+                    .overlay
+                    .map_or(playback.current, |overlay| overlay.target),
+            ]
+        });
         let settings = self
             .hierarchy
             .interactions
@@ -67,13 +76,26 @@ impl Workspace {
             .index
             .as_ref()
             .is_some_and(|old| Rc::ptr_eq(old, &index))
-            || self.presentation.scroll.settings != settings;
+            || self.presentation.scroll.settings != settings
+            || self.presentation.scroll.roots != roots;
         if !geometry_changed && !self.presentation.scroll.dirty {
             return;
         }
         self.presentation.scroll.dirty = false;
-        self.presentation.scroll.scrolling = settings.values().any(|(axis, _)| !axis.is_none());
-        let order = index.order.clone();
+        let order: Vec<_> = index
+            .order
+            .iter()
+            .copied()
+            .filter(|id| {
+                roots.is_none_or(|roots| {
+                    roots.contains(id)
+                        || self
+                            .ancestors(*id)
+                            .iter()
+                            .any(|parent| roots.contains(parent))
+                })
+            })
+            .collect();
         let mut nodes: HashMap<_, _> = if geometry_changed {
             order
                 .iter()
@@ -151,9 +173,10 @@ impl Workspace {
             }
         }
         let state = &mut self.presentation.scroll;
-        state
-            .offsets
-            .retain(|id, _| nodes.get(id).is_some_and(|n| n.range.is_some()));
+        state.scrolling = nodes.values().any(|node| node.range.is_some());
+        state.offsets.retain(|id, _| {
+            index.included.contains(id) && settings.get(id).is_some_and(|(axis, _)| !axis.is_none())
+        });
         for (id, node) in &mut nodes {
             if let Some(range) = &mut node.range {
                 if !range.axis.horizontal() {
@@ -205,6 +228,7 @@ impl Workspace {
         self.presentation.scroll.nodes = nodes;
         self.presentation.scroll.index = Some(index);
         self.presentation.scroll.settings = settings;
+        self.presentation.scroll.roots = roots;
     }
 
     pub(in crate::editor) fn playback_scroll_offset(&self, id: usize) -> Point<f32> {

@@ -60,6 +60,59 @@ fn profile_canvas_document(cx: &mut TestAppContext) {
         })
         .unwrap();
     let mut visual = VisualTestContext::from_window(handle.into(), cx);
+    if std::env::var_os("ROVAR_PROFILE_PLAYBACK").is_some() {
+        handle.update(&mut visual.cx, |w, window, cx| {
+            w.suspend(window, cx);
+            w.sync_components(window, cx);
+            w.reflow_layout(cx);
+            let started = std::time::Instant::now();
+            let (page, _) = w.snapshot_page(cx);
+            let snapshot = started.elapsed();
+            let started = std::time::Instant::now();
+            let duplicate = page.clone();
+            let clone = started.elapsed();
+            let started = std::time::Instant::now();
+            let player = cx.new(|cx| Workspace::new(window, cx));
+            let construction = started.elapsed();
+            let started = std::time::Instant::now();
+            player.update(cx, |player, cx| player.load_page(duplicate, window, cx));
+            let load = started.elapsed();
+            let started = std::time::Instant::now();
+            player.update(cx, |player, _| {
+                player.presentation.scroll.active = true;
+                player.refresh_playback_scroll();
+            });
+            eprintln!("playback parts: snapshot={snapshot:?} clone={clone:?} construction={construction:?} load={load:?} scroll_all_frames={:?}", started.elapsed());
+        }).unwrap();
+        for run in 0..5 {
+            handle
+                .update(&mut visual.cx, |w, window, cx| {
+                    let started = std::time::Instant::now();
+                    w.start_presentation(window, cx);
+                    eprintln!("playback run={run} start={:?}", started.elapsed());
+                })
+                .unwrap();
+            let build = visual.update(|window, _| window.frame_diagnostics().unwrap().build_time);
+            eprintln!("playback run={run} frame_build={build:?}");
+            handle
+                .update(&mut visual.cx, |w, window, cx| {
+                    if let Some(player) = w.presentation.player.take() {
+                        player.update(cx, |player, cx| player.pause_media(cx));
+                    }
+                    w.focus.focus(window, cx);
+                    cx.notify();
+                })
+                .unwrap();
+        }
+        handle
+            .update(&mut visual.cx, |w, window, cx| {
+                w.suspend(window, cx);
+                window.remove_window();
+            })
+            .unwrap();
+        visual.cx.run_until_parked();
+        return;
+    }
     if std::env::var_os("ROVAR_PROFILE_PROTOTYPE").is_some() {
         handle
             .update(&mut visual.cx, |w, window, cx| {

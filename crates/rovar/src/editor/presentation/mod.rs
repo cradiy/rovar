@@ -113,7 +113,7 @@ impl Workspace {
         self.sync_components(window, cx);
         self.reflow_layout(cx);
         let start = self.presentation_start().unwrap();
-        let (mut page, _) = self.snapshot_page(cx);
+        let mut page = self.snapshot_page_state(cx);
         for binding in page.hierarchy.components.values_mut() {
             binding.master = false;
         }
