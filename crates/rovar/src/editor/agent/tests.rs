@@ -193,7 +193,7 @@ fn interactions_resolve_targets_preserve_other_triggers_and_undo_atomically(
             {"op":"set_interaction","id":"$button","trigger":"hover","action":{"type":"navigate","target":"$frame"},
                 "hover_exit":{"type":"restore"},"transition":{"type":"wipe","direction":"left","duration_ms":200}},
             {"op":"set_interaction","id":"$button","trigger":"click","action":{"type":"back"},
-                "transition":{"type":"blur","duration_ms":300}}
+                "transition":{"type":"effect","effect":"pixelate","duration_ms":375,"easing":"ease_in"}}
         ]));
         let result = execute(this, &setup, window, cx).unwrap();
         let frame = this.boards[0].id;
@@ -203,7 +203,7 @@ fn interactions_resolve_targets_preserve_other_triggers_and_undo_atomically(
         let node = result["nodes"].as_array().unwrap().iter().find(|n| n["id"] == uid).unwrap();
         assert_eq!(node["interactions"]["hover"]["action"]["target"], result["created"]["$frame"]);
         assert_eq!(node["interactions"]["hover"]["transition"], json!({"type":"wipe","direction":"left","duration_ms":200}));
-        assert_eq!(node["interactions"]["click"]["transition"], json!({"type":"blur","duration_ms":300}));
+        assert_eq!(node["interactions"]["click"]["transition"], json!({"type":"effect","effect":"pixelate","direction":"right","duration_ms":375,"easing":"ease_in"}));
         let original = this.snapshot_page(cx).0;
         let revision = this.document_revision();
         let undo_len = this.history.borrow().undo_len();
@@ -224,6 +224,7 @@ fn interactions_resolve_targets_preserve_other_triggers_and_undo_atomically(
         assert_eq!(interaction.hover_transition, Transition::Wipe {
             direction: crate::scene::presentation::WipeDirection::Left,
             duration_ms: 200,
+            easing: Default::default(),
         });
         this.undo_redo(false, window, cx);
         assert!(this.snapshot_page(cx).0 == original);

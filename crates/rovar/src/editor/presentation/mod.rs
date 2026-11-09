@@ -35,6 +35,7 @@ pub(super) struct State {
     menus: [Entity<DropdownState>; 8],
     editor: Entity<PopoverState>,
     transition_editor: Entity<PopoverState>,
+    timing: transition::Controls,
     media: media::State,
     properties: properties::State,
     pub(in crate::editor) scroll: scroll::State,
@@ -70,6 +71,7 @@ impl State {
             menus: std::array::from_fn(|_| cx.new(|cx| DropdownState::new(window, cx))),
             editor: cx.new(|cx| PopoverState::new(window, cx)),
             transition_editor: cx.new(|cx| PopoverState::new(window, cx)),
+            timing: transition::Controls::new(window, cx),
             media: media::State::new(window, cx),
             properties: properties::State::new(window, cx),
             scroll: scroll::State::default(),
@@ -85,6 +87,7 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.commit_transition_duration(window, cx);
         self.suspend(window, cx);
         self.presentation.tab = tab;
         if tab {
@@ -283,9 +286,7 @@ impl Workspace {
             visual: playback.visual.clone(),
             overlay: playback.overlay,
         };
-        let duration =
-            std::time::Duration::from_millis(playback.transition.duration_ms().unwrap_or(0).into());
-        let kind = transition::kind(playback.transition);
+        let transition = playback.transition;
         let available = stage.get().size;
         let zoom = ((f32::from(available.width) - 32.).max(1.) / rect.width.max(1.))
             .min((f32::from(available.height) - 32.).max(1.) / rect.height.max(1.));
@@ -303,17 +304,11 @@ impl Workspace {
         let weak = cx.entity().downgrade();
         let pointer = weak.clone();
         let frame_bounds = self.bounds.clone();
-        let workspace = cx.entity().downgrade();
-        let frames = gpui_effects::animated_switch("playback-transition", frame, move |frame| {
-            transition::Frame {
-                workspace: workspace.clone(),
-                key: frame.clone(),
-            }
-        })
-        .size_full()
-        .duration(duration)
-        .enabled(!duration.is_zero() && window.supports_subtree_effects())
-        .kind(kind);
+        let frames = transition::Surface {
+            workspace: cx.entity().downgrade(),
+            key: frame,
+            transition,
+        };
         div()
             .on_paint_before_children(move |_, _, window, _| {
                 let moving = pointer.clone();

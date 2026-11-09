@@ -231,6 +231,7 @@ impl Workspace {
                                             },
                                         )
                                         .on_click(cx.listener(move |this, _, window, cx| {
+                                            this.commit_transition_duration(window, cx);
                                             this.close_action_editor(window, cx);
                                             this.presentation
                                                 .transition_editor

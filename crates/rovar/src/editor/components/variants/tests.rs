@@ -48,7 +48,7 @@ fn prototype_wire_to_main_variant_creates_state_change(cx: &mut TestAppContext) 
             use crate::scene::presentation::Transition;
             assert_eq!(
                 w.hierarchy.interactions[&1].hover_transition,
-                Transition::Dissolve { duration_ms: 200 }
+                Transition::dissolve(200)
             );
             w.undo_redo(false, window, cx);
             assert_eq!(
@@ -154,7 +154,7 @@ fn prototype_variants_are_independent_and_playback_is_temporary(cx: &mut TestApp
                 w.set_prototype_transition(
                     second_master,
                     trigger,
-                    Transition::Dissolve { duration_ms: 500 },
+                    Transition::dissolve(500),
                     window,
                     cx,
                 );
@@ -162,7 +162,7 @@ fn prototype_variants_are_independent_and_playback_is_temporary(cx: &mut TestApp
             w.set_prototype_transition(
                 master,
                 Trigger::Hover,
-                Transition::Dissolve { duration_ms: 500 },
+                Transition::dissolve(500),
                 window,
                 cx,
             );

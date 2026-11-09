@@ -111,15 +111,29 @@ pub(crate) enum HoverExit {
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub(crate) enum Transition {
     Instant,
+    Effect {
+        effect: crate::scene::presentation::TransitionEffect,
+        #[serde(default)]
+        direction: crate::scene::presentation::WipeDirection,
+        duration_ms: u16,
+        #[serde(default)]
+        easing: crate::scene::presentation::Easing,
+    },
     /// Duration must be 50 to 2000 milliseconds.
     Dissolve {
         duration_ms: u16,
+        #[serde(default)]
+        easing: crate::scene::presentation::Easing,
     },
     Blur {
         duration_ms: u16,
+        #[serde(default)]
+        easing: crate::scene::presentation::Easing,
     },
     Wipe {
         direction: crate::scene::presentation::WipeDirection,
         duration_ms: u16,
+        #[serde(default)]
+        easing: crate::scene::presentation::Easing,
     },
 }

@@ -171,14 +171,39 @@ pub(super) fn apply(
         .transpose()?;
     let transition = transition.map(|transition| match transition {
         dto::Transition::Instant => scene::Transition::Instant,
-        dto::Transition::Dissolve { duration_ms } => scene::Transition::Dissolve { duration_ms },
-        dto::Transition::Blur { duration_ms } => scene::Transition::Blur { duration_ms },
+        dto::Transition::Effect {
+            effect,
+            direction,
+            duration_ms,
+            easing,
+        } => scene::Transition::Effect {
+            effect,
+            direction,
+            duration_ms,
+            easing,
+        },
+        dto::Transition::Dissolve {
+            duration_ms,
+            easing,
+        } => scene::Transition::Dissolve {
+            duration_ms,
+            easing,
+        },
+        dto::Transition::Blur {
+            duration_ms,
+            easing,
+        } => scene::Transition::Blur {
+            duration_ms,
+            easing,
+        },
         dto::Transition::Wipe {
             direction,
             duration_ms,
+            easing,
         } => scene::Transition::Wipe {
             direction,
             duration_ms,
+            easing,
         },
     });
     if transition.is_some_and(|transition| !transition.valid()) {

@@ -214,23 +214,176 @@ pub(crate) enum WipeDirection {
 }
 
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(any(unix, windows), derive(schemars::JsonSchema))]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum Easing {
+    Linear,
+    EaseIn,
+    EaseOut,
+    #[default]
+    EaseInOut,
+}
+
+impl Easing {
+    pub fn is_default(&self) -> bool {
+        *self == Self::EaseInOut
+    }
+    pub fn sample(self, progress: f32) -> f32 {
+        let t = progress.clamp(0., 1.);
+        match self {
+            Self::Linear => t,
+            Self::EaseIn => t * t * t,
+            Self::EaseOut => 1. - (1. - t).powi(3),
+            Self::EaseInOut => t * t * (3. - 2. * t),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(any(unix, windows), derive(schemars::JsonSchema))]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum TransitionEffect {
+    Slide,
+    Push,
+    ZoomIn,
+    ZoomOut,
+    Rotate,
+    Flip,
+    Iris,
+    Blinds,
+    Pixelate,
+    Noise,
+}
+
+impl TransitionEffect {
+    pub fn directional(self) -> bool {
+        matches!(self, Self::Slide | Self::Push | Self::Flip | Self::Blinds)
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Slide => "prototype-slide",
+            Self::Push => "prototype-push",
+            Self::ZoomIn => "prototype-zoom-in",
+            Self::ZoomOut => "prototype-zoom-out",
+            Self::Rotate => "prototype-rotate",
+            Self::Flip => "prototype-flip",
+            Self::Iris => "prototype-iris",
+            Self::Blinds => "prototype-blinds",
+            Self::Pixelate => "prototype-pixelate",
+            Self::Noise => "prototype-noise",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub(crate) enum Transition {
     #[default]
     Instant,
     Dissolve {
         duration_ms: u16,
+        #[serde(default, skip_serializing_if = "Easing::is_default")]
+        easing: Easing,
     },
     Blur {
         duration_ms: u16,
+        #[serde(default, skip_serializing_if = "Easing::is_default")]
+        easing: Easing,
     },
     Wipe {
         direction: WipeDirection,
         duration_ms: u16,
+        #[serde(default, skip_serializing_if = "Easing::is_default")]
+        easing: Easing,
+    },
+    Effect {
+        effect: TransitionEffect,
+        #[serde(default)]
+        direction: WipeDirection,
+        duration_ms: u16,
+        #[serde(default, skip_serializing_if = "Easing::is_default")]
+        easing: Easing,
     },
 }
 
 impl Transition {
+    pub fn effect(effect: TransitionEffect, duration_ms: u16) -> Self {
+        Self::Effect {
+            effect,
+            direction: WipeDirection::default(),
+            duration_ms,
+            easing: Easing::default(),
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Instant => "prototype-instant",
+            Self::Dissolve { .. } => "prototype-dissolve",
+            Self::Blur { .. } => "prototype-blur",
+            Self::Wipe { .. } => "prototype-wipe",
+            Self::Effect { effect, .. } => effect.label(),
+        }
+    }
+
+    pub fn direction(self) -> Option<WipeDirection> {
+        match self {
+            Self::Wipe { direction, .. } => Some(direction),
+            Self::Effect {
+                effect, direction, ..
+            } if effect.directional() => Some(direction),
+            _ => None,
+        }
+    }
+
+    pub fn with_direction(mut self, value: WipeDirection) -> Self {
+        match &mut self {
+            Self::Wipe { direction, .. } | Self::Effect { direction, .. } => *direction = value,
+            _ => (),
+        }
+        self
+    }
+    pub fn dissolve(duration_ms: u16) -> Self {
+        Self::Dissolve {
+            duration_ms,
+            easing: Easing::default(),
+        }
+    }
+    pub fn blur(duration_ms: u16) -> Self {
+        Self::Blur {
+            duration_ms,
+            easing: Easing::default(),
+        }
+    }
+    pub fn wipe(direction: WipeDirection, duration_ms: u16) -> Self {
+        Self::Wipe {
+            direction,
+            duration_ms,
+            easing: Easing::default(),
+        }
+    }
+
+    pub fn easing(self) -> Easing {
+        match self {
+            Self::Instant => Easing::default(),
+            Self::Dissolve { easing, .. }
+            | Self::Blur { easing, .. }
+            | Self::Wipe { easing, .. }
+            | Self::Effect { easing, .. } => easing,
+        }
+    }
+
+    pub fn with_easing(mut self, value: Easing) -> Self {
+        match &mut self {
+            Self::Instant => (),
+            Self::Dissolve { easing, .. }
+            | Self::Blur { easing, .. }
+            | Self::Wipe { easing, .. }
+            | Self::Effect { easing, .. } => *easing = value,
+        }
+        self
+    }
     pub fn is_default(&self) -> bool {
         *self == Self::Instant
     }
@@ -243,20 +396,41 @@ impl Transition {
     pub fn duration_ms(self) -> Option<u16> {
         match self {
             Self::Instant => None,
-            Self::Dissolve { duration_ms }
-            | Self::Blur { duration_ms }
-            | Self::Wipe { duration_ms, .. } => Some(duration_ms),
+            Self::Dissolve { duration_ms, .. }
+            | Self::Blur { duration_ms, .. }
+            | Self::Wipe { duration_ms, .. }
+            | Self::Effect { duration_ms, .. } => Some(duration_ms),
         }
     }
 
     pub fn with_duration(self, duration_ms: u16) -> Self {
         match self {
             Self::Instant => Self::Instant,
-            Self::Dissolve { .. } => Self::Dissolve { duration_ms },
-            Self::Blur { .. } => Self::Blur { duration_ms },
-            Self::Wipe { direction, .. } => Self::Wipe {
+            Self::Dissolve { easing, .. } => Self::Dissolve {
+                duration_ms,
+                easing,
+            },
+            Self::Blur { easing, .. } => Self::Blur {
+                duration_ms,
+                easing,
+            },
+            Self::Wipe {
+                direction, easing, ..
+            } => Self::Wipe {
                 direction,
                 duration_ms,
+                easing,
+            },
+            Self::Effect {
+                effect,
+                direction,
+                easing,
+                ..
+            } => Self::Effect {
+                effect,
+                direction,
+                duration_ms,
+                easing,
             },
         }
     }

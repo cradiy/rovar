@@ -374,9 +374,13 @@ Use `set_interaction` within `document.apply` to replace one trigger's action:
   Existing single-action values remain valid. Property and variant changes are applied
   together before navigation, scrolling, and media commands run in list order.
   The trigger shares one transition and hover-exit behavior across the action list.
-  Transitions are `instant`, `dissolve`, `blur`, or `wipe`. Animated transitions
+  Transitions are `instant`, `dissolve`, `blur`, `wipe`, or `effect`. For `effect`,
+  select `effect`: `slide`, `push`, `zoom_in`, `zoom_out`, `rotate`, `flip`, `iris`,
+  `blinds`, `pixelate`, or `noise`. Slide, push, flip, and blinds accept `direction`
+  (`left`, `right`, `up`, `down`; default `right`). Animated transitions
   require `duration_ms` (50–2000); `wipe` also requires `direction` (`left`, `right`,
-  `up`, or `down`). Hover exit is `restore`, `keep`, or `change_variant` with an
+  `up`, or `down`). Optional `easing` is `linear`, `ease_in`, `ease_out`, or
+  `ease_in_out` (the default). Hover exit is `restore`, `keep`, or `change_variant` with an
   available variant UUID. It may only be supplied for a nonempty hover action.
 - `{"type":"none"}` clears that trigger and resets its transition. Clearing hover
   also resets its exit behavior to `restore`. Do not supply transition/exit settings

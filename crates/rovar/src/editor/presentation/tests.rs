@@ -1389,7 +1389,7 @@ fn overlay_hover_restore_and_escape_preserve_the_base_page(cx: &mut TestAppConte
             w.set_prototype_transition(
                 ids.2,
                 Trigger::Hover,
-                Transition::Dissolve { duration_ms: 200 },
+                Transition::dissolve(200),
                 window,
                 cx,
             );
@@ -1513,6 +1513,61 @@ fn transition_controls_persist_per_trigger_with_undo_and_validation(cx: &mut Tes
     click(&mut visual, "prototype-wipe-down");
     click(&mut visual, "prototype-duration");
     click(&mut visual, "prototype-duration-1000");
+    click(&mut visual, "prototype-easing-menu");
+    click(&mut visual, "prototype-easing-2");
+    click(&mut visual, "prototype-duration-input");
+    visual.simulate_keystrokes("secondary-a 3 7 5 enter");
+    draw(&mut visual);
+    let depth = handle
+        .update(&mut visual.cx, |w, _, _| w.history.borrow().undo_len())
+        .unwrap();
+    visual.simulate_keystrokes("secondary-a 4 9 enter");
+    draw(&mut visual);
+    handle
+        .update(&mut visual.cx, |w, _, _| {
+            assert_eq!(
+                w.prototype_transition(button, Trigger::Click).duration_ms(),
+                Some(375)
+            );
+            assert_eq!(w.history.borrow().undo_len(), depth);
+        })
+        .unwrap();
+    click(&mut visual, "prototype-push");
+    handle
+        .update(&mut visual.cx, |w, _, cx| {
+            assert_eq!(
+                w.prototype_transition(button, Trigger::Click).label(),
+                "prototype-push"
+            );
+            assert!(
+                w.presentation.transition_editor.read(cx).is_open(),
+                "transition popover closed after changing effect"
+            );
+        })
+        .unwrap();
+    click(&mut visual, "prototype-wipe-up");
+    handle
+        .update(&mut visual.cx, |w, window, cx| {
+            use crate::scene::presentation::{Easing, TransitionEffect, WipeDirection};
+            let transition = w.prototype_transition(button, Trigger::Click);
+            assert_eq!(
+                transition,
+                Transition::effect(TransitionEffect::Push, 375)
+                    .with_easing(Easing::EaseOut)
+                    .with_direction(WipeDirection::Up)
+            );
+            let page = w.snapshot_page(cx).0;
+            let decoded =
+                crate::document::Page::decode(&serde_json::to_vec(&page).unwrap()).unwrap();
+            assert_eq!(
+                decoded.hierarchy.interactions[&button].click_transition,
+                transition
+            );
+            w.undo_redo(false, window, cx);
+            w.undo_redo(false, window, cx);
+        })
+        .unwrap();
+    draw(&mut visual);
     click(&mut visual, "prototype-hover");
     assert!(visual.debug_bounds("prototype-duration").is_none());
     click(&mut visual, "prototype-transition-menu");
@@ -1524,13 +1579,11 @@ fn transition_controls_persist_per_trigger_with_undo_and_validation(cx: &mut Tes
                 settings.click_transition,
                 Transition::Wipe {
                     direction: crate::scene::presentation::WipeDirection::Down,
-                    duration_ms: 1000,
+                    duration_ms: 375,
+                    easing: crate::scene::presentation::Easing::EaseOut,
                 }
             );
-            assert_eq!(
-                settings.hover_transition,
-                Transition::Blur { duration_ms: 200 }
-            );
+            assert_eq!(settings.hover_transition, Transition::blur(200));
             w.undo_redo(false, window, cx);
             assert_eq!(
                 w.hierarchy.interactions[&button].hover_transition,
@@ -1553,6 +1606,7 @@ fn transition_controls_persist_per_trigger_with_undo_and_validation(cx: &mut Tes
                 .click_transition = Transition::Wipe {
                 direction: crate::scene::presentation::WipeDirection::Down,
                 duration_ms: 0,
+                easing: Default::default(),
             };
             assert!(decoded.validate().is_err());
             w.set_prototype_action(button, Trigger::Click, None, window, cx);
@@ -1569,84 +1623,88 @@ fn transition_controls_persist_per_trigger_with_undo_and_validation(cx: &mut Tes
 }
 
 #[gpui::test]
-fn wipe_reverses_hover_and_restart_clears_outgoing_frames(cx: &mut TestAppContext) {
-    let handle = open(cx);
-    let (first, second, saved) = handle
-        .update(cx, |w, window, cx| {
-            let (first, second, button) = setup(w, window, cx);
-            w.boards[1].rect.width = 160.;
-            w.boards[1].rect.height = 100.;
-            w.set_prototype_action(
-                button,
-                Trigger::Hover,
-                Some(Action::Navigate { target: second }),
-                window,
-                cx,
-            );
-            w.set_prototype_transition(
-                button,
-                Trigger::Hover,
-                Transition::Wipe {
-                    direction: crate::scene::presentation::WipeDirection::Left,
-                    duration_ms: 500,
-                },
-                window,
-                cx,
-            );
-            let saved = serde_json::to_value(w.snapshot_page(cx).0).unwrap();
-            w.start_presentation(window, cx);
-            (first, second, saved)
-        })
-        .unwrap();
-    let mut visual = VisualTestContext::from_window(handle.into(), cx);
-    draw(&mut visual);
-    draw(&mut visual);
-    let surface = visual.debug_bounds("playback-surface").unwrap();
-    let scale = f32::from(surface.size.width) / 320.;
-    let hotspot = surface.origin + point(px(50. * scale), px(40. * scale));
-    let outside = surface.origin + point(px(250. * scale), px(200. * scale));
-    let from_selector: &'static str = format!("playback-frame-{first}").leak();
-    let to_selector: &'static str = format!("playback-frame-{second}").leak();
-    visual.simulate_mouse_move(hotspot, None, Default::default());
-    draw(&mut visual);
-    visual
-        .cx
-        .executor()
-        .advance_clock(std::time::Duration::from_millis(200));
-    draw(&mut visual);
-    let from = visual.debug_bounds(from_selector).unwrap();
-    let to = visual.debug_bounds(to_selector).unwrap();
-    assert!((from.size.width / from.size.height - 320. / 480.).abs() < 0.001);
-    assert!((to.size.width / to.size.height - 160. / 100.).abs() < 0.001);
-    visual.simulate_mouse_move(outside, None, Default::default());
-    draw(&mut visual);
-    visual
-        .cx
-        .executor()
-        .advance_clock(std::time::Duration::from_millis(600));
-    draw(&mut visual);
-    assert!(visual.debug_bounds(from_selector).is_some());
-    assert!(visual.debug_bounds(to_selector).is_none());
-    handle
-        .update(&mut visual.cx, |w, _, cx| {
-            let p = w.presentation.player.as_ref().unwrap().read(cx);
-            let playback = p.presentation.playback.as_ref().unwrap();
-            assert_eq!(playback.current, first);
-            assert!(playback.history.is_empty());
-            assert!(playback.hover.is_none());
-            assert_eq!(serde_json::to_value(w.snapshot_page(cx).0).unwrap(), saved);
-        })
-        .unwrap();
-    visual.simulate_mouse_move(hotspot, None, Default::default());
-    draw(&mut visual);
-    visual
-        .cx
-        .executor()
-        .advance_clock(std::time::Duration::from_millis(100));
-    draw(&mut visual);
-    click(&mut visual, "playback-restart");
-    assert!(visual.debug_bounds(to_selector).is_none());
-    assert!(visual.debug_bounds(from_selector).is_some());
+fn animated_hover_reverses_and_restart_clears_outgoing_frames(cx: &mut TestAppContext) {
+    use crate::scene::presentation::{Easing, TransitionEffect, WipeDirection};
+    for transition in [
+        Transition::wipe(WipeDirection::Left, 500),
+        Transition::effect(TransitionEffect::Push, 500),
+        Transition::effect(TransitionEffect::Flip, 500),
+    ] {
+        let handle = open(cx);
+        let (first, second, saved) = handle
+            .update(cx, |w, window, cx| {
+                let (first, second, button) = setup(w, window, cx);
+                w.boards[1].rect.width = 160.;
+                w.boards[1].rect.height = 100.;
+                w.set_prototype_action(
+                    button,
+                    Trigger::Hover,
+                    Some(Action::Navigate { target: second }),
+                    window,
+                    cx,
+                );
+                w.set_prototype_transition(
+                    button,
+                    Trigger::Hover,
+                    transition.with_easing(Easing::EaseOut),
+                    window,
+                    cx,
+                );
+                let saved = serde_json::to_value(w.snapshot_page(cx).0).unwrap();
+                w.start_presentation(window, cx);
+                (first, second, saved)
+            })
+            .unwrap();
+        let mut visual = VisualTestContext::from_window(handle.into(), cx);
+        draw(&mut visual);
+        draw(&mut visual);
+        let surface = visual.debug_bounds("playback-surface").unwrap();
+        let scale = f32::from(surface.size.width) / 320.;
+        let hotspot = surface.origin + point(px(50. * scale), px(40. * scale));
+        let outside = surface.origin + point(px(250. * scale), px(200. * scale));
+        let from_selector: &'static str = format!("playback-frame-{first}").leak();
+        let to_selector: &'static str = format!("playback-frame-{second}").leak();
+        visual.simulate_mouse_move(hotspot, None, Default::default());
+        draw(&mut visual);
+        visual
+            .cx
+            .executor()
+            .advance_clock(std::time::Duration::from_millis(200));
+        draw(&mut visual);
+        let from = visual.debug_bounds(from_selector).unwrap();
+        let to = visual.debug_bounds(to_selector).unwrap();
+        assert!((from.size.width / from.size.height - 320. / 480.).abs() < 0.001);
+        assert!((to.size.width / to.size.height - 160. / 100.).abs() < 0.001);
+        visual.simulate_mouse_move(outside, None, Default::default());
+        draw(&mut visual);
+        visual
+            .cx
+            .executor()
+            .advance_clock(std::time::Duration::from_millis(600));
+        draw(&mut visual);
+        assert!(visual.debug_bounds(from_selector).is_some());
+        assert!(visual.debug_bounds(to_selector).is_none());
+        handle
+            .update(&mut visual.cx, |w, _, cx| {
+                let p = w.presentation.player.as_ref().unwrap().read(cx);
+                let playback = p.presentation.playback.as_ref().unwrap();
+                assert_eq!(playback.current, first);
+                assert!(playback.history.is_empty());
+                assert!(playback.hover.is_none());
+                assert_eq!(serde_json::to_value(w.snapshot_page(cx).0).unwrap(), saved);
+            })
+            .unwrap();
+        visual.simulate_mouse_move(hotspot, None, Default::default());
+        draw(&mut visual);
+        visual
+            .cx
+            .executor()
+            .advance_clock(std::time::Duration::from_millis(100));
+        draw(&mut visual);
+        click(&mut visual, "playback-restart");
+        assert!(visual.debug_bounds(to_selector).is_none());
+        assert!(visual.debug_bounds(from_selector).is_some());
+    }
 }
 
 #[gpui::test]
@@ -1669,8 +1727,8 @@ fn rapid_transition_clicks_finish_at_latest_target_without_changing_history(
             let third = w.boards.last().unwrap().id;
             w.set_click(second, Some(Action::Navigate { target: third }), window, cx);
             for (source, transition) in [
-                (button, Transition::Blur { duration_ms: 500 }),
-                (second, Transition::Dissolve { duration_ms: 500 }),
+                (button, Transition::blur(500)),
+                (second, Transition::dissolve(500)),
             ] {
                 w.set_prototype_transition(source, Trigger::Click, transition, window, cx);
             }

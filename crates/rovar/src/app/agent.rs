@@ -156,6 +156,8 @@ fn dispatch(
                 "sizing_modes":["fixed","hug","fill"],"max_grid_tracks":crate::scene::auto_layout::MAX_GRID_TRACKS,
                 "interaction_triggers":["click","hover"],
                 "interaction_actions":["none","navigate","back","open_overlay","close_overlay","change_variant","media","set_property","scroll_to","multiple"],
+                "prototype_easings":["linear","ease_in","ease_out","ease_in_out"],
+                "prototype_transition_effects":["slide","push","zoom_in","zoom_out","rotate","flip","iris","blinds","pixelate","noise"],
                 "prototype_scroll_axes":["none","vertical","horizontal","both"],
                 "coordinates":"page","atomic_apply":true,"undo":"one apply per undo entry",
                 "max_operations":protocol::MAX_OPERATIONS,"max_read_nodes":protocol::MAX_NODES,

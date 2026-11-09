@@ -272,12 +272,7 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) -> impl IntoElement + use<> {
         let current = self.prototype_transition(id, trigger);
-        let label = t(match current {
-            Transition::Instant => "prototype-instant",
-            Transition::Dissolve { .. } => "prototype-dissolve",
-            Transition::Blur { .. } => "prototype-blur",
-            Transition::Wipe { .. } => "prototype-wipe",
-        });
+        let label = t(current.label());
         let summary = current
             .duration_ms()
             .map_or_else(|| label.to_owned(), |ms| format!("{label} · {ms} ms"));
@@ -317,11 +312,15 @@ impl Workspace {
                             .child(icon(GpuiIcons::LucideChevronDown, 12.)),
                     ),
             )
-            .content(move |_, cx| {
-                div().children(
-                    weak.update(cx, |this, cx| this.transition_controls(id, trigger, cx))
-                        .ok(),
-                )
+            .content(move |window, cx| {
+                div()
+                    .id("prototype-transition-fields")
+                    .max_h((window.viewport_size().height - px(64.)).max(px(120.)))
+                    .overflow_y_scroll()
+                    .children(
+                        weak.update(cx, |this, cx| this.transition_controls(id, trigger, cx))
+                            .ok(),
+                    )
             })
     }
 }
