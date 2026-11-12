@@ -27,7 +27,7 @@ pub(in crate::editor) struct Node {
     pub clip: Option<Bounds<f32>>,
     pub range: Option<Range>,
     pub(in crate::editor::presentation) rotation: f32,
-    pub(in crate::editor::presentation) ancestors: Vec<usize>,
+    pub ancestors: Vec<usize>,
 }
 
 #[derive(Clone, Copy)]
@@ -42,6 +42,18 @@ pub(super) fn bounds(rect: Rect) -> Bounds<f32> {
 }
 
 impl Node {
+    pub fn intersects(&self, viewport: Rect, margin: f32) -> bool {
+        let mut rect = crate::scene::rotation::bounds(self.rect, self.rotation);
+        rect.x -= self.offset.x;
+        rect.y -= self.offset.y;
+        let area = Bounds::new(
+            point(rect.x - margin, rect.y - margin),
+            gpui::size(rect.width + margin * 2., rect.height + margin * 2.),
+        );
+        let area = self.clip.map_or(area, |clip| area.intersect(&clip));
+        !area.intersect(&bounds(viewport)).is_empty()
+    }
+
     pub fn displayed(&self) -> Bounds<f32> {
         let mut rect = bounds(self.rect);
         rect.origin -= self.offset;
@@ -244,16 +256,8 @@ impl Workspace {
         let Some(node) = self.presentation.scroll.nodes.get(&id) else {
             return true;
         };
-        let mut rect = crate::scene::rotation::bounds(node.rect, node.rotation);
-        rect.x -= node.offset.x;
-        rect.y -= node.offset.y;
         let margin = self.effect_padding(id) + 32. / self.view.zoom;
-        let area = Bounds::new(
-            point(rect.x - margin, rect.y - margin),
-            gpui::size(rect.width + margin * 2., rect.height + margin * 2.),
-        );
-        let area = node.clip.map_or(area, |clip| area.intersect(&clip));
-        !area.intersect(&bounds(viewport)).is_empty()
+        node.intersects(viewport, margin)
     }
 
     pub(in crate::editor::presentation) fn scroll_by(

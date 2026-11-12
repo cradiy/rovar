@@ -106,20 +106,13 @@ impl Workspace {
     }
 
     pub(super) fn load_visible_media(&mut self, window: &Window, cx: &mut Context<Self>) {
-        if self.media.decoding.len() >= 2 {
-            return;
-        }
         let bounds = self.bounds.get();
         let size = if f32::from(bounds.size.width) > 0. {
             bounds.size
         } else {
             window.viewport_size()
         };
-        let (left, right) = if self.presentation.playback.is_some() {
-            (0., 0.)
-        } else {
-            self.canvas_insets()
-        };
+        let (left, right) = self.canvas_insets();
         let origin = self.view.world(point(left, 0.));
         let viewport = Rect {
             x: origin.x,
@@ -127,7 +120,32 @@ impl Workspace {
             width: (f32::from(size.width) - left - right).max(1.) / self.view.zoom,
             height: f32::from(size.height) / self.view.zoom,
         };
+        self.load_media_in(viewport, None, cx);
+    }
+
+    pub(super) fn load_playback_media(&mut self, frame: usize, cx: &mut Context<Self>) {
+        if let Some(board) = self.board_by_id(frame) {
+            self.load_media_in(board.rect, Some(frame), cx);
+        }
+    }
+
+    fn load_media_in(&mut self, viewport: Rect, frame: Option<usize>, cx: &mut Context<Self>) {
+        if self.media.decoding.len() >= 2 {
+            return;
+        }
         let visible = |id| {
+            if let Some(frame) = frame {
+                let Some(node) = self
+                    .presentation
+                    .scroll
+                    .nodes
+                    .get(&id)
+                    .filter(|node| id == frame || node.ancestors.contains(&frame))
+                else {
+                    return false;
+                };
+                return node.intersects(viewport, self.effect_padding(id));
+            }
             self.layer_info(id)
                 .is_some_and(|(own, parent)| !self.effective_layer(own, parent).hidden)
                 && self.world_rect(id).is_some_and(|rect| {

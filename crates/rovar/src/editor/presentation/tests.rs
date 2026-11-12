@@ -4,6 +4,141 @@ use crate::scene::presentation::{OverlayPosition, OverlaySettings};
 use gpui::{TestAppContext, VisualTestContext};
 
 #[gpui::test]
+fn media_loading_follows_presented_frames_and_scroll(cx: &mut TestAppContext) {
+    use crate::{asset::FileAsset, scene::presentation::ScrollAxis};
+    let directory = tempfile::tempdir().unwrap();
+    let window = open(cx);
+    let (frames, far_image) = window
+        .update(cx, |this, window, cx| {
+            let mut frames = Vec::new();
+            let mut far_image = 0;
+            for index in 0..4 {
+                let path = directory.path().join(format!("{index}.png"));
+                image::RgbaImage::from_pixel(4, 4, image::Rgba([index, 100, 150, 255]))
+                    .save(&path)
+                    .unwrap();
+                let mut asset = FileAsset::load(path).unwrap();
+                std::sync::Arc::get_mut(&mut asset).unwrap().content.take();
+                let frame = if index < 3 {
+                    this.add_artboard(
+                        Rect {
+                            x: 0.,
+                            y: 0.,
+                            width: 320.,
+                            height: 200.,
+                        },
+                        cx,
+                    );
+                    let frame = this.boards.last().unwrap().id;
+                    frames.push(frame);
+                    frame
+                } else {
+                    frames[0]
+                };
+                let id = this.next_id;
+                this.next_id += 1;
+                let mut shape = Shape::new(
+                    id,
+                    Some(frame),
+                    ShapeKind::Image,
+                    Rect {
+                        x: 40.,
+                        y: if index == 3 { 500. } else { 40. },
+                        width: 100.,
+                        height: 100.,
+                    },
+                );
+                shape.asset = Some(asset);
+                this.shapes.push(shape);
+                if index == 3 {
+                    far_image = id;
+                }
+            }
+            this.set_prototype_behavior(frames[0], ScrollAxis::Vertical, false, false, window, cx);
+            this.hierarchy.start = Some(frames[0]);
+            this.start_presentation(window, cx);
+            (frames, far_image)
+        })
+        .unwrap();
+    let mut visual = VisualTestContext::from_window(window.into(), cx);
+    draw(&mut visual);
+    window
+        .update(&mut visual.cx, |this, window, cx| {
+            assert!(!this.shapes[0].asset.as_ref().unwrap().is_pending());
+            for shape in &this.shapes[1..] {
+                assert!(shape.asset.as_ref().unwrap().is_pending());
+            }
+            this.presentation
+                .player
+                .clone()
+                .unwrap()
+                .update(cx, |player, cx| {
+                    player.activate_prototype(
+                        frames[0],
+                        Action::ScrollTo { target: far_image },
+                        window,
+                        cx,
+                    );
+                });
+        })
+        .unwrap();
+    draw(&mut visual);
+    window
+        .update(&mut visual.cx, |this, window, cx| {
+            assert!(!this.shapes[3].asset.as_ref().unwrap().is_pending());
+            assert!(this.shapes[1].asset.as_ref().unwrap().is_pending());
+            assert!(this.shapes[2].asset.as_ref().unwrap().is_pending());
+            this.presentation
+                .player
+                .clone()
+                .unwrap()
+                .update(cx, |player, cx| {
+                    player.activate_prototype(
+                        frames[0],
+                        Action::OpenOverlay {
+                            target: frames[1],
+                            settings: Default::default(),
+                        },
+                        window,
+                        cx,
+                    );
+                });
+        })
+        .unwrap();
+    draw(&mut visual);
+    window
+        .update(&mut visual.cx, |this, window, cx| {
+            assert!(!this.shapes[1].asset.as_ref().unwrap().is_pending());
+            assert!(this.shapes[2].asset.as_ref().unwrap().is_pending());
+            this.presentation
+                .player
+                .clone()
+                .unwrap()
+                .update(cx, |player, cx| {
+                    player.activate_prototype(
+                        frames[0],
+                        Action::Navigate { target: frames[2] },
+                        window,
+                        cx,
+                    );
+                });
+        })
+        .unwrap();
+    draw(&mut visual);
+    window
+        .update(&mut visual.cx, |this, _, cx| {
+            assert!(!this.shapes[2].asset.as_ref().unwrap().is_pending());
+            assert!(this.media.error.is_none());
+            let player = this.presentation.player.as_ref().unwrap().read(cx);
+            assert_eq!(
+                player.presentation.playback.as_ref().unwrap().current,
+                frames[2]
+            );
+        })
+        .unwrap();
+}
+
+#[gpui::test]
 #[ignore = "manual playback profiling; set ROVAR_PROFILE_DOCUMENT"]
 fn profile_playback_document(cx: &mut TestAppContext) {
     let path = std::env::var_os("ROVAR_PROFILE_DOCUMENT").expect("ROVAR_PROFILE_DOCUMENT");

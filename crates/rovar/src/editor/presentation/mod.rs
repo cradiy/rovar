@@ -294,12 +294,9 @@ impl Workspace {
             zoom,
             pan: point(-rect.x * zoom, -rect.y * zoom),
         };
-        self.load_visible_media(window, cx);
-        if frame.overlay.is_some() {
-            let (view, _) = self.playback_coordinates();
-            let base_view = std::mem::replace(&mut self.view, view);
-            self.load_visible_media(window, cx);
-            self.view = base_view;
+        self.load_playback_media(frame.board, cx);
+        if let Some(overlay) = frame.overlay {
+            self.load_playback_media(overlay.target, cx);
         }
         let weak = cx.entity().downgrade();
         let pointer = weak.clone();
