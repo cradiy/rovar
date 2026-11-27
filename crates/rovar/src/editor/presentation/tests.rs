@@ -989,9 +989,9 @@ fn property_playback_restores_self_hiding_hover_and_resets_text_and_layout(
         presentation::property::{Boolean, Property},
     };
     let handle = open(cx);
-    let (frame, button, text, saved, undo) = handle
+    let (frame, button, text, unchanged, saved, undo) = handle
         .update(cx, |w, window, cx| {
-            let (frame, _, button) = setup(w, window, cx);
+            let (frame, second, button) = setup(w, window, cx);
             let text = w.next_id;
             w.next_id += 1;
             let item = w.make_text(
@@ -1006,6 +1006,10 @@ fn property_playback_restores_self_hiding_hover_and_resets_text_and_layout(
                 window,
                 cx,
             );
+            w.texts.push(item);
+            let unchanged = w.next_id;
+            w.next_id += 1;
+            let item = w.make_text(unchanged, Some(second), w.texts[0].rect, window, cx);
             w.texts.push(item);
             let mut layout = auto_layout::Container::new(w.boards[0].rect);
             layout.gap = 12.;
@@ -1035,7 +1039,7 @@ fn property_playback_restores_self_hiding_hover_and_resets_text_and_layout(
             let saved = serde_json::to_value(w.snapshot_page(cx).0).unwrap();
             let undo = w.history.borrow().undo_len();
             w.start_presentation(window, cx);
-            (frame, button, text, saved, undo)
+            (frame, button, text, unchanged, saved, undo)
         })
         .unwrap();
     let mut visual = VisualTestContext::from_window(handle.into(), cx);
@@ -1182,11 +1186,31 @@ fn property_playback_restores_self_hiding_hover_and_resets_text_and_layout(
             assert_eq!(w.history.borrow().undo_len(), undo);
         })
         .unwrap();
+    let unchanged_editor = handle
+        .update(&mut visual.cx, |w, _, cx| {
+            let p = w.presentation.player.as_ref().unwrap().read(cx);
+            p.texts
+                .iter()
+                .find(|item| item.id == unchanged)
+                .unwrap()
+                .editor
+                .entity_id()
+        })
+        .unwrap();
     click(&mut visual, "playback-restart");
     handle
         .update(&mut visual.cx, |w, _, cx| {
             let p = w.presentation.player.as_ref().unwrap().read(cx);
             let page = p.snapshot_page(cx).0;
+            assert_eq!(
+                p.texts
+                    .iter()
+                    .find(|item| item.id == unchanged)
+                    .unwrap()
+                    .editor
+                    .entity_id(),
+                unchanged_editor
+            );
             assert_eq!(page.hierarchy.layouts[&frame].gap, 12.);
             assert!(
                 page.texts

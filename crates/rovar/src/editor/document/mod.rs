@@ -380,8 +380,23 @@ impl Workspace {
         self.shapes = page.shapes;
         self.hierarchy = page.hierarchy;
         self.next_id = page.next_id;
-        self.texts.clear();
+        let mut previous_texts = std::collections::HashMap::new();
+        if self.presentation.playback.is_some() {
+            previous_texts.extend(self.texts.drain(..).map(|item| (item.id, item)));
+        } else {
+            self.texts.clear();
+        }
         for text in page.texts {
+            if let Some(mut item) = previous_texts.remove(&text.id).filter(|item| {
+                let editor = item.editor.read(cx);
+                item.uid == text.uid && !editor.editing && editor.matches_document(&text)
+            }) {
+                item.board = text.board;
+                item.rect = text.rect;
+                item.layer = text.layer;
+                self.texts.push(item);
+                continue;
+            }
             let mut item = self.make_text(text.id, text.board, text.rect, window, cx);
             item.uid = text.uid;
             item.layer = text.layer;
