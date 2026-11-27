@@ -52,7 +52,6 @@ sha2 = "0.11"
 hex = "0.4"
 uuid = { version = "1", features = ["v4", "serde"] }
 sys-locale = "0.3"
-dirs = "7"
 rovar-storage = { path = "../rovar-storage" }
 rovar-svg = { path = "../rovar-svg" }
 web-time = "1"
@@ -74,6 +73,7 @@ windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Securit
 wgpu = { version = "30", default-features = false, features = ["static-dxc"] }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
+dirs = "7"
 gpui_io = { git = "https://github.com/cradiy/gpui-fusion.git", rev = "38dc856387eeb9e7540cb92351da95d0dd541081" }
 flexi_logger = { version = "0.31", default-features = false, features = ["async", "colors"] }
 whoami = "2.1.3"
@@ -94,7 +94,6 @@ wasm-bindgen-futures = "0.4"
 js-sys = "0.3"
 web-sys = { version = "0.3", features = ["Window", "Location", "Document", "Element", "HtmlElement", "HtmlAnchorElement", "Blob", "BlobPropertyBag", "Url", "Navigator"] }
 console_error_panic_hook = "0.1"
-rust-embed = { version = "8", features = ["debug-embed"] }
 
 [dev-dependencies.tempfile]
 version = "3"

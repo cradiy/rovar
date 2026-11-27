@@ -12,10 +12,20 @@ pub(super) struct Press {
     pub moved: bool,
 }
 
+pub(super) struct HitOrder {
+    index: std::rc::Weak<scene_index::Index>,
+    root: usize,
+    layers: Vec<usize>,
+    included: BTreeSet<usize>,
+}
+
 impl Workspace {
     pub(super) fn playback_target(&self, world: Point<f32>) -> Option<usize> {
         let playback = self.presentation.playback.as_ref()?;
         let root = playback.overlay.map_or(playback.current, |o| o.target);
+        if !scroll::bounds(self.world_rect(root)?).contains(&world) {
+            return None;
+        }
         let index = self.scene_index();
         let cached = self
             .presentation
@@ -23,26 +33,27 @@ impl Workspace {
             .index
             .as_ref()
             .is_some_and(|old| Rc::ptr_eq(old, &index));
-        if !scroll::bounds(self.world_rect(root)?).contains(&world) {
-            return None;
+        let mut hit_order = playback.hit_order.borrow_mut();
+        if hit_order
+            .as_ref()
+            .is_none_or(|order| order.root != root || order.index.as_ptr() != Rc::as_ptr(&index))
+        {
+            let layers: Vec<_> = index
+                .order
+                .iter()
+                .copied()
+                .filter(|id| *id == root || self.ancestors(*id).contains(&root))
+                .collect();
+            *hit_order = Some(HitOrder {
+                index: Rc::downgrade(&index),
+                root,
+                included: layers.iter().copied().collect(),
+                layers,
+            });
         }
-        let order: Vec<_> = index
-            .order
-            .iter()
-            .copied()
-            .filter(|id| {
-                *id == root
-                    || cached
-                        .then(|| self.presentation.scroll.nodes.get(id))
-                        .flatten()
-                        .map_or_else(
-                            || self.ancestors(*id).contains(&root),
-                            |node| node.ancestors.contains(&root),
-                        )
-            })
-            .collect();
-        let included = order.iter().copied().collect();
-        order.into_iter().rev().find(|id| {
+        let order = hit_order.as_ref().unwrap();
+        let included = &order.included;
+        order.layers.iter().rev().copied().find(|id| {
             let node = cached
                 .then(|| self.presentation.scroll.nodes.get(id))
                 .flatten();
@@ -55,8 +66,8 @@ impl Workspace {
                     .shapes
                     .get(id)
                     .is_some_and(|i| self.shapes[*i].kind == ShapeKind::Audio)
-                || crate::scene::boolean::consumed(&self.hierarchy, *id, &included)
-                || crate::scene::mask::is_source(&self.hierarchy, *id, &included)
+                || crate::scene::boolean::consumed(&self.hierarchy, *id, included)
+                || crate::scene::mask::is_source(&self.hierarchy, *id, included)
             {
                 return false;
             }
@@ -103,7 +114,7 @@ impl Workspace {
             if !scroll::bounds(rect).contains(&p) {
                 return false;
             }
-            let mut masks = crate::scene::mask::ancestors(&self.hierarchy, *id, &included);
+            let mut masks = crate::scene::mask::ancestors(&self.hierarchy, *id, included);
             if crate::scene::mask::source(&self.hierarchy, *id).is_some() {
                 masks.push(*id);
             }
@@ -134,17 +145,43 @@ impl Workspace {
         })
     }
 
+    pub(super) fn playback_interactions(
+        &self,
+        hit: usize,
+    ) -> impl Iterator<Item = (usize, &crate::scene::presentation::Interaction)> {
+        std::iter::once(hit)
+            .chain(self.ancestors(hit))
+            .filter_map(|id| {
+                let interaction = self.hierarchy.interactions.get(&id)?;
+                (!interaction.pass_through).then_some((id, interaction))
+            })
+    }
+
+    pub(super) fn playback_hit(
+        &self,
+        world: Point<f32>,
+        trigger: Trigger,
+    ) -> Option<(usize, Action)> {
+        self.playback_action_at(self.playback_target(world), trigger)
+    }
+
+    fn playback_action_at(&self, hit: Option<usize>, trigger: Trigger) -> Option<(usize, Action)> {
+        self.playback_interactions(hit?)
+            .find_map(|(id, interaction)| interaction.get(trigger).map(|action| (id, action)))
+    }
+
     pub(super) fn playback_press(&mut self, position: Point<Pixels>, cx: &mut Context<Self>) {
         self.presentation.scroll.press = None;
         if self.overlay_outside_click(position, cx) {
             return;
         }
         let world = self.playback_world(position);
+        let hit = self.playback_target(world);
         self.presentation.scroll.press = Some(Press {
             start: position,
             last: position,
-            action: self.playback_hit(world, Trigger::Click),
-            containers: self.playback_scroll_containers(world),
+            action: self.playback_action_at(hit, Trigger::Click),
+            containers: self.playback_scroll_containers(hit),
             bar: self.playback_scrollbar(world),
             moved: false,
         });

@@ -173,9 +173,21 @@ impl Workspace {
             return;
         }
         let world = self.playback_world(position);
-        let click = self.playback_hit(world, Trigger::Click);
-        let hover = self.playback_hit(world, Trigger::Hover);
-        self.playback_hover(click.is_some() || hover.is_some(), cx);
+        let mut click = false;
+        let mut hover = None;
+        if let Some(hit) = self.playback_target(world) {
+            for (id, interaction) in self.playback_interactions(hit) {
+                click |= interaction.click.is_some();
+                if hover.is_none() {
+                    hover = interaction.hover.as_ref().map(|action| (id, action));
+                }
+                if click && hover.is_some() {
+                    break;
+                }
+            }
+        }
+        let hover = hover.map(|(id, action)| (id, action.clone()));
+        self.playback_hover(click || hover.is_some(), cx);
         // Keep the entry latch across a variant swap so two hover variants cannot
         // repeatedly switch each other while the pointer remains on the component.
         let entered = hover

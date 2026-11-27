@@ -298,7 +298,7 @@ impl Workspace {
     ) {
         self.leave_playback_hover(window, cx);
         let world = self.playback_world(event.position);
-        let containers = self.playback_scroll_containers(world);
+        let containers = self.playback_scroll_containers(self.playback_target(world));
         let delta = event
             .delta
             .pixel_delta(px(24.))
@@ -320,9 +320,8 @@ impl Workspace {
         cx.stop_propagation();
     }
 
-    pub(super) fn playback_scroll_containers(&self, world: Point<f32>) -> Vec<usize> {
-        self.playback_target(world)
-            .into_iter()
+    pub(super) fn playback_scroll_containers(&self, hit: Option<usize>) -> Vec<usize> {
+        hit.into_iter()
             .flat_map(|id| std::iter::once(id).chain(self.ancestors(id)))
             .filter(|id| {
                 self.presentation

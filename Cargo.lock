@@ -6301,7 +6301,6 @@ dependencies = [
  "rovar-format",
  "rovar-storage",
  "rovar-svg",
- "rust-embed",
  "schemars",
  "semver",
  "serde",

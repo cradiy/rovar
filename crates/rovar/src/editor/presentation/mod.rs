@@ -6,7 +6,7 @@ use crate::{
     scene::presentation::{Action, HoverExit, MediaCommand, Transition, Trigger},
     ui::theme::Color,
 };
-use std::collections::BTreeSet;
+use std::{cell::RefCell, collections::BTreeSet};
 use uic::components::dropdown::DropdownState;
 use uic::components::popover::PopoverState;
 mod actions;
@@ -57,6 +57,7 @@ pub(super) struct Playback {
     visual: transition::Visual,
     overlay: Option<overlay::Overlay>,
     overlay_transition: Transition,
+    hit_order: RefCell<Option<input::HitOrder>>,
 }
 
 impl State {
@@ -145,6 +146,7 @@ impl Workspace {
                 visual: transition::Visual::default(),
                 overlay: None,
                 overlay_transition: Transition::Instant,
+                hit_order: RefCell::new(None),
             });
             player.presentation.scroll.active = true;
             player.refresh_playback_scroll();
@@ -240,20 +242,6 @@ impl Workspace {
             playback.hotspot_hovered = hovered;
             cx.notify();
         }
-    }
-
-    fn playback_hit(&self, world: Point<f32>, trigger: Trigger) -> Option<(usize, Action)> {
-        let hit = self.playback_target(world)?;
-        std::iter::once(hit)
-            .chain(self.ancestors(hit))
-            .find_map(|id| {
-                self.hierarchy
-                    .interactions
-                    .get(&id)
-                    .filter(|i| !i.pass_through)
-                    .and_then(|i| i.get(trigger))
-                    .map(|action| (id, action))
-            })
     }
 
     pub(super) fn playback_view(
