@@ -1846,6 +1846,7 @@ fn animated_hover_reverses_and_restart_clears_outgoing_frames(cx: &mut TestAppCo
 fn rapid_transition_clicks_finish_at_latest_target_without_changing_history(
     cx: &mut TestAppContext,
 ) {
+    use crate::scene::presentation::property::{Boolean, Property};
     let handle = open(cx);
     let (first, second, third) = handle
         .update(cx, |w, window, cx| {
@@ -1860,7 +1861,20 @@ fn rapid_transition_clicks_finish_at_latest_target_without_changing_history(
                 cx,
             );
             let third = w.boards.last().unwrap().id;
-            w.set_click(second, Some(Action::Navigate { target: third }), window, cx);
+            w.set_click(
+                second,
+                Some(Action::Multiple {
+                    actions: vec![
+                        Action::SetProperty {
+                            target: first,
+                            property: Property::Visible(Boolean::Set(false)),
+                        },
+                        Action::Navigate { target: third },
+                    ],
+                }),
+                window,
+                cx,
+            );
             for (source, transition) in [
                 (button, Transition::blur(500)),
                 (second, Transition::dissolve(500)),
@@ -1889,6 +1903,9 @@ fn rapid_transition_clicks_finish_at_latest_target_without_changing_history(
     let destination = visual.debug_bounds("playback-surface").unwrap().center();
     visual.simulate_click(destination, Default::default());
     draw(&mut visual);
+    let outgoing: &'static str = format!("playback-frame-{first}").leak();
+    assert!(visual.debug_bounds(outgoing).is_some());
+    assert!(visual.debug_bounds("playback-outgoing-snapshot").is_some());
     for _ in 0..2 {
         visual
             .cx

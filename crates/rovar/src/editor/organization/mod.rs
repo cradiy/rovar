@@ -52,6 +52,14 @@ impl Workspace {
             .enumerate()
             .map(|(i, id)| (*id, i))
             .collect();
+        let mut children = self.hierarchy_children_unordered();
+        for ids in children.values_mut() {
+            ids.sort_unstable_by_key(|id| ranks.get(id).map_or((1, *id), |rank| (0, *rank)));
+        }
+        children
+    }
+
+    fn hierarchy_children_unordered(&self) -> HashMap<Option<usize>, Vec<usize>> {
         let mut children: HashMap<Option<usize>, Vec<usize>> = HashMap::new();
         for (id, board) in self
             .boards
@@ -63,9 +71,6 @@ impl Workspace {
         {
             let parent = self.hierarchy.parents.get(&id).copied().or(board);
             children.entry(parent).or_default().push(id);
-        }
-        for ids in children.values_mut() {
-            ids.sort_unstable_by_key(|id| ranks.get(id).map_or((1, *id), |rank| (0, *rank)));
         }
         children
     }
@@ -193,8 +198,7 @@ impl Workspace {
     }
 
     pub(super) fn descendants(&self, roots: &BTreeSet<usize>) -> BTreeSet<usize> {
-        let children = self.hierarchy_children();
-        let ids: BTreeSet<_> = self.layer_ids().into_iter().collect();
+        let children = self.hierarchy_children_unordered();
         let mut pending: Vec<_> = roots.iter().copied().collect();
         let mut visited = BTreeSet::new();
         while let Some(id) = pending.pop() {
@@ -202,7 +206,11 @@ impl Workspace {
                 pending.extend(children.get(&Some(id)).into_iter().flatten().copied());
             }
         }
-        visited.retain(|id| ids.contains(id));
+        for id in roots {
+            if !self.hierarchy.groups.contains_key(id) && self.object_info(*id).is_none() {
+                visited.remove(id);
+            }
+        }
         visited
     }
 

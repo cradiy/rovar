@@ -52,6 +52,7 @@ pub(super) struct Playback {
     hover: Option<variants::Hover>,
     initial_page: crate::document::Page,
     stage: Rc<Cell<Bounds<Pixels>>>,
+    transition_boards: Rc<Cell<[Option<usize>; 4]>>,
     window_size: gpui::Size<Pixels>,
     transition: Transition,
     visual: transition::Visual,
@@ -141,6 +142,7 @@ impl Workspace {
                 hover: None,
                 initial_page,
                 stage: Rc::new(Cell::new(Bounds::default())),
+                transition_boards: Rc::default(),
                 window_size: window.viewport_size(),
                 transition: Transition::Instant,
                 visual: transition::Visual::default(),
@@ -269,6 +271,7 @@ impl Workspace {
             gpui::CursorStyle::Arrow
         };
         let stage = playback.stage.clone();
+        let transition_boards = playback.transition_boards.clone();
         let frame = transition::FrameKey {
             board: playback.current,
             visual: playback.visual.clone(),
@@ -293,6 +296,7 @@ impl Workspace {
             workspace: cx.entity().downgrade(),
             key: frame,
             transition,
+            boards: transition_boards,
         };
         div()
             .on_paint_before_children(move |_, _, window, _| {

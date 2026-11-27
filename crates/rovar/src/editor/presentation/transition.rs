@@ -184,8 +184,21 @@ impl Workspace {
             return;
         }
         let visual = p.visual.clone();
-        let page = self.snapshot_page_state(cx);
-        let videos = self.media.videos.clone();
+        let roots = std::iter::once(p.current)
+            .chain(p.overlay.map(|overlay| overlay.target))
+            .chain(p.transition_boards.get().into_iter().flatten())
+            .collect();
+        let page = self.playback_visual_page(&roots, cx);
+        let videos = page
+            .shapes
+            .iter()
+            .filter_map(|shape| {
+                self.media
+                    .videos
+                    .get(&shape.id)
+                    .map(|video| (shape.id, video.clone()))
+            })
+            .collect();
         let scene = cx.new(|cx| {
             let mut scene = Workspace::new(window, cx);
             scene.load_page(page, window, cx);
@@ -193,12 +206,97 @@ impl Workspace {
             scene.media.videos = videos;
             scene.presentation.scroll = self.presentation.scroll.clone();
             scene.presentation.raised = self.presentation.raised.clone();
-            for text in &scene.texts {
-                text.editor.update(cx, |editor, _| editor.editing = false);
-            }
             scene
         });
         *visual.0.borrow_mut() = Some(scene);
+    }
+
+    fn playback_visual_page(&self, roots: &BTreeSet<usize>, cx: &App) -> crate::document::Page {
+        let mut included = self.descendants(roots);
+        // An object's board supplies its coordinates even when it is parented
+        // under a group in a different frame.
+        let coordinate_boards: BTreeSet<_> = self
+            .shapes
+            .iter()
+            .map(|shape| (shape.id, shape.board))
+            .chain(self.texts.iter().map(|text| (text.id, text.board)))
+            .chain(
+                self.hierarchy
+                    .groups
+                    .iter()
+                    .map(|(id, group)| (*id, group.board)),
+            )
+            .filter(|(id, _)| included.contains(id))
+            .filter_map(|(_, board)| board)
+            .collect();
+        included.extend(&coordinate_boards);
+        for id in roots.union(&coordinate_boards) {
+            included.extend(self.ancestors(*id));
+        }
+        let hierarchy = &self.hierarchy;
+        crate::document::Page {
+            id: self.pages.active.clone(),
+            name: self.pages.current().page.name.clone(),
+            boards: self
+                .boards
+                .iter()
+                .filter(|board| included.contains(&board.id))
+                .cloned()
+                .collect(),
+            shapes: self
+                .shapes
+                .iter()
+                .filter(|shape| included.contains(&shape.id))
+                .cloned()
+                .collect(),
+            texts: self
+                .texts
+                .iter()
+                .filter(|text| included.contains(&text.id))
+                .map(|text| {
+                    text.editor
+                        .read(cx)
+                        .document_text(text.id, text.uid, text.board, text.rect, text.layer)
+                })
+                .collect(),
+            hierarchy: crate::scene::layer::Hierarchy {
+                groups: included
+                    .iter()
+                    .filter_map(|id| hierarchy.groups.get(id).map(|group| (*id, group.clone())))
+                    .collect(),
+                parents: included
+                    .iter()
+                    .filter_map(|id| hierarchy.parents.get(id).map(|parent| (*id, *parent)))
+                    .collect(),
+                layouts: included
+                    .iter()
+                    .filter_map(|id| {
+                        hierarchy
+                            .layouts
+                            .get(id)
+                            .map(|layout| (*id, layout.clone()))
+                    })
+                    .collect(),
+                effects: included
+                    .iter()
+                    .filter_map(|id| {
+                        hierarchy
+                            .effects
+                            .get(id)
+                            .map(|effects| (*id, effects.clone()))
+                    })
+                    .collect(),
+                order: hierarchy
+                    .order
+                    .iter()
+                    .copied()
+                    .filter(|id| included.contains(id))
+                    .collect(),
+                ..Default::default()
+            },
+            next_id: self.next_id,
+            assets: Vec::new(),
+        }
     }
 
     pub(super) fn restore_playback_visual(&mut self, visual: Visual) {

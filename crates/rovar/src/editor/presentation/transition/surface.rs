@@ -10,6 +10,7 @@ pub(in crate::editor::presentation) struct Surface {
     pub workspace: gpui::WeakEntity<Workspace>,
     pub key: FrameKey,
     pub transition: Transition,
+    pub boards: Rc<Cell<[Option<usize>; 4]>>,
 }
 
 struct Motion {
@@ -172,6 +173,13 @@ impl Element for Surface {
                     state,
                 )
             });
+        self.boards.set([
+            Some(from.board),
+            from.overlay.map(|overlay| overlay.target),
+            to.as_ref().map(|frame| frame.board),
+            to.as_ref()
+                .and_then(|frame| frame.overlay.map(|overlay| overlay.target)),
+        ]);
         if active {
             window.request_animation_frame();
         }
