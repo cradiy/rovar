@@ -1,6 +1,30 @@
 # Changelog
 
-## 0.4.0 (Released)
+## 0.5.0 (Released)
+
+### Added
+
+- Run multiple prototype actions from a single click or hover.
+- Build nested scrollable areas in prototypes with fixed layers, draggable scrollbars, and scroll-to actions.
+- Animate transitions with directional wipes, blur, slides, zooms, flips, and other effects. Set a custom duration and easing curve.
+- Highlight selected text with a background color.
+
+### Improved
+
+- Redesigned the Prototype panel for editing actions, transitions, and scrolling. Connection lines focus on the selection and simplify when zoomed out.
+- Reduced delays when opening or restarting a presentation, moving the pointer, or switching between prototype states.
+- Made large canvases more responsive and reduced idle memory use after closing documents.
+- Expanded the AI design interface to support the new prototype controls and paginate document reads.
+- Added rotating diagnostic logs and cleaned up stale editor session records at startup.
+
+### Fixed
+
+- Keep prototype popups and overlays from passing clicks to layers underneath.
+- Load media for the presented frame and open overlay, including images as they scroll into view.
+- Render all gradient stops across the affected text range in the editor and exports.
+- Keep frame titles and selection handles beneath sidebars and tabs.
+
+## 0.4.0
 
 ### Added
 
